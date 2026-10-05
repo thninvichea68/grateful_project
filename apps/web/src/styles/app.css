@@ -1,0 +1,59 @@
+/*
+ * App-shell additions that the static prototype did not need.
+ * Everything visual still comes from tokens.css + prototype.css.
+ */
+
+/* The prototype made <body> the flex row; in React the shell mounts in #root. */
+#root {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+/* Visible keyboard focus everywhere (the prototype relied on hover states). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Mobile: dim the page behind the open sidebar and close it on tap. */
+.sidebar-scrim {
+  display: none;
+}
+@media (max-width: 860px) {
+  .sidebar {
+    z-index: 60;
+  }
+  .sidebar.open + .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(7, 13, 18, 0.55);
+  }
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: #001018;
+  font-weight: 800;
+}
+.skip-link:focus {
+  top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

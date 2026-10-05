@@ -1,0 +1,5 @@
+node_modules
+dist
+apps/api/drizzle
+apps/web/public
+pnpm-lock.yaml
