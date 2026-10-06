@@ -6,6 +6,7 @@ export default defineConfig({
     server: 'src/server.ts',
     'db/migrate': 'src/db/migrate.ts',
     'db/seed/index': 'src/db/seed/index.ts',
+    'db/init': 'src/db/init.ts',
   },
   format: ['esm'],
   target: 'node20',

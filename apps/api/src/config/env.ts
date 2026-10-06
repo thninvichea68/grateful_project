@@ -1,4 +1,23 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
+
+/**
+ * The project folder (where pnpm-workspace.yaml lives). Relative paths in .env such as
+ * UPLOAD_DIR and WEB_DIST_DIR are resolved from here, whether the API was started by
+ * `pnpm dev` (from apps/api) or `pnpm start` (from the project root).
+ */
+function findRepoRoot(start: string): string {
+  let dir = start;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return start;
+    dir = up;
+  }
+}
+export const repoRoot = findRepoRoot(process.cwd());
+export const fromRoot = (p: string) => path.resolve(repoRoot, p);
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -17,6 +36,8 @@ const envSchema = z.object({
   UPLOAD_DIR: z.string().default('./storage'),
   BUSINESS_TIMEZONE: z.string().default('Asia/Phnom_Penh'),
   SEED_DEFAULT_PASSWORD: z.string().min(10).optional(),
+  /** Production: folder with the built website (apps/web/dist) to serve from this same process. */
+  WEB_DIST_DIR: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -33,7 +54,26 @@ function loadEnv(): Env {
     );
     process.exit(1);
   }
-  return parsed.data;
+  const e = parsed.data;
+  // Refuse to run production with the example secret or a weak one.
+  if (e.NODE_ENV === 'production') {
+    const problems: string[] = [];
+    if (
+      /replace_with|dev_only|change_me|example/i.test(e.JWT_ACCESS_SECRET) ||
+      e.JWT_ACCESS_SECRET.length < 40
+    )
+      problems.push(
+        'JWT_ACCESS_SECRET must be a new random value of at least 40 characters (see DEPLOY.md)',
+      );
+    if (/change_me|gs_dev_password/i.test(e.DATABASE_URL))
+      problems.push('DATABASE_URL still uses the example database password');
+    if (problems.length) {
+      // eslint-disable-next-line no-console
+      console.error(`Production configuration is not safe:\n  - ${problems.join('\n  - ')}`);
+      process.exit(1);
+    }
+  }
+  return e;
 }
 
 export const env = loadEnv();

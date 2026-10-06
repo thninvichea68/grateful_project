@@ -96,7 +96,7 @@ export const NAV: NavGroup[] = [
         sub: true,
       },
       {
-        to: '/accounting/record-summary',
+        to: '/accounting/record-summaries',
         label: 'Record Summary',
         title: 'Record Summary',
         icon: 'recordSummary',
@@ -143,9 +143,13 @@ export const NAV: NavGroup[] = [
 /** Titles for routes that are not sidebar items. Longest prefix wins. */
 const EXTRA_TITLES: [string, string][] = [
   ['/accounting/tax-invoices', 'Tax Invoice'],
+  ['/accounting/record-summaries', 'Record Summary'],
   ['/accounting/disbursements', 'Disbursement'],
   ['/accounting/debit-notes', 'Debit Note'],
   ['/plans/new', 'Create Shipment'],
+  ['/plans/', 'Shipment Details'],
+  ['/clients/', 'Client Details'],
+  ['/quotations/', 'Quotation'],
 ];
 
 export function titleFor(pathname: string): string {
@@ -154,7 +158,7 @@ export function titleFor(pathname: string): string {
     ...NAV.flatMap((g) => g.items.map((i) => [i.to, i.title] as [string, string])),
   ];
   const match = candidates
-    .filter(([to]) => pathname === to || pathname.startsWith(`${to}/`))
+    .filter(([to]) => pathname === to || pathname.startsWith(to.endsWith('/') ? to : `${to}/`))
     .sort((a, b) => b[0].length - a[0].length)[0];
   return match?.[1] ?? 'Grateful Solutions';
 }

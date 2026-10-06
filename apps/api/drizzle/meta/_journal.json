@@ -15,6 +15,13 @@
       "when": 1791204692454,
       "tag": "0001_views_and_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791251957157,
+      "tag": "0002_billing_shipment_fields",
+      "breakpoints": true
     }
   ]
 }

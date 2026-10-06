@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import { ROLE_LABEL } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { NAV } from './nav';
@@ -23,6 +25,7 @@ function initials(name: string) {
 export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
   const { user, can, logout } = useAuth();
   const counts = useNavCounts();
+  const [pwOpen, setPwOpen] = useState(false);
   if (!user) return null;
 
   return (
@@ -46,7 +49,19 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
           </button>
         </div>
 
-        <div className="user-card">
+        <button
+          type="button"
+          className="user-card"
+          onClick={() => setPwOpen(true)}
+          title="Change password"
+          style={{
+            width: 'auto',
+            textAlign: 'left',
+            cursor: 'pointer',
+            font: 'inherit',
+            color: 'inherit',
+          }}
+        >
           <div className="avatar">
             {user.avatarUrl ? (
               <img src={user.avatarUrl} alt="" />
@@ -63,7 +78,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             <div className="name">{user.fullName}</div>
             <div className="role">{user.jobTitle ?? ROLE_LABEL[user.role]}</div>
           </div>
-        </div>
+        </button>
 
         <nav className="menu" id="menu">
           {NAV.map((group) => {
@@ -109,6 +124,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
         </div>
       </aside>
       <div className="sidebar-scrim" onClick={onNavigate} aria-hidden="true" />
+      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </>
   );
 }

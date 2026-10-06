@@ -3,8 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 /** The accounting engine's six tabs, as native routes (no iframe). */
 const TABS = [
   { to: '/accounting', label: 'Monthly Ledger', end: true },
-  { to: '/accounting/credit-notes', label: 'Chea Payment' },
-  { to: '/accounting/record-summary', label: 'Record Summary' },
+  { to: '/accounting/credit-notes', label: 'Credit Noted' },
+  { to: '/accounting/record-summaries', label: 'Record Summary' },
   { to: '/accounting/tax-invoices', label: 'Tax Invoice' },
   { to: '/accounting/disbursements', label: 'Disbursement' },
   { to: '/accounting/debit-notes', label: 'Debit Note' },

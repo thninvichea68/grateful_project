@@ -1,13 +1,244 @@
-import { PagePlaceholder } from '../components/PagePlaceholder';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { CUT_STOCK_CATEGORIES, CUT_STOCK_CATEGORY_LABEL } from '@gs/shared';
+import { useAuth } from '../auth/AuthProvider';
+import { useCutStock, useLookups } from '../features/hooks';
+import { TableState, ui } from '../components/ui';
+import { useToast } from '../components/Toast';
+import { downloadFile } from '../lib/files';
+import { fmtMoney, fmtNum, fmtPct } from '../lib/format';
+import { CutStockItemModal } from './cutstock/CutStockItemModal';
+import { ImportModal } from './cutstock/ImportModal';
+
+const COND_STYLE = {
+  OK: { color: 'var(--status-completed-fg)' },
+  CHECK: { color: 'var(--status-exception-fg)' },
+} as const;
 
 export function CutStockPage() {
+  const { can } = useAuth();
+  const toast = useToast();
+  const lookups = useLookups();
+  const [params, setParams] = useSearchParams();
+  const [openItem, setOpenItem] = useState<string | 'new' | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const clients = useMemo(() => lookups.data?.clients ?? [], [lookups.data]);
+  const clientId = params.get('clientId') ?? '';
+  // Default to the first client (JR in the seed) once lookups arrive.
+  useEffect(() => {
+    if (!clientId && clients.length) setParams({ clientId: clients[0]!.id }, { replace: true });
+  }, [clientId, clients, setParams]);
+  const q = params.get('q') ?? '';
+  const category = params.get('category') ?? '';
+  const condition = params.get('condition') ?? '';
+  const list = useCutStock({
+    clientId,
+    q: q || undefined,
+    category: category || undefined,
+    condition: condition || undefined,
+    pageSize: 500,
+    sort: 'lineNo',
+  });
+  const client = clients.find((c) => c.id === clientId);
+  const s = list.data?.summary;
+
+  const set = (k: string, v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set(k, v);
+    else next.delete(k);
+    setParams(next, { replace: true });
+  };
+
   return (
-    <PagePlaceholder
-      heading={'Cut Stock Master List'}
-      phase={3}
-      summary={
-        'Each client’s CDC master list with live imported quantity, balance and balance % (CHECK below 50%), the declarations that drew it down, Excel import/export, and Manager overrides for over-imports.'
-      }
-    />
+    <section className="view active" id="view-cutstock">
+      <div className="card">
+        <div className="card-header-row">
+          <h3 style={{ margin: 0 }}>Cut Stock Master List{client ? ` — ${client.name}` : ''}</h3>
+          <div className={ui.toolbar}>
+            <select
+              className={ui.input}
+              value={clientId}
+              onChange={(e) => setParams({ clientId: e.target.value })}
+              aria-label="Client"
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code} · {c.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className={ui.input}
+              type="search"
+              placeholder="Search item, declare no…"
+              defaultValue={q}
+              onChange={(e) => set('q', e.target.value.trim())}
+              style={{ minWidth: 200 }}
+              aria-label="Search items"
+            />
+            <select
+              className={ui.input}
+              value={category}
+              onChange={(e) => set('category', e.target.value)}
+              aria-label="Category"
+            >
+              <option value="">All Categories</option>
+              {CUT_STOCK_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {CUT_STOCK_CATEGORY_LABEL[c]}
+                </option>
+              ))}
+            </select>
+            <select
+              className={ui.input}
+              value={condition}
+              onChange={(e) => set('condition', e.target.value)}
+              aria-label="Condition"
+            >
+              <option value="">All conditions</option>
+              <option value="OK">OK</option>
+              <option value="CHECK">CHECK (balance under 50%)</option>
+              <option value="OVER">Over-imported (below zero)</option>
+            </select>
+            <button
+              type="button"
+              className="filter-btn"
+              disabled={!clientId}
+              onClick={() =>
+                downloadFile('/cut-stock/export.xlsx', { clientId }).catch(() =>
+                  toast('Export failed. Try again.'),
+                )
+              }
+            >
+              Export Excel
+            </button>
+            {can('cutstock:write') && clientId && (
+              <>
+                <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
+                  Import Excel
+                </button>
+                <button
+                  type="button"
+                  className="new-shipment-btn"
+                  onClick={() => setOpenItem('new')}
+                >
+                  + Add Item
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div
+          id="cutstockSummary"
+          style={{
+            display: 'flex',
+            gap: 22,
+            margin: '12px 2px 4px',
+            fontSize: 12,
+            color: 'var(--text-tertiary)',
+            flexWrap: 'wrap',
+            fontWeight: 700,
+          }}
+        >
+          {s && (
+            <>
+              <span>{s.items} items</span>
+              <span style={{ color: s.checkCount ? 'var(--status-exception-fg)' : undefined }}>
+                {s.checkCount} to check
+              </span>
+              <span style={{ color: s.overImported ? 'var(--status-exception-fg)' : undefined }}>
+                {s.overImported} over-imported
+              </span>
+              <span>Licensed value {fmtMoney(s.totalValue)}</span>
+              <span>Imported value {fmtMoney(s.importedValue)}</span>
+            </>
+          )}
+        </div>
+        <div className="plans-table-scroll cutstock-table-wrap">
+          <table className="data-table-clean cutstock-table">
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>Item</th>
+                <th>Type</th>
+                <th>Unit</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Total Price</th>
+                <th>Imported Qty</th>
+                <th>Imported Price</th>
+                <th>N.W</th>
+                <th>Balance</th>
+                <th>Balance %</th>
+                <th>Condition</th>
+                <th>Declare No</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableState
+                cols={14}
+                loading={list.isLoading || (!clientId && lookups.isLoading)}
+                error={list.error}
+                empty={list.data?.data.length === 0}
+                emptyText={
+                  q || category || condition
+                    ? 'No items match these filters.'
+                    : 'No master list for this client yet. Use “Import Excel” to load it.'
+                }
+              />
+              {list.data?.data.map((r) => (
+                <tr
+                  key={r.id}
+                  className="plans-row-clickable"
+                  tabIndex={0}
+                  onClick={() => setOpenItem(r.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && setOpenItem(r.id)}
+                >
+                  <td>{r.lineNo}</td>
+                  <td className="val-bold">{r.name}</td>
+                  <td>{r.newOrUsed ?? '-'}</td>
+                  <td>{r.unit}</td>
+                  <td>{fmtNum(r.qty)}</td>
+                  <td>{fmtNum(r.unitPrice, 2)}</td>
+                  <td>{fmtNum(r.totalPrice, 2)}</td>
+                  <td>{fmtNum(r.importedQty)}</td>
+                  <td>{fmtNum(r.importedValue, 2)}</td>
+                  <td>{fmtNum(r.importedNw, 2)}</td>
+                  <td
+                    style={{
+                      fontWeight: 800,
+                      color:
+                        Number(r.balance) < 0
+                          ? 'var(--status-exception-fg)'
+                          : 'var(--text-primary)',
+                    }}
+                  >
+                    {fmtNum(r.balance)}
+                  </td>
+                  <td>{fmtPct(r.balancePct)}</td>
+                  <td style={{ fontWeight: 800, ...COND_STYLE[r.condition] }}>{r.condition}</td>
+                  <td>{r.declareRef}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {openItem && clientId && (
+        <CutStockItemModal
+          itemId={openItem === 'new' ? null : openItem}
+          clientId={clientId}
+          onClose={() => setOpenItem(null)}
+        />
+      )}
+      {importing && client && (
+        <ImportModal
+          clientId={client.id}
+          clientName={client.name}
+          onClose={() => setImporting(false)}
+        />
+      )}
+    </section>
   );
 }

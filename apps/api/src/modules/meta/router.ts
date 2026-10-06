@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { sql } from 'drizzle-orm';
 import type { NavCounts } from '@gs/shared';
+import { eq } from 'drizzle-orm';
 import { db } from '../../db/client';
+import { settings } from '../../db/schema';
 import { requireAuth } from '../../middleware/auth';
 
 export const metaRouter = Router();
@@ -20,4 +22,10 @@ metaRouter.get('/nav-counts', requireAuth, async (_req, res) => {
     unreadNotifications: 0,
   };
   res.json(body);
+});
+
+/** Company details printed on invoices and vouchers (edited in Settings). */
+metaRouter.get('/company', requireAuth, async (_req, res) => {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'company'));
+  res.json(row?.value ?? {});
 });

@@ -26,6 +26,8 @@ describe('titleFor', () => {
     ['/accounting/tax-invoices', 'Tax Invoice'],
     ['/cutstock', 'Cut Stock Master List'],
     ['/staff', 'Staff Management'],
+    ['/plans/3f6c0a1e-0000-4000-8000-000000000000', 'Shipment Details'],
+    ['/clients/3f6c0a1e-0000-4000-8000-000000000000', 'Client Details'],
   ])('%s → %s', (path, title) => expect(titleFor(path)).toBe(title));
 });
 

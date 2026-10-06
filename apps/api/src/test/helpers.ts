@@ -49,3 +49,41 @@ export function refreshCookieFrom(setCookie: string[] | string | undefined): str
   const c = list.find((x) => x.startsWith('gs_rt='));
   return c?.split(';')[0];
 }
+
+import {
+  clients as clientsT,
+  countries as countriesT,
+  forwarders as forwardersT,
+  ports as portsT,
+} from '../db/schema';
+
+/** Minimal reference data for shipment / cut-stock tests. */
+export async function seedBasics() {
+  await db.insert(countriesT).values([
+    { iso2: 'KH', name: 'Cambodia' },
+    { iso2: 'CN', name: 'China' },
+    { iso2: 'US', name: 'United States' },
+  ]);
+  const [port] = await db
+    .insert(portsT)
+    .values({
+      code: 'SHV11',
+      customsPortNo: '11',
+      name: 'Sihanoukville Port',
+      shortName: 'SIHANOUKVILLE',
+      kind: 'SEA',
+    })
+    .returning();
+  const [fwd] = await db
+    .insert(forwardersT)
+    .values({ code: 'MAERSK', name: 'Maersk Logistics' })
+    .returning();
+  const [jr, jyx] = await db
+    .insert(clientsT)
+    .values([
+      { code: 'JR', name: 'JR Apparel Corp', countryIso2: 'KH', commissionUsd: '0.00' },
+      { code: 'JYX', name: 'Jin Yuan Xi Ltd', countryIso2: 'KH', commissionUsd: '50.00' },
+    ])
+    .returning();
+  return { port: port!, fwd: fwd!, jr: jr!, jyx: jyx! };
+}

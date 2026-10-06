@@ -17,7 +17,12 @@
     "db:seed": "pnpm --filter @gs/api db:seed",
     "db:reset": "pnpm --filter @gs/api db:reset",
     "db:studio": "pnpm --filter @gs/api db:studio",
-    "docker:seed": "docker compose exec api node dist/db/seed/index.js --force"
+    "docker:seed": "docker compose exec api node dist/db/seed/index.js --force",
+    "start": "node --env-file=.env apps/api/dist/server.js",
+    "db:migrate:prod": "node --env-file=.env apps/api/dist/db/migrate.js",
+    "db:init": "pnpm --filter @gs/api db:init",
+    "db:init:prod": "node --env-file=.env apps/api/dist/db/init.js",
+    "backup": "node --env-file=.env scripts/backup.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

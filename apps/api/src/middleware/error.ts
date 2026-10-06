@@ -61,6 +61,23 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
             ? new AppError(413 as number, 'VALIDATION_ERROR', 'Request body is too large')
             : null));
 
+  const multerCode =
+    (err as { name?: string; code?: string })?.name === 'MulterError'
+      ? (err as { code?: string }).code
+      : undefined;
+  if (!appErr && multerCode) {
+    const body: ApiErrorBody = {
+      error: {
+        code: 'VALIDATION_ERROR',
+        message:
+          multerCode === 'LIMIT_FILE_SIZE'
+            ? 'The file is larger than 5 MB'
+            : `Upload problem: ${multerCode}`,
+      },
+    };
+    res.status(multerCode === 'LIMIT_FILE_SIZE' ? 413 : 400).json(body);
+    return;
+  }
   if (!appErr) {
     logger.error({ err, reqId: req.id }, 'Unhandled error');
     const body: ApiErrorBody = {

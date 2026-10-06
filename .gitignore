@@ -7,3 +7,6 @@ apps/api/storage/*
 coverage
 *.log
 .DS_Store
+/storage/
+/backups/
+logs/

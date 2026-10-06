@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
-import { loginInputSchema, type AuthResponse } from '@gs/shared';
+import { changePasswordSchema, loginInputSchema, type AuthResponse } from '@gs/shared';
+import { changeOwnPassword } from '../staff/service';
 import { env } from '../../config/env';
 import { parse } from '../../lib/validate';
 import { requireAuth } from '../../middleware/auth';
@@ -56,4 +57,16 @@ authRouter.post('/logout', async (req, res) => {
 
 authRouter.get('/me', requireAuth, async (req, res) => {
   res.json({ user: await auth.me(req.auth!.userId) });
+});
+
+/** Change my own password; my other sessions are signed out. */
+authRouter.post('/change-password', requireAuth, async (req, res) => {
+  const v = parse(changePasswordSchema, req.body);
+  await changeOwnPassword(
+    v.currentPassword,
+    v.newPassword,
+    req.cookies?.[REFRESH_COOKIE] as string | undefined,
+    req,
+  );
+  res.status(204).end();
 });

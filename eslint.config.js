@@ -15,7 +15,7 @@ export default tseslint.config(
     rules: { ...reactHooks.configs.recommended.rules },
   },
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts'],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'scripts/**/*.mjs', '*.cjs'],
     languageOptions: { globals: globals.node },
     // The API logs through pino; console is allowed only in CLI scripts (with a disable comment).
     rules: { 'no-console': 'error' },
@@ -23,6 +23,7 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-require-imports': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -30,5 +31,8 @@ export default tseslint.config(
       ],
     },
   },
+  // CLI scripts print to the terminal.
+  { files: ['scripts/**/*.mjs'], rules: { 'no-console': 'off' } },
+  { files: ['*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },
   prettier,
 );

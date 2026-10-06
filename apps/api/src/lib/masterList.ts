@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
 import type { CutStockCategory } from '@gs/shared';
 
@@ -18,10 +16,9 @@ export interface MasterListRow {
   importedNw: number;
   /** BALANCE column as the spreadsheet computed it — used to verify the import. */
   sheetBalance: number;
+  /** 1-based worksheet row, for error messages. */
+  sheetRow: number;
 }
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-export const MASTER_LIST_PATH = path.join(here, 'data', 'jr-cdc-master-list.xlsx');
 
 function cellValue(v: ExcelJS.CellValue): unknown {
   if (v && typeof v === 'object' && 'result' in v) return (v as ExcelJS.CellFormulaValue).result;
@@ -46,14 +43,15 @@ function categoryFromHeading(h: string): CutStockCategory | null {
  * followed by item rows A..O = No, Name, New/Used, Unit, Qty, Unit price, Total, Remarks,
  * Imported qty, Imported price, Imported N.W, Balance, <50%, Condition, Declare.
  */
-export async function readMasterList(file = MASTER_LIST_PATH): Promise<MasterListRow[]> {
+export async function readMasterList(source: string | Buffer): Promise<MasterListRow[]> {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(file);
+  if (typeof source === 'string') await wb.xlsx.readFile(source);
+  else await wb.xlsx.load(source as unknown as ArrayBuffer);
   const ws = wb.worksheets[0];
   if (!ws) throw new Error('Master list has no worksheet');
   const rows: MasterListRow[] = [];
   let category: CutStockCategory | null = null;
-  ws.eachRow((row) => {
+  ws.eachRow((row, rowNumber) => {
     const c = (i: number) => cellValue(row.getCell(i).value);
     const a = c(1);
     const b = str(c(2));
@@ -78,6 +76,7 @@ export async function readMasterList(file = MASTER_LIST_PATH): Promise<MasterLis
       importedValue: num(c(10)),
       importedNw: num(c(11)),
       sheetBalance: num(c(12)),
+      sheetRow: rowNumber,
     });
   });
   return rows;

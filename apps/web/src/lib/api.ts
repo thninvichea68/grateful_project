@@ -24,6 +24,8 @@ export const session = {
     accessToken = token;
   },
   hasToken: () => accessToken !== null,
+  authHeader: (): Record<string, string> =>
+    accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   /** Called when a refresh fails mid-session, so the UI can return to /login. */
   onLost(cb: () => void) {
     onSessionLost = cb;
@@ -72,7 +74,10 @@ export function refreshSession(): Promise<AuthResponse | null> {
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   json?: unknown;
   body?: BodyInit;
-  query?: Record<string, string | number | boolean | undefined | null | (string | number)[]>;
+  query?: Record<
+    string,
+    string | number | boolean | undefined | null | readonly (string | number)[]
+  >;
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {

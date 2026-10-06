@@ -1,0 +1,347 @@
+import { z } from 'zod';
+import {
+  DOCUMENT_CATEGORIES,
+  FOLLOW_UP_PRIORITIES,
+  FOLLOW_UP_STATUSES,
+  LOOKUP_TYPES,
+  PORT_KINDS,
+  QUOTATION_STATUSES,
+  STAFF_STATUSES,
+  type DocumentCategory,
+  type FollowUpPriority,
+  type FollowUpStatus,
+  type LookupType,
+  type PortKind,
+  type QuotationStatus,
+  type StaffStatus,
+} from '../enums';
+import { PERMISSIONS, ROLE_CODES, type Permission, type RoleCode } from '../permissions';
+import { paginationQuerySchema } from './common';
+import { boolParam, decimal, optText, optUuid } from './fields';
+
+/* ------------------------------ Passwords ------------------------------ */
+
+/** At least 10 characters with a letter and a digit. */
+export const passwordSchema = z
+  .string()
+  .min(10, 'At least 10 characters')
+  .max(200)
+  .refine((v) => /[A-Za-z]/.test(v) && /\d/.test(v), 'Use letters and at least one number');
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password'),
+    newPassword: passwordSchema,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: 'Choose a different password',
+    path: ['newPassword'],
+  });
+
+/* ------------------------------ Staff & roles ------------------------------ */
+
+export const staffInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Enter a valid email'),
+  fullName: z.string().trim().min(2, 'Enter the full name').max(120),
+  role: z.enum(ROLE_CODES),
+  jobTitle: optText(120),
+  department: optText(80),
+  phone: optText(40),
+  status: z.enum(STAFF_STATUSES).default('ACTIVE'),
+  /** Temporary password the person changes after first sign-in. */
+  password: passwordSchema,
+});
+export const staffUpdateSchema = staffInputSchema.omit({ password: true, email: true }).partial();
+export const resetPasswordSchema = z.object({ password: passwordSchema });
+export const rolePermissionsSchema = z.object({ permissions: z.array(z.enum(PERMISSIONS)) });
+
+export interface StaffMember {
+  id: string;
+  email: string;
+  fullName: string;
+  role: RoleCode;
+  jobTitle: string | null;
+  department: string | null;
+  phone: string | null;
+  status: StaffStatus;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+export interface RoleInfo {
+  code: RoleCode;
+  name: string;
+  permissions: Permission[];
+  members: number;
+}
+
+/* ------------------------------ Follow-ups ------------------------------ */
+
+export const followUpInputSchema = z.object({
+  subject: z.string().trim().min(3, 'Enter a subject').max(200),
+  notes: optText(2000),
+  clientId: optUuid,
+  shipmentId: optUuid,
+  assigneeId: optUuid,
+  /** Local Phnom Penh date-time "YYYY-MM-DDTHH:mm" (from a datetime-local input) or ISO. */
+  dueAt: z.string().min(10, 'Enter a due date'),
+  priority: z.enum(FOLLOW_UP_PRIORITIES).default('MEDIUM'),
+  status: z.enum(FOLLOW_UP_STATUSES).default('OPEN'),
+});
+export const followUpUpdateSchema = followUpInputSchema.partial();
+
+export const followUpListQuerySchema = paginationQuerySchema.extend({
+  status: z.enum([...FOLLOW_UP_STATUSES, 'ACTIVE'] as const).optional(),
+  priority: z.enum(FOLLOW_UP_PRIORITIES).optional(),
+  assigneeId: z.string().uuid().optional(),
+  clientId: z.string().uuid().optional(),
+  overdue: boolParam,
+});
+
+export interface FollowUpRow {
+  id: string;
+  reference: string;
+  subject: string;
+  notes: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  shipmentId: string | null;
+  shipmentReference: string | null;
+  assigneeId: string | null;
+  assigneeName: string | null;
+  dueAt: string;
+  priority: FollowUpPriority;
+  status: FollowUpStatus;
+  overdue: boolean;
+  completedAt: string | null;
+}
+
+/* ------------------------------ Documents ------------------------------ */
+
+export const documentMetaSchema = z.object({
+  title: z.string().trim().min(2, 'Enter a title').max(200),
+  category: z.enum(DOCUMENT_CATEGORIES).default('OTHER'),
+  statusLabel: optText(60),
+  shipmentId: optUuid,
+  clientId: optUuid,
+});
+
+export const documentListQuerySchema = paginationQuerySchema.extend({
+  category: z.enum(DOCUMENT_CATEGORIES).optional(),
+  shipmentId: z.string().uuid().optional(),
+  clientId: z.string().uuid().optional(),
+});
+
+export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
+  BILL_OF_LADING: 'Bill of Lading',
+  CUSTOMS_DECLARATION: 'Customs Declaration',
+  CERTIFICATE_OF_ORIGIN: 'Certificate of Origin',
+  COMMERCIAL_INVOICE: 'Commercial Invoice',
+  PACKING_LIST: 'Packing List',
+  CONTRACT: 'Contract',
+  POLICY: 'Policy',
+  OTHER: 'Other',
+};
+
+export interface DocumentRow {
+  id: string;
+  title: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  category: DocumentCategory;
+  statusLabel: string | null;
+  shipmentId: string | null;
+  shipmentReference: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  uploadedBy: string | null;
+  createdAt: string;
+}
+
+/* ------------------------------ Operations ------------------------------ */
+
+export const declarationRegisterQuerySchema = paginationQuerySchema.extend({
+  clientId: z.string().uuid().optional(),
+  direction: z.enum(['IMPORT', 'EXPORT']).optional(),
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+  ledger: z.enum(['with', 'without']).optional(),
+});
+
+export interface DeclarationRegisterRow {
+  id: string;
+  declareNo: string;
+  declareDate: string;
+  portCode: string | null;
+  shipmentId: string;
+  shipmentReference: string;
+  hblNo: string | null;
+  clientCode: string;
+  direction: 'IMPORT' | 'EXPORT';
+  clearanceStatus: string;
+  ledgerId: string | null;
+  invNo: string | null;
+  documents: number;
+  cdcLines: number;
+}
+
+/* ------------------------------ Quotations ------------------------------ */
+
+export const quotationInputSchema = z.object({
+  templateKey: z.string().min(1, 'Choose a service category'),
+  clientId: optUuid,
+  toName: z.string().trim().min(2, 'Who is the quotation for?').max(200),
+  attn: optText(120),
+  quoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
+  paymentTermDays: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(365)
+    .nullish()
+    .transform((v) => v ?? null),
+  latePenaltyPctPerDay: decimal(3, { min: 0 }),
+  notes: optText(4000),
+  /** One object per row: column key → displayed text ("As per receipt", "60", "5/10/15"). */
+  lines: z.array(z.record(z.string().max(300))).min(1, 'Add at least one row'),
+});
+export type QuotationInput = z.input<typeof quotationInputSchema>;
+
+export const quotationListQuerySchema = paginationQuerySchema.extend({
+  status: z.enum(QUOTATION_STATUSES).optional(),
+  clientId: z.string().uuid().optional(),
+  templateKey: z.string().optional(),
+  latestOnly: boolParam,
+});
+
+export interface QuotationTemplate {
+  key: string;
+  label: string;
+  docTitle: string;
+  columns: { key: string; label: string; type: 'wide' | 'text' | 'num' | 'remark' }[];
+  defaultRows: string[][];
+  notes: string | null;
+}
+
+export interface QuotationRow {
+  id: string;
+  quoteNo: string;
+  version: number;
+  status: QuotationStatus;
+  templateKey: string;
+  templateLabel: string;
+  clientId: string | null;
+  clientName: string | null;
+  toName: string;
+  quoteDate: string;
+  lineCount: number;
+  isLatest: boolean;
+}
+
+export interface QuotationDetail extends Omit<QuotationRow, 'lineCount' | 'isLatest'> {
+  attn: string | null;
+  paymentTermDays: number | null;
+  latePenaltyPctPerDay: string | null;
+  notes: string | null;
+  docTitle: string;
+  columns: QuotationTemplate['columns'];
+  lines: Record<string, string>[];
+  versions: { id: string; version: number; status: QuotationStatus; quoteDate: string }[];
+}
+
+/* ------------------------------ Settings ------------------------------ */
+
+export const companySchema = z.object({
+  nameEn: z.string().trim().min(2).max(200),
+  nameKm: optText(200),
+  vattin: optText(40),
+  addressEn: optText(400),
+  addressKm: optText(400),
+  phone: optText(60),
+  bankName: optText(120),
+  bankAccountName: optText(200),
+  bankAccountNo: optText(60),
+});
+export type CompanyInput = z.input<typeof companySchema>;
+
+export const exchangeRateInputSchema = z.object({
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
+  usdToKhr: decimal(4, { min: 1, allowEmpty: false }),
+});
+
+export const portInputSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{3,8}$/, '3–8 letters/digits, e.g. SHV11'),
+  customsPortNo: optText(10),
+  name: z.string().trim().min(2).max(120),
+  shortName: z.string().trim().toUpperCase().min(2).max(30),
+  kind: z.enum(PORT_KINDS),
+  isActive: z.boolean().default(true),
+});
+export const forwarderUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(160).optional(),
+  contactEmail: optText(200),
+  isActive: z.boolean().optional(),
+});
+export const consigneeUpdateSchema = z.object({
+  name: z.string().trim().min(2).max(160).optional(),
+  clientId: optUuid,
+  countryIso2: optText(2),
+  address: optText(400),
+  isActive: z.boolean().optional(),
+});
+export const lookupValueInputSchema = z.object({
+  type: z.enum(LOOKUP_TYPES),
+  value: z.string().trim().min(1).max(80),
+  label: optText(120),
+  sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+  isActive: z.boolean().default(true),
+});
+
+export interface SettingsBundle {
+  company: CompanyInput;
+  baseExchangeRate: number;
+  exchangeRates: { id: string; effectiveDate: string; usdToKhr: string }[];
+  ports: {
+    id: string;
+    code: string;
+    customsPortNo: string | null;
+    name: string;
+    shortName: string;
+    kind: PortKind;
+    isActive: boolean;
+    shipments: number;
+  }[];
+  forwarders: {
+    id: string;
+    code: string;
+    name: string;
+    contactEmail: string | null;
+    isActive: boolean;
+    shipments: number;
+  }[];
+  consignees: {
+    id: string;
+    name: string;
+    clientId: string | null;
+    countryIso2: string | null;
+    address: string | null;
+    isActive: boolean;
+    shipments: number;
+  }[];
+  lookupValues: {
+    id: string;
+    type: LookupType;
+    value: string;
+    label: string;
+    sortOrder: number;
+    isActive: boolean;
+  }[];
+}

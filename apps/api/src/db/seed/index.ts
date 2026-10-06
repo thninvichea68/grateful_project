@@ -33,7 +33,9 @@ import {
   LOOKUPS,
   COMPANY,
 } from './data/reference';
-import { readMasterList } from './cutstock';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readMasterList } from '../../lib/masterList';
 import quotationTemplates from './data/quotation-templates.json' with { type: 'json' };
 
 const YEAR = 2026;
@@ -209,7 +211,9 @@ async function main() {
   );
 
   /* ---------- Cut stock (JR CDC master list) ---------- */
-  const master = await readMasterList();
+  const master = await readMasterList(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'data', 'jr-cdc-master-list.xlsx'),
+  );
   const jr = clientByCode('JR');
   const cutRows: (typeof s.cutStockItems.$inferSelect)[] = [];
   for (const part of chunk(master, 100)) {
