@@ -1,6 +1,3 @@
-@import '@fontsource/noto-sans-khmer/400.css';
-@import '@fontsource/noto-sans-khmer/700.css';
-
 /* A4 document, printed in black on white regardless of the app theme. */
 .page {
   --ink: #111827;
@@ -9,7 +6,7 @@
   width: 100%;
   background: #e5e7eb;
   padding: 24px 12px 60px;
-  font-family: 'Helvetica', 'Noto Sans Khmer', Arial, sans-serif;
+  font-family: 'GS Khmer', 'Helvetica', Arial, sans-serif;
   color: var(--ink);
 }
 .toolbar {
@@ -47,7 +44,7 @@
   overflow: hidden;
 }
 .km {
-  font-family: 'Noto Sans Khmer', 'Helvetica', sans-serif;
+  font-family: 'GS Khmer', 'Helvetica', sans-serif;
 }
 .head {
   display: flex;

@@ -523,8 +523,9 @@ body.sidebar-collapsed .signout {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  padding: 8px 16px;
-  width: 280px;
+  height: 40px;
+  padding: 0 16px;
+  width: 400px;
   transition: all 0.15s ease;
 }
 .search-box:focus-within {
@@ -552,7 +553,8 @@ body.sidebar-collapsed .signout {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 10px 20px;
+  height: 40px;
+  padding: 0 20px;
   border-radius: 999px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
@@ -588,7 +590,7 @@ body.sidebar-collapsed .signout {
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  font-family: 'GS Khmer', var(--font-main);
+  font-family: var(--font-main);
   background: var(--bg-surface);
   border-left: 1px solid var(--border-subtle);
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
@@ -908,7 +910,7 @@ body.sidebar-collapsed .signout {
 }
 @media (max-width: 860px) {
   .ask-ai-btn {
-    padding: 10px;
+    padding: 0 9px;
     font-size: 0;
     gap: 0;
   }
@@ -1004,7 +1006,8 @@ body.sidebar-collapsed .signout {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 18px;
+  height: 40px;
+  padding: 0 18px;
   border-radius: 999px;
   border: none;
   background: var(--accent-primary);

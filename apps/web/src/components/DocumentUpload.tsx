@@ -3,6 +3,7 @@ import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, type DocumentCategory } f
 import { useApiMutation } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { api } from '../lib/api';
+import { FilePicker } from './FilePicker';
 import { ErrorBanner, Modal, ui } from './ui';
 import { useToast } from './Toast';
 
@@ -39,7 +40,7 @@ export function DocumentUploadModal({
   return (
     <Modal
       title="Upload document"
-      sub="PDF, images, Excel, CSV, Word or text · up to 20 MB"
+      sub="Add a file to the document library and link it to a client."
       onClose={onClose}
       width={560}
     >
@@ -47,13 +48,12 @@ export function DocumentUploadModal({
       <div className="form-fields-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
           <label htmlFor="up-file">File</label>
-          <input
+          <FilePicker
             id="up-file"
-            type="file"
-            className="form-field-box"
             accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.doc,.txt"
-            onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
+            hint="PDF, images, Excel, CSV, Word or text · up to 20 MB"
+            file={file}
+            onChange={(f) => {
               setFile(f);
               if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ''));
             }}

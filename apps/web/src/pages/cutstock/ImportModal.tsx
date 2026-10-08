@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CutStockImportResult } from '@gs/shared';
 import { useImportMasterList } from '../../features/hooks';
+import { FilePicker } from '../../components/FilePicker';
 import { ErrorBanner, Modal, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 
@@ -41,13 +42,13 @@ export function ImportModal({
       <div className="form-fields-grid" style={{ gridTemplateColumns: '1fr' }}>
         <div className="form-field-group">
           <label htmlFor="imp-file">Workbook (.xlsx)</label>
-          <input
+          <FilePicker
             id="imp-file"
-            type="file"
             accept=".xlsx"
-            className="form-field-box"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
+            hint="Excel workbook (.xlsx)"
+            file={file}
+            onChange={(f) => {
+              setFile(f);
               setPreview(null);
             }}
           />

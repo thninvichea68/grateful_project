@@ -85,23 +85,6 @@ export const NAV: NavGroup[] = [
         title: 'Accounting',
         icon: 'accounting',
         permission: 'accounting:read',
-        end: true,
-      },
-      {
-        to: '/accounting/credit-notes',
-        label: 'Credit Noted',
-        title: 'Chea Payments / Credit Noted',
-        icon: 'creditNote',
-        permission: 'accounting:read',
-        sub: true,
-      },
-      {
-        to: '/accounting/record-summaries',
-        label: 'Record Summary',
-        title: 'Record Summary',
-        icon: 'recordSummary',
-        permission: 'accounting:read',
-        sub: true,
       },
       {
         to: '/quotations',
@@ -142,6 +125,7 @@ export const NAV: NavGroup[] = [
 
 /** Titles for routes that are not sidebar items. Longest prefix wins. */
 const EXTRA_TITLES: [string, string][] = [
+  ['/accounting/credit-notes', 'Chea Payments / Credit Noted'],
   ['/accounting/tax-invoices', 'Tax Invoice'],
   ['/accounting/record-summaries', 'Record Summary'],
   ['/accounting/disbursements', 'Disbursement'],

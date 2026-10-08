@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiError } from '../lib/api';
 import s from './ui.module.css';
 
@@ -28,7 +29,9 @@ export function Modal({
       prev?.focus();
     };
   }, [onClose]);
-  return (
+  // Portalled to <body>: an animated/transformed ancestor would otherwise turn the fixed
+  // overlay into a box clipped to the content area instead of covering the screen.
+  return createPortal(
     <div className={s.overlay} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className={s.dialog}
@@ -51,7 +54,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

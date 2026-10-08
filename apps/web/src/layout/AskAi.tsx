@@ -12,18 +12,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { assistantStatus, streamChat, type ChatMessage } from '../lib/assistant';
 import { icons } from './icons';
-import khmerFont from '@fontsource/khmer/files/khmer-khmer-400-normal.woff2';
-
-// Google's "Khmer" font, self-hosted (the CSP blocks Google Fonts). Registered for Khmer
-// characters only, so English in the chat keeps the app font. Only downloaded when used.
-if (typeof FontFace !== 'undefined' && typeof document !== 'undefined' && document.fonts) {
-  document.fonts.add(
-    new FontFace('GS Khmer', `url(${khmerFont}) format('woff2')`, {
-      unicodeRange: 'U+1780-17FF, U+19E0-19FF, U+200C-200D, U+25CC',
-      display: 'swap',
-    }),
-  );
-}
 
 const SUGGESTIONS = [
   'How do I create a new shipment?',

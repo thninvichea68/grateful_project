@@ -6,6 +6,7 @@ import { ApiError } from './lib/api';
 import { AuthProvider } from './auth/AuthProvider';
 import { ToastProvider } from './components/Toast';
 import { router } from './router';
+import './lib/khmerFont';
 import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/prototype.css';

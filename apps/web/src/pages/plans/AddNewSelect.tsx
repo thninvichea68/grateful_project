@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { ErrorBanner } from '../../components/ui';
 
@@ -69,50 +70,58 @@ export function AddNewSelect({
         ))}
         {onCreate && <option value="__add__">+ Add new {label.toLowerCase()}…</option>}
       </select>
-      <div
-        className={`addnew-modal-overlay${open ? ' open' : ''}`}
-        onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}
-      >
-        {open && (
-          <div
-            className="addnew-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`${id}-add-title`}
-          >
-            <h4 id={`${id}-add-title`}>Add New {label}</h4>
-            <p>Enter a {label.toLowerCase()} name to add it to the list.</p>
-            <ErrorBanner error={error} />
-            <input
-              type="text"
-              autoFocus
-              value={name}
-              placeholder={`e.g. ${label} name`}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void save();
-                }
-                if (e.key === 'Escape') setOpen(false);
-              }}
-            />
-            <div className="addnew-modal-actions">
-              <button type="button" className="addnew-modal-cancel" onClick={() => setOpen(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="addnew-modal-save"
-                disabled={busy || name.trim().length < 2}
-                onClick={() => void save()}
-              >
-                {busy ? 'Adding…' : 'Add'}
-              </button>
+      {/* Portalled to <body> so the fixed overlay covers the screen (see Modal in ui.tsx). */}
+      {createPortal(
+        <div
+          className={`addnew-modal-overlay${open ? ' open' : ''}`}
+          onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}
+        >
+          {open && (
+            <div
+              className="addnew-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`${id}-add-title`}
+            >
+              <h4 id={`${id}-add-title`}>Add New {label}</h4>
+              <p>Enter a {label.toLowerCase()} name to add it to the list.</p>
+              <ErrorBanner error={error} />
+              <input
+                type="text"
+                autoFocus
+                value={name}
+                placeholder={`e.g. ${label} name`}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void save();
+                  }
+                  if (e.key === 'Escape') setOpen(false);
+                }}
+              />
+              <div className="addnew-modal-actions">
+                <button
+                  type="button"
+                  className="addnew-modal-cancel"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="addnew-modal-save"
+                  disabled={busy || name.trim().length < 2}
+                  onClick={() => void save()}
+                >
+                  {busy ? 'Adding…' : 'Add'}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>,
+        document.body,
+      )}
     </>
   );
 }
