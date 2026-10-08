@@ -151,6 +151,21 @@ export const icons = {
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
     </svg>
   ),
+  bolt: (p: IconProps) => (
+    <svg {...base} strokeWidth={2} strokeLinejoin="round" {...p}>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="currentColor" fillOpacity={0.2} />
+    </svg>
+  ),
+  close: (p: IconProps) => (
+    <svg {...base} strokeWidth={2.2} {...p}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
+  send: (p: IconProps) => (
+    <svg {...base} strokeWidth={2.2} {...p}>
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  ),
   plus: (p: IconProps) => (
     <svg {...base} strokeWidth={3} width={16} height={16} {...p}>
       <path d="M12 5v14M5 12h14" />

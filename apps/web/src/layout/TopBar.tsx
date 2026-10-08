@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { icons } from './icons';
+import { AskAi } from './AskAi';
 import { LiveClock } from './LiveClock';
 import { useNavCounts } from './useNavCounts';
 
@@ -55,6 +56,8 @@ export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
             {icons.search({})}
           </form>
         )}
+
+        <AskAi />
 
         <button
           type="button"

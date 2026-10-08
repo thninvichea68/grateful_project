@@ -27,6 +27,7 @@ import { followUpsRouter } from './modules/followups/router';
 import { documentsRouter } from './modules/documents/router';
 import { operationsRouter } from './modules/operations/router';
 import { quotationsRouter } from './modules/quotations/router';
+import { assistantRouter } from './modules/assistant/router';
 import { buildOpenApiDocument } from './openapi/spec';
 
 export function createApp(): Express {
@@ -101,6 +102,7 @@ export function createApp(): Express {
   v1.use('/documents', documentsRouter);
   v1.use('/operations', operationsRouter);
   v1.use('/quotations', quotationsRouter);
+  v1.use('/assistant', assistantRouter);
 
   app.use('/api/v1', v1);
 

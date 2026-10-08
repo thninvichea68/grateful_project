@@ -38,6 +38,14 @@ const envSchema = z.object({
   SEED_DEFAULT_PASSWORD: z.string().min(10).optional(),
   /** Production: folder with the built website (apps/web/dist) to serve from this same process. */
   WEB_DIST_DIR: z.string().optional(),
+  /** "Ask AI" assistant. Unset AI_PROVIDER = whichever provider has a key (Claude first). */
+  AI_PROVIDER: z.preprocess((v) => v || undefined, z.enum(['anthropic', 'gemini']).optional()),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
+  /** Used when GEMINI_MODEL is overloaded. */
+  GEMINI_FALLBACK_MODEL: z.string().default('gemini-flash-latest'),
 });
 
 export type Env = z.infer<typeof envSchema>;

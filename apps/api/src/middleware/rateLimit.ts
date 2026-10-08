@@ -30,3 +30,13 @@ export const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   handler,
 });
+
+/** "Ask AI" messages per signed-in user (each one is a paid Claude API call). */
+export const assistantLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: isTest ? 1000 : 15,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.auth?.userId ?? req.ip ?? 'anon',
+  handler,
+});

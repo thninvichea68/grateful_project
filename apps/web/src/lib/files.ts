@@ -15,8 +15,7 @@ export async function downloadFile(
   let res = await go();
   if (res.status === 401 && (await refreshSession())) res = await go();
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
-  const name =
-    /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'download.xlsx';
+  const name = fileNameFrom(res.headers.get('content-disposition') ?? '');
   const blob = await res.blob();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -25,6 +24,19 @@ export async function downloadFile(
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** File name from Content-Disposition: `filename*=UTF-8''…` (RFC 5987) wins over `filename="…"`. */
+function fileNameFrom(disposition: string): string {
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim());
+    } catch {
+      // Malformed escape: fall through to the plain filename.
+    }
+  }
+  return /filename="([^"]+)"/i.exec(disposition)?.[1] ?? 'download';
 }
 
 function authHeader(): HeadersInit {

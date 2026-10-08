@@ -34,6 +34,15 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
         <div className="brand">
           <div className="brand-mark">
             <img src="/logo.png" alt="Grateful Solutions logo" />
+            <button
+              type="button"
+              className="brand-expand-btn"
+              onClick={onToggleCollapse}
+              aria-label="Open sidebar"
+              data-tooltip="Open sidebar"
+            >
+              {icons.collapse({})}
+            </button>
           </div>
           <div className="brand-text">
             <div className="title">Grateful Solutions</div>
