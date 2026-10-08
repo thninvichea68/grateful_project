@@ -1,8 +1,29 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { assistantStatus, streamChat, type ChatMessage } from '../lib/assistant';
 import { icons } from './icons';
+import khmerFont from '@fontsource/khmer/files/khmer-khmer-400-normal.woff2';
+
+// Google's "Khmer" font, self-hosted (the CSP blocks Google Fonts). Registered for Khmer
+// characters only, so English in the chat keeps the app font. Only downloaded when used.
+if (typeof FontFace !== 'undefined' && typeof document !== 'undefined' && document.fonts) {
+  document.fonts.add(
+    new FontFace('GS Khmer', `url(${khmerFont}) format('woff2')`, {
+      unicodeRange: 'U+1780-17FF, U+19E0-19FF, U+200C-200D, U+25CC',
+      display: 'swap',
+    }),
+  );
+}
 
 const SUGGESTIONS = [
   'How do I create a new shipment?',
@@ -10,6 +31,21 @@ const SUGGESTIONS = [
   'How do I import a CDC master list?',
   'What does CY / CY mean?',
 ];
+
+/** Panel width: the default is also the minimum; drag the left edge to widen it. */
+const MIN_WIDTH = 420;
+const WIDTH_KEY = 'gs:ai-panel-width';
+const maxWidth = () => Math.max(MIN_WIDTH, Math.min(960, window.innerWidth - 80));
+const clampWidth = (w: number) => Math.round(Math.min(Math.max(w, MIN_WIDTH), maxWidth()));
+
+function readWidth(): number {
+  try {
+    const saved = Number(localStorage.getItem(WIDTH_KEY));
+    return saved ? clampWidth(saved) : MIN_WIDTH;
+  } catch {
+    return MIN_WIDTH;
+  }
+}
 
 /** "Ask AI" top-bar button and the help-assistant chat panel it opens. */
 export function AskAi() {
@@ -22,6 +58,35 @@ export function AskAi() {
   const abortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [width, setWidth] = useState(readWidth);
+  const [resizing, setResizing] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WIDTH_KEY, String(width));
+    } catch {
+      /* private mode */
+    }
+  }, [width]);
+
+  function onResizeStart(e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setResizing(true);
+  }
+  function onResizeMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (resizing) setWidth(clampWidth(window.innerWidth - e.clientX));
+  }
+  function onResizeKey(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = e.shiftKey ? 80 : 20;
+    if (e.key === 'ArrowLeft') setWidth((w) => clampWidth(w + step));
+    else if (e.key === 'ArrowRight') setWidth((w) => clampWidth(w - step));
+    else if (e.key === 'Home') setWidth(MIN_WIDTH);
+    else if (e.key === 'End') setWidth(maxWidth());
+    else return;
+    e.preventDefault();
+  }
   const status = useQuery({
     queryKey: ['assistant', 'status'],
     queryFn: assistantStatus,
@@ -116,10 +181,28 @@ export function AskAi() {
 
       <aside
         id="ask-ai-panel"
-        className={`ai-panel${open ? ' open' : ''}`}
+        className={`ai-panel${open ? ' open' : ''}${resizing ? ' resizing' : ''}`}
+        style={{ width: `min(${width}px, 100vw)` }}
         aria-label="AI assistant"
         aria-hidden={!open}
       >
+        <div
+          className="ai-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize assistant panel"
+          aria-valuemin={MIN_WIDTH}
+          aria-valuemax={960}
+          aria-valuenow={width}
+          tabIndex={0}
+          title="Drag to resize · double-click to reset"
+          onPointerDown={onResizeStart}
+          onPointerMove={onResizeMove}
+          onPointerUp={() => setResizing(false)}
+          onPointerCancel={() => setResizing(false)}
+          onDoubleClick={() => setWidth(MIN_WIDTH)}
+          onKeyDown={onResizeKey}
+        />
         <header className="ai-panel-head">
           <div className="ai-panel-title">
             {icons.bolt({})}

@@ -583,11 +583,12 @@ body.sidebar-collapsed .signout {
   top: 0;
   right: 0;
   z-index: 60;
-  width: min(420px, 100vw);
+  width: min(420px, 100vw); /* overridden inline by the drag-to-resize width */
   height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
+  font-family: 'GS Khmer', var(--font-main);
   background: var(--bg-surface);
   border-left: 1px solid var(--border-subtle);
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.18);
@@ -603,6 +604,45 @@ body.sidebar-collapsed .signout {
   transition:
     transform 0.22s cubic-bezier(0.2, 0, 0, 1),
     visibility 0s;
+}
+.ai-resize {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.ai-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  background: var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.ai-resize:hover::after,
+.ai-resize:focus-visible::after,
+.ai-panel.resizing .ai-resize::after {
+  opacity: 1;
+}
+.ai-resize:focus-visible {
+  outline: none;
+}
+/* While dragging: no text selection, and the cursor stays a resize cursor */
+.ai-panel.resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+@media (max-width: 860px) {
+  .ai-resize {
+    display: none;
+  }
 }
 .ai-panel-head {
   display: flex;
@@ -720,7 +760,7 @@ body.sidebar-collapsed .signout {
   border-radius: 16px 16px 4px 16px;
   background: var(--accent-primary);
   color: #041b2d;
-  font-weight: 600;
+  font-weight: 400;
   white-space: pre-wrap;
 }
 .ai-msg.assistant {
