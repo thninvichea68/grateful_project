@@ -1,0 +1,394 @@
+/* Shipment create / edit page. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-bottom: 8px;
+}
+
+/* ---------- Header ---------- */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+.back:hover {
+  color: var(--accent-primary);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge[data-tone='done'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.badge[data-tone='progress'] {
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+.badge[data-tone='pending'] {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.badge[data-tone='exception'] {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.badge[data-tone='draft'] {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.meta strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--status-exception-fg);
+  cursor: pointer;
+}
+.deleteBtn svg {
+  width: 15px;
+  height: 15px;
+}
+.deleteBtn:hover {
+  background: var(--status-exception-bg);
+  border-color: var(--status-exception-fg);
+}
+
+/* ---------- Setup card: client + segmented choices ---------- */
+.setup {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) auto auto auto;
+  gap: 18px 24px;
+  align-items: end;
+}
+.setupField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.cap {
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.clientSelect {
+  height: 42px;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+.segOpt {
+  position: relative;
+  display: flex;
+}
+.segOpt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segOpt span {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.segOpt span:hover {
+  color: var(--text-primary);
+}
+.segOpt input:checked + span {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+.segOpt input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+.setupField:disabled .segOpt span {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ---------- Stepper ---------- */
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: 4px 2px;
+}
+.step {
+  flex: 1 1 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+/* Connector line to the next step */
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: calc(50% + 22px);
+  right: calc(-50% + 22px);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+}
+.step[data-state='done']:not(:last-child)::after {
+  background: var(--accent-primary);
+}
+.dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--bg-surface);
+  border: 2px solid var(--border-strong);
+  color: var(--text-tertiary);
+  transition: all 0.15s ease;
+}
+.stepLabel {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  line-height: 1.3;
+}
+.step:hover .stepLabel {
+  color: var(--text-primary);
+}
+.step[data-state='active'] .dot {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #04202a;
+  box-shadow: 0 0 0 5px var(--status-completed-bg);
+}
+.step[data-state='active'] .stepLabel {
+  color: var(--text-primary);
+}
+.step[data-state='done'] .dot {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.step[data-state='done'] .stepLabel {
+  color: var(--text-secondary);
+}
+.step[data-error='true'] .dot {
+  background: var(--status-exception-bg);
+  border-color: var(--status-exception-fg);
+  color: var(--status-exception-fg);
+  box-shadow: none;
+}
+.step[data-error='true'] .stepLabel {
+  color: var(--status-exception-fg);
+}
+.step:focus-visible {
+  outline: none;
+}
+.step:focus-visible .dot {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
+}
+
+/* ---------- Section cards ---------- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.stack > :global(.cx-card + .cx-card) {
+  margin-top: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: 18px;
+}
+.note {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Sticky action bar ---------- */
+.actionBar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px 12px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  min-width: 0;
+}
+.progress strong {
+  color: var(--text-primary);
+}
+.dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.dirty::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.buttons :global(.btn-create-submit),
+.buttons :global(.btn-cancel-shipment) {
+  height: 40px;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-radius: 10px;
+}
+.secondaryNext {
+  composes: btn-cancel-shipment from global;
+  color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+@media (max-width: 1100px) {
+  .setup {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 1000px) {
+  .grid {
+    --cols: 2 !important;
+  }
+}
+@media (max-width: 640px) {
+  .setup {
+    grid-template-columns: 1fr;
+  }
+  .segmented {
+    overflow-x: auto;
+  }
+  .grid {
+    --cols: 1 !important;
+  }
+  .grid > * {
+    grid-column: 1 / -1 !important;
+  }
+  .progress span:not(.dirty) {
+    display: none;
+  }
+}

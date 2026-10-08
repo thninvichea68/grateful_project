@@ -1,32 +1,48 @@
 import { useState } from 'react';
-import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, type DocumentCategory } from '@gs/shared';
+import {
+  DOCUMENT_CATEGORIES,
+  DOCUMENT_CATEGORY_LABEL,
+  type DocumentCategory,
+  type DocumentRow,
+} from '@gs/shared';
 import { useApiMutation } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { api } from '../lib/api';
+import { fmtFileSize } from '../lib/format';
 import { FilePicker } from './FilePicker';
 import { ErrorBanner, Modal, ui } from './ui';
 import { useToast } from './Toast';
 
-/** Upload one file with its metadata. Pass shipmentId/clientId to link it. */
+/**
+ * Upload one file with its metadata. Pass shipmentId/clientId to link it.
+ * Pass `doc` instead to edit an existing document's details (the file itself stays).
+ */
 export function DocumentUploadModal({
   shipmentId,
   clientId,
   defaultCategory = 'OTHER',
+  doc,
   onClose,
 }: {
   shipmentId?: string;
   clientId?: string;
   defaultCategory?: DocumentCategory;
+  doc?: DocumentRow;
   onClose: () => void;
 }) {
   const lookups = useLookups();
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<DocumentCategory>(defaultCategory);
-  const [statusLabel, setStatusLabel] = useState('');
-  const [client, setClient] = useState(clientId ?? '');
+  const [title, setTitle] = useState(doc?.title ?? '');
+  const [category, setCategory] = useState<DocumentCategory>(doc?.category ?? defaultCategory);
+  const [statusLabel, setStatusLabel] = useState(doc?.statusLabel ?? '');
+  const [client, setClient] = useState(doc ? (doc.clientId ?? '') : (clientId ?? ''));
   const upload = useApiMutation(() => {
+    if (doc)
+      return api(`/documents/${doc.id}`, {
+        method: 'PATCH',
+        json: { title, category, statusLabel, ...(clientId ? {} : { clientId: client }) },
+      });
     const fd = new FormData();
     fd.append('file', file!);
     fd.append('title', title || file!.name);
@@ -39,14 +55,21 @@ export function DocumentUploadModal({
   const tooBig = !!file && file.size > 20 * 1024 * 1024;
   return (
     <Modal
-      title="Upload document"
-      sub="Add a file to the document library and link it to a client."
+      title={doc ? 'Edit document' : 'Upload document'}
+      sub={
+        doc
+          ? `${doc.originalName} · ${fmtFileSize(doc.sizeBytes)}`
+          : 'Add a file to the document library and link it to a client.'
+      }
       onClose={onClose}
       width={560}
     >
       <ErrorBanner error={upload.error} />
       <div className="form-fields-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-        <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
+        <div
+          className="form-field-group"
+          style={{ gridColumn: 'span 2', display: doc ? 'none' : undefined }}
+        >
           <label htmlFor="up-file">File</label>
           <FilePicker
             id="up-file"
@@ -121,15 +144,21 @@ export function DocumentUploadModal({
         <button
           type="button"
           className="btn-create-submit"
-          disabled={!file || tooBig || upload.isPending}
+          disabled={(doc ? title.trim().length < 2 : !file || tooBig) || upload.isPending}
           onClick={() =>
             void upload.mutateAsync(undefined).then(() => {
-              toast('Document uploaded.');
+              toast(doc ? 'Document updated.' : 'Document uploaded.');
               onClose();
             })
           }
         >
-          {upload.isPending ? 'Uploading…' : 'Upload'}
+          {doc
+            ? upload.isPending
+              ? 'Saving…'
+              : 'Save changes'
+            : upload.isPending
+              ? 'Uploading…'
+              : 'Upload'}
         </button>
       </div>
     </Modal>

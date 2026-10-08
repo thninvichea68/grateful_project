@@ -6,16 +6,12 @@ import { useApiMutation, useDocuments } from '../features/admin';
 import { Pager, TableState, ui } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { DocumentUploadModal } from '../components/DocumentUpload';
+import { DocumentPreview } from '../components/DocumentPreview';
 import { api } from '../lib/api';
 import { downloadFile } from '../lib/files';
-import { fmtDate } from '../lib/format';
-
-export const fileSize = (n: number) =>
-  n < 1024
-    ? `${n} B`
-    : n < 1048576
-      ? `${(n / 1024).toFixed(0)} KB`
-      : `${(n / 1048576).toFixed(1)} MB`;
+import { fmtDate, fmtFileSize } from '../lib/format';
+import { icons } from '../layout/icons';
+import t from './DocumentTable.module.css';
 
 export function DocumentTable({
   rows,
@@ -34,8 +30,12 @@ export function DocumentTable({
     (id: string) => api(`/documents/${id}`, { method: 'DELETE' }),
     [['documents'], ['operations']],
   );
+  const [previewing, setPreviewing] = useState<DocumentRow | null>(null);
+  const [editing, setEditing] = useState<DocumentRow | null>(null);
   return (
     <div className="plans-table-scroll">
+      {previewing && <DocumentPreview doc={previewing} onClose={() => setPreviewing(null)} />}
+      {editing && <DocumentUploadModal doc={editing} onClose={() => setEditing(null)} />}
       <table className="data-table-clean">
         <thead>
           <tr>
@@ -56,11 +56,14 @@ export function DocumentTable({
             emptyText="No documents yet."
           />
           {rows?.map((d) => (
-            <tr key={d.id}>
+            <tr key={d.id} className={t.row} onClick={() => setPreviewing(d)}>
               <td>
-                <div className="val-bold">{d.title}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 700 }}>
-                  {d.originalName} · {fileSize(d.sizeBytes)}
+                {/* The row is the click target; this button makes it reachable by keyboard. */}
+                <button type="button" className={t.title}>
+                  {d.title}
+                </button>
+                <div className={t.file}>
+                  {d.originalName} · {fmtFileSize(d.sizeBytes)}
                 </div>
               </td>
               <td>{DOCUMENT_CATEGORY_LABEL[d.category]}</td>
@@ -69,6 +72,7 @@ export function DocumentTable({
                   <Link
                     to={`/plans/${d.shipmentId}`}
                     style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {d.shipmentReference}
                   </Link>
@@ -81,33 +85,50 @@ export function DocumentTable({
                 {d.uploadedBy ? ` · ${d.uploadedBy}` : ''}
               </td>
               <td>{d.statusLabel ?? '-'}</td>
-              <td style={{ whiteSpace: 'nowrap' }}>
-                <button
-                  type="button"
-                  className="filter-btn"
-                  onClick={() =>
-                    downloadFile(`/documents/${d.id}/download`).catch(() =>
-                      toast('Download failed.'),
-                    )
-                  }
-                >
-                  Download
-                </button>{' '}
-                {can('documents:write') && (
+              <td onClick={(e) => e.stopPropagation()}>
+                <div className={t.actions}>
+                  {can('documents:write') && (
+                    <button
+                      type="button"
+                      className={t.action}
+                      onClick={() => setEditing(d)}
+                      title="Edit details"
+                      aria-label={`Edit ${d.title}`}
+                    >
+                      {icons.edit({})}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className={ui.dangerBtn}
+                    className={t.action}
                     onClick={() =>
-                      window.confirm(`Delete “${d.title}”?`) &&
-                      void remove.mutateAsync(d.id).then(() => {
-                        toast('Document deleted.');
-                        onChanged?.();
-                      })
+                      downloadFile(`/documents/${d.id}/download`).catch(() =>
+                        toast('Download failed.'),
+                      )
                     }
+                    title="Download"
+                    aria-label={`Download ${d.title}`}
                   >
-                    Delete
+                    {icons.download({})}
                   </button>
-                )}
+                  {can('documents:write') && (
+                    <button
+                      type="button"
+                      className={`${t.action} ${t.danger}`}
+                      onClick={() =>
+                        window.confirm(`Delete “${d.title}”?`) &&
+                        void remove.mutateAsync(d.id).then(() => {
+                          toast('Document deleted.');
+                          onChanged?.();
+                        })
+                      }
+                      title="Delete"
+                      aria-label={`Delete ${d.title}`}
+                    >
+                      {icons.trash({})}
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

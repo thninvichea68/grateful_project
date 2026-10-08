@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { icons } from '../layout/icons';
+import { fmtFileSize } from '../lib/format';
 import s from './FilePicker.module.css';
 
 /** Drop zone + click-to-browse replacement for a bare `<input type="file">` (single file). */
@@ -60,7 +61,7 @@ export function FilePicker({
               {file.name}
             </span>
             <span className={s.fileMeta}>
-              {extOf(file.name)} · {formatSize(file.size)}
+              {extOf(file.name)} · {fmtFileSize(file.size)}
             </span>
           </span>
           <label htmlFor={id} className={s.change}>
@@ -98,10 +99,4 @@ export function FilePicker({
 function extOf(name: string) {
   const ext = /\.([^.]+)$/.exec(name)?.[1];
   return ext ? ext.toUpperCase() : 'FILE';
-}
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

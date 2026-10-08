@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   FormProvider,
   useFieldArray,
@@ -30,12 +30,14 @@ import {
 } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { useToast } from '../../components/Toast';
+import { icons } from '../../layout/icons';
 import { ApiError } from '../../lib/api';
 import { formResolver } from '../../lib/zodForm';
 import { AddNewSelect } from './AddNewSelect';
 import { CargoSection } from './CargoSection';
 import { DeclarationsSection } from './DeclarationsSection';
 import { cleanForSubmit, emptyForm, fromDetail, type FormValues } from './formModel';
+import f from './ShipmentForm.module.css';
 
 interface Step {
   label: string;
@@ -43,6 +45,30 @@ interface Step {
   fields: (keyof FormValues)[];
   render: () => ReactNode;
 }
+
+const FREIGHT = [
+  { value: 'SEA', label: 'Sea' },
+  { value: 'AIR', label: 'Air' },
+  { value: 'ROAD', label: 'Truck' },
+  { value: 'RAIL', label: 'Rail' },
+];
+const TERMS = [
+  { value: 'FCL', label: 'CY / CY' },
+  { value: 'LCL', label: 'CFS / CFS (LCL)' },
+  { value: 'NONE', label: 'Loose' },
+];
+const DIRECTIONS = [
+  { value: 'EXPORT', label: 'Export' },
+  { value: 'IMPORT', label: 'Import' },
+];
+
+const TONE: Record<string, string> = {
+  COMPLETED: 'done',
+  CLEARED: 'done',
+  IN_PROGRESS: 'progress',
+  PENDING: 'pending',
+  EXCEPTION: 'exception',
+};
 
 export function ShipmentFormPage() {
   const { id } = useParams();
@@ -91,11 +117,14 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const direction = useWatch({ control, name: 'direction' });
-  const transportMode = useWatch({ control, name: 'transportMode' });
+  const [direction, transportMode, loadType, clientId, status, clearanceStatus] = useWatch({
+    control,
+    name: ['direction', 'transportMode', 'loadType', 'clientId', 'status', 'clearanceStatus'],
+  });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
   const readOnly = !can('shipments:write');
+  const clientLocked = !!detail && detail.declarations.some((d) => d.hasLedgerEntry);
 
   // Air has no CY/CY or LCL load type.
   useEffect(() => {
@@ -108,7 +137,7 @@ function ShipmentForm({
 
   const onInvalid = (errs: FieldErrors<FormValues>) => {
     const keys = Object.keys(errs) as (keyof FormValues)[];
-    const target = steps.findIndex((s) => s.fields.some((f) => keys.includes(f)));
+    const target = steps.findIndex((s) => s.fields.some((k) => keys.includes(k)));
     if (target >= 0) setStep(target);
     toast(`Check ${keys.length} highlighted field${keys.length === 1 ? '' : 's'} before saving.`);
   };
@@ -148,155 +177,164 @@ function ShipmentForm({
     }
   };
 
-  const pill = (label: string, el: ReactNode, wide = false) => (
-    <label className={`ship-field${wide ? ' ship-wide' : ''}`}>
-      <span className="ship-cap">{label}</span>
-      <span className="ship-sel">{el}</span>
-    </label>
-  );
+  const cancel = () => {
+    if (isDirty && !window.confirm('Discard your changes?')) return;
+    if (detail) navigate('/plans');
+    else navigate(-1);
+  };
+
+  const shipStatus = status ?? 'PENDING';
+  const clearStatus = clearanceStatus ?? 'PENDING';
+  const clientName =
+    lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
+  const metaParts = [
+    clientName,
+    DIRECTIONS.find((d) => d.value === direction)?.label,
+    `By ${FREIGHT.find((x) => x.value === transportMode)?.label.toLowerCase() ?? ''}`,
+    TERMS.find((t) => t.value === loadType)?.label,
+  ].filter(Boolean);
+  // Editing an existing record: save from any step. New record: walk the steps, create at the end.
+  const canSaveHere = !!detail || isLast;
 
   return (
     <section className="view active">
-      <div className="shipment-create-container">
-        <div>
-          <div className="create-header-title">
-            {detail ? `${detail.reference} · ${detail.clientName}` : 'Create your new shipment'}
+      <FormProvider {...methods}>
+        <form
+          className={f.page}
+          // Enter in a field moves to the next step; only the last step saves on Enter.
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isLast) void submit();
+            else setStep(current + 1);
+          }}
+          noValidate
+        >
+          {/* ---------- Header ---------- */}
+          <div>
+            <Link to="/plans" className={f.back}>
+              ← Shipping Plans
+            </Link>
+            <div className={f.header}>
+              <div style={{ minWidth: 0 }}>
+                <div className={f.titleRow}>
+                  <h2 className={f.title}>{detail ? detail.reference : 'New shipment'}</h2>
+                  {detail ? (
+                    <>
+                      <span className={f.badge} data-tone={TONE[shipStatus]}>
+                        {SHIPMENT_STATUS_LABEL[shipStatus]}
+                      </span>
+                      <span className={f.badge} data-tone={TONE[clearStatus]}>
+                        {CLEARANCE_STATUS_LABEL[clearStatus]}
+                      </span>
+                    </>
+                  ) : (
+                    <span className={f.badge} data-tone="draft">
+                      Draft
+                    </span>
+                  )}
+                </div>
+                <div className={f.meta}>
+                  <span>
+                    <strong>{metaParts[0]}</strong>
+                    {metaParts.length > 1 ? ` · ${metaParts.slice(1).join(' · ')}` : ''}
+                  </span>
+                  {detail && (
+                    <span>
+                      Updated{' '}
+                      {new Date(detail.updatedAt).toLocaleString('en-GB', {
+                        timeZone: 'Asia/Phnom_Penh',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {detail && can('shipments:delete') && (
+                <button
+                  type="button"
+                  className={f.deleteBtn}
+                  onClick={() => void remove()}
+                  disabled={del.isPending}
+                >
+                  {icons.trash({})}
+                  Delete shipment
+                </button>
+              )}
+            </div>
           </div>
-          <div className="create-header-desc">
-            {detail
-              ? `Last updated ${new Date(detail.updatedAt).toLocaleString('en-GB', { timeZone: 'Asia/Phnom_Penh' })}`
-              : 'Shipment details, cargo invoices and customs declarations in one record.'}
-          </div>
-        </div>
-        <FormProvider {...methods}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (isLast) void submit();
-              else setStep(current + 1);
-            }}
-            noValidate
-          >
-            <fieldset disabled={readOnly} style={{ border: 'none', minWidth: 0 }}>
-              <div className="create-top-bar">
-                <div className="top-pills-left">
-                  {pill(
-                    'Client',
+
+          <fieldset disabled={readOnly} style={{ border: 'none', minWidth: 0, padding: 0 }}>
+            <div className={f.stack}>
+              {/* ---------- Setup ---------- */}
+              <div className="cx-card">
+                <div className={f.setup}>
+                  <div className={f.setupField}>
+                    <label className={f.cap} htmlFor="f-clientId">
+                      Client
+                    </label>
                     <select
-                      className="custom-select-pill"
+                      id="f-clientId"
+                      className={`form-select-box ${f.clientSelect}`}
                       {...register('clientId')}
-                      disabled={!!detail && detail.declarations.some((d) => d.hasLedgerEntry)}
+                      disabled={clientLocked}
+                      title={
+                        clientLocked
+                          ? 'Locked: a declaration of this shipment is already in the ledger'
+                          : undefined
+                      }
                     >
                       {lookups.clients
                         .filter((c) => c.status !== 'INACTIVE' || c.id === detail?.clientId)
                         .map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.name.toUpperCase()}
+                            {c.name}
                           </option>
                         ))}
-                    </select>,
-                    true,
-                  )}
-                  {pill(
-                    'Shipment type',
-                    <select
-                      className="custom-select-pill"
-                      {...register('direction', { onChange: () => setStep(0) })}
-                    >
-                      <option value="EXPORT">EXPORT</option>
-                      <option value="IMPORT">IMPORT</option>
-                    </select>,
-                  )}
-                  {pill(
-                    'Freight',
-                    <select className="custom-select-pill" {...register('transportMode')}>
-                      <option value="SEA">BY SEA</option>
-                      <option value="AIR">BY AIR</option>
-                      <option value="ROAD">BY TRUCK</option>
-                      <option value="RAIL">BY RAIL</option>
-                    </select>,
-                  )}
-                  {pill(
-                    'Terms',
-                    <select
-                      className="custom-select-pill"
-                      {...register('loadType')}
-                      disabled={transportMode === 'AIR'}
-                    >
-                      <option value="FCL">CY / CY</option>
-                      <option value="LCL">CFS / CFS (LCL)</option>
-                      <option value="NONE">Loose / Air</option>
-                    </select>,
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {detail && can('shipments:delete') && (
-                    <button
-                      type="button"
-                      className="btn-delete-shipment"
-                      onClick={() => void remove()}
-                      disabled={del.isPending}
-                    >
-                      Delete Shipment
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-cancel-shipment"
-                    onClick={() => {
-                      if (isDirty && !window.confirm('Discard your changes?')) return;
-                      if (detail) navigate('/plans');
-                      else navigate(-1);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  {current > 0 && (
-                    <button
-                      type="button"
-                      className="btn-cancel-shipment"
-                      onClick={() => setStep(current - 1)}
-                    >
-                      Back
-                    </button>
-                  )}
-                  {!readOnly && (
-                    <button type="submit" className="btn-create-submit" disabled={save.isPending}>
-                      {isLast
-                        ? save.isPending
-                          ? 'Saving…'
-                          : detail
-                            ? 'Save Changes'
-                            : 'Create Shipment'
-                        : 'Next'}
-                    </button>
-                  )}
+                    </select>
+                  </div>
+                  <Segmented
+                    name="direction"
+                    label="Shipment type"
+                    options={DIRECTIONS}
+                    onChange={() => setStep(0)}
+                  />
+                  <Segmented name="transportMode" label="Freight" options={FREIGHT} />
+                  <Segmented
+                    name="loadType"
+                    label="Terms"
+                    options={TERMS}
+                    disabled={transportMode === 'AIR'}
+                  />
                 </div>
               </div>
 
-              <div className="shipment-steps-bar" role="tablist">
+              {/* ---------- Stepper ---------- */}
+              <nav className={f.stepper} aria-label="Form steps">
                 {steps.map((s, i) => {
-                  const hasError = s.fields.some((f) => f in errors);
-                  const state =
-                    i === current ? 'is-active' : i < current ? 'is-completed' : 'is-pending';
+                  const hasError = s.fields.some((k) => k in errors);
+                  const state = i === current ? 'active' : i < current ? 'done' : 'todo';
                   return (
                     <button
                       type="button"
                       key={s.label}
-                      role="tab"
-                      aria-selected={i === current}
-                      className={`step-item ${state}`}
+                      className={f.step}
+                      data-state={state}
+                      data-error={hasError}
+                      aria-current={i === current ? 'step' : undefined}
                       onClick={() => setStep(i)}
-                      style={hasError ? { color: 'var(--status-exception-fg)' } : undefined}
                     >
-                      <span className="step-index">
-                        {state === 'is-completed' && !hasError ? '✓' : i + 1}
+                      <span className={f.dot}>
+                        {hasError ? '!' : state === 'done' ? '✓' : i + 1}
                       </span>
-                      <span>{s.label}</span>
+                      <span className={f.stepLabel}>{s.label}</span>
                     </button>
                   );
                 })}
-              </div>
+              </nav>
 
               <ErrorBanner error={violations ? null : (save.error ?? del.error)} />
               {violations && (
@@ -305,7 +343,6 @@ function ShipmentForm({
                   style={{
                     borderRadius: 10,
                     padding: '10px 14px',
-                    marginBottom: 14,
                     background: 'var(--status-exception-bg)',
                     color: 'var(--status-exception-fg)',
                     fontSize: 13,
@@ -326,16 +363,101 @@ function ShipmentForm({
                 </div>
               )}
 
-              <div className="form-fields-set">{steps[current]!.render()}</div>
-            </fieldset>
-          </form>
-        </FormProvider>
-      </div>
+              {steps[current]!.render()}
+            </div>
+          </fieldset>
+
+          {/* ---------- Sticky action bar ---------- */}
+          <div className={f.actionBar}>
+            <div className={f.progress}>
+              <span>
+                Step <strong>{current + 1}</strong> of {steps.length} ·{' '}
+                <strong>{steps[current]!.label}</strong>
+              </span>
+              {isDirty && !readOnly && <span className={f.dirty}>Unsaved changes</span>}
+            </div>
+            <div className={f.buttons}>
+              <button type="button" className="btn-cancel-shipment" onClick={cancel}>
+                {readOnly ? 'Close' : 'Cancel'}
+              </button>
+              {current > 0 && (
+                <button
+                  type="button"
+                  className="btn-cancel-shipment"
+                  onClick={() => setStep(current - 1)}
+                >
+                  ← Back
+                </button>
+              )}
+              {!isLast && (detail || readOnly) && (
+                <button
+                  type="button"
+                  className={f.secondaryNext}
+                  onClick={() => setStep(current + 1)}
+                >
+                  Next →
+                </button>
+              )}
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="btn-create-submit"
+                  disabled={save.isPending}
+                  onClick={() => (canSaveHere ? void submit() : setStep(current + 1))}
+                >
+                  {!canSaveHere
+                    ? 'Next →'
+                    : save.isPending
+                      ? 'Saving…'
+                      : detail
+                        ? 'Save changes'
+                        : 'Create shipment'}
+                </button>
+              )}
+            </div>
+          </div>
+        </form>
+      </FormProvider>
     </section>
   );
 }
 
 /* ------------------------------ Field helpers ------------------------------ */
+
+type Span = number | 'full';
+const spanStyle = (span?: Span): CSSProperties | undefined =>
+  span === 'full' ? { gridColumn: '1 / -1' } : span ? { gridColumn: `span ${span}` } : undefined;
+
+function Segmented({
+  name,
+  label,
+  options,
+  disabled,
+  onChange,
+}: {
+  name: 'direction' | 'transportMode' | 'loadType';
+  label: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+  onChange?: () => void;
+}) {
+  const { register } = useFormContext<FormValues>();
+  return (
+    <fieldset className={f.setupField} disabled={disabled}>
+      <legend className={f.cap} style={{ marginBottom: 8 }}>
+        {label}
+      </legend>
+      <div className={f.segmented}>
+        {options.map((o) => (
+          <label key={o.value} className={f.segOpt}>
+            <input type="radio" value={o.value} {...register(name, { onChange })} />
+            <span>{o.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 
 function Field({
   name,
@@ -347,7 +469,7 @@ function Field({
   name: keyof FormValues;
   label: string;
   type?: string;
-  span?: number;
+  span?: Span;
   placeholder?: string;
 }) {
   const {
@@ -356,13 +478,14 @@ function Field({
   } = useFormContext<FormValues>();
   const err = errors[name] as { message?: string } | undefined;
   return (
-    <div className="form-field-group" style={span ? { gridColumn: `span ${span}` } : undefined}>
+    <div className="form-field-group" style={spanStyle(span)}>
       <label htmlFor={`f-${name}`}>{label}</label>
       <input
         id={`f-${name}`}
         type={type}
         className="form-field-box"
         placeholder={placeholder ?? label}
+        title={type === 'text' ? undefined : label}
         {...register(name)}
         aria-invalid={!!err}
       />
@@ -382,7 +505,7 @@ function Select({
   label: string;
   options: { value: string; label: string }[];
   placeholder?: string;
-  span?: number;
+  span?: Span;
 }) {
   const {
     register,
@@ -390,7 +513,7 @@ function Select({
   } = useFormContext<FormValues>();
   const err = errors[name] as { message?: string } | undefined;
   return (
-    <div className="form-field-group" style={span ? { gridColumn: `span ${span}` } : undefined}>
+    <div className="form-field-group" style={spanStyle(span)}>
       <label htmlFor={`f-${name}`}>{label}</label>
       <select id={`f-${name}`} className="form-select-box" {...register(name)} aria-invalid={!!err}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
@@ -405,19 +528,30 @@ function Select({
   );
 }
 
-function Card({ title, sub, children }: { title: string; sub: string; children: ReactNode }) {
+/** A titled section card; `cols` sets the grid (fields span 1 unless told otherwise). */
+function Card({
+  title,
+  sub,
+  cols = 4,
+  children,
+}: {
+  title: string;
+  sub: string;
+  cols?: number;
+  children: ReactNode;
+}) {
   return (
-    <div className="form-section">
-      <div className="cx-card">
-        <div className="cx-card-head">
-          <div className="cx-title">
-            <div>
-              <h3>{title}</h3>
-              <p>{sub}</p>
-            </div>
+    <div className="cx-card">
+      <div className="cx-card-head">
+        <div className="cx-title">
+          <div>
+            <h3>{title}</h3>
+            <p>{sub}</p>
           </div>
         </div>
-        <div className="form-fields-grid cx-info-grid">{children}</div>
+      </div>
+      <div className={f.grid} style={{ '--cols': cols } as CSSProperties}>
+        {children}
       </div>
     </div>
   );
@@ -440,7 +574,7 @@ function PartiesFields({
       (a, b) => Number(b.clientId === clientId) - Number(a.clientId === clientId),
     );
     return (
-      <div className="form-field-group cx-wide" style={{ gridColumn: 'span 2' }}>
+      <div className="form-field-group" style={spanStyle(2)}>
         <label htmlFor="f-consigneeId">Consignee</label>
         <AddNewSelect
           id="f-consigneeId"
@@ -458,14 +592,14 @@ function PartiesFields({
     );
   }
   return (
-    <div className="form-field-group cx-wide" style={{ gridColumn: 'span 2' }}>
+    <div className="form-field-group" style={spanStyle(2)}>
       <label htmlFor="f-forwarderId">Forwarder</label>
       <AddNewSelect
         id="f-forwarderId"
         label="Forwarder"
         placeholder="Forwarder"
         registration={register('forwarderId')}
-        options={lookups.forwarders.map((f) => ({ value: f.id, label: f.name }))}
+        options={lookups.forwarders.map((x) => ({ value: x.id, label: x.name }))}
         onCreate={
           can('shipments:write')
             ? async (name) => (await addForwarder.mutateAsync({ name })).id
@@ -476,7 +610,7 @@ function PartiesFields({
   );
 }
 
-function ContainersSection() {
+function ContainersCard() {
   const {
     control,
     register,
@@ -489,87 +623,93 @@ function ContainersSection() {
     (Record<number, Record<string, { message?: string }>> & { message?: string }) | undefined;
   if (loadType !== 'FCL')
     return (
-      <p className="create-header-desc" style={{ gridColumn: '1 / -1' }}>
-        Containers are recorded for CY/CY (FCL) shipments only.
-      </p>
+      <Card title="Containers" sub="Container numbers and seals" cols={1}>
+        <p className={f.note}>
+          Containers are recorded for CY / CY (FCL) shipments only. Change Terms above to add them.
+        </p>
+      </Card>
     );
   return (
-    <div style={{ gridColumn: '1 / -1' }}>
-      <div className="cdc-lines-wrap">
-        <table className="cdc-lines-table">
-          <thead>
-            <tr>
-              <th>Container No.</th>
-              <th>Size</th>
-              <th>Liner Seal</th>
-              {direction === 'EXPORT' && <th>Customs Seal</th>}
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {arr.fields.map((f, i) => (
-              <tr key={f.id}>
-                <td>
-                  <input
-                    className="form-field-box"
-                    placeholder="e.g. MRKU8974303"
-                    {...register(`containers.${i}.containerNo`)}
-                    aria-invalid={!!errs?.[i]?.containerNo}
-                  />
-                  <FieldError message={errs?.[i]?.containerNo?.message} />
-                </td>
-                <td>
-                  <select className="form-field-box" {...register(`containers.${i}.size`)}>
-                    <option value="">Size</option>
-                    {CONTAINER_SIZES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace(/^(\d\d)/, "$1'")}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <input
-                    className="form-field-box"
-                    placeholder="Liner Seal"
-                    {...register(`containers.${i}.linerSeal`)}
-                  />
-                </td>
-                {direction === 'EXPORT' && (
-                  <td>
-                    <input
-                      className="form-field-box"
-                      placeholder="Customs Seal"
-                      {...register(`containers.${i}.customsSeal`)}
-                    />
-                  </td>
-                )}
-                <td>
-                  <button
-                    type="button"
-                    className="cdc-remove-line-btn"
-                    title="Remove container"
-                    onClick={() => arr.remove(i)}
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <Card title="Containers" sub="Container numbers and seals loaded on this shipment" cols={1}>
+      <div>
+        {arr.fields.length > 0 && (
+          <div className="cdc-lines-wrap">
+            <table className="cdc-lines-table">
+              <thead>
+                <tr>
+                  <th>Container No.</th>
+                  <th>Size</th>
+                  <th>Liner Seal</th>
+                  {direction === 'EXPORT' && <th>Customs Seal</th>}
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {arr.fields.map((row, i) => (
+                  <tr key={row.id}>
+                    <td>
+                      <input
+                        className="form-field-box"
+                        placeholder="e.g. MRKU8974303"
+                        {...register(`containers.${i}.containerNo`)}
+                        aria-invalid={!!errs?.[i]?.containerNo}
+                      />
+                      <FieldError message={errs?.[i]?.containerNo?.message} />
+                    </td>
+                    <td>
+                      <select className="form-field-box" {...register(`containers.${i}.size`)}>
+                        <option value="">Size</option>
+                        {CONTAINER_SIZES.map((s) => (
+                          <option key={s} value={s}>
+                            {s.replace(/^(\d\d)/, "$1'")}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        className="form-field-box"
+                        placeholder="Liner Seal"
+                        {...register(`containers.${i}.linerSeal`)}
+                      />
+                    </td>
+                    {direction === 'EXPORT' && (
+                      <td>
+                        <input
+                          className="form-field-box"
+                          placeholder="Customs Seal"
+                          {...register(`containers.${i}.customsSeal`)}
+                        />
+                      </td>
+                    )}
+                    <td>
+                      <button
+                        type="button"
+                        className="cdc-remove-line-btn"
+                        title="Remove container"
+                        onClick={() => arr.remove(i)}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <FieldError message={errs?.message} />
+        <button
+          type="button"
+          className="cdc-add-line-btn"
+          onClick={() =>
+            arr.append({ containerNo: '', size: '40HQ', linerSeal: '', customsSeal: '' })
+          }
+        >
+          + Add Container
+        </button>
       </div>
-      <FieldError message={errs?.message} />
-      <button
-        type="button"
-        className="cdc-add-line-btn"
-        onClick={() =>
-          arr.append({ containerNo: '', size: '40HQ', linerSeal: '', customsSeal: '' })
-        }
-      >
-        + Add Container
-      </button>
-    </div>
+    </Card>
   );
 }
 
@@ -587,11 +727,24 @@ function buildSteps(
   const coForms = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
   const statuses = SHIPMENT_STATUSES.map((s) => ({ value: s, label: SHIPMENT_STATUS_LABEL[s] }));
   const clearance = CLEARANCE_STATUSES.map((s) => ({ value: s, label: CLEARANCE_STATUS_LABEL[s] }));
-  const statusFields = (
-    <>
+
+  const statusCard = (
+    <Card title="Status" sub="Where the shipment and its customs clearance stand" cols={2}>
       <Select name="status" label="Shipment Status" options={statuses} />
       <Select name="clearanceStatus" label="Clearance Status" options={clearance} />
-    </>
+    </Card>
+  );
+  const thcCard = (
+    <Card title="THC / HBL" sub="Terminal handling charge billed against the house bill">
+      <Field name="thcHblNo" label="THC / HBL No." span={2} />
+      <Field name="thcHblDate" label="THC / HBL Date" type="date" />
+      <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" />
+    </Card>
+  );
+  const remarkCard = (
+    <Card title="Remark" sub="Anything the team should know about this shipment" cols={1}>
+      <Field name="remark" label="Remark" span="full" placeholder="Optional note" />
+    </Card>
   );
 
   if (direction === 'EXPORT') {
@@ -609,22 +762,27 @@ function buildSteps(
         ],
         render: () => (
           <>
-            <Card title="Shipment Information" sub="Who is shipping, to where, and key references">
+            <Card title="Parties & Destination" sub="Who receives the goods and who moves them">
               <PartiesFields lookups={lookups} which="consignee" />
               <PartiesFields lookups={lookups} which="forwarder" />
+            </Card>
+            <Card title="Cargo" sub="What is shipped and where it goes">
               <Select
                 name="destinationCountryIso2"
-                label="Country"
+                label="Destination Country"
                 options={countries}
-                placeholder="Country"
+                placeholder="Select country"
               />
-              <Field name="quantity" label="Quantity" />
-              <Select name="quantityUnit" label="Unit" options={units} placeholder="Unit" />
-              <Select name="material" label="Material" options={materials} placeholder="Material" />
+              <Field name="quantity" label="Quantity" placeholder="0" />
+              <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+              <Select
+                name="material"
+                label="Material"
+                options={materials}
+                placeholder="Select material"
+              />
             </Card>
-            <div className="form-section">
-              <CargoSection shipmentId={detail?.id} />
-            </div>
+            <CargoSection shipmentId={detail?.id} />
           </>
         ),
       },
@@ -645,21 +803,28 @@ function buildSteps(
           'loadType',
         ],
         render: () => (
-          <Card
-            title="Booking, Container & Clearance"
-            sub="Booking, the containers loaded and the clearance port"
-          >
-            <Field name="bookingNo" label="Booking / SO No." />
-            <Field name="crd" label="CRD" type="date" />
-            <Field name="hblNo" label="HBL No." />
-            <Select name="clearancePortId" label="Port" options={ports} placeholder="Port" />
-            <Field name="etdPort" label="ETD Port" />
-            <Field name="etd" label="ETD" type="date" />
-            <Field name="atd" label="ATD Date" type="date" />
-            <Field name="eta" label="ETA Port" type="date" />
-            {statusFields}
-            <ContainersSection />
-          </Card>
+          <>
+            <Card title="Booking & Clearance" sub="Booking references and the clearance port">
+              <Field name="bookingNo" label="Booking / SO No." span={2} />
+              <Field name="hblNo" label="HBL No." />
+              <Field name="crd" label="CRD" type="date" />
+              <Select
+                name="clearancePortId"
+                label="Clearance Port"
+                options={ports}
+                placeholder="Select port"
+                span={2}
+              />
+              <Field name="etdPort" label="ETD Port" span={2} placeholder="e.g. Sihanoukville" />
+            </Card>
+            <Card title="Schedule" sub="Departure and arrival dates" cols={3}>
+              <Field name="etd" label="ETD" type="date" />
+              <Field name="atd" label="ATD (Actual Departure)" type="date" />
+              <Field name="eta" label="ETA Port" type="date" />
+            </Card>
+            <ContainersCard />
+            {statusCard}
+          </>
         ),
       },
       {
@@ -682,19 +847,15 @@ function buildSteps(
               title="Vessel & Certificate of Origin"
               sub="Vessel details and the CO issued for this shipment"
             >
-              <Field name="vesselName" label="Vessel Name" />
-              <Field name="voyageNo" label="Voyage No." />
-              <Select name="coForm" label="CO Form" options={coForms} placeholder="CO Form" />
-              <Field name="coNumber" label="CO Number" />
+              <Field name="vesselName" label="Vessel Name" span={2} />
+              <Field name="voyageNo" label="Voyage No." span={2} />
+              <Select name="coForm" label="CO Form" options={coForms} placeholder="Select form" />
+              <Field name="coNumber" label="CO Number" span={2} />
               <Field name="coStatus" label="CO Status" placeholder="e.g. Active" />
-              <Field name="thcHblNo" label="THC / HBL No." />
-              <Field name="thcHblDate" label="THC / HBL Date" type="date" />
-              <Field name="thcHblAmount" label="THC / HBL Amount (USD)" />
-              <Field name="remark" label="Remark" span={4} />
             </Card>
-            <div className="form-section">
-              <DeclarationsSection ports={lookups.ports} original={detail} />
-            </div>
+            {thcCard}
+            <DeclarationsSection ports={lookups.ports} original={detail} />
+            {remarkCard}
           </>
         ),
       },
@@ -716,24 +877,30 @@ function buildSteps(
         'originCountryIso2',
       ],
       render: () => (
-        <Card
-          title="Shipment Information"
-          sub="Supplier, factory consignee and what is being imported"
-        >
-          <Field name="shipperName" label="Shipper Name" span={2} />
-          <PartiesFields lookups={lookups} which="consignee" />
-          <Field name="quantity" label="Quantity" />
-          <Select name="quantityUnit" label="Unit" options={units} placeholder="Unit" />
-          <Select name="material" label="Material" options={materials} placeholder="Material" />
-          <Select
-            name="originCountryIso2"
-            label="Origin Country"
-            options={countries}
-            placeholder="Country"
-          />
-          <PartiesFields lookups={lookups} which="forwarder" />
-          <Field name="broker" label="Broker" span={2} />
-        </Card>
+        <>
+          <Card title="Parties" sub="Supplier, factory consignee and the agents handling it">
+            <Field name="shipperName" label="Shipper Name" span={2} placeholder="Supplier name" />
+            <PartiesFields lookups={lookups} which="consignee" />
+            <PartiesFields lookups={lookups} which="forwarder" />
+            <Field name="broker" label="Broker" span={2} placeholder="Customs broker" />
+          </Card>
+          <Card title="Cargo" sub="What is being imported and where it comes from">
+            <Field name="quantity" label="Quantity" placeholder="0" />
+            <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+            <Select
+              name="material"
+              label="Material"
+              options={materials}
+              placeholder="Select material"
+            />
+            <Select
+              name="originCountryIso2"
+              label="Origin Country"
+              options={countries}
+              placeholder="Select country"
+            />
+          </Card>
+        </>
       ),
     },
     {
@@ -741,14 +908,8 @@ function buildSteps(
       fields: ['invoices', 'thcHblNo', 'thcHblDate', 'thcHblAmount'],
       render: () => (
         <>
-          <div className="form-section">
-            <CargoSection shipmentId={detail?.id} />
-          </div>
-          <Card title="THC / HBL" sub="Terminal handling charge billed against the house bill">
-            <Field name="thcHblNo" label="THC / HBL No." />
-            <Field name="thcHblDate" label="THC / HBL Date" type="date" />
-            <Field name="thcHblAmount" label="THC / HBL Amount (USD)" />
-          </Card>
+          <CargoSection shipmentId={detail?.id} />
+          {thcCard}
         </>
       ),
     },
@@ -770,27 +931,29 @@ function buildSteps(
         'loadType',
       ],
       render: () => (
-        <Card
-          title="Origin, Destination & Vessel"
-          sub="Arrival, clearance and delivery to the factory"
-        >
-          <Field name="hblNo" label="HBL No." />
-          <Select
-            name="clearancePortId"
-            label="Clearance Port"
-            options={ports}
-            placeholder="Port"
-          />
-          <Field name="etd" label="ETD" type="date" />
-          <Field name="eta" label="ETA Port" type="date" />
-          <Field name="ata" label="Actual Arrival (ATA)" type="date" />
-          <Field name="arriveFty" label="ETA Factory" type="date" />
-          <Field name="vesselName" label="Vessel Name" />
-          <Field name="voyageNo" label="Voyage No." />
-          <Field name="coNumber" label="CO Number" />
-          {statusFields}
-          <ContainersSection />
-        </Card>
+        <>
+          <Card title="Vessel & Clearance" sub="Vessel, house bill and where it clears customs">
+            <Field name="vesselName" label="Vessel Name" span={2} />
+            <Field name="voyageNo" label="Voyage No." />
+            <Field name="hblNo" label="HBL No." />
+            <Select
+              name="clearancePortId"
+              label="Clearance Port"
+              options={ports}
+              placeholder="Select port"
+              span={2}
+            />
+            <Field name="coNumber" label="CO Number" span={2} />
+          </Card>
+          <Card title="Schedule" sub="Arrival at port and delivery to the factory">
+            <Field name="etd" label="ETD" type="date" />
+            <Field name="eta" label="ETA Port" type="date" />
+            <Field name="ata" label="Actual Arrival (ATA)" type="date" />
+            <Field name="arriveFty" label="ETA Factory" type="date" />
+          </Card>
+          <ContainersCard />
+          {statusCard}
+        </>
       ),
     },
     {
@@ -798,12 +961,8 @@ function buildSteps(
       fields: ['declarations', 'remark'],
       render: () => (
         <>
-          <div className="form-section">
-            <DeclarationsSection ports={lookups.ports} original={detail} />
-          </div>
-          <Card title="Remark" sub="Anything the team should know about this shipment">
-            <Field name="remark" label="Remark" span={4} />
-          </Card>
+          <DeclarationsSection ports={lookups.ports} original={detail} />
+          {remarkCard}
         </>
       ),
     },
