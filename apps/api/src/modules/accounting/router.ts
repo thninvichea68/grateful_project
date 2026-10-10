@@ -36,10 +36,12 @@ accountingRouter.get('/declarations', async (req, res) => {
 });
 
 accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
-  const q = parse(ledgerListQuerySchema, { ...req.query, page: 1, pageSize: 500 });
-  const { data, totals } = await ledger.listLedger({ ...q, sort: 'invDate' });
+  const q = parse(ledgerListQuerySchema, { ...req.query, page: 1 });
+  const period = q.month ?? q.year ?? 'all';
+  // Every matching row (a full year can exceed one page), not just the first page.
+  const { data, totals } = await ledger.listLedger({ ...q, pageSize: 100_000, sort: 'invDate' });
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet(`Ledger ${q.month ?? 'all'}`, {
+  const ws = wb.addWorksheet(`Ledger ${period}`, {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
   const cols: [string, number, (r: (typeof data)[number]) => string | number | null][] = [
@@ -89,7 +91,10 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   );
-  res.setHeader('Content-Disposition', attachmentName(`monthly-ledger-${q.month ?? 'all'}.xlsx`));
+  res.setHeader(
+    'Content-Disposition',
+    attachmentName(`${q.month ? 'monthly' : q.year ? 'yearly' : 'full'}-ledger-${period}.xlsx`),
+  );
   await wb.xlsx.write(res);
   res.end();
 });

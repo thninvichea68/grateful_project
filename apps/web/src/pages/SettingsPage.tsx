@@ -5,12 +5,16 @@ import {
   PORT_KINDS,
   companySchema,
   type CompanyInput,
+  type ExchangeRateSyncStatus,
   type LookupType,
 } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useSettings } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { ErrorBanner, FieldError, TableState, ui } from '../components/ui';
+import { InlineName } from '../components/InlineName';
+import { MefSyncStatus, RateImportModal, RateRow } from './settings/ExchangeRates';
+import st from './SettingsPage.module.css';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { fmtDate, fmtNum } from '../lib/format';
@@ -42,7 +46,8 @@ export function SettingsPage() {
   const [tab, setTab] = useState<Tab>('company');
   const manage = can('settings:manage');
   return (
-    <section className="view active">
+    // Every tab but Company is a list: fill the window so only its rows scroll.
+    <section className={`view active${tab !== 'company' ? ` ${st.fill}` : ''}`}>
       <nav
         style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}
         aria-label="Settings sections"
@@ -176,6 +181,7 @@ function Rates({ manage }: { manage: boolean }) {
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()),
   );
   const [rate, setRate] = useState('');
+  const [importing, setImporting] = useState(false);
   const add = useApiMutation(
     () =>
       api('/settings/exchange-rates', {
@@ -184,12 +190,12 @@ function Rates({ manage }: { manage: boolean }) {
       }),
     INVALIDATE,
   );
-  const del = useApiMutation(
-    (id: string) => api(`/settings/exchange-rates/${id}`, { method: 'DELETE' }),
-    INVALIDATE,
-  );
   const base = useApiMutation(
     (value: string) => api('/settings/base-exchange-rate', { method: 'PUT', json: { value } }),
+    INVALIDATE,
+  );
+  const sync = useApiMutation(
+    () => api<ExchangeRateSyncStatus>('/settings/exchange-rates/sync', { method: 'POST' }),
     INVALIDATE,
   );
   return (
@@ -198,20 +204,45 @@ function Rates({ manage }: { manage: boolean }) {
       sub={`New ledger rows use the rate in force on their invoice date. Before the first rate, the base rate (${fmtNum(s.baseExchangeRate)}) is used.`}
       action={
         manage ? (
-          <button
-            type="button"
-            className="filter-btn"
-            onClick={() => {
-              const v = window.prompt('Base rate (1 USD = ? KHR)', String(s.baseExchangeRate));
-              if (v) void base.mutateAsync(v).then(() => toast('Base rate saved.'));
-            }}
-          >
-            Set base rate
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="filter-btn"
+              disabled={sync.isPending}
+              onClick={() =>
+                void sync
+                  .mutateAsync(undefined)
+                  .then((r) =>
+                    toast(
+                      r.result === 'same'
+                        ? `Already up to date: ${fmtNum(r.usdToKhr)} KHR for ${fmtDate(r.effectiveDate)}.`
+                        : `Official rate ${r.result === 'new' ? 'added' : 'updated'}: ${fmtNum(r.usdToKhr)} KHR for ${fmtDate(r.effectiveDate)}.`,
+                    ),
+                  )
+              }
+            >
+              {sync.isPending ? 'Updating…' : 'Update from MEF'}
+            </button>
+            <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
+              Import Excel
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              onClick={() => {
+                const v = window.prompt('Base rate (1 USD = ? KHR)', String(s.baseExchangeRate));
+                if (v) void base.mutateAsync(v).then(() => toast('Base rate saved.'));
+              }}
+            >
+              Set base rate
+            </button>
+          </div>
         ) : undefined
       }
     >
-      <ErrorBanner error={add.error ?? del.error ?? base.error} />
+      {importing && <RateImportModal onClose={() => setImporting(false)} />}
+      <MefSyncStatus status={s.exchangeRateSync} auto={s.exchangeRateAutoSync} />
+      <ErrorBanner error={add.error ?? base.error ?? sync.error} />
       {manage && (
         <div className={ui.toolbar} style={{ marginBottom: 14 }}>
           <input
@@ -244,43 +275,29 @@ function Rates({ manage }: { manage: boolean }) {
           </button>
         </div>
       )}
-      <table className="data-table-clean">
-        <thead>
-          <tr>
-            <th>Effective from</th>
-            <th>1 USD =</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          <TableState
-            cols={3}
-            loading={false}
-            error={null}
-            empty={!s.exchangeRates.length}
-            emptyText="No dated rates yet."
-          />
-          {s.exchangeRates.map((r) => (
-            <tr key={r.id}>
-              <td>{fmtDate(r.effectiveDate)}</td>
-              <td className="val-bold">{fmtNum(r.usdToKhr)} KHR</td>
-              <td>
-                {manage && (
-                  <button
-                    type="button"
-                    className={ui.dangerBtn}
-                    onClick={() =>
-                      window.confirm('Delete this rate?') && void del.mutateAsync(r.id)
-                    }
-                  >
-                    Delete
-                  </button>
-                )}
-              </td>
+      <div className={st.tableScroll}>
+        <table className="data-table-clean">
+          <thead>
+            <tr>
+              <th>Effective from</th>
+              <th>1 USD =</th>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            <TableState
+              cols={3}
+              loading={false}
+              error={null}
+              empty={!s.exchangeRates.length}
+              emptyText="No dated rates yet."
+            />
+            {s.exchangeRates.map((r) => (
+              <RateRow key={r.id} rate={r} manage={manage} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -366,57 +383,54 @@ function Ports({ manage }: { manage: boolean }) {
           </button>
         </div>
       )}
-      <table className="data-table-clean">
-        <thead>
-          <tr>
-            <th>Code</th>
-            <th>No.</th>
-            <th>Name</th>
-            <th>Chart label</th>
-            <th>Kind</th>
-            <th style={{ textAlign: 'center' }}>Shipments</th>
-            <th>Active</th>
-          </tr>
-        </thead>
-        <tbody>
-          {s.ports.map((p) => (
-            <tr key={p.id}>
-              <td className="val-bold">{p.code}</td>
-              <td>{p.customsPortNo ?? '-'}</td>
-              <td>
-                {manage ? (
-                  <button
-                    type="button"
-                    className="filter-mini-link"
-                    onClick={() => {
-                      const v = window.prompt('Port name', p.name);
-                      if (v) void patch.mutateAsync({ id: p.id, v: { name: v } });
-                    }}
-                  >
-                    {p.name}
-                  </button>
-                ) : (
-                  p.name
-                )}
-              </td>
-              <td>{p.shortName}</td>
-              <td>{p.kind}</td>
-              <td style={{ textAlign: 'center' }}>{p.shipments}</td>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={p.isActive}
-                  disabled={!manage}
-                  aria-label={`${p.code} active`}
-                  onChange={(e) =>
-                    void patch.mutateAsync({ id: p.id, v: { isActive: e.target.checked } })
-                  }
-                />
-              </td>
+      <div className={st.tableScroll}>
+        <table className="data-table-clean">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>No.</th>
+              <th>Name</th>
+              <th>Chart label</th>
+              <th>Kind</th>
+              <th style={{ textAlign: 'center' }}>Shipments</th>
+              <th>Active</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {s.ports.map((p) => (
+              <tr key={p.id}>
+                <td className="val-bold">{p.code}</td>
+                <td>{p.customsPortNo ?? '-'}</td>
+                <td>
+                  <InlineName
+                    value={p.name}
+                    label="Port name"
+                    onSave={
+                      manage
+                        ? (name) => void patch.mutateAsync({ id: p.id, v: { name } })
+                        : undefined
+                    }
+                  />
+                </td>
+                <td>{p.shortName}</td>
+                <td>{p.kind}</td>
+                <td style={{ textAlign: 'center' }}>{p.shipments}</td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={p.isActive}
+                    disabled={!manage}
+                    aria-label={`${p.code} active`}
+                    onChange={(e) =>
+                      void patch.mutateAsync({ id: p.id, v: { isActive: e.target.checked } })
+                    }
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -467,70 +481,70 @@ function SimpleList({ kind, manage }: { kind: 'forwarders' | 'consignees'; manag
           </button>
         </div>
       )}
-      <table className="data-table-clean">
-        <thead>
-          <tr>
-            <th>Name</th>
-            {kind === 'consignees' && <th>Client</th>}
-            <th style={{ textAlign: 'center' }}>Shipments</th>
-            <th>Active</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td>
-                {manage ? (
-                  <button
-                    type="button"
-                    className="filter-mini-link"
-                    onClick={() => {
-                      const v = window.prompt(`${label} name`, r.name);
-                      if (v) void patch.mutateAsync({ id: r.id, v: { name: v } });
-                    }}
-                  >
-                    {r.name}
-                  </button>
-                ) : (
-                  r.name
-                )}
-              </td>
-              {kind === 'consignees' && (
-                <td>
-                  <select
-                    className={ui.input}
-                    disabled={!manage}
-                    value={(r as { clientId: string | null }).clientId ?? ''}
-                    aria-label="Client"
-                    onChange={(e) =>
-                      void patch.mutateAsync({ id: r.id, v: { clientId: e.target.value || null } })
-                    }
-                  >
-                    <option value="">— overseas buyer —</option>
-                    {lookups.data?.clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.code}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              )}
-              <td style={{ textAlign: 'center' }}>{r.shipments}</td>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={r.isActive}
-                  disabled={!manage}
-                  aria-label={`${r.name} active`}
-                  onChange={(e) =>
-                    void patch.mutateAsync({ id: r.id, v: { isActive: e.target.checked } })
-                  }
-                />
-              </td>
+      <div className={st.tableScroll}>
+        <table className="data-table-clean">
+          <thead>
+            <tr>
+              <th>Name</th>
+              {kind === 'consignees' && <th>Client</th>}
+              <th style={{ textAlign: 'center' }}>Shipments</th>
+              <th>Active</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <InlineName
+                    value={r.name}
+                    label={`${label} name`}
+                    onSave={
+                      manage
+                        ? (name) => void patch.mutateAsync({ id: r.id, v: { name } })
+                        : undefined
+                    }
+                  />
+                </td>
+                {kind === 'consignees' && (
+                  <td>
+                    <select
+                      className={ui.input}
+                      disabled={!manage}
+                      value={(r as { clientId: string | null }).clientId ?? ''}
+                      aria-label="Client"
+                      onChange={(e) =>
+                        void patch.mutateAsync({
+                          id: r.id,
+                          v: { clientId: e.target.value || null },
+                        })
+                      }
+                    >
+                      <option value="">— overseas buyer —</option>
+                      {lookups.data?.clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.code}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
+                <td style={{ textAlign: 'center' }}>{r.shipments}</td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={r.isActive}
+                    disabled={!manage}
+                    aria-label={`${r.name} active`}
+                    onChange={(e) =>
+                      void patch.mutateAsync({ id: r.id, v: { isActive: e.target.checked } })
+                    }
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
@@ -597,48 +611,50 @@ function Lists({ manage }: { manage: boolean }) {
           </>
         )}
       </div>
-      <table className="data-table-clean">
-        <thead>
-          <tr>
-            <th>Value</th>
-            <th>Active</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {s.lookupValues
-            .filter((v) => v.type === type)
-            .map((v) => (
-              <tr key={v.id}>
-                <td className="val-bold">{v.label}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={v.isActive}
-                    disabled={!manage}
-                    aria-label={`${v.label} active`}
-                    onChange={(e) =>
-                      void patch.mutateAsync({ id: v.id, v: { isActive: e.target.checked } })
-                    }
-                  />
-                </td>
-                <td>
-                  {manage && (
-                    <button
-                      type="button"
-                      className={ui.dangerBtn}
-                      onClick={() =>
-                        window.confirm(`Delete “${v.label}”?`) && void del.mutateAsync(v.id)
+      <div className={st.tableScroll}>
+        <table className="data-table-clean">
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Active</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {s.lookupValues
+              .filter((v) => v.type === type)
+              .map((v) => (
+                <tr key={v.id}>
+                  <td className="val-bold">{v.label}</td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={v.isActive}
+                      disabled={!manage}
+                      aria-label={`${v.label} active`}
+                      onChange={(e) =>
+                        void patch.mutateAsync({ id: v.id, v: { isActive: e.target.checked } })
                       }
-                    >
-                      Delete
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+                    />
+                  </td>
+                  <td>
+                    {manage && (
+                      <button
+                        type="button"
+                        className={ui.dangerBtn}
+                        onClick={() =>
+                          window.confirm(`Delete “${v.label}”?`) && void del.mutateAsync(v.id)
+                        }
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

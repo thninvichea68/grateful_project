@@ -50,6 +50,11 @@ export const ledgerListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM')
     .optional(),
+  /** Whole calendar year (Jan–Dec); used when no month is given. */
+  year: z
+    .string()
+    .regex(/^\d{4}$/, 'Use YYYY')
+    .optional(),
   clientId: z.string().uuid().optional(),
   cheaStatus: z.enum(CHEA_STATUSES).optional(),
   pageSize: z.coerce.number().int().min(1).max(500).default(100),

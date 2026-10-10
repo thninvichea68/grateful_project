@@ -73,6 +73,12 @@
   color: var(--text-secondary);
   cursor: pointer;
 }
+/* Download sits beside the 40px close button. */
+.head :global(.new-shipment-btn) {
+  height: 40px;
+  padding: 0 18px;
+  font-size: 13px;
+}
 .close:hover {
   color: var(--text-primary);
   border-color: var(--border-strong);

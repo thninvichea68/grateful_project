@@ -2,10 +2,13 @@ import { Router } from 'express';
 import { asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  boolParam,
   companySchema,
   consigneeInputSchema,
   consigneeUpdateSchema,
   exchangeRateInputSchema,
+  exchangeRateUpdateSchema,
+  type ExchangeRateImportResult,
   forwarderInputSchema,
   forwarderUpdateSchema,
   lookupValueInputSchema,
@@ -24,8 +27,12 @@ import {
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
-import { notFound } from '../../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
+import { env } from '../../config/env';
+import { lastSync, syncExchangeRate } from './rateSync';
+import { excelUpload, requireFile } from '../../lib/http';
 import { queryRows } from '../../lib/listing';
+import { parseRateWorkbook } from './rateImport';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -65,6 +72,8 @@ settingsRouter.get('/', requirePermission('settings:read'), async (_req, res) =>
     company: (company?.value ?? { nameEn: '' }) as SettingsBundle['company'],
     baseExchangeRate: Number(base?.value ?? 4026),
     exchangeRates: rates,
+    exchangeRateSync: await lastSync(),
+    exchangeRateAutoSync: env.EXCHANGE_RATE_SYNC,
     ports: p,
     forwarders: f,
     consignees: c,
@@ -127,6 +136,112 @@ settingsRouter.post('/exchange-rates', manage, async (req, res) => {
   );
   res.status(201).json(row);
 });
+settingsRouter.patch('/exchange-rates/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const v = parse(exchangeRateUpdateSchema, req.body);
+  const [before] = await db.select().from(exchangeRates).where(eq(exchangeRates.id, id));
+  if (!before) throw notFound('Exchange rate');
+  if (v.effectiveDate && v.effectiveDate !== before.effectiveDate) {
+    const [clash] = await db
+      .select({ id: exchangeRates.id })
+      .from(exchangeRates)
+      .where(eq(exchangeRates.effectiveDate, v.effectiveDate));
+    if (clash) throw conflict(`There is already a rate for ${v.effectiveDate}. Edit that one.`);
+  }
+  const [row] = await db
+    .update(exchangeRates)
+    .set({
+      ...(v.effectiveDate ? { effectiveDate: v.effectiveDate } : {}),
+      ...(v.usdToKhr ? { usdToKhr: v.usdToKhr } : {}),
+    })
+    .where(eq(exchangeRates.id, id))
+    .returning();
+  await audit(
+    db,
+    { action: 'UPDATE', entity: 'exchange_rate', entityId: id, before, after: row },
+    req,
+  );
+  res.json(row);
+});
+
+/**
+ * Import dated rates from a spreadsheet (e.g. the NBC monthly rate sheet). Each date is
+ * added, or its rate replaced. `?dryRun=1` only reports what would change.
+ */
+settingsRouter.post('/exchange-rates/import', manage, excelUpload, async (req, res) => {
+  const { dryRun } = parse(z.object({ dryRun: boolParam }), req.query);
+  const file = requireFile(req.file);
+  const parsed = await parseRateWorkbook(file.buffer, file.originalname);
+  if (parsed.rates.size === 0)
+    throw badRequest(
+      'No dated rates found. The sheet needs a date column (e.g. "September 30, 2026") and a rate column (e.g. 4055).',
+    );
+  const existing = new Map(
+    (
+      await queryRows<{ d: string; r: string }>(
+        db,
+        sql`SELECT to_char(effective_date, 'YYYY-MM-DD') AS d, usd_to_khr::text AS r FROM exchange_rates`,
+      )
+    ).map((x) => [x.d, Number(x.r)]),
+  );
+  const rates: ExchangeRateImportResult['rates'] = [...parsed.rates]
+    .sort(([a], [b]) => (a < b ? 1 : -1))
+    .map(([effectiveDate, usdToKhr]) => ({
+      effectiveDate,
+      usdToKhr,
+      status: !existing.has(effectiveDate)
+        ? 'new'
+        : existing.get(effectiveDate) === Number(usdToKhr)
+          ? 'same'
+          : 'changed',
+    }));
+  const count = (s: string) => rates.filter((r) => r.status === s).length;
+  if (!dryRun) {
+    const toWrite = rates.filter((r) => r.status !== 'same');
+    await db.transaction(async (tx) => {
+      for (const r of toWrite)
+        await tx
+          .insert(exchangeRates)
+          .values({
+            effectiveDate: r.effectiveDate,
+            usdToKhr: r.usdToKhr,
+            createdById: req.auth!.userId,
+          })
+          .onConflictDoUpdate({
+            target: exchangeRates.effectiveDate,
+            set: { usdToKhr: r.usdToKhr },
+          });
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: 'exchange_rate',
+          entityId: null,
+          after: { file: file.originalname, rates: toWrite },
+        },
+        req,
+      );
+    });
+  }
+  const body: ExchangeRateImportResult = {
+    dryRun: !!dryRun,
+    rates,
+    created: count('new'),
+    updated: count('changed'),
+    unchanged: count('same'),
+    skipped: parsed.skipped,
+  };
+  res.json(body);
+});
+
+/** "Update now": fetch today's official rate from the MEF API (also runs automatically). */
+settingsRouter.post('/exchange-rates/sync', manage, async (req, res) => {
+  const status = await syncExchangeRate('manual', req.auth!.userId);
+  if (!status.ok)
+    throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get the rate from MEF: ${status.error}`);
+  res.json(status);
+});
+
 settingsRouter.delete('/exchange-rates/:id', manage, async (req, res) => {
   const { id } = parse(idParam, req.params);
   const [row] = await db.delete(exchangeRates).where(eq(exchangeRates.id, id)).returning();

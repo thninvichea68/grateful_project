@@ -39,6 +39,8 @@ export const ERROR_CODES = [
   'CONFLICT',
   'BUSINESS_RULE',
   'RATE_LIMITED',
+  /** An outside service we depend on (e.g. the MEF exchange-rate API) failed. */
+  'UPSTREAM_ERROR',
   'INTERNAL',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

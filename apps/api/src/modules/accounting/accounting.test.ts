@@ -173,6 +173,30 @@ describe('monthly ledger', () => {
       .set(h);
     expect(xlsx.status).toBe(200);
     expect(xlsx.headers['content-disposition']).toContain('monthly-ledger-2026-08');
+
+    // Whole year: both months together; another year has nothing.
+    const y2026 = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2026' })
+      .set(h);
+    expect(y2026.body.meta.total).toBe(2);
+    expect(y2026.body.totals.rows).toBe(2);
+    const y2025 = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2025' })
+      .set(h);
+    expect(y2025.body.meta.total).toBe(0);
+    // A month wins over a year when both are sent.
+    const both = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2026', month: '2026-08' })
+      .set(h);
+    expect(both.body.meta.total).toBe(1);
+    const yx = await request(app)
+      .get('/api/v1/accounting/ledger/export.xlsx')
+      .query({ year: '2026' })
+      .set(h);
+    expect(yx.headers['content-disposition']).toContain('yearly-ledger-2026');
   });
 
   it('roles: operators cannot see accounting; viewers can read but not write', async () => {

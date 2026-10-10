@@ -17,6 +17,57 @@
   outline-offset: 2px;
 }
 
+/*
+ * Text fields show focus with ONE line: their own border turns accent-coloured, and no
+ * second ring around it. (Checkboxes, radios, buttons and links keep the ring above, as
+ * they have no border to recolour.) Fields drawn without a border sit inside a box that
+ * highlights with :focus-within instead (top-bar search, ledger search, Ask AI).
+ * :where() keeps this at zero specificity, so a component's own focus style still wins.
+ */
+:where(
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']),
+  select,
+  textarea
+):focus-visible {
+  outline: none;
+}
+:where(
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']),
+  select,
+  textarea
+):focus {
+  border-color: var(--accent-primary);
+}
+
+/*
+ * One standard dropdown everywhere (the .form-select-box look): white box, thin border and a
+ * small grey chevron instead of the browser's own arrow. select[class] outranks the single
+ * class styles (.input, .form-field-box…) whose `background:` shorthand would erase the icon.
+ */
+select[class] {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--bg-surface);
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 13px;
+  padding-right: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+}
+select[class]:hover:not(:disabled, :focus) {
+  border-color: var(--border-strong);
+}
+select[class]:focus {
+  border-color: var(--accent-primary);
+}
+select[class]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* Mobile: dim the page behind the open sidebar and close it on tap. */
 .sidebar-scrim {
   display: none;

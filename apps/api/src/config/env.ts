@@ -46,6 +46,15 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
   /** Used when GEMINI_MODEL is overloaded. */
   GEMINI_FALLBACK_MODEL: z.string().default('gemini-flash-latest'),
+  /** Fetch the official USD→KHR rate from the MEF open-data API on a schedule. */
+  EXCHANGE_RATE_SYNC: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  EXCHANGE_RATE_API_URL: z
+    .string()
+    .url()
+    .default('https://data.mef.gov.kh/api/v1/realtime-api/exchange-rate?currency_id=USD'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -6,6 +6,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
@@ -13,7 +14,8 @@ import { pool } from '../db/client';
 import { createUser, resetDb, TEST_PASSWORD } from '../test/helpers';
 import { contentMatchesExtension } from './documents/router';
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+// fileURLToPath, not URL.pathname: on Windows the pathname is "/D:/..." and breaks path.join.
+const here = path.dirname(fileURLToPath(import.meta.url));
 const appSrc = fs.readFileSync(path.join(here, '..', 'app.ts'), 'utf8');
 const mounts = new Map(
   [...appSrc.matchAll(/v1\.use\('([^']+)', (\w+)\)/g)].map((m) => [m[2]!, m[1]!]),
@@ -51,8 +53,11 @@ const PUBLIC = new Set([
   'post /api/v1/auth/logout',
   'get /api/v1/health',
 ]);
-/** Endpoints any signed-in user may call (they act only on the caller). */
-const SELF_SERVICE = new Set(['post /api/v1/auth/change-password']);
+/** Endpoints any signed-in user may call (they act only on the caller, or change no data). */
+const SELF_SERVICE = new Set([
+  'post /api/v1/auth/change-password',
+  'post /api/v1/assistant/chat', // "Ask AI": everyone may ask; it writes nothing
+]);
 const concrete = (p: string) =>
   p
     .replace(':id', '00000000-0000-4000-8000-000000000000')

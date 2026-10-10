@@ -36,7 +36,8 @@ a {
 button {
   font-family: inherit;
 }
-:focus-visible {
+/* Zero specificity so app.css can drop the ring on text fields (they recolour the border). */
+:where(:focus-visible) {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
@@ -253,6 +254,12 @@ nav.menu {
     color 0.15s ease;
 }
 .menu-item:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+/* Keyboard focus: highlight like hover instead of a second ring around the tab. */
+.menu-item:focus-visible {
+  outline: none;
   background: var(--bg-subtle);
   color: var(--text-primary);
 }
@@ -1002,21 +1009,28 @@ body.sidebar-collapsed .signout {
   border: 2px solid var(--bg-surface);
 }
 
+/* Primary (cyan) action. Same box as .filter-btn so it lines up with Export / Import / Filter. */
 .new-shipment-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 18px;
+  gap: 7px;
+  padding: 8px 16px;
   border-radius: 999px;
-  border: none;
+  border: 1px solid transparent;
   background: var(--accent-primary);
   color: #041b2d;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   box-shadow: none;
   transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+/* Top bar: taller, to match the Ask AI / theme buttons beside it. */
+.topbar-right .new-shipment-btn {
+  height: 40px;
+  padding: 0 18px;
+  font-size: 13px;
 }
 .new-shipment-btn:hover {
   background: var(--accent-lime-bright);
@@ -1976,6 +1990,20 @@ body.sidebar-collapsed .signout {
   text-transform: none;
   letter-spacing: 0;
 }
+/* Small text-style action (e.g. "Clear search"); the filter popup tweaks it below. */
+.filter-mini-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.filter-mini-link:hover {
+  text-decoration: underline;
+}
 .filter-col-title .filter-mini-link {
   font-size: 10.5px;
   font-weight: 700;
@@ -2581,7 +2609,7 @@ body.sidebar-collapsed .signout {
 }
 .ship-field .custom-select-pill:focus {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 4px var(--status-completed-bg);
+  box-shadow: none;
 }
 
 .btn-create-submit {

@@ -1,5 +1,6 @@
+import ExcelJS from 'exceljs';
 import request from 'supertest';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RoleCode } from '@gs/shared';
 import { createApp } from '../app';
 import { pool } from '../db/client';
@@ -239,6 +240,163 @@ describe('settings', () => {
           .send({ nameEn: 'X Co' })
       ).status,
     ).toBe(403);
+  });
+});
+
+describe('exchange rates: edit and Excel import', () => {
+  /** Laid out like the NBC "Exchange Rate 2026" sheet: title, header, text dates, rates as text. */
+  async function nbcSheet(): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sep');
+    ws.addRow(['Exchange Rate 2026']);
+    ws.addRow(['Release Date', 'Currency', 'Rate']);
+    ws.addRow(['September 30, 2026', 'USD/KHR', '4055']);
+    ws.addRow(['September 29, 2026', 'USD/KHR', '4,056']);
+    ws.addRow([new Date(Date.UTC(2026, 8, 1)), 'USD/KHR', 4047]); // a real Excel date
+    ws.addRow(['September 2, 2026', 'USD/KHR', '']); // no rate → skipped
+    return Buffer.from(await wb.xlsx.writeBuffer());
+  }
+
+  it('previews, then imports; same dates are updated, not duplicated', async () => {
+    const h = await as('ADMIN');
+    await api('post', '/settings/exchange-rates')
+      .set(h)
+      .send({ effectiveDate: '2026-09-30', usdToKhr: '4000' });
+    const file = await nbcSheet();
+
+    const preview = await api('post', '/settings/exchange-rates/import')
+      .query({ dryRun: 'true' })
+      .set(h)
+      .attach('file', file, 'Exchange Rate 2026.xlsx');
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({ dryRun: true, created: 2, updated: 1, unchanged: 0 });
+    expect(preview.body.skipped).toEqual([
+      expect.objectContaining({ row: 6, message: 'No rate found for 2026-09-02' }),
+    ]);
+    expect((await api('get', '/settings').set(h)).body.exchangeRates).toHaveLength(1); // nothing saved
+
+    const done = await api('post', '/settings/exchange-rates/import')
+      .set(h)
+      .attach('file', file, 'Exchange Rate 2026.xlsx');
+    expect(done.body).toMatchObject({ dryRun: false, created: 2, updated: 1 });
+    const rates = (await api('get', '/settings').set(h)).body.exchangeRates;
+    expect(
+      rates.map((r: { effectiveDate: string; usdToKhr: string }) => [r.effectiveDate, r.usdToKhr]),
+    ).toEqual([
+      ['2026-09-30', '4055.0000'],
+      ['2026-09-29', '4056.0000'],
+      ['2026-09-01', '4047.0000'],
+    ]);
+
+    // Importing the same file again changes nothing.
+    const again = await api('post', '/settings/exchange-rates/import')
+      .set(h)
+      .attach('file', file, 'Exchange Rate 2026.xlsx');
+    expect(again.body).toMatchObject({ created: 0, updated: 0, unchanged: 3 });
+  });
+
+  it('edits a rate; refuses a date that already has one', async () => {
+    const h = await as('ADMIN');
+    const a = (
+      await api('post', '/settings/exchange-rates')
+        .set(h)
+        .send({ effectiveDate: '2026-10-01', usdToKhr: '4020' })
+    ).body;
+    await api('post', '/settings/exchange-rates')
+      .set(h)
+      .send({ effectiveDate: '2026-11-01', usdToKhr: '4027' });
+
+    const edited = await api('patch', `/settings/exchange-rates/${a.id}`)
+      .set(h)
+      .send({ effectiveDate: '2026-10-02', usdToKhr: '4022.5' });
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ effectiveDate: '2026-10-02', usdToKhr: '4022.5000' });
+
+    const clash = await api('patch', `/settings/exchange-rates/${a.id}`)
+      .set(h)
+      .send({ effectiveDate: '2026-11-01' });
+    expect(clash.status).toBe(409);
+    expect(
+      (
+        await api('patch', `/settings/exchange-rates/${a.id}`)
+          .set(await as('VIEWER'))
+          .send({ usdToKhr: '1' })
+      ).status,
+    ).toBe(403);
+  });
+});
+
+describe('exchange rates: MEF official-rate sync', () => {
+  const mef = (validDate: string, average: number) =>
+    new Response(
+      JSON.stringify({
+        data: {
+          id: 11030,
+          valid_date: validDate,
+          currency_id: 'USD',
+          symbol: 'USD/KHR',
+          unit: 1,
+          bid: average,
+          ask: average,
+          average,
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  afterEach(() => vi.restoreAllMocks());
+
+  it('"Update now" saves the rate under its own date; repeats change nothing', async () => {
+    const h = await as('ADMIN');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(mef('2026-10-09', 4069))
+      .mockResolvedValueOnce(mef('2026-10-09', 4069))
+      .mockResolvedValueOnce(mef('2026-10-09', 4070));
+
+    const first = await api('post', '/settings/exchange-rates/sync').set(h);
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      ok: true,
+      trigger: 'manual',
+      effectiveDate: '2026-10-09',
+      usdToKhr: '4069',
+      result: 'new',
+    });
+    expect(fetchSpy.mock.calls[0]![0]).toContain('data.mef.gov.kh');
+    expect((await api('post', '/settings/exchange-rates/sync').set(h)).body.result).toBe('same');
+    expect((await api('post', '/settings/exchange-rates/sync').set(h)).body.result).toBe('changed');
+
+    const s = (await api('get', '/settings').set(h)).body;
+    expect(s.exchangeRates).toEqual([
+      expect.objectContaining({ effectiveDate: '2026-10-09', usdToKhr: '4070.0000' }),
+    ]);
+    expect(s.exchangeRateSync).toMatchObject({ ok: true, result: 'changed' });
+  });
+
+  it('reports a MEF outage clearly and records it; Viewers cannot trigger it', async () => {
+    const h = await as('ADMIN');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('oops', { status: 503 }));
+    const res = await api('post', '/settings/exchange-rates/sync').set(h);
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatchObject({ code: 'UPSTREAM_ERROR' });
+    expect(res.body.error.message).toContain('503');
+    expect((await api('get', '/settings').set(h)).body.exchangeRateSync).toMatchObject({
+      ok: false,
+      error: 'MEF API answered 503',
+    });
+    expect((await api('get', '/settings').set(h)).body.exchangeRates).toEqual([]);
+
+    expect(
+      (await api('post', '/settings/exchange-rates/sync').set(await as('VIEWER'))).status,
+    ).toBe(403);
+  });
+
+  it('refuses an implausible rate', async () => {
+    const h = await as('ADMIN');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(mef('2026-10-09', 4.069));
+    const res = await api('post', '/settings/exchange-rates/sync').set(h);
+    expect(res.status).toBe(502);
+    expect((await api('get', '/settings').set(h)).body.exchangeRates).toEqual([]);
   });
 });
 

@@ -72,6 +72,7 @@ interface ListParams {
   sort?: string | undefined;
   q?: string | undefined;
   month?: string | undefined;
+  year?: string | undefined;
   clientId?: string | undefined;
   cheaStatus?: string | undefined;
 }
@@ -81,6 +82,10 @@ function where(p: ListParams) {
   if (p.month)
     c.push(
       sql`a.inv_date >= ${`${p.month}-01`}::date AND a.inv_date < (${`${p.month}-01`}::date + interval '1 month')`,
+    );
+  else if (p.year)
+    c.push(
+      sql`a.inv_date >= ${`${p.year}-01-01`}::date AND a.inv_date < (${`${p.year}-01-01`}::date + interval '1 year')`,
     );
   if (p.clientId) c.push(sql`a.client_id = ${p.clientId}`);
   if (p.cheaStatus) c.push(sql`a.chea_status = ${p.cheaStatus}`);

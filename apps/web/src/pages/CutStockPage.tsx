@@ -4,6 +4,7 @@ import { CUT_STOCK_CATEGORIES, CUT_STOCK_CATEGORY_LABEL } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useCutStock, useLookups } from '../features/hooks';
 import { TableState, ui } from '../components/ui';
+import { StatTile, StatTiles } from '../components/StatTiles';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
 import { fmtMoney, fmtNum, fmtPct } from '../lib/format';
@@ -129,30 +130,29 @@ export function CutStockPage() {
             )}
           </div>
         </div>
-        <div
-          id="cutstockSummary"
-          style={{
-            display: 'flex',
-            gap: 22,
-            margin: '12px 2px 4px',
-            fontSize: 12,
-            color: 'var(--text-tertiary)',
-            flexWrap: 'wrap',
-            fontWeight: 700,
-          }}
-        >
+        <div id="cutstockSummary">
           {s && (
-            <>
-              <span>{s.items} items</span>
-              <span style={{ color: s.checkCount ? 'var(--status-exception-fg)' : undefined }}>
-                {s.checkCount} to check
-              </span>
-              <span style={{ color: s.overImported ? 'var(--status-exception-fg)' : undefined }}>
-                {s.overImported} over-imported
-              </span>
-              <span>Licensed value {fmtMoney(s.totalValue)}</span>
-              <span>Imported value {fmtMoney(s.importedValue)}</span>
-            </>
+            <StatTiles columns={5}>
+              <StatTile label="Items" value={fmtNum(s.items)} />
+              <StatTile
+                label="To check (under 50%)"
+                value={s.checkCount}
+                tone={s.checkCount > 0 ? 'warning' : undefined}
+                pressed={condition === 'CHECK'}
+                onClick={() => set('condition', condition === 'CHECK' ? '' : 'CHECK')}
+                tooltip={condition === 'CHECK' ? 'Show all' : 'Show items to check only'}
+              />
+              <StatTile
+                label="Over-imported"
+                value={s.overImported}
+                tone={s.overImported > 0 ? 'danger' : undefined}
+                pressed={condition === 'OVER'}
+                onClick={() => set('condition', condition === 'OVER' ? '' : 'OVER')}
+                tooltip={condition === 'OVER' ? 'Show all' : 'Show over-imported only'}
+              />
+              <StatTile label="Licensed value" value={fmtMoney(s.totalValue)} />
+              <StatTile label="Imported value" value={fmtMoney(s.importedValue)} />
+            </StatTiles>
           )}
         </div>
         <div className="plans-table-scroll cutstock-table-wrap">

@@ -272,6 +272,18 @@ export const exchangeRateInputSchema = z.object({
   effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),
   usdToKhr: decimal(4, { min: 1, allowEmpty: false }),
 });
+export const exchangeRateUpdateSchema = exchangeRateInputSchema.partial();
+
+/** Result of importing dated rates from a spreadsheet (preview with dryRun, then apply). */
+export interface ExchangeRateImportResult {
+  dryRun: boolean;
+  /** Dates found in the file, one rate each. */
+  rates: { effectiveDate: string; usdToKhr: string; status: 'new' | 'changed' | 'same' }[];
+  created: number;
+  updated: number;
+  unchanged: number;
+  skipped: { sheet: string; row: number; message: string }[];
+}
 
 export const portInputSchema = z.object({
   code: z
@@ -305,10 +317,25 @@ export const lookupValueInputSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+/** Last fetch of the official rate from the MEF open-data API (auto or "Update now"). */
+export interface ExchangeRateSyncStatus {
+  at: string; // ISO timestamp of the attempt
+  trigger: 'auto' | 'manual';
+  ok: boolean;
+  /** The rate's own date (MEF "valid_date"), its value, and what happened to our list. */
+  effectiveDate?: string;
+  usdToKhr?: string;
+  result?: 'new' | 'changed' | 'same';
+  error?: string;
+}
+
 export interface SettingsBundle {
   company: CompanyInput;
   baseExchangeRate: number;
   exchangeRates: { id: string; effectiveDate: string; usdToKhr: string }[];
+  exchangeRateSync: ExchangeRateSyncStatus | null;
+  /** False when the server has automatic updates turned off (EXCHANGE_RATE_SYNC=false). */
+  exchangeRateAutoSync: boolean;
   ports: {
     id: string;
     code: string;

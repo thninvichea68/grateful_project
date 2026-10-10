@@ -1,0 +1,128 @@
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+.actions :global(.btn-create-submit),
+.actions :global(.btn-cancel-shipment) {
+  padding: 7px 14px;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.icon svg {
+  width: 15px;
+  height: 15px;
+}
+.icon:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.danger:hover {
+  color: var(--status-exception-fg);
+  border-color: var(--status-exception-fg);
+  background: var(--status-exception-bg);
+}
+
+.editing td {
+  background: var(--bg-subtle);
+}
+.rateInput {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.rateInput input {
+  width: 120px;
+}
+
+/* MEF auto-update status line */
+.sync {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.sync strong {
+  color: var(--text-secondary);
+}
+.sync a {
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+.syncDot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-completed-fg);
+  box-shadow: 0 0 0 3px var(--status-completed-bg);
+}
+.sync[data-tone='error'] {
+  color: var(--status-exception-fg);
+}
+.sync[data-tone='error'] .syncDot {
+  background: var(--status-exception-fg);
+  box-shadow: 0 0 0 3px var(--status-exception-bg);
+}
+
+/* Import preview */
+.preview {
+  margin-top: 16px;
+}
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.counts span,
+.status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+[data-tone='new'] {
+  background: var(--status-completed-bg) !important;
+  color: var(--status-completed-fg) !important;
+}
+[data-tone='changed'] {
+  background: var(--status-progress-bg) !important;
+  color: var(--status-progress-fg) !important;
+}
+[data-tone='skipped'] {
+  background: var(--status-pending-bg) !important;
+  color: var(--status-pending-fg) !important;
+}
+.previewTable {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.skipped {
+  margin: 10px 0 0 18px;
+  font-size: 12px;
+  color: var(--status-pending-fg);
+}

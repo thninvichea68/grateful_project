@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { LedgerRow } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -9,7 +10,32 @@ import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtNum } from '../../lib/format';
+import { icons } from '../../layout/icons';
+import { StatTile, StatTiles } from '../../components/StatTiles';
+import { useAccountingLayout } from './AccountingLayout';
 import { LedgerModal } from './LedgerModal';
+import l from './LedgerPage.module.css';
+
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+/** "2026-10" → "October 2026"; a year → "Jan – Dec 2026"; nothing → "All months". */
+function periodLabel(month: string, year: string | null) {
+  if (year) return `Jan – Dec ${year}`;
+  if (!month) return 'All months';
+  return `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+}
 
 const thisMonth = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()).slice(0, 7);
@@ -40,9 +66,14 @@ export function LedgerPage() {
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<LedgerRow | 'new' | null>(null);
-  const month = params.get('month') ?? thisMonth();
+  // Period: a month (default) or a whole year (?year=2026, Jan–Dec).
+  const year = params.get('year');
+  const month = year ? '' : (params.get('month') ?? thisMonth());
+  const currentYear = Number(thisMonth().slice(0, 4));
+  const years = Array.from({ length: 8 }, (_, i) => String(currentYear + 1 - i));
   const q = {
     month: month || undefined,
+    year: year || undefined,
     clientId: params.get('clientId') || undefined,
     cheaStatus: params.get('chea') || undefined,
     q: params.get('q') || undefined,
@@ -58,19 +89,67 @@ export function LedgerPage() {
     if (k !== 'page') next.delete('page');
     setParams(next, { replace: true });
   };
+  const setPeriod = (p: { month: string } | { year: string }) => {
+    const next = new URLSearchParams(params);
+    next.delete('page');
+    if ('year' in p) {
+      next.delete('month');
+      next.set('year', p.year);
+    } else {
+      next.delete('year');
+      next.set('month', p.month);
+    }
+    setParams(next, { replace: true });
+  };
+
+  const { tabsAside } = useAccountingLayout();
 
   return (
-    <section className="view active">
-      <div className="card">
-        <div className="card-header-row">
+    <section className={`view active ${l.fill}`}>
+      {/* Title sits at the right end of the accounting tabs row, freeing height for rows. */}
+      {tabsAside &&
+        createPortal(
           <div>
-            <h3>Monthly Ledger</h3>
-            <div className="create-header-desc" style={{ marginTop: 4 }}>
-              One row per customs declaration. Net profit = (INV + DIS + DN) − (Clear fee + THC + CM
-              + Other pay); VAT is not profit.
-            </div>
-          </div>
-          <div className={ui.toolbar}>
+            <h3 className={l.title}>
+              {year ? 'Yearly Ledger' : 'Monthly Ledger'} ·{' '}
+              <span className={l.period}>{periodLabel(month, year)}</span>
+            </h3>
+            <div className={l.sub}>One row per customs declaration.</div>
+          </div>,
+          tabsAside,
+        )}
+      <div className="card">
+        <div className={l.filters}>
+          <select
+            className={ui.input}
+            value={year ? 'year' : 'month'}
+            onChange={(e) =>
+              e.target.value === 'year'
+                ? setPeriod({ year: (month || thisMonth()).slice(0, 4) })
+                : setPeriod({
+                    // Back to this month if it's the year being viewed, else that year's January.
+                    month: year && !thisMonth().startsWith(year) ? `${year}-01` : thisMonth(),
+                  })
+            }
+            aria-label="View by"
+          >
+            <option value="month">Monthly</option>
+            <option value="year">Yearly</option>
+          </select>
+          {year ? (
+            <select
+              className={ui.input}
+              value={year}
+              onChange={(e) => setPeriod({ year: e.target.value })}
+              aria-label="Year"
+            >
+              {(years.includes(year) ? years : [year, ...years]).map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          ) : (
             <input
               type="month"
               className={ui.input}
@@ -78,89 +157,89 @@ export function LedgerPage() {
               onChange={(e) => set('month', e.target.value)}
               aria-label="Month"
             />
-            <select
-              className={ui.input}
-              value={q.clientId ?? ''}
-              onChange={(e) => set('clientId', e.target.value)}
-              aria-label="Client"
-            >
-              <option value="">All clients</option>
-              {lookups.data?.clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code}
-                </option>
-              ))}
-            </select>
-            <select
-              className={ui.input}
-              value={q.cheaStatus ?? ''}
-              onChange={(e) => set('chea', e.target.value)}
-              aria-label="Chea payment"
-            >
-              <option value="">Paid &amp; unpaid</option>
-              <option value="UNPAID">Unpaid</option>
-              <option value="PAID">Paid</option>
-            </select>
+          )}
+          <span className={l.divider} aria-hidden="true" />
+          <select
+            className={ui.input}
+            value={q.clientId ?? ''}
+            onChange={(e) => set('clientId', e.target.value)}
+            aria-label="Client"
+          >
+            <option value="">All clients</option>
+            {lookups.data?.clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code}
+              </option>
+            ))}
+          </select>
+          <select
+            className={ui.input}
+            value={q.cheaStatus ?? ''}
+            onChange={(e) => set('chea', e.target.value)}
+            aria-label="Chea payment"
+          >
+            <option value="">Paid &amp; unpaid</option>
+            <option value="UNPAID">Unpaid</option>
+            <option value="PAID">Paid</option>
+          </select>
+          <label className={l.search}>
             <input
               type="search"
-              className={ui.input}
-              placeholder="Declare / INV / DN no…"
+              placeholder="Search declare, INV or DN no…"
               defaultValue={q.q}
               onChange={(e) => set('q', e.target.value.trim())}
               aria-label="Search"
             />
+            {icons.search({})}
+          </label>
+          <div className={l.actions}>
             <button
               type="button"
-              className="filter-btn"
+              className={l.export}
               onClick={() =>
                 downloadFile('/accounting/ledger/export.xlsx', {
                   month: month || undefined,
+                  year: year || undefined,
                   clientId: q.clientId,
                 }).catch(() => toast('Export failed.'))
               }
             >
+              {icons.download({})}
               Export Excel
             </button>
             {can('accounting:write') && (
               <button type="button" className="new-shipment-btn" onClick={() => setOpen('new')}>
-                + New Entry
+                {icons.plus({})}
+                New Entry
               </button>
             )}
           </div>
         </div>
         {t && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 20,
-              flexWrap: 'wrap',
-              margin: '4px 2px 12px',
-              fontSize: 12.5,
-              fontWeight: 800,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <span>{t.rows} entries</span>
-            <span>INV ${m(t.invRevenue)}</span>
-            <span>DIS ${m(t.disTotal)}</span>
-            <span>DN ${m(t.dnTotal)}</span>
-            <span>VAT ${m(t.vat)}</span>
-            <span
-              style={{
-                color:
-                  Number(t.netProfit) < 0
-                    ? 'var(--status-exception-fg)'
-                    : 'var(--status-completed-fg)',
-              }}
-            >
-              Net profit ${m(t.netProfit)}
-            </span>
-            <span style={{ color: t.unpaid ? 'var(--status-pending-fg)' : undefined }}>
-              {t.unpaid} unpaid
-            </span>
-          </div>
+          <StatTiles columns={8}>
+            <StatTile label="Entries" value={fmtNum(t.rows)} />
+            <StatTile label="INV (Service revenue)" value={`$${m(t.invRevenue)}`} />
+            <StatTile label="Disbursements" value={`$${m(t.disTotal)}`} />
+            <StatTile label="Debit notes" value={`$${m(t.dnTotal)}`} />
+            <StatTile label="VAT 10% (Not profit)" value={`$${m(t.vat)}`} />
+            <StatTile
+              label="Net profit"
+              value={`$${m(t.netProfit)}`}
+              tone={Number(t.netProfit) < 0 ? 'danger' : 'success'}
+              span={2}
+              tooltip="(INV + DIS + DN) − (Clear fee + THC + CM + Other)"
+            />
+            <StatTile
+              label="Unpaid (Chea)"
+              value={t.unpaid}
+              tone={t.unpaid > 0 ? 'warning' : undefined}
+              pressed={q.cheaStatus === 'UNPAID'}
+              onClick={() => set('chea', q.cheaStatus === 'UNPAID' ? '' : 'UNPAID')}
+              tooltip={q.cheaStatus === 'UNPAID' ? 'Show all' : 'Show unpaid only'}
+            />
+          </StatTiles>
         )}
-        <div className="plans-table-scroll">
+        <div className={`plans-table-scroll ${l.tableScroll}`}>
           <table className="data-table-clean">
             <thead>
               <tr>
