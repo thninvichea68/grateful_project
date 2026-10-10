@@ -4,6 +4,7 @@ import { DOCUMENT_CATEGORIES, DOCUMENT_CATEGORY_LABEL, type DocumentRow } from '
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useDocuments } from '../features/admin';
 import { Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { DocumentUploadModal } from '../components/DocumentUpload';
 import { DocumentPreview } from '../components/DocumentPreview';
@@ -162,9 +163,7 @@ export function DocumentsPage() {
         <div className="card-header-row">
           <h3>Document Library</h3>
           <div className={ui.toolbar}>
-            <input
-              type="search"
-              className={ui.input}
+            <SearchBox
               placeholder="Title, file, shipment, client…"
               defaultValue={q.q}
               onChange={(e) => set('q', e.target.value.trim())}

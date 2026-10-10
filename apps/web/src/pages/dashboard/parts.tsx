@@ -206,16 +206,20 @@ export const MONTHS_LONG = [
   'December',
 ];
 export const monthLabel = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1] ?? ym;
+/** Per-client series colours: brand cyan first, then muted jewel tones that sit well
+ *  together (no traffic-light red/green, which reads as good/bad). */
 export const CLIENT_COLORS = [
-  '#00B4D8',
-  '#F43F5E',
-  '#10B981',
-  '#F59E0B',
-  '#8B5CF6',
-  '#38BDF8',
-  '#EC4899',
-  '#84CC16',
+  '#06B6D4', // cyan
+  '#04a1bd', // indigo
+  '#0294ad', // soft gold
+  '#037e94', // lavender
+  '#0EA5E9', // sky
+  '#F472B6', // rose pink
+  '#2DD4BF', // teal
+  '#94A3B8', // slate
 ];
+/** The same colour as a left-to-right gradient, for bars. */
+export const barGradient = (c = CLIENT_COLORS[0]!) => `linear-gradient(90deg, ${c}99, ${c})`;
 
 /** Round an axis maximum up to a friendly number (5, 10, 20, 50, 100…). */
 export function niceMax(v: number): number {

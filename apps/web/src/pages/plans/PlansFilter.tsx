@@ -143,25 +143,33 @@ export function PlansFilter({
               <div className="filter-col-title">
                 <span>Transport</span>
               </div>
+              {/* Two toggles, both on by default (= every shipment). Turning one off shows
+                  only the other; the last one on can't be turned off. */}
               <div className="filter-seg-group">
                 {(
                   [
-                    ['', 'All'],
-                    ['IMPORT', 'Import'],
-                    ['EXPORT', 'Export'],
+                    ['IMPORT', 'Import', 'EXPORT'],
+                    ['EXPORT', 'Export', 'IMPORT'],
                   ] as const
-                ).map(([v, l]) => (
-                  <label className="filter-seg-item" key={v}>
-                    <input
-                      type="radio"
-                      name="plansTransport"
-                      checked={draft.direction === v}
-                      onChange={() => setDraft({ ...draft, direction: v })}
-                    />
-                    <span className="seg-dot" />
-                    <span>{l}</span>
-                  </label>
-                ))}
+                ).map(([v, l, other]) => {
+                  const on = draft.direction === '' || draft.direction === v;
+                  return (
+                    <label className="filter-seg-item" key={v}>
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() =>
+                          setDraft({
+                            ...draft,
+                            direction: !on ? '' : draft.direction === '' ? other : v,
+                          })
+                        }
+                      />
+                      <span className="seg-dot" />
+                      <span>{l}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           </div>

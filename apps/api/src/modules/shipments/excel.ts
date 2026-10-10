@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { Readable } from 'node:stream';
-import type { CargoExcelParseResult } from '@gs/shared';
+import { invoiceHtsCodes, type CargoExcelParseResult } from '@gs/shared';
 
 /** Header aliases ported from the prototype's cargoExcelHeaderMap (matching is case/space/punctuation-insensitive). */
 const HEADERS: { field: keyof Line | 'invoiceNo' | 'invoiceDate'; match: string[] }[] = [
@@ -219,5 +219,16 @@ export async function parseCargoWorkbook(
     });
   }
   if (!rowsRead) warnings.push({ row: null, message: 'The sheet has a header but no data rows.' });
+  // One invoice = one HTS code: fill blank lines from the invoice's code, and flag invoices
+  // whose lines disagree so the user picks one in the form.
+  for (const inv of invoices.values()) {
+    const codes = invoiceHtsCodes(inv.lines);
+    if (codes.length === 1) for (const l of inv.lines) l.htsCode = codes[0]!;
+    else if (codes.length > 1)
+      warnings.push({
+        row: null,
+        message: `Invoice ${inv.invoiceNo} has several HTS codes (${codes.join(', ')}); one invoice uses one HTS code — choose it in the form.`,
+      });
+  }
   return { invoices: [...invoices.values()], warnings, rowsRead };
 }

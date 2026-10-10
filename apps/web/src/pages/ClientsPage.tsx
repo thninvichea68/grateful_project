@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useClients } from '../features/hooks';
 import { Pill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { fmtDate, fmtMoney } from '../lib/format';
 import { ClientFormModal } from './clients/ClientFormModal';
 
@@ -45,9 +46,7 @@ export function ClientsPage() {
         <div className="card-header-row">
           <h3>Registered Shipping Clients</h3>
           <div className={ui.toolbar}>
-            <input
-              className={ui.input}
-              type="search"
+            <SearchBox
               placeholder="Search name or code…"
               defaultValue={q}
               aria-label="Search clients"

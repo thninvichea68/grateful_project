@@ -288,6 +288,61 @@ describe('overview and profit', () => {
     expect(acc.body.kpis.period.from).toMatch(/^\d{4}-\d{2}-01$/);
   });
 
+  it('client revenue breaks the ledger down per client with a monthly trend', async () => {
+    const a = await ship({
+      eta: '2026-02-10',
+      declarations: [
+        { declareNo: 'R 1', declareDate: '2026-02-10' },
+        { declareNo: 'R 2', declareDate: '2026-03-10' },
+      ],
+    });
+    await db.insert(accountingRecords).values([
+      {
+        declarationId: a.declarations[0]!.id,
+        clientId: b.jr.id,
+        invDate: '2026-02-11',
+        exchangeRate: '4026',
+        invRevenue: '100.00',
+        disTotal: '50.00',
+        dnTotal: '50.00',
+        vat: '10.00',
+        clearFee: '40.00',
+        thc: '10.00',
+        netProfit: '150.00',
+      },
+      {
+        declarationId: a.declarations[1]!.id,
+        clientId: b.jr.id,
+        invDate: '2026-03-02',
+        exchangeRate: '4026',
+        invRevenue: '50.00',
+        netProfit: '50.00',
+        cheaStatus: 'PAID',
+      },
+    ]);
+    const q = { from: '2026-01-01', to: '2026-03-31' };
+    expect((await get('/analytics/client-revenue', q, 'OPERATOR')).status).toBe(403);
+    const res = await get('/analytics/client-revenue', q, 'ACCOUNTANT');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      code: 'JR',
+      entries: 2,
+      unpaid: 1,
+      revenue: '250.00',
+      costs: '50.00',
+      netProfit: '200.00',
+      marginPct: 80,
+      sharePct: 100,
+      lastInvDate: '2026-03-02',
+    });
+    expect(res.body[0].monthly).toEqual([
+      { month: '2026-01', revenue: '0.00', netProfit: '0.00' },
+      { month: '2026-02', revenue: '200.00', netProfit: '150.00' },
+      { month: '2026-03', revenue: '50.00', netProfit: '50.00' },
+    ]);
+  });
+
   it('live consignments put exceptions first', async () => {
     const res = await get('/overview/live-consignments');
     expect(res.body[0]).toMatchObject({ status: 'EXCEPTION', clientCode: 'JR' });

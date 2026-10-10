@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type {
   AccountRow,
   ClearanceStatusRow,
+  ClientRevenueRow,
   CountryRow,
   ForwarderRow,
   KpiResponse,
@@ -54,6 +55,14 @@ export const useByCountry = (f: AnalyticsFilters, flow: 'import' | 'export') =>
 export const useForwarders = (f: AnalyticsFilters) => useAnalytics<ForwarderRow[]>('forwarders', f);
 export const usePorts = (f: AnalyticsFilters) => useAnalytics<PortRow[]>('ports', f);
 export const useAccounts = (f: AnalyticsFilters) => useAnalytics<AccountRow[]>('accounts', f);
+/** Per-client ledger breakdown (accounting roles only). */
+export const useClientRevenue = (f: AnalyticsFilters, enabled: boolean) =>
+  useAnalytics<ClientRevenueRow[]>(
+    'client-revenue',
+    { from: f.from, to: f.to, clientId: f.clientId },
+    {},
+    enabled,
+  );
 export const useProfit = (f: AnalyticsFilters, year: number, enabled: boolean) =>
   useAnalytics<ProfitSummary>('profit', { clientId: f.clientId }, { year: String(year) }, enabled);
 

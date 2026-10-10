@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useLookups, useShipments } from '../features/hooks';
 import { ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
 import { fmtDate } from '../lib/format';
@@ -124,7 +125,7 @@ export function ShippingPlansPage() {
     ...prefs,
   };
   return (
-    <section className="view active">
+    <section className="view active" id="view-plans">
       <div className="card">
         <div className="card-header-row">
           <div>
@@ -134,9 +135,7 @@ export function ShippingPlansPage() {
             </div>
           </div>
           <div className={ui.toolbar}>
-            <input
-              className={ui.input}
-              type="search"
+            <SearchBox
               placeholder="Invoice, HBL, container, declare no…"
               defaultValue={filters.q}
               aria-label="Search shipments"

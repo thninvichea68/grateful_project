@@ -19,7 +19,7 @@ import {
   YAxis,
   type TooltipProps,
 } from 'recharts';
-import type { AccountRow, KpiResponse, MonthlyVolumeRow, ProfitSummary } from '@gs/shared';
+import type { AccountRow, MonthlyVolumeRow, ProfitSummary } from '@gs/shared';
 import {
   useAccounts,
   useByCountry,
@@ -33,6 +33,7 @@ import {
   CardDropdown,
   ChartState,
   CLIENT_COLORS,
+  barGradient,
   changePct,
   dash,
   MONTHS,
@@ -40,173 +41,8 @@ import {
   monthLabel,
   niceMax,
 } from './parts';
-
-const ARROW = (
-  <svg
-    viewBox="0 0 24 24"
-    width="14"
-    height="14"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M7 17 17 7M8 7h9v9" />
-  </svg>
-);
-const ICONS = {
-  box: (
-    <svg
-      viewBox="0 0 24 24"
-      width="40"
-      height="40"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-      <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-  ),
-  ship: (
-    <svg
-      viewBox="0 0 24 24"
-      width="40"
-      height="40"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
-      <path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76" />
-      <path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" />
-      <path d="M12 10v4M12 2v3" />
-    </svg>
-  ),
-  shield: (
-    <svg
-      viewBox="0 0 24 24"
-      width="40"
-      height="40"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <polyline points="9 12 11 14 15 10" />
-    </svg>
-  ),
-};
-
-/* ------------------------------ KPI row ------------------------------ */
-
-export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeRow[] }) {
-  const navigate = useNavigate();
-  const toPlans = (q: string) => navigate(`/plans?${q}`);
-  const card = (
-    label: string,
-    value: number,
-    prev: number | null,
-    meta: React.ReactNode,
-    graphic: React.ReactNode,
-    onOpen: () => void,
-  ) => {
-    const ch = prev === null ? null : changePct(value, prev);
-    return (
-      <div className="modern-kpi-card">
-        <div className="kpi-top-row">
-          <div className="kpi-label">{label}</div>
-          <button className="kpi-arrow-badge" aria-label={`View ${label}`} onClick={onOpen}>
-            {ARROW}
-          </button>
-        </div>
-        <div className="kpi-main-body">
-          <div>
-            <div className="kpi-val">{value.toLocaleString()}</div>
-            <div className="kpi-meta">
-              {meta ??
-                (ch ? (
-                  <>
-                    <span
-                      className={ch.up ? 'meta-positive' : 'meta-negative'}
-                      style={ch.up ? undefined : { color: 'var(--accent-rose)' }}
-                    >
-                      {ch.text}
-                    </span>
-                    <span className="meta-sub">vs last month</span>
-                  </>
-                ) : (
-                  <span className="meta-sub">no data last month</span>
-                ))}
-            </div>
-          </div>
-          {graphic}
-        </div>
-      </div>
-    );
-  };
-  const spark = monthly.map((m) => ({ m: m.month, v: m.imports }));
-  return (
-    <div className="kpi-row-modern">
-      {card(
-        'Total Shipments This Month',
-        k.total,
-        k.previous.total,
-        null,
-        <div className="kpi-graphic-icon">{ICONS.box}</div>,
-        () => toPlans(`sort=-eta`),
-      )}
-      {card(
-        'Import Shipments',
-        k.imports,
-        k.previous.imports,
-        null,
-        <div className="kpi-spark-box" aria-hidden="true">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={spark} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke="#22D3EE"
-                strokeWidth={2}
-                fill="#22D3EE"
-                fillOpacity={0.15}
-                isAnimationActive={false}
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>,
-        () => toPlans('direction=IMPORT'),
-      )}
-      {card(
-        'Export Shipments',
-        k.exports,
-        k.previous.exports,
-        null,
-        <div className="kpi-graphic-icon">{ICONS.ship}</div>,
-        () => toPlans('direction=EXPORT'),
-      )}
-      {card(
-        'Customs Cleared',
-        k.cleared,
-        null,
-        <>
-          <span className="meta-positive">{k.clearancePending}</span>
-          <span className="meta-sub">still pending</span>
-        </>,
-        <div className="kpi-graphic-icon">{ICONS.shield}</div>,
-        () => toPlans(`status=IN_PROGRESS`),
-      )}
-    </div>
-  );
-}
+import { WorldMap } from './WorldMap';
+export { KpiRow } from './KpiRow';
 
 /* ------------------------------ Shipment Summary ------------------------------ */
 
@@ -414,7 +250,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
                   dataKey="v"
                   innerRadius={44}
                   outerRadius={56}
-                  fill="#0B141D"
+                  fill="var(--bg-subtle)"
                   stroke="none"
                   isAnimationActive={false}
                 />
@@ -459,7 +295,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
                     className="rc-bar-fill"
                     style={{
                       width: `${Math.max(0, c.pct)}%`,
-                      background: CLIENT_COLORS[i % CLIENT_COLORS.length],
+                      background: barGradient(CLIENT_COLORS[i % CLIENT_COLORS.length]),
                     }}
                   />
                 </div>
@@ -543,7 +379,7 @@ export function ClientShareCard({ accounts, year }: { accounts: AccountRow[]; ye
                       className="rc-bar-fill"
                       style={{
                         width: `${pct}%`,
-                        background: CLIENT_COLORS[i % CLIENT_COLORS.length],
+                        background: barGradient(CLIENT_COLORS[i % CLIENT_COLORS.length]),
                       }}
                     />
                   </div>
@@ -567,14 +403,22 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
   const [flow, setFlow] = useState<'import' | 'export'>('import');
   const q = useByCountry(filters, flow);
   const rows = q.data ?? [];
+  const total = rows.reduce((n, r) => n + r.count, 0);
   return (
     <div className="world-map-card ga-map">
       <div>
         <div className="world-map-header-row">
-          <div className="world-map-title-wrap">
-            <span className="world-map-title-bar" />
-            <div className="world-map-title">
-              {flow === 'import' ? 'Imported By Countries' : 'Exported By Countries'}
+          <div>
+            <div className="world-map-title-wrap">
+              <span className="world-map-title-bar" />
+              <div className="world-map-title">
+                {flow === 'import' ? 'Imported By Countries' : 'Exported By Countries'}
+              </div>
+            </div>
+            <div className="world-map-sub">
+              {rows.length
+                ? `${total.toLocaleString()} shipments · ${rows.length} ${rows.length === 1 ? 'country' : 'countries'}`
+                : 'No shipments in this period'}
             </div>
           </div>
           <CardDropdown
@@ -588,15 +432,24 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
           />
         </div>
         <div className="world-map-visual">
-          <img src="/earth-map.svg" alt="" width={365} height={185} loading="lazy" />
+          <WorldMap rows={rows} />
         </div>
       </div>
       <div className="world-country-list">
         <ChartState loading={q.isLoading} error={q.error} empty={!rows.length} height={90}>
-          {rows.slice(0, 4).map((r) => (
-            <div className="world-country-row" key={r.iso2} title={`${r.count} shipments`}>
+          {rows.slice(0, 3).map((r, i) => (
+            <div
+              className="world-country-row"
+              key={r.iso2}
+              title={`${r.count} shipments`}
+              data-top={i === 0 || undefined}
+            >
+              <span className="c-rank">{i + 1}</span>
               <span className="c-name">{r.name}</span>
               <span className="c-val">{r.pct}%</span>
+              <span className="c-bar">
+                <span style={{ width: `${Math.min(100, r.pct)}%` }} />
+              </span>
             </div>
           ))}
         </ChartState>

@@ -25,7 +25,9 @@ import {
   useTransportShare,
   type AnalyticsFilters,
 } from '../features/analytics';
+import { useAuth } from '../auth/AuthProvider';
 import { useLookups } from '../features/hooks';
+import { ClientRevenueCards } from './analytics/ClientRevenueCards';
 import { ChartState, HBarList, changePct, dash, monthLabel } from './dashboard/parts';
 
 const CLEARANCE_COLOR = {
@@ -90,6 +92,7 @@ function PlainTooltip({
 export function AnalyticsPage() {
   const [params, setParams] = useSearchParams();
   const lookups = useLookups();
+  const { can } = useAuth();
   const today = ppToday();
   const preset = params.get('period') ?? 'year';
   const fromP = params.get('from');
@@ -596,6 +599,8 @@ export function AnalyticsPage() {
           </ChartState>
         </div>
       </div>
+
+      {can('accounting:read') && <ClientRevenueCards filters={filters} periodLabel={periodLabel} />}
 
       <div className="card">
         <div className="an-section-title-row">

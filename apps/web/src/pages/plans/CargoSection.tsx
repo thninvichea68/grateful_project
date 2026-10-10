@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFieldArray, useFormContext, useWatch, type Control } from 'react-hook-form';
-import type { CargoExcelParseResult } from '@gs/shared';
+import { invoiceHtsCodes, type CargoExcelParseResult } from '@gs/shared';
 import { uploadFile } from '../../lib/files';
 import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
@@ -23,17 +23,9 @@ const CHEVRON = (
   </svg>
 );
 
-function sums(inv: InvoiceValues | undefined) {
-  let pcs = 0,
-    ctns = 0,
-    fob = 0;
-  inv?.lines.forEach((l) => {
-    pcs += toNum(l.pcs);
-    ctns += toNum(l.ctns);
-    fob += toNum(l.pcs) * toNum(l.fobUnitPrice);
-  });
-  return { pcs, ctns, fob };
-}
+/** The invoice's HTS codes (one invoice = one code; more than one is flagged). */
+const htsCodesOf = (lines: InvoiceValues['lines'] | undefined) => invoiceHtsCodes(lines ?? []);
+
 const money = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -215,7 +207,6 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
                   open={openIdx.has(gi)}
                   onToggle={() => toggle(gi)}
                   onRemove={invoices.fields.length > 1 ? () => invoices.remove(gi) : undefined}
-                  sum={sums(watched?.[gi])}
                   register={register}
                   onDate={setSharedDate}
                   errors={Array.isArray(invErr) ? invErr[gi] : undefined}
@@ -259,6 +250,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
 type InvErrors =
   | {
       invoiceNo?: { message?: string };
+      htsCode?: { message?: string };
       lines?: { message?: string } | Record<number, Record<string, { message?: string }>>;
     }
   | undefined;
@@ -269,7 +261,6 @@ function InvoiceCard({
   open,
   onToggle,
   onRemove,
-  sum,
   register,
   onDate,
   errors,
@@ -279,14 +270,98 @@ function InvoiceCard({
   open: boolean;
   onToggle: () => void;
   onRemove: (() => void) | undefined;
-  sum: { pcs: number; ctns: number; fob: number };
   register: ReturnType<typeof useFormContext<FormValues>>['register'];
   onDate: (d: string) => void;
   errors: unknown;
 }) {
+  const { setValue, getValues } = useFormContext<FormValues>();
   const lines = useFieldArray({ control, name: `invoices.${gi}.lines` });
   const watchedLines = useWatch({ control, name: `invoices.${gi}.lines` });
+  const invDesc = useWatch({ control, name: `invoices.${gi}.description` }) ?? '';
+
+  // Lines are grouped under descriptions. A group starts at a line whose (stable) field id
+  // is in `starts`, seeded from where the saved descriptions change.
+  const [starts, setStarts] = useState<Set<string>>(() => {
+    const saved = getValues(`invoices.${gi}.lines`) ?? [];
+    return new Set(
+      lines.fields
+        .filter(
+          (_, i) => i === 0 || (saved[i]?.description ?? '') !== (saved[i - 1]?.description ?? ''),
+        )
+        .map((f) => f.id),
+    );
+  });
+  const newGroup = useRef(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  // "+ Add Description" appends a line; once it has an id, make it start a new group.
+  useEffect(() => {
+    if (!newGroup.current) return;
+    newGroup.current = false;
+    const last = lines.fields.at(-1);
+    if (!last) return;
+    setStarts((s) => new Set(s).add(last.id));
+    setFocusId(last.id);
+  }, [lines.fields]);
+  const groups: { start: number; idx: number[] }[] = [];
+  lines.fields.forEach((f, i) => {
+    if (i === 0 || starts.has(f.id)) groups.push({ start: i, idx: [i] });
+    else groups.at(-1)!.idx.push(i);
+  });
+  // Older invoices kept one description on the invoice only; show it on the first group.
+  const descOf = (g: { start: number }) =>
+    watchedLines?.[g.start]?.description || (g.start === 0 ? invDesc : '');
+  const setDesc = (g: { start: number; idx: number[] }, v: string) => {
+    g.idx.forEach((i) =>
+      setValue(`invoices.${gi}.lines.${i}.description`, v, { shouldDirty: true }),
+    );
+    // The invoice's own description mirrors the first group (used on printed documents).
+    if (g.start === 0) setValue(`invoices.${gi}.description`, v, { shouldDirty: true });
+  };
+  const blank = (description: string) => ({
+    ...blankLine(),
+    htsCode: htsCodesOf(getValues(`invoices.${gi}.lines`))[0] ?? '',
+    description,
+  });
+  const addLine = () => lines.append(blank(descOf(groups.at(-1)!)));
+  const addDescription = () => {
+    newGroup.current = true;
+    lines.append(blank(''));
+  };
+  const removeLine = (li: number) => {
+    // Removing a group's first line: the next line of that group takes over as its start.
+    const id = lines.fields[li]!.id;
+    const next = lines.fields[li + 1];
+    if (starts.has(id) && next && !starts.has(next.id)) setStarts((s) => new Set(s).add(next.id));
+    lines.remove(li);
+  };
+  const removeGroup = (g: { start: number; idx: number[] }) => {
+    if (g.start === 0) {
+      const second = groups[1];
+      setValue(`invoices.${gi}.description`, second ? descOf(second) : '', {
+        shouldDirty: true,
+      });
+    }
+    lines.remove(g.idx);
+  };
   const e = errors as InvErrors;
+  const htsCodes = htsCodesOf(watchedLines);
+  const setHts = (code: string) =>
+    lines.fields.forEach((_, li) =>
+      setValue(`invoices.${gi}.lines.${li}.htsCode`, code, { shouldDirty: true }),
+    );
+  // Invoice totals under the line items.
+  type Sum = { pcs: number; ctns: number; nw: number; gw: number; cbm: number; fob: number };
+  const lineSum = (watchedLines ?? []).reduce<Sum>(
+    (t, l) => ({
+      pcs: t.pcs + toNum(l.pcs),
+      ctns: t.ctns + toNum(l.ctns),
+      nw: t.nw + toNum(l.netWeightKg),
+      gw: t.gw + toNum(l.grossWeightKg),
+      cbm: t.cbm + toNum(l.cbm),
+      fob: t.fob + toNum(l.pcs) * toNum(l.fobUnitPrice),
+    }),
+    { pcs: 0, ctns: 0, nw: 0, gw: 0, cbm: 0, fob: 0 },
+  );
   const lineErr = (li: number, f: string) =>
     e?.lines && !('message' in e.lines)
       ? (e.lines as Record<number, Record<string, { message?: string }>>)[li]?.[f]?.message
@@ -322,6 +397,58 @@ function InvoiceCard({
     </label>
   );
 
+  const renderLine = (li: number) => {
+    const l = watchedLines?.[li];
+    const total = l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
+    return (
+      <div className="cx-line" key={lines.fields[li]!.id}>
+        <div className="cx-line-group">
+          <div className="cx-line-group-title">Product</div>
+          <div className="cx-line-fields cx-g2">
+            {F(li, 'poNo', 'PO No.', 'PO No.')}
+            {F(li, 'styleNo', 'Style', 'Style No.')}
+          </div>
+        </div>
+        <div className="cx-line-group">
+          <div className="cx-line-group-title">Quantity</div>
+          <div className="cx-line-fields cx-g2">
+            {F(li, 'pcs', 'PCS', '0', true)}
+            {F(li, 'ctns', 'CTNS', '0', true)}
+          </div>
+        </div>
+        <div className="cx-line-group">
+          <div className="cx-line-group-title">Weight &amp; Volume</div>
+          <div className="cx-line-fields cx-g3">
+            {F(li, 'netWeightKg', 'Net Wt (kg)', '0.00', true)}
+            {F(li, 'grossWeightKg', 'Gross Wt (kg)', '0.00', true)}
+            {F(li, 'cbm', 'CBM', '0.00', true)}
+          </div>
+        </div>
+        <div className="cx-line-group">
+          <div className="cx-line-group-title">Price</div>
+          <div className="cx-line-fields cx-g2">
+            {F(li, 'fobUnitPrice', 'Unit (USD)', '0.00', true)}
+            <div className="cx-line-total-box">
+              <span className="cx-lbl">Line Total</span>
+              <div className="cargo-line-total">{total !== null ? `${money(total)} USD` : ''}</div>
+            </div>
+          </div>
+        </div>
+        {lines.fields.length > 1 && (
+          <button
+            type="button"
+            className="cargo-row-del"
+            title="Remove line"
+            aria-label="Remove line"
+            onClick={() => removeLine(li)}
+          >
+            ×
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`cargo-inv${open ? ' open' : ''}`}>
       <div className="cargo-inv-row">
@@ -347,27 +474,47 @@ function InvoiceCard({
           />
         </label>
         <label className="cx-f">
-          <span className="cx-lbl">Description</span>
+          <span className="cx-lbl">HTS Code</span>
+          {/* One invoice = one HTS code: shown once here and written to every line. */}
           <input
             type="text"
             className="cargo-cell"
-            placeholder="Description"
-            {...register(`invoices.${gi}.description`)}
+            placeholder={htsCodes.length > 1 ? 'Choose one' : 'HTS Code'}
+            value={htsCodes.length === 1 ? htsCodes[0] : ''}
+            onChange={(ev) => setHts(ev.target.value)}
+            aria-invalid={htsCodes.length > 1 || !!e?.htsCode}
+            title={e?.htsCode?.message}
           />
         </label>
         <div className="cx-chips">
           <div className="cx-chip">
+            <span className="cx-lbl">Net Wt (kg)</span>
+            <div className={`cargo-sum${emp(lineSum.nw)}`}>
+              {lineSum.nw ? fmtNum(lineSum.nw, 2) : '—'}
+            </div>
+          </div>
+          <div className="cx-chip">
+            <span className="cx-lbl">Gross Wt (kg)</span>
+            <div className={`cargo-sum${emp(lineSum.gw)}`}>
+              {lineSum.gw ? fmtNum(lineSum.gw, 2) : '—'}
+            </div>
+          </div>
+          <div className="cx-chip">
             <span className="cx-lbl">PCS</span>
-            <div className={`cargo-sum${emp(sum.pcs)}`}>{sum.pcs ? fmtNum(sum.pcs) : '—'}</div>
+            <div className={`cargo-sum${emp(lineSum.pcs)}`}>
+              {lineSum.pcs ? fmtNum(lineSum.pcs) : '—'}
+            </div>
           </div>
           <div className="cx-chip">
             <span className="cx-lbl">CTNS</span>
-            <div className={`cargo-sum${emp(sum.ctns)}`}>{sum.ctns ? fmtNum(sum.ctns) : '—'}</div>
+            <div className={`cargo-sum${emp(lineSum.ctns)}`}>
+              {lineSum.ctns ? fmtNum(lineSum.ctns) : '—'}
+            </div>
           </div>
           <div className="cx-chip cx-chip-fob">
             <span className="cx-lbl">Total FOB</span>
-            <div className={`cargo-sum cargo-sum-fob${emp(sum.fob)}`}>
-              {sum.fob ? `${money(sum.fob)} USD` : '—'}
+            <div className={`cargo-sum cargo-sum-fob${emp(lineSum.fob)}`}>
+              {lineSum.fob ? `${money(lineSum.fob)} USD` : '—'}
             </div>
           </div>
         </div>
@@ -387,6 +534,13 @@ function InvoiceCard({
           <FieldError message={e.invoiceNo.message} />
         </div>
       )}
+      {htsCodes.length > 1 && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <FieldError
+            message={`The lines have different HTS codes (${htsCodes.join(', ')}). One invoice uses one HTS code — enter it above.`}
+          />
+        </div>
+      )}
       <div className="cargo-inv-details">
         <div className="cargo-inv-details-inner">
           <div className="cargo-inv-panel">
@@ -397,70 +551,79 @@ function InvoiceCard({
               </small>
             </div>
             <div className="cargo-line-cards">
-              {lines.fields.map((lf, li) => {
-                const l = watchedLines?.[li];
-                const total =
-                  l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
+              {groups.map((g) => {
+                const id = lines.fields[g.start]!.id;
                 return (
-                  <div className="cx-line" key={lf.id}>
-                    <div className="cx-line-group">
-                      <div className="cx-line-group-title">Product</div>
-                      <div className="cx-line-fields cx-g3">
-                        {F(li, 'poNo', 'PO No.', 'PO No.')}
-                        {F(li, 'styleNo', 'Style', 'Style No.')}
-                        {F(li, 'htsCode', 'HTS Code', 'HTS Code')}
-                      </div>
+                  <div className="cx-desc-group" key={id}>
+                    <div className="cx-desc-row">
+                      <label className="cx-f">
+                        <span className="cx-lbl">Description</span>
+                        <input
+                          type="text"
+                          className="cargo-cell"
+                          placeholder="e.g. Mens woven shorts 100 nylon"
+                          value={descOf(g)}
+                          onChange={(ev) => setDesc(g, ev.target.value)}
+                          autoFocus={focusId === id}
+                        />
+                      </label>
+                      {groups.length > 1 && (
+                        <button
+                          type="button"
+                          className="cargo-row-del"
+                          title="Remove this description and its lines"
+                          aria-label="Remove description"
+                          onClick={() => removeGroup(g)}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-group-title">Quantity</div>
-                      <div className="cx-line-fields cx-g2">
-                        {F(li, 'pcs', 'PCS', '0', true)}
-                        {F(li, 'ctns', 'CTNS', '0', true)}
-                      </div>
-                    </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-group-title">Weight &amp; Volume</div>
-                      <div className="cx-line-fields cx-g3">
-                        {F(li, 'netWeightKg', 'Net Wt (kg)', '0.00', true)}
-                        {F(li, 'grossWeightKg', 'Gross Wt (kg)', '0.00', true)}
-                        {F(li, 'cbm', 'CBM', '0.00', true)}
-                      </div>
-                    </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-group-title">Price</div>
-                      <div className="cx-line-fields cx-g2">
-                        {F(li, 'fobUnitPrice', 'Unit (USD)', '0.00', true)}
-                        <div className="cx-line-total-box">
-                          <span className="cx-lbl">Line Total</span>
-                          <div className="cargo-line-total">
-                            {total !== null ? `${money(total)} USD` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {lines.fields.length > 1 && (
-                      <button
-                        type="button"
-                        className="cargo-row-del"
-                        title="Remove line"
-                        aria-label="Remove line"
-                        onClick={() => lines.remove(li)}
-                      >
-                        ×
-                      </button>
-                    )}
+                    {g.idx.map(renderLine)}
                   </div>
                 );
               })}
+              {/* Invoice total, column-aligned with the line fields above. */}
+              <div className="cx-line cx-line-sum" aria-label="Invoice total">
+                <div className="cx-line-group">
+                  <div className="cx-sum-label">Invoice total</div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g2">
+                    <div className="cx-sum-cell">{fmtNum(lineSum.pcs)}</div>
+                    <div className="cx-sum-cell">{fmtNum(lineSum.ctns)}</div>
+                  </div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g3">
+                    <div className="cx-sum-cell">{fmtNum(lineSum.nw, 2)}</div>
+                    <div className="cx-sum-cell">{fmtNum(lineSum.gw, 2)}</div>
+                    <div className="cx-sum-cell">{fmtNum(lineSum.cbm, 3)}</div>
+                  </div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g2">
+                    <div />
+                    <div className="cx-sum-cell cx-sum-fob">{money(lineSum.fob)} USD</div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="cargo-panel-foot">
-              <button
-                type="button"
-                className="cargo-link-btn cargo-add-line"
-                onClick={() => lines.append(blankLine())}
-              >
-                + Add line
-              </button>
+              <div className="cargo-foot-adds">
+                {/* New line under the latest description. */}
+                <button type="button" className="cargo-link-btn cargo-add-line" onClick={addLine}>
+                  + Add line
+                </button>
+                {/* New description box with its first line. */}
+                <button
+                  type="button"
+                  className="cargo-link-btn cargo-add-line"
+                  onClick={addDescription}
+                >
+                  + Add Description
+                </button>
+              </div>
               {onRemove && (
                 <button
                   type="button"

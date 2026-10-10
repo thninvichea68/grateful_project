@@ -52,6 +52,10 @@ analyticsRouter.get('/profit', requirePermission('accounting:read'), async (req,
   res.json(await svc.profit(year ?? Number(f.today.slice(0, 4)), f.today, f.clientId));
 });
 
+analyticsRouter.get('/client-revenue', requirePermission('accounting:read'), async (req, res) =>
+  res.json(await svc.clientRevenue(await filters(req))),
+);
+
 export const overviewRouter = Router();
 overviewRouter.use(requireAuth, requirePermission('dashboard:read'));
 

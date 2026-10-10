@@ -186,9 +186,18 @@
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
 }
+/* Air: Terms don't apply. Nothing is highlighted and hovering does nothing. */
 .setupField:disabled .segOpt span {
   cursor: not-allowed;
   opacity: 0.5;
+}
+.setupField:disabled .segOpt span:hover {
+  color: var(--text-secondary);
+}
+.setupField:disabled .segOpt input:checked + span {
+  background: none;
+  box-shadow: none;
+  color: var(--text-secondary);
 }
 
 /* ---------- Stepper ---------- */
