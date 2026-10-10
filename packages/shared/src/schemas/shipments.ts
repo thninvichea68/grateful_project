@@ -48,12 +48,32 @@ export const cargoLineInputSchema = z.object({
   description: optText(300),
 });
 
-export const cargoInvoiceInputSchema = z.object({
-  invoiceNo: z.string().trim().toUpperCase().min(1, 'Enter the invoice no.').max(40),
-  invoiceDate: optDate,
-  description: optText(300),
-  lines: z.array(cargoLineInputSchema).min(1, 'Add at least one line'),
-});
+/** The distinct, non-empty HTS codes used on an invoice's lines. */
+export const invoiceHtsCodes = (lines: { htsCode?: string | null }[]) => [
+  ...new Set(lines.map((l) => l.htsCode?.trim().toUpperCase()).filter((c): c is string => !!c)),
+];
+
+/** One invoice = one HTS code: lines may not differ, and blank lines take the invoice's code. */
+export const cargoInvoiceInputSchema = z
+  .object({
+    invoiceNo: z.string().trim().toUpperCase().min(1, 'Enter the invoice no.').max(40),
+    invoiceDate: optDate,
+    description: optText(300),
+    lines: z.array(cargoLineInputSchema).min(1, 'Add at least one line'),
+  })
+  .superRefine((inv, ctx) => {
+    const codes = invoiceHtsCodes(inv.lines);
+    if (codes.length > 1)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['htsCode'],
+        message: `One invoice uses one HTS code; this one has ${codes.join(', ')}`,
+      });
+  })
+  .transform((inv) => {
+    const [code = null] = invoiceHtsCodes(inv.lines);
+    return { ...inv, lines: inv.lines.map((l) => ({ ...l, htsCode: code })) };
+  });
 
 export const cdcLineInputSchema = z.object({
   cutStockItemId: z.string().uuid('Choose an item from the master list'),

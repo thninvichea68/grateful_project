@@ -3,6 +3,7 @@ import type { QuotationStatus } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useQuotations, useQuotationTemplates } from '../features/admin';
 import { Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { Pill } from '../components/StatusPill';
 import { fmtDate } from '../lib/format';
 
@@ -47,9 +48,7 @@ export function QuotationsPage() {
         <div className="card-header-row">
           <h3>Quotation Builder</h3>
           <div className={ui.toolbar}>
-            <input
-              type="search"
-              className={ui.input}
+            <SearchBox
               placeholder="Quote no., customer…"
               defaultValue={q.q}
               onChange={(e) => set('q', e.target.value.trim())}

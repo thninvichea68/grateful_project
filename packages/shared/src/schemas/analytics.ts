@@ -125,6 +125,37 @@ export interface ProfitSummary {
   byClient: { clientId: string; code: string; name: string; netProfit: string; pct: number }[];
 }
 
+/** One client's ledger figures for a period (by invoice date), for the Analytics cards. */
+export interface ClientRevenueRow {
+  clientId: string;
+  code: string;
+  name: string;
+  /** Ledger entries (one per customs declaration). */
+  entries: number;
+  /** Entries Chea hasn't been paid for yet. */
+  unpaid: number;
+  invRevenue: string;
+  disTotal: string;
+  dnTotal: string;
+  vat: string;
+  clearFee: string;
+  thc: string;
+  commission: string;
+  otherPay: string;
+  /** INV + DIS + DN. */
+  revenue: string;
+  /** Clear fee + THC + CM + Other. */
+  costs: string;
+  netProfit: string;
+  /** Net profit as a % of revenue; null when there is no revenue. */
+  marginPct: number | null;
+  /** This client's share of all clients' net profit in the period. */
+  sharePct: number | null;
+  lastInvDate: string | null;
+  /** Every month of the period, zero-filled. */
+  monthly: { month: string; revenue: string; netProfit: string }[];
+}
+
 export interface OverviewSummary {
   year: number;
   today: string;

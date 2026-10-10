@@ -277,6 +277,27 @@ describe('shipments', () => {
     expect(res.body.invoices[0].lines).toHaveLength(5);
   });
 
+  it('one invoice = one HTS code: blank lines take it, different codes are rejected', async () => {
+    const h = await as('OPERATOR');
+    const ok = await request(app).post('/api/v1/shipments').set(h).send(exportShipment());
+    expect(ok.status).toBe(201);
+    const saved = await request(app).get(`/api/v1/shipments/${ok.body.id}`).set(h);
+    expect(saved.body.invoices[0].lines.map((l: { htsCode: string | null }) => l.htsCode)).toEqual([
+      '6104.69',
+      '6104.69',
+    ]);
+
+    const base = exportShipment();
+    const [inv] = base.invoices as { lines: Record<string, unknown>[] }[];
+    inv!.lines[1]!.htsCode = '6105.10';
+    const bad = await request(app)
+      .post('/api/v1/shipments')
+      .set(h)
+      .send({ ...base, hblNo: 'MAE26999999' });
+    expect(bad.status).toBe(400);
+    expect(JSON.stringify(bad.body)).toMatch(/one HTS code/);
+  });
+
   it('warns when an uploaded invoice number is already used', async () => {
     const h = await as('OPERATOR');
     await request(app).post('/api/v1/shipments').set(h).send(exportShipment());
@@ -288,7 +309,14 @@ describe('shipments', () => {
         fs.readFileSync(path.join(DATA, 'export-template.xlsx')),
         'Export Template.xlsx',
       );
-    expect(res.body.warnings[0].message).toMatch(/JRA26045 is already on shipment SHP-26-/);
+    const messages = res.body.warnings.map((w: { message: string }) => w.message);
+    expect(messages).toEqual(
+      expect.arrayContaining([expect.stringMatching(/JRA26045 is already on shipment SHP-26-/)]),
+    );
+    // The template mixes HTS codes within an invoice; one invoice = one HTS code.
+    expect(messages).toEqual(
+      expect.arrayContaining([expect.stringMatching(/JRA26045 has several HTS codes/)]),
+    );
   });
 
   it('rejects non-spreadsheet uploads', async () => {

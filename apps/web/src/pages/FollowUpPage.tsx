@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useFollowUps, useStaff } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { ErrorBanner, FieldError, Modal, Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { Pill } from '../components/StatusPill';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
@@ -110,9 +111,7 @@ export function FollowUpPage() {
                 {l}
               </button>
             ))}
-            <input
-              type="search"
-              className={ui.input}
+            <SearchBox
               placeholder="Search…"
               defaultValue={q.q}
               aria-label="Search follow-ups"

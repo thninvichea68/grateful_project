@@ -4,6 +4,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useDocs } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
+import { SearchBox } from '../../components/SearchBox';
 import { Pill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { NotFoundPage } from '../NotFoundPage';
@@ -57,9 +58,7 @@ function DocsList({ type }: { type: BillingDocType }) {
             </div>
           </div>
           <div className={ui.toolbar}>
-            <input
-              type="search"
-              className={ui.input}
+            <SearchBox
               placeholder="Number, customer, declare no…"
               defaultValue={q.q}
               onChange={(e) => set('q', e.target.value.trim())}

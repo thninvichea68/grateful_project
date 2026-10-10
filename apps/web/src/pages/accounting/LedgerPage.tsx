@@ -11,6 +11,7 @@ import { useToast } from '../../components/Toast';
 import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtNum } from '../../lib/format';
 import { icons } from '../../layout/icons';
+import { SearchBox } from '../../components/SearchBox';
 import { StatTile, StatTiles } from '../../components/StatTiles';
 import { useAccountingLayout } from './AccountingLayout';
 import { LedgerModal } from './LedgerModal';
@@ -182,16 +183,13 @@ export function LedgerPage() {
             <option value="UNPAID">Unpaid</option>
             <option value="PAID">Paid</option>
           </select>
-          <label className={l.search}>
-            <input
-              type="search"
-              placeholder="Search declare, INV or DN no…"
-              defaultValue={q.q}
-              onChange={(e) => set('q', e.target.value.trim())}
-              aria-label="Search"
-            />
-            {icons.search({})}
-          </label>
+          <SearchBox
+            className={l.search}
+            placeholder="Search declare, INV or DN no…"
+            defaultValue={q.q}
+            onChange={(e) => set('q', e.target.value.trim())}
+            aria-label="Search"
+          />
           <div className={l.actions}>
             <button
               type="button"

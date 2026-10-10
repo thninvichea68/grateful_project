@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import type {
   AccountRow,
   ClearanceStatusRow,
+  ClientRevenueRow,
   CountryRow,
   ForwarderRow,
   KpiResponse,
@@ -259,6 +260,79 @@ export async function accounts(f: Filters): Promise<AccountRow[]> {
   return [...map.values()].sort(
     (a, b) => b.all.total - a.all.total || a.name.localeCompare(b.name),
   );
+}
+
+/** Every YYYY-MM from `from` to `to` inclusive. */
+function monthsBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  let y = Number(from.slice(0, 4));
+  let m = Number(from.slice(5, 7));
+  const end = to.slice(0, 7);
+  for (let key = from.slice(0, 7); key <= end && out.length < 600; ) {
+    out.push(key);
+    m += 1;
+    if (m > 12) [y, m] = [y + 1, 1];
+    key = `${y}-${String(m).padStart(2, '0')}`;
+  }
+  return out;
+}
+
+/**
+ * Each client's ledger for the period (by invoice date): every revenue and cost column,
+ * net profit, margin, share of all profit and a month-by-month trend. Ledger rows have
+ * no direction or transport mode, so only the period and client filters apply.
+ */
+export async function clientRevenue(
+  f: Filters & { from: string; to: string },
+): Promise<ClientRevenueRow[]> {
+  const c: SQL[] = [sql`a.inv_date BETWEEN ${f.from}::date AND ${f.to}::date`];
+  if (f.clientId?.length)
+    c.push(
+      sql`a.client_id IN (${sql.join(
+        f.clientId.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )})`,
+    );
+  const where = sql`WHERE ${sql.join(c, sql` AND `)}`;
+  const rows = await queryRows<Omit<ClientRevenueRow, 'monthly'>>(
+    db,
+    sql`
+    SELECT c.id AS "clientId", c.code, c.name, count(*)::int AS entries,
+           (count(*) FILTER (WHERE a.chea_status = 'UNPAID'))::int AS unpaid,
+           sum(a.inv_revenue)::text AS "invRevenue", sum(a.dis_total)::text AS "disTotal",
+           sum(a.dn_total)::text AS "dnTotal", sum(a.vat)::text AS vat,
+           sum(a.clear_fee)::text AS "clearFee", sum(a.thc)::text AS thc,
+           sum(a.commission)::text AS commission, sum(a.other_pay)::text AS "otherPay",
+           sum(a.inv_revenue + a.dis_total + a.dn_total)::text AS revenue,
+           sum(a.clear_fee + a.thc + a.commission + a.other_pay)::text AS costs,
+           sum(a.net_profit)::text AS "netProfit",
+           round(100.0 * sum(a.net_profit) / nullif(sum(a.inv_revenue + a.dis_total + a.dn_total), 0), 1)::float AS "marginPct",
+           round(100.0 * sum(a.net_profit) / nullif(sum(sum(a.net_profit)) OVER (), 0), 1)::float AS "sharePct",
+           to_char(max(a.inv_date), 'YYYY-MM-DD') AS "lastInvDate"
+    FROM accounting_records a JOIN clients c ON c.id = a.client_id ${where}
+    GROUP BY c.id ORDER BY sum(a.net_profit) DESC, c.name`,
+  );
+  const monthly = await queryRows<{
+    clientId: string;
+    month: string;
+    revenue: string;
+    netProfit: string;
+  }>(
+    db,
+    sql`
+    SELECT a.client_id AS "clientId", to_char(a.inv_date, 'YYYY-MM') AS month,
+           sum(a.inv_revenue + a.dis_total + a.dn_total)::text AS revenue, sum(a.net_profit)::text AS "netProfit"
+    FROM accounting_records a ${where} GROUP BY 1, 2`,
+  );
+  const byKey = new Map(monthly.map((m) => [`${m.clientId}|${m.month}`, m]));
+  const months = monthsBetween(f.from, f.to);
+  return rows.map((r) => ({
+    ...r,
+    monthly: months.map((month) => {
+      const m = byKey.get(`${r.clientId}|${month}`);
+      return { month, revenue: m?.revenue ?? '0.00', netProfit: m?.netProfit ?? '0.00' };
+    }),
+  }));
 }
 
 /** Net profit from the monthly ledger (invoice date), for roles with accounting:read. */

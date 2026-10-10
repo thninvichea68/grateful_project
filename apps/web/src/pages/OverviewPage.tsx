@@ -12,6 +12,7 @@ import {
   ProfitCard,
   ShipmentSummaryCard,
 } from './dashboard/OverviewCards';
+import { KpiRowSkeleton } from './dashboard/KpiRow';
 import { MONTHS_LONG } from './dashboard/parts';
 
 export function OverviewPage() {
@@ -36,15 +37,7 @@ export function OverviewPage() {
         </span>
       </div>
       <ErrorBanner error={summary.error} />
-      {s ? (
-        <KpiRow k={s.kpis} monthly={s.monthly} />
-      ) : (
-        <div className="kpi-row-modern" aria-busy="true">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="modern-kpi-card" style={{ minHeight: 120 }} />
-          ))}
-        </div>
-      )}
+      {s ? <KpiRow k={s.kpis} monthly={s.monthly} /> : <KpiRowSkeleton />}
 
       <div className="ov-grid-3col">
         <ShipmentSummaryCard

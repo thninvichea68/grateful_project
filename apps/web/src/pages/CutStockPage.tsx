@@ -4,6 +4,7 @@ import { CUT_STOCK_CATEGORIES, CUT_STOCK_CATEGORY_LABEL } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useCutStock, useLookups } from '../features/hooks';
 import { TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { StatTile, StatTiles } from '../components/StatTiles';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
@@ -69,13 +70,10 @@ export function CutStockPage() {
                 </option>
               ))}
             </select>
-            <input
-              className={ui.input}
-              type="search"
+            <SearchBox
               placeholder="Search item, declare no…"
               defaultValue={q}
               onChange={(e) => set('q', e.target.value.trim())}
-              style={{ minWidth: 200 }}
               aria-label="Search items"
             />
             <select

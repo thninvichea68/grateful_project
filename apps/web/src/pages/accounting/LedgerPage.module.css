@@ -58,51 +58,10 @@
   margin: 0 4px;
   background: var(--border-subtle);
 }
-/* Search: one bordered box with the icon inside (like the top-bar search); the box
-   highlights on focus instead of the input getting a second outline ring. */
-.search {
+/* Search takes the width left over in the row. */
+.filters .search {
   flex: 1 1 160px;
   min-width: 140px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-canvas);
-  cursor: text;
-  transition: border-color 0.15s ease;
-}
-.search:focus-within {
-  border-color: var(--accent-primary);
-}
-.search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-family: var(--font-main);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.search input:focus-visible {
-  outline: none;
-}
-.search input::placeholder {
-  font-weight: 400;
-  color: var(--text-tertiary);
-}
-.search svg {
-  flex-shrink: 0;
-  width: 15px;
-  height: 15px;
-  color: var(--text-tertiary);
-}
-.search:focus-within svg {
-  color: var(--accent-primary);
 }
 
 /* Fill the window exactly: the content area becomes a column, the ledger card takes the

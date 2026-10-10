@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useDeclarationRegister, useDocuments } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { Modal, Pager, TableState, ui } from '../components/ui';
+import { SearchBox } from '../components/SearchBox';
 import { DocumentUploadModal } from '../components/DocumentUpload';
 import { fmtDate } from '../lib/format';
 import { DocumentTable } from './DocumentsPage';
@@ -46,9 +47,7 @@ export function OperationsPage() {
             </div>
           </div>
           <div className={ui.toolbar}>
-            <input
-              type="search"
-              className={ui.input}
+            <SearchBox
               placeholder="Declare no., shipment, HBL…"
               defaultValue={q.q}
               onChange={(e) => set('q', e.target.value.trim())}

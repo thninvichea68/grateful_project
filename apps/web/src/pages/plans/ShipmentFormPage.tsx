@@ -50,12 +50,10 @@ const FREIGHT = [
   { value: 'SEA', label: 'Sea' },
   { value: 'AIR', label: 'Air' },
   { value: 'ROAD', label: 'Truck' },
-  { value: 'RAIL', label: 'Rail' },
 ];
 const TERMS = [
   { value: 'FCL', label: 'CY / CY' },
   { value: 'LCL', label: 'CFS / CFS (LCL)' },
-  { value: 'NONE', label: 'Loose' },
 ];
 const DIRECTIONS = [
   { value: 'EXPORT', label: 'Export' },
@@ -126,7 +124,7 @@ function ShipmentForm({
   const readOnly = !can('shipments:write');
   const clientLocked = !!detail && detail.declarations.some((d) => d.hasLedgerEntry);
 
-  // Air has no CY/CY or LCL load type.
+  // Air has no terms (stored as NONE, so neither option shows selected).
   useEffect(() => {
     if (transportMode === 'AIR') setValue('loadType', 'NONE');
   }, [transportMode, setValue]);
@@ -302,7 +300,13 @@ function ShipmentForm({
                     options={DIRECTIONS}
                     onChange={() => setStep(0)}
                   />
-                  <Segmented name="transportMode" label="Freight" options={FREIGHT} />
+                  <Segmented
+                    name="transportMode"
+                    label="Freight"
+                    options={FREIGHT}
+                    // Switching away from Air: pick CY / CY so Sea and Truck have terms.
+                    onChange={() => loadType === 'NONE' && setValue('loadType', 'FCL')}
+                  />
                   <Segmented
                     name="loadType"
                     label="Terms"
