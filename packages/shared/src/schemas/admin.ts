@@ -50,6 +50,15 @@ export const staffInputSchema = z.object({
   status: z.enum(STAFF_STATUSES).default('ACTIVE'),
   /** Temporary password the person changes after first sign-in. */
   password: passwordSchema,
+  /** Per-user tweaks on top of the role: extra permissions and removed ones. */
+  permissionsAdd: z.array(z.enum(PERMISSIONS)).default([]),
+  permissionsRemove: z.array(z.enum(PERMISSIONS)).default([]),
+  /** Clients this person may work with; null = every client. */
+  clientIds: z
+    .array(z.string().uuid())
+    .min(1, 'Choose at least one client, or allow all clients')
+    .nullable()
+    .default(null),
 });
 export const staffUpdateSchema = staffInputSchema.omit({ password: true, email: true }).partial();
 export const resetPasswordSchema = z.object({ password: passwordSchema });
@@ -67,6 +76,10 @@ export interface StaffMember {
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  permissionsAdd: Permission[];
+  permissionsRemove: Permission[];
+  /** null = every client. */
+  clientIds: string[] | null;
 }
 
 export interface RoleInfo {

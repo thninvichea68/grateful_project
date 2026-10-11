@@ -167,6 +167,16 @@ export async function listShipmentsForExport(
 
 /* ============================== Detail ============================== */
 
+/** The shipment's client (for access checks); 404 when it doesn't exist. */
+export async function shipmentClientId(id: string): Promise<string> {
+  const [row] = await db
+    .select({ clientId: shipments.clientId })
+    .from(shipments)
+    .where(and(eq(shipments.id, id), isNull(shipments.deletedAt)));
+  if (!row) throw notFound('Shipment');
+  return row.clientId;
+}
+
 export async function getShipment(id: string): Promise<ShipmentDetail> {
   const [s] = await db
     .select({ s: shipments, clientCode: clients.code, clientName: clients.name })

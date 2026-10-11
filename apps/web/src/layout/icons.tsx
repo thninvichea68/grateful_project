@@ -66,6 +66,13 @@ export const icons = {
       <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" />
     </svg>
   ),
+  /** Receipt: Credit Noted (the broker's payment voucher), as in the accounting engine. */
+  creditnote: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-3 2V2z" />
+      <path d="M8 7h8M8 11h8M8 15h5" />
+    </svg>
+  ),
   quotations: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />

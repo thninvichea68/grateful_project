@@ -12,7 +12,7 @@ export function LoginPage() {
   const { status, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? '/overview';
+  const from = (location.state as { from?: string } | null)?.from ?? '/'; // "/" picks the first page the role can open
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {

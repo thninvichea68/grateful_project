@@ -11,10 +11,17 @@ const claimsSchema = z.object({
   sub: z.string().uuid(),
   role: z.enum(ROLE_CODES),
   perms: z.array(z.string()),
+  /** Client ids the user may work with; null = every client. */
+  clients: z.array(z.string().uuid()).nullable().default(null),
 });
 
-export function signAccessToken(userId: string, role: RoleCode, permissions: Permission[]): string {
-  return jwt.sign({ role, perms: permissions }, env.JWT_ACCESS_SECRET, {
+export function signAccessToken(
+  userId: string,
+  role: RoleCode,
+  permissions: Permission[],
+  clientIds: string[] | null = null,
+): string {
+  return jwt.sign({ role, perms: permissions, clients: clientIds }, env.JWT_ACCESS_SECRET, {
     subject: userId,
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -27,6 +34,7 @@ export function verifyAccessToken(token: string): {
   userId: string;
   role: RoleCode;
   permissions: Permission[];
+  clientIds: string[] | null;
 } {
   const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
     issuer: ISSUER,
@@ -39,6 +47,7 @@ export function verifyAccessToken(token: string): {
     userId: claims.sub,
     role: claims.role,
     permissions: claims.perms.filter((p): p is Permission => known.has(p)),
+    clientIds: claims.clients,
   };
 }
 

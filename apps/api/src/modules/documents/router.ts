@@ -11,6 +11,35 @@ import { audit } from '../../lib/audit';
 import { badRequest, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll, isoTs } from '../../lib/listing';
 import { fileExists, putFile, readFile } from '../../lib/storage';
+import {
+  allowedClients,
+  assertClientAllowed,
+  assertClientVisible,
+  clientCondition,
+  scopeClients,
+} from '../../lib/clientScope';
+import { shipmentClientId } from '../shipments/service';
+
+/** A document belongs to its own client, or else to its shipment's client. */
+const DOC_CLIENT = sql`coalesce(d.client_id, s.client_id)`;
+async function documentClientId(id: string): Promise<string | null> {
+  const [r] = await queryRows<{ clientId: string | null }>(
+    db,
+    sql`SELECT ${DOC_CLIENT} AS "clientId" FROM documents d LEFT JOIN shipments s ON s.id = d.shipment_id WHERE d.id = ${id} AND d.deleted_at IS NULL`,
+  );
+  if (!r) throw notFound('Document');
+  return r.clientId;
+}
+/** Restricted users may only file documents under their own clients or shipments. */
+async function assertMetaAllowed(
+  req: Parameters<typeof allowedClients>[0],
+  meta: { clientId?: string | null | undefined; shipmentId?: string | null | undefined },
+) {
+  if (!allowedClients(req)) return;
+  if (meta.clientId) assertClientAllowed(req, meta.clientId);
+  if (meta.shipmentId) assertClientAllowed(req, await shipmentClientId(meta.shipmentId));
+  if (!meta.clientId && !meta.shipmentId) assertClientAllowed(req, null);
+}
 
 const ALLOWED = /\.(pdf|png|jpe?g|webp|xlsx|xls|csv|docx|doc|txt)$/i;
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -73,6 +102,8 @@ documentsRouter.get('/', requirePermission('documents:read'), async (req, res) =
   if (q.category) c.push(sql`d.category = ${q.category}`);
   if (q.shipmentId) c.push(sql`d.shipment_id = ${q.shipmentId}`);
   if (q.clientId) c.push(sql`d.client_id = ${q.clientId}`);
+  const scoped = clientCondition(DOC_CLIENT, scopeClients(req));
+  if (scoped) c.push(scoped);
   if (q.q) {
     const like = likePattern(q.q);
     c.push(
@@ -104,6 +135,7 @@ documentsRouter.post('/', requirePermission('documents:write'), upload, async (r
     ...req.body,
     title: req.body.title || req.file.originalname,
   });
+  await assertMetaAllowed(req, meta);
   const stored = await putFile(req.file.buffer, req.file.originalname);
   const id = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -127,6 +159,7 @@ documentsRouter.post('/', requirePermission('documents:write'), upload, async (r
 
 documentsRouter.get('/:id/download', requirePermission('documents:read'), async (req, res) => {
   const { id } = parse(idParam, req.params);
+  assertClientVisible(req, await documentClientId(id), 'File');
   const [d] = await db
     .select()
     .from(documents)
@@ -148,11 +181,13 @@ documentsRouter.get('/:id/download', requirePermission('documents:read'), async 
 
 documentsRouter.patch('/:id', requirePermission('documents:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
+  assertClientVisible(req, await documentClientId(id), 'Document');
   const v = Object.fromEntries(
     Object.entries(parse(documentMetaSchema.partial(), req.body)).filter(
       ([, x]) => x !== undefined,
     ),
   );
+  if ('clientId' in v || 'shipmentId' in v) await assertMetaAllowed(req, v);
   const [row] = await db
     .update(documents)
     .set(v)
@@ -166,6 +201,7 @@ documentsRouter.patch('/:id', requirePermission('documents:write'), async (req, 
 /** Soft delete: the file is kept on disk for the audit trail. */
 documentsRouter.delete('/:id', requirePermission('documents:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
+  assertClientVisible(req, await documentClientId(id), 'Document');
   const [row] = await db
     .update(documents)
     .set({ deletedAt: new Date() })

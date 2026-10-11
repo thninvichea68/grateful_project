@@ -1,0 +1,306 @@
+/* Credit Noted editor: form on the left, live A4 voucher on the right. Fills the window. */
+.wrap {
+  display: grid !important;
+  grid-template-columns: minmax(420px, 1fr) minmax(0, 1.05fr);
+  gap: 0;
+  height: calc(100vh - var(--topbar-h) - 48px);
+  min-height: 560px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+.headText {
+  min-width: 0;
+}
+.back {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+.back:hover {
+  color: var(--accent-primary);
+}
+.head h2 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.number {
+  color: var(--accent-primary);
+}
+.head p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.headActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--status-completed-fg);
+  border-radius: 8px;
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.submit:hover:not(:disabled) {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+.submit:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--bg-canvas);
+}
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.card {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.card h3 {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.field > span {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.field textarea {
+  resize: vertical;
+  font-family: var(--font-main);
+}
+.pair {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 6px;
+}
+
+/* Line items: one compact row per charge. */
+.lineHead,
+.line {
+  display: grid;
+  grid-template-columns: 20px minmax(120px, 1fr) 46px 56px 72px 60px 76px 26px;
+  gap: 6px;
+  align-items: center;
+}
+.lineHead {
+  padding: 0 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.line {
+  margin-bottom: 6px;
+}
+.line :global(.form-field-box) {
+  padding: 7px 9px;
+  font-size: 12px;
+}
+.no {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+.right {
+  text-align: right;
+}
+.lineTotal {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.remove {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--status-exception-fg);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.remove:hover {
+  background: var(--status-exception-bg);
+}
+.addLine {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addLine:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.totalRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.totalRow b {
+  font-size: 15px;
+  color: var(--accent-primary);
+  font-variant-numeric: tabular-nums;
+}
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.foot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.footBtn {
+  height: 38px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.footBtn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.footBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.footPrimary {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: #041b2d;
+}
+.footPrimary:hover:not(:disabled) {
+  background: var(--accent-lime-bright);
+}
+.footExcel {
+  color: var(--status-completed-fg);
+  border-color: var(--status-completed-bg);
+}
+.deleteLink {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--status-exception-fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Preview pane: grey desk with the A4 sheet. */
+.preview {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: var(--bg-subtle);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+@media (max-width: 1100px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .editor {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .body {
+    overflow: visible;
+  }
+}

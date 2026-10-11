@@ -29,6 +29,7 @@ import {
   toPaginated,
   whereAll,
 } from '../../lib/listing';
+import { clientCondition } from '../../lib/clientScope';
 
 type LedgerInput = z.output<typeof ledgerInputSchema>;
 
@@ -74,6 +75,8 @@ interface ListParams {
   month?: string | undefined;
   year?: string | undefined;
   clientId?: string | undefined;
+  /** Per-user client access; undefined = every client. */
+  clientIds?: string[] | undefined;
   cheaStatus?: string | undefined;
 }
 
@@ -88,6 +91,8 @@ function where(p: ListParams) {
       sql`a.inv_date >= ${`${p.year}-01-01`}::date AND a.inv_date < (${`${p.year}-01-01`}::date + interval '1 year')`,
     );
   if (p.clientId) c.push(sql`a.client_id = ${p.clientId}`);
+  const scoped = clientCondition(sql`a.client_id`, p.clientIds);
+  if (scoped) c.push(scoped);
   if (p.cheaStatus) c.push(sql`a.chea_status = ${p.cheaStatus}`);
   if (p.q) {
     const like = likePattern(p.q);
@@ -128,8 +133,12 @@ export async function getLedger(id: string): Promise<LedgerRow> {
 }
 
 /** Declarations that don't have a ledger row yet (for "New ledger entry"). */
-export async function declarationOptions(q: string | undefined): Promise<DeclarationOption[]> {
+export async function declarationOptions(
+  q: string | undefined,
+  clientIds?: string[],
+): Promise<DeclarationOption[]> {
   const like = q ? likePattern(q) : null;
+  const scoped = clientCondition(sql`s.client_id`, clientIds);
   return queryRows<DeclarationOption>(
     db,
     sql`
@@ -137,9 +146,41 @@ export async function declarationOptions(q: string | undefined): Promise<Declara
            c.id AS "clientId", c.code AS "clientCode", s.direction
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN accounting_records a ON a.declaration_id = d.id
-    WHERE a.id IS NULL ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
+    WHERE a.id IS NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 30`,
   );
+}
+
+/**
+ * Declarations a Credit Noted can start from: all of them (ledger row or not), newest first,
+ * flagged when a live (non-void) credit note already exists for the declare no.
+ */
+export async function creditNoteDeclarations(
+  q: string | undefined,
+  clientIds?: string[],
+): Promise<(DeclarationOption & { creditNoteNo: string | null })[]> {
+  const like = q ? likePattern(q) : null;
+  const scoped = clientCondition(sql`s.client_id`, clientIds);
+  return queryRows(
+    db,
+    sql`
+    SELECT d.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", s.reference AS "shipmentReference",
+           c.id AS "clientId", c.code AS "clientCode", s.direction,
+           (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
+    WHERE true ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
+    ORDER BY d.declare_date DESC, d.declare_no LIMIT 40`,
+  );
+}
+
+/** The client a declaration belongs to (through its shipment), for access checks. */
+export async function declarationClientId(declarationId: string): Promise<string | null> {
+  const [r] = await db
+    .select({ clientId: shipments.clientId })
+    .from(customsDeclarations)
+    .innerJoin(shipments, eq(shipments.id, customsDeclarations.shipmentId))
+    .where(eq(customsDeclarations.id, declarationId));
+  return r?.clientId ?? null;
 }
 
 /** Recalculate VAT and net profit from the row's stored amounts (used after any change). */
@@ -162,7 +203,12 @@ export async function recompute(tx: DbOrTx, id: string): Promise<void> {
 }
 
 export async function createLedger(input: LedgerInput, req: Request): Promise<string> {
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => insertLedger(tx, input, req));
+}
+
+/** Creates a ledger row for a declaration inside an existing transaction. */
+export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request): Promise<string> {
+  {
     const [d] = await tx
       .select({ d: customsDeclarations, s: shipments, c: clients })
       .from(customsDeclarations)
@@ -211,7 +257,7 @@ export async function createLedger(input: LedgerInput, req: Request): Promise<st
       req,
     );
     return row!.id;
-  });
+  }
 }
 
 export async function updateLedger(

@@ -17,6 +17,7 @@ import {
   FOLLOW_UP_STATUSES,
   STAFF_STATUSES,
   CREDIT_NOTE_REF_TYPES,
+  CREDIT_NOTE_REVIEW_STATUSES,
   AUDIT_ACTIONS,
   LOOKUP_TYPES,
   ROLE_CODES,
@@ -41,6 +42,7 @@ export const followUpPriorityEnum = pgEnum('follow_up_priority', FOLLOW_UP_PRIOR
 export const followUpStatusEnum = pgEnum('follow_up_status', FOLLOW_UP_STATUSES);
 export const staffStatusEnum = pgEnum('staff_status', STAFF_STATUSES);
 export const creditNoteRefTypeEnum = pgEnum('credit_note_ref_type', CREDIT_NOTE_REF_TYPES);
+export const creditNoteReviewEnum = pgEnum('credit_note_review', CREDIT_NOTE_REVIEW_STATUSES);
 export const auditActionEnum = pgEnum('audit_action', AUDIT_ACTIONS);
 export const lookupTypeEnum = pgEnum('lookup_type', LOOKUP_TYPES);
 

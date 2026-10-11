@@ -52,6 +52,14 @@ export async function prefill(
   type: BillingDocType,
   recordId: string,
 ): Promise<Record<string, unknown>> {
+  if (type === 'credit-notes') {
+    const [r] = await queryRows<{ declarationId: string }>(
+      db,
+      sql`SELECT declaration_id AS "declarationId" FROM accounting_records WHERE id = ${recordId}`,
+    );
+    if (!r) throw notFound('Ledger entry');
+    return creditNotePrefill(r.declarationId);
+  }
   const [c] = await queryRows<Ctx>(
     db,
     sql`
@@ -139,27 +147,6 @@ export async function prefill(
         reference: c.declareNo,
         lines: [line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal)],
       };
-    case 'credit-notes':
-      return {
-        ...base,
-        cnDate: c.invDate,
-        billTo: customer.customerNameEn,
-        address: c.address,
-        shipper: c.shipper,
-        portId: c.portId,
-        containerNo: c.containers,
-        refType: 'HOUSE_BILL',
-        refNo: c.hbl,
-        quantityText: ship.pkgs,
-        grossWeightKg: n(c.gw),
-        cbm: n(c.cbm),
-        declareNo: c.declareNo,
-        lines: [
-          line('CLEAR FEE', c.clearFee),
-          ...(Number(c.thc) ? [line('THC FEE', c.thc)] : []),
-          ...(Number(c.otherPay) ? [line('OTHER PAYMENT', c.otherPay)] : []),
-        ],
-      };
     case 'record-summaries':
       return {
         ...base,
@@ -186,4 +173,83 @@ export async function prefill(
         ],
       };
   }
+}
+
+/**
+ * A draft Credit Noted (the customs broker's payment voucher) for a declaration. It bills
+ * Grateful Solutions; the shipper is the client's factory. Works with or without a Monthly
+ * Ledger row (submitting it creates one when missing).
+ */
+export async function creditNotePrefill(declarationId: string): Promise<Record<string, unknown>> {
+  const [c] = await queryRows<{
+    recordId: string | null;
+    clientId: string;
+    declareNo: string;
+    declareDate: string;
+    direction: 'IMPORT' | 'EXPORT';
+    portId: string | null;
+    shipper: string;
+    hbl: string | null;
+    quantity: string | null;
+    quantityUnit: string | null;
+    containers: string | null;
+    containerSize: string | null;
+    containerCount: number;
+    cbm: string;
+    gw: string;
+    company: { nameEn?: string; addressEn?: string } | null;
+  }>(
+    db,
+    sql`
+    SELECT a.id AS "recordId", s.client_id AS "clientId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+           s.direction, coalesce(d.port_id, s.clearance_port_id) AS "portId", upper(coalesce(c.legal_name, c.name)) AS shipper,
+           s.hbl_no AS hbl, s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
+           (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
+           (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
+           (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
+           coalesce((SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS cbm,
+           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
+           (SELECT value FROM settings WHERE key = 'company') AS company
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    WHERE d.id = ${declarationId}`,
+  );
+  if (!c) throw notFound('Declaration');
+  const size = c.containerSize ?? '';
+  // "MRKU8974303 (1X20'GP)" as on the broker's voucher.
+  const containerNo = c.containers
+    ? `${c.containers}${size ? ` (${c.containerCount}X${size.replace(/^(\d+)/, "$1'")})` : ''}`
+    : null;
+  const unit = size ? size.replace(/^(\d+).*/, "$1'") : 'SHIP';
+  const line = (description: string, u = unit) => ({
+    description,
+    qty: '1',
+    unit: u,
+    unitPrice: '',
+    mark: '',
+  });
+  return {
+    accountingRecordId: c.recordId ?? '',
+    clientId: c.clientId,
+    cnDate: c.declareDate,
+    billTo: (c.company?.nameEn ?? 'GRATEFUL SOLUTIONS (CAMBODIA) CO.,LTD').toUpperCase(),
+    address: c.company?.addressEn ?? null,
+    shipper: c.shipper,
+    portId: c.portId,
+    containerNo,
+    refType: 'HOUSE_BILL',
+    refNo: c.hbl,
+    quantityText: c.quantity ? `${n(c.quantity)} ${c.quantityUnit ?? ''}`.trim() : null,
+    grossWeightKg: n(c.gw),
+    cbm: n(c.cbm),
+    declareNo: c.declareNo,
+    // The broker's usual charges; prices are filled in per shipment.
+    lines: [
+      line(c.direction === 'IMPORT' ? 'IMPORT-CLEARANCE' : 'EXPORT-CLEARANCE'),
+      line('TRUCKING'),
+      line('CUSTOMS ACC', 'SHIP'),
+      line('CUSTOM PROCESSING FEE', 'SHIP'),
+      line('LOLO'),
+    ],
+  };
 }

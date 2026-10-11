@@ -373,18 +373,27 @@ describe('billing documents', () => {
         .query({ recordId: rec.id })
         .set(h)
     ).body;
-    expect(
-      cnPre.lines.map((l: { description: string; unitPrice: string }) => [
-        l.description,
-        l.unitPrice,
-      ]),
-    ).toEqual([
-      ['CLEAR FEE', '982.45'],
-      ['THC FEE', '355'],
+    // The broker's voucher bills Grateful Solutions, with the usual charges to price.
+    expect(cnPre.billTo).toMatch(/GRATEFUL SOLUTIONS/);
+    expect(cnPre.lines.map((l: { description: string }) => l.description)).toEqual([
+      'EXPORT-CLEARANCE',
+      'TRUCKING',
+      'CUSTOMS ACC',
+      'CUSTOM PROCESSING FEE',
+      'LOLO',
     ]);
+    const prices = ['115', '280', '10', '18.75', '62.70'];
+    cnPre.lines.forEach((l: { unitPrice: string }, i: number) => (l.unitPrice = prices[i]!));
     const cn = await request(app).post('/api/v1/accounting/docs/credit-notes').set(h).send(cnPre);
     expect(cn.body).toMatchObject({ number: 'CN26-001' });
-    expect(cn.body.totals.total).toBe('1337.45');
+    expect(cn.body.totals.total).toBe('486.45');
+    // "Submit to Monthly": issuing writes the total as the declaration's Clear Fee.
+    await request(app)
+      .post(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/issue`)
+      .set(h)
+      .expect(200);
+    const after = await request(app).get(`/api/v1/accounting/ledger/${rec.id}`).set(h);
+    expect(after.body.clearFee).toBe('486.45');
 
     const rsPre = (
       await request(app)
@@ -468,5 +477,69 @@ describe('billing documents', () => {
     expect(x.status).toBe(200);
     expect(x.headers['content-disposition']).toContain('GS26-001');
     expect((await request(app).get('/api/v1/accounting/docs/nope').set(h)).status).toBe(400);
+  });
+});
+
+describe('customs broker: Credit Noted only', () => {
+  it('drafts and submits credit notes, creating the ledger row, but sees no other accounting', async () => {
+    const declId = await declaration(b.jr.id, 'I 122050', '2026-08-21', 'IMPORT');
+    const h = await as('CUSTOMS_BROKER');
+    const api = (m: 'get' | 'post', path: string) =>
+      request(app)[m](`/api/v1/accounting${path}`).set(h);
+
+    // The rest of accounting is closed; shipments are readable.
+    expect((await api('get', '/ledger')).status).toBe(403);
+    expect((await api('get', '/docs/tax-invoices')).status).toBe(403);
+    expect((await request(app).get('/api/v1/shipments').set(h)).status).toBe(200);
+
+    const decls = (await api('get', '/credit-notes/declarations')).body;
+    expect(decls.map((d: { declareNo: string }) => d.declareNo)).toEqual(['I 122050']);
+    const draft = (await api('get', '/docs/credit-notes/prefill').query({ declarationId: declId }))
+      .body;
+    expect(draft).toMatchObject({ declareNo: 'I 122050', accountingRecordId: '' });
+    expect(draft.lines[0]).toMatchObject({ description: 'IMPORT-CLEARANCE', unit: "40'" });
+    draft.lines = [{ description: 'IMPORT-CLEARANCE', qty: '1', unit: "40'", unitPrice: '115' }];
+    const cn = await api('post', '/docs/credit-notes').send(draft);
+    expect(cn.status).toBe(201);
+
+    // Submit to Monthly: no ledger row yet, so one is created with the clear fee.
+    expect((await api('post', `/docs/credit-notes/${cn.body.id}/issue`)).status).toBe(200);
+    const ledger = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2026' })
+      .set(await as('ACCOUNTANT'));
+    expect(ledger.body.data).toHaveLength(1);
+    expect(ledger.body.data[0]).toMatchObject({ declareNo: 'I 122050', clearFee: '115.00' });
+
+    // Voiding a submitted credit note stays with accounting.
+    expect(
+      (await api('post', `/docs/credit-notes/${cn.body.id}/void`).send({ reason: 'wrong' })).status,
+    ).toBe(403);
+
+    // Accounting checks it; the broker can't see or change that.
+    expect((await api('get', '/credit-notes/review')).status).toBe(403);
+    const acc = await as('ACCOUNTANT');
+    const review = () =>
+      request(app).get('/api/v1/accounting/credit-notes/review').query({ year: 2026 }).set(acc);
+    let list = (await review()).body;
+    expect(list.counts).toEqual({ total: 1, checked: 0, unchecked: 1, revised: 0 });
+    expect(list.data[0]).toMatchObject({
+      declareNo: 'I 122050',
+      clientCode: 'JR',
+      direction: 'IMPORT',
+      total: '115.00',
+      reviewStatus: 'UNCHECKED',
+    });
+    const mark = (who: Record<string, string>) =>
+      request(app)
+        .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
+        .set(who)
+        .send({ reviewStatus: 'CHECKED' });
+    expect((await mark(h)).status).toBe(403);
+    expect((await mark(acc)).status).toBe(204);
+    list = (await review()).body;
+    expect(list.counts).toMatchObject({ checked: 1, unchecked: 0 });
+    expect((await review().query({ review: 'UNCHECKED' })).body.data).toHaveLength(0);
+    expect((await review().query({ q: 'I122050', direction: 'IMPORT' })).body.data).toHaveLength(1);
   });
 });

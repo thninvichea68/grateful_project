@@ -22,6 +22,27 @@
       "when": 1791251957157,
       "tag": "0002_billing_shipment_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791690941862,
+      "tag": "0003_user_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791696377422,
+      "tag": "0004_customs_broker",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791700287982,
+      "tag": "0005_credit_note_review",
+      "breakpoints": true
     }
   ]
 }

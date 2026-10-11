@@ -64,6 +64,9 @@ export type StaffStatus = (typeof STAFF_STATUSES)[number];
 
 export const CREDIT_NOTE_REF_TYPES = ['HOUSE_BILL', 'BILL_NO', 'HAWB_NO'] as const;
 export type CreditNoteRefType = (typeof CREDIT_NOTE_REF_TYPES)[number];
+/** Accounting's check of a submitted Credit Noted. */
+export const CREDIT_NOTE_REVIEW_STATUSES = ['UNCHECKED', 'CHECKED', 'REVISED'] as const;
+export type CreditNoteReviewStatus = (typeof CREDIT_NOTE_REVIEW_STATUSES)[number];
 
 export const AUDIT_ACTIONS = [
   'CREATE',

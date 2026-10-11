@@ -6,6 +6,8 @@ import { RequireAuth, RequirePermission } from './auth/guards';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AccountingLayout } from './pages/accounting/AccountingLayout';
+import { useAuth } from './auth/AuthProvider';
+import { NAV } from './layout/nav';
 
 const OverviewPage = lazy(() =>
   import('./pages/OverviewPage').then((m) => ({ default: m.OverviewPage })),
@@ -54,6 +56,12 @@ const DocsListPage = lazy(() =>
 const DocEditorPage = lazy(() =>
   import('./pages/accounting/DocEditorPage').then((m) => ({ default: m.DocEditorPage })),
 );
+const CreditNotesReview = lazy(() =>
+  import('./pages/accounting/CreditNotesReview').then((m) => ({ default: m.CreditNotesReview })),
+);
+const CreditNotedRoute = lazy(() =>
+  import('./pages/creditnoted/CreditNotedEditor').then((m) => ({ default: m.CreditNotedRoute })),
+);
 const QuotationEditorPage = lazy(() =>
   import('./pages/quotations/QuotationEditorPage').then((m) => ({
     default: m.QuotationEditorPage,
@@ -83,8 +91,41 @@ function PageLoading() {
   );
 }
 
+/** Credit notes open in the two-pane Credit Noted editor; other types in the generic one. */
+function DocEditorRoute() {
+  const { type = '' } = useParams();
+  return type === 'credit-notes' ? (
+    <CreditNotedRoute base="/accounting/credit-notes" />
+  ) : (
+    <DocEditorPage />
+  );
+}
+
+/** Credit notes print for anyone with Credit Noted access (the customs broker too). */
+function PrintDocRoute() {
+  const { type } = useParams();
+  return (
+    <RequirePermission
+      permission={type === 'credit-notes' ? 'creditnotes:read' : 'accounting:read'}
+    >
+      <Suspense fallback={null}>
+        <PrintDocPage />
+      </Suspense>
+    </RequirePermission>
+  );
+}
+
+/** "/" lands on the first sidebar page the role can open (a broker has no dashboard). */
+function HomeRedirect() {
+  const { can } = useAuth();
+  const first = NAV.flatMap((g) => g.items).find((i) => can(i.permission));
+  return <Navigate to={first?.to ?? '/overview'} replace />;
+}
+
 function DocsListRoute() {
   const { type = '' } = useParams();
+  // Accounting's Credit Noted tab checks the broker's submitted notes.
+  if (type === 'credit-notes') return <CreditNotesReview />;
   return <DocsListPage type={type} key={type} />;
 }
 
@@ -107,11 +148,7 @@ export const router = createBrowserRouter([
     path: '/print/:type/:id',
     element: (
       <RequireAuth>
-        <RequirePermission permission="accounting:read">
-          <Suspense fallback={null}>
-            <PrintDocPage />
-          </Suspense>
-        </RequirePermission>
+        <PrintDocRoute />
       </RequireAuth>
     ),
   },
@@ -123,7 +160,7 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/overview" replace /> },
+      { index: true, element: <HomeRedirect /> },
       { path: 'overview', element: guard('dashboard:read', <OverviewPage />) },
       { path: 'plans', element: guard('shipments:read', <ShippingPlansPage />) },
       { path: 'plans/new', element: guard('shipments:write', <ShipmentFormPage />) },
@@ -158,11 +195,22 @@ export const router = createBrowserRouter([
             path: ':type/:id',
             element: (
               <Suspense fallback={null}>
-                <DocEditorPage />
+                <DocEditorRoute />
               </Suspense>
             ),
           },
         ],
+      },
+      {
+        path: 'credit-noted',
+        element: guard(
+          'creditnotes:read',
+          <DocsListPage type="credit-notes" base="/credit-noted" />,
+        ),
+      },
+      {
+        path: 'credit-noted/:id',
+        element: guard('creditnotes:read', <CreditNotedRoute base="/credit-noted" />),
       },
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },

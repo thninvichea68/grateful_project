@@ -5,12 +5,16 @@ import {
   computeLinesTotal,
   computeTaxDocument,
   computeTaxLine,
+  ledgerInputSchema,
   lineAmount,
   toMoneyString,
   usdToKhr,
   type BillingDoc,
   type BillingDocListItem,
   type BillingDocType,
+  type CreditNoteReviewCounts,
+  type CreditNoteReviewRow,
+  type CreditNoteReviewStatus,
   type Paginated,
 } from '@gs/shared';
 import type { Request } from 'express';
@@ -33,8 +37,9 @@ import {
 import { audit } from '../../lib/audit';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
+import { clientCondition } from '../../lib/clientScope';
 import { formatNumber, nextNumber } from '../../lib/numbering';
-import { recompute } from './ledger';
+import { insertLedger, recompute } from './ledger';
 
 type Row = Record<string, unknown>;
 type Input = z.output<(typeof BILLING_DOC_SCHEMAS)[BillingDocType]> & Row;
@@ -53,10 +58,10 @@ interface Config {
   /** Allocate the next number when the user didn't type one. */
   allocate: ((tx: Tx, date: string, clientCode: string) => Promise<string>) | null;
   kind: 'tax' | 'khr' | 'plain';
-  /** Issuing writes the number + total into these ledger columns. */
+  /** Issuing writes the number (when the ledger has a column for it) + total into the ledger. */
   ledger: {
-    numberCol: 'invNo' | 'disNo' | 'dnNo';
-    totalCol: 'invRevenue' | 'disTotal' | 'dnTotal';
+    numberCol: 'invNo' | 'disNo' | 'dnNo' | null;
+    totalCol: 'invRevenue' | 'disTotal' | 'dnTotal' | 'clearFee';
   } | null;
 }
 
@@ -123,7 +128,8 @@ const CONFIG: Record<BillingDocType, Config> = {
     kind: 'plain',
     allocate: async (tx, date) =>
       `CN${date.slice(2, 4)}-${String(await nextNumber(tx, `CREDIT_NOTE:${date.slice(0, 4)}`)).padStart(3, '0')}`,
-    ledger: null,
+    // "Submit to Monthly": the broker's credit note total is that declaration's Clear Fee.
+    ledger: { numberCol: null, totalCol: 'clearFee' },
   },
   'record-summaries': {
     table: recordSummaries,
@@ -348,12 +354,21 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       .update(cfg.table)
       .set({ status: 'ISSUED' } as never)
       .where(eq(col(cfg.table, 'id'), id));
+    if (type === 'credit-notes' && !doc.accountingRecordId) {
+      doc.accountingRecordId = await ledgerRowForCreditNote(tx, doc, req);
+      await tx
+        .update(cfg.table)
+        .set({ accountingRecordId: doc.accountingRecordId } as never)
+        .where(eq(col(cfg.table, 'id'), id));
+    }
     if (cfg.ledger && doc.accountingRecordId) {
       const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
       await tx
         .update(accountingRecords)
         .set({
-          [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null,
+          ...(cfg.ledger.numberCol
+            ? { [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null }
+            : {}),
           [cfg.ledger.totalCol]: total,
           updatedById: req.auth!.userId,
         } as never)
@@ -372,6 +387,29 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       req,
     );
   });
+}
+
+/**
+ * The Monthly Ledger row a credit note belongs to, found through its declare no. When the
+ * declaration has no ledger row yet, one is created (amounts 0) so the clear fee has a home.
+ */
+async function ledgerRowForCreditNote(tx: Tx, doc: Row, req: Request): Promise<string> {
+  const declareNo = String(doc.declareNo ?? '').trim();
+  if (!declareNo)
+    throw businessRule('Enter the declare no. so the credit note can go into the Monthly Ledger');
+  const [d] = await queryRows<{ id: string; clientId: string; recordId: string | null }>(
+    tx,
+    sql`
+    SELECT d.id, s.client_id AS "clientId", a.id AS "recordId"
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    WHERE upper(d.declare_no) = upper(${declareNo})
+    ORDER BY d.declare_date DESC LIMIT 1`,
+  );
+  if (!d) throw businessRule(`Declaration ${declareNo} was not found on any shipment`);
+  if (d.clientId !== doc.clientId)
+    throw businessRule(`Declaration ${declareNo} belongs to a different client`);
+  return d.recordId ?? insertLedger(tx, ledgerInputSchema.parse({ declarationId: d.id }), req);
 }
 
 /** Void: keeps the record (numbers are never reused) and takes it back out of the ledger. */
@@ -394,10 +432,17 @@ export async function voidDoc(
         .select()
         .from(accountingRecords)
         .where(eq(accountingRecords.id, doc.accountingRecordId as string));
-      if (r && cfg.numberCol && r[cfg.ledger.numberCol] === doc[cfg.numberCol]) {
+      const numberCol = cfg.ledger.numberCol;
+      const stillOurs = numberCol
+        ? !!cfg.numberCol && r?.[numberCol] === doc[cfg.numberCol]
+        : Number(r?.[cfg.ledger.totalCol]) === Number(doc.total);
+      if (r && stillOurs) {
         await tx
           .update(accountingRecords)
-          .set({ [cfg.ledger.numberCol]: null, [cfg.ledger.totalCol]: '0' } as never)
+          .set({
+            ...(numberCol ? { [numberCol]: null } : {}),
+            [cfg.ledger.totalCol]: '0',
+          } as never)
           .where(eq(accountingRecords.id, r.id));
         await recompute(tx, r.id);
       }
@@ -513,6 +558,8 @@ export async function listDocs(
     pageSize: number;
     q?: string | undefined;
     clientId?: string | undefined;
+    /** Per-user client access; undefined = every client. */
+    clientIds?: string[] | undefined;
     status?: string | undefined;
     month?: string | undefined;
   },
@@ -523,6 +570,8 @@ export async function listDocs(
   const numCol = cfg.numberSql ? sql.raw(`t.${cfg.numberSql}`) : sql`NULL`;
   const c = [sql`true`];
   if (p.clientId) c.push(sql`t.client_id = ${p.clientId}`);
+  const scoped = clientCondition(sql`t.client_id`, p.clientIds);
+  if (scoped) c.push(scoped);
   if (p.status) c.push(sql`t.status = ${p.status}`);
   if (p.month)
     c.push(
@@ -544,4 +593,96 @@ export async function listDocs(
     ${whereAll(c)} ORDER BY ${dateCol} DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
   );
   return toPaginated(rows, p.page, p.pageSize);
+}
+
+/* ---------- Accounting's check of submitted credit notes ---------- */
+
+/**
+ * Submitted (issued) credit notes for Accounting → Credit Noted, with the shipment's
+ * direction and mode, plus Checked / Unchecked / Revised counts for the same filters.
+ */
+export async function listCreditNoteReview(p: {
+  page: number;
+  pageSize: number;
+  q?: string | undefined;
+  clientId?: string | undefined;
+  clientIds?: string[] | undefined;
+  direction?: string | undefined;
+  month?: number | undefined;
+  year?: number | undefined;
+  review?: string | undefined;
+}): Promise<Paginated<CreditNoteReviewRow> & { counts: CreditNoteReviewCounts }> {
+  const c = [sql`t.status = 'ISSUED'`];
+  if (p.clientId) c.push(sql`t.client_id = ${p.clientId}`);
+  const scoped = clientCondition(sql`t.client_id`, p.clientIds);
+  if (scoped) c.push(scoped);
+  if (p.direction) c.push(sql`x.direction = ${p.direction}`);
+  if (p.year) c.push(sql`extract(year FROM t.cn_date) = ${p.year}`);
+  if (p.month) c.push(sql`extract(month FROM t.cn_date) = ${p.month}`);
+  if (p.q) {
+    const like = likePattern(p.q.replace(/\s+/g, ''));
+    c.push(sql`(replace(t.declare_no, ' ', '') ILIKE ${like} OR t.cn_no ILIKE ${like})`);
+  }
+  const from = sql`
+    FROM credit_notes t JOIN clients cl ON cl.id = t.client_id
+    LEFT JOIN ports po ON po.id = t.port_id
+    LEFT JOIN accounting_records a ON a.id = t.accounting_record_id
+    LEFT JOIN LATERAL (
+      SELECT s.direction, s.transport_mode
+      FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id
+      WHERE d.id = a.declaration_id
+         OR (a.declaration_id IS NULL AND lower(d.declare_no) = lower(t.declare_no))
+      ORDER BY d.created_at DESC LIMIT 1
+    ) x ON true`;
+  const [counts] = await queryRows<CreditNoteReviewCounts>(
+    db,
+    sql`SELECT count(*)::int AS total,
+          (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
+          (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
+          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
+        ${from} ${whereAll(c)}`,
+  );
+  if (p.review) c.push(sql`t.review_status = ${p.review}`);
+  const rows = await queryRows<CreditNoteReviewRow & { total_count: string }>(
+    db,
+    sql`SELECT t.id, t.cn_no AS number, to_char(t.cn_date, 'YYYY-MM-DD') AS date,
+          cl.id AS "clientId", cl.code AS "clientCode", cl.name AS "clientName",
+          x.direction, x.transport_mode AS "transportMode", t.declare_no AS "declareNo",
+          t.quantity_text AS "quantityText", po.short_name AS port, t.total::text AS total,
+          t.review_status AS "reviewStatus", count(*) OVER () AS total_count
+        ${from} ${whereAll(c)}
+        ORDER BY t.cn_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
+  );
+  return { ...toPaginated(rows, p.page, p.pageSize), counts: counts! };
+}
+
+export async function setCreditNoteReview(
+  id: string,
+  reviewStatus: CreditNoteReviewStatus,
+  req: Request,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ status: creditNotes.status, reviewStatus: creditNotes.reviewStatus })
+      .from(creditNotes)
+      .where(eq(creditNotes.id, id));
+    if (!before) throw notFound('Credit note');
+    if (before.status !== 'ISSUED')
+      throw businessRule('Only a credit note submitted to the Monthly Ledger can be checked');
+    await tx
+      .update(creditNotes)
+      .set({ reviewStatus, reviewedBy: req.auth?.userId ?? null, reviewedAt: new Date() })
+      .where(eq(creditNotes.id, id));
+    await audit(
+      tx,
+      {
+        action: 'UPDATE',
+        entity: 'credit_note',
+        entityId: id,
+        before: { reviewStatus: before.reviewStatus },
+        after: { reviewStatus },
+      },
+      req,
+    );
+  });
 }

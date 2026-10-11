@@ -16,12 +16,35 @@ import { audit } from '../../lib/audit';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { nextNumber } from '../../lib/numbering';
+import {
+  allowedClients,
+  assertClientAllowed,
+  assertClientVisible,
+  clientCondition,
+  scopeClients,
+} from '../../lib/clientScope';
 
 type Input = z.output<typeof quotationInputSchema>;
 const idParam = z.object({ id: z.string().uuid() });
 export const quotationsRouter = Router();
 quotationsRouter.use(requireAuth, requirePermission('quotations:read'));
 const write = requirePermission('quotations:write');
+
+// Every /:id route: a quotation of a client this user can't see looks like it doesn't exist.
+quotationsRouter.param('id', async (req, _res, next, id: string) => {
+  try {
+    if (allowedClients(req) && z.string().uuid().safeParse(id).success) {
+      const [q] = await db
+        .select({ clientId: quotations.clientId })
+        .from(quotations)
+        .where(and(eq(quotations.id, id), isNull(quotations.deletedAt)));
+      if (q) assertClientVisible(req, q.clientId, 'Quotation');
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 quotationsRouter.get('/templates', async (_req, res) => {
   res.json(
@@ -37,6 +60,8 @@ quotationsRouter.get('/', async (req, res) => {
   const c = [sql`qt.deleted_at IS NULL`];
   if (q.status) c.push(sql`qt.status = ${q.status}`);
   if (q.clientId) c.push(sql`qt.client_id = ${q.clientId}`);
+  const scoped = clientCondition(sql`qt.client_id`, scopeClients(req));
+  if (scoped) c.push(scoped);
   if (q.templateKey) c.push(sql`qt.template_key = ${q.templateKey}`);
   if (q.latestOnly)
     c.push(
@@ -134,6 +159,7 @@ quotationsRouter.get('/:id', async (req, res) =>
 
 quotationsRouter.post('/', write, async (req, res) => {
   const v = parse(quotationInputSchema, req.body);
+  if (allowedClients(req)) assertClientAllowed(req, v.clientId);
   const id = await db.transaction(async (tx) => {
     await assertTemplate(tx, v.templateKey);
     const year = v.quoteDate.slice(0, 4);
@@ -161,6 +187,7 @@ quotationsRouter.post('/', write, async (req, res) => {
 quotationsRouter.put('/:id', write, async (req, res) => {
   const { id } = parse(idParam, req.params);
   const v = parse(quotationInputSchema, req.body);
+  if (allowedClients(req)) assertClientAllowed(req, v.clientId);
   await db.transaction(async (tx) => {
     const [before] = await tx
       .select()

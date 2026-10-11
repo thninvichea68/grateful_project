@@ -13,6 +13,7 @@ import { db } from '../../db/client';
 import { clients } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import * as svc from './service';
+import { assertClientAllowed, assertClientVisible } from '../../lib/clientScope';
 
 const idParam = z.object({ id: z.string().uuid('Invalid item id') });
 const clientQuery = z.object({ clientId: z.string().uuid('Choose a client') });
@@ -20,7 +21,9 @@ export const cutStockRouter = Router();
 cutStockRouter.use(requireAuth);
 
 cutStockRouter.get('/', requirePermission('cutstock:read'), async (req, res) => {
-  res.json(await svc.listCutStock(parse(cutStockListQuerySchema, req.query)));
+  const q = parse(cutStockListQuerySchema, req.query);
+  assertClientVisible(req, q.clientId, 'Client');
+  res.json(await svc.listCutStock(q));
 });
 
 /** Item picker for CDC lines (any role that can edit shipments). */
@@ -29,11 +32,13 @@ cutStockRouter.get('/options', requirePermission('shipments:read'), async (req, 
     clientQuery.extend({ q: z.string().trim().max(80).optional() }),
     req.query,
   );
+  assertClientVisible(req, clientId, 'Client');
   res.json(await svc.cutStockOptions(clientId, q));
 });
 
 cutStockRouter.get('/export.xlsx', requirePermission('cutstock:read'), async (req, res) => {
   const { clientId } = parse(clientQuery, req.query);
+  assertClientVisible(req, clientId, 'Client');
   const [c] = await db.select({ code: clients.code }).from(clients).where(eq(clients.id, clientId));
   const wb = await svc.exportMasterList(clientId);
   res.setHeader(
@@ -56,6 +61,7 @@ cutStockRouter.post(
   excelUpload,
   async (req, res) => {
     const q = parse(clientQuery.extend({ dryRun: boolParam, updateOpening: boolParam }), req.query);
+    assertClientAllowed(req, q.clientId);
     const file = requireFile(req.file);
     res.json(
       await svc.importMasterList(
@@ -69,21 +75,28 @@ cutStockRouter.post(
 );
 
 cutStockRouter.get('/:id', requirePermission('cutstock:read'), async (req, res) => {
-  res.json(await svc.getCutStockItem(parse(idParam, req.params).id));
+  const item = await svc.getCutStockItem(parse(idParam, req.params).id);
+  assertClientVisible(req, item.clientId, 'Item');
+  res.json(item);
 });
 
 cutStockRouter.post('/', requirePermission('cutstock:write'), async (req, res) => {
-  const id = await svc.createCutStockItem(parse(cutStockItemInputSchema, req.body), req);
+  const input = parse(cutStockItemInputSchema, req.body);
+  assertClientAllowed(req, input.clientId);
+  const id = await svc.createCutStockItem(input, req);
   res.status(201).json(await svc.getCutStockItem(id));
 });
 
 cutStockRouter.patch('/:id', requirePermission('cutstock:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
+  assertClientVisible(req, (await svc.getCutStockItem(id)).clientId, 'Item');
   await svc.updateCutStockItem(id, parse(cutStockItemUpdateSchema, req.body), req);
   res.json(await svc.getCutStockItem(id));
 });
 
 cutStockRouter.delete('/:id', requirePermission('cutstock:write'), async (req, res) => {
-  await svc.deleteCutStockItem(parse(idParam, req.params).id, req);
+  const { id } = parse(idParam, req.params);
+  assertClientVisible(req, (await svc.getCutStockItem(id)).clientId, 'Item');
+  await svc.deleteCutStockItem(id, req);
   res.status(204).end();
 });

@@ -15,6 +15,8 @@ export const sessionUserSchema = z.object({
   avatarUrl: z.string().nullable(),
   role: z.enum(ROLE_CODES),
   permissions: z.array(z.enum(PERMISSIONS)),
+  /** Clients this user may work with; null = every client. */
+  clientIds: z.array(z.string().uuid()).nullable(),
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { BILLING_DOC_TYPES, type BillingDocType, type BillingDocStatus } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -8,6 +9,7 @@ import { SearchBox } from '../../components/SearchBox';
 import { Pill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { NotFoundPage } from '../NotFoundPage';
+import { NewCreditNoteModal } from '../creditnoted/NewCreditNoteModal';
 import { DOC_CONFIG } from './docConfig';
 
 export const DOC_STATUS_PILL: Record<
@@ -19,16 +21,20 @@ export const DOC_STATUS_PILL: Record<
   VOID: { tone: 'exception', label: 'Void' },
 };
 
-export function DocsListPage({ type }: { type: string }) {
+/** `base` is where rows link to: /accounting/<type>, or /credit-noted for the broker tab. */
+export function DocsListPage({ type, base }: { type: string; base?: string }) {
   if (!(BILLING_DOC_TYPES as readonly string[]).includes(type)) return <NotFoundPage />;
-  return <DocsList type={type as BillingDocType} />;
+  return <DocsList type={type as BillingDocType} base={base ?? `/accounting/${type}`} />;
 }
 
-function DocsList({ type }: { type: BillingDocType }) {
+function DocsList({ type, base }: { type: BillingDocType; base: string }) {
   const { can } = useAuth();
   const navigate = useNavigate();
   const lookups = useLookups();
   const cfg = DOC_CONFIG[type];
+  const isCn = type === 'credit-notes';
+  const canWrite = can(isCn ? 'creditnotes:write' : 'accounting:write');
+  const [picking, setPicking] = useState(false);
   const [params, setParams] = useSearchParams();
   const q = {
     page: Number(params.get('page') ?? 1),
@@ -51,10 +57,11 @@ function DocsList({ type }: { type: BillingDocType }) {
       <div className="card">
         <div className="card-header-row">
           <div>
-            <h3>{cfg.title}s</h3>
+            <h3>{isCn ? 'Credit Noted' : `${cfg.title}s`}</h3>
             <div className="create-header-desc" style={{ marginTop: 4 }}>
-              Create from a ledger row (Monthly Ledger → open a row) to fill everything from the
-              shipment, or start blank here.
+              {isCn
+                ? 'Customs broker payment vouchers. Start one from a declaration; "Submit to Monthly" posts its total as the Clear Fee.'
+                : 'Create from a ledger row (Monthly Ledger → open a row) to fill everything from the shipment, or start blank here.'}
             </div>
           </div>
           <div className={ui.toolbar}>
@@ -95,11 +102,16 @@ function DocsList({ type }: { type: BillingDocType }) {
               <option value="ISSUED">Issued</option>
               <option value="VOID">Void</option>
             </select>
-            {can('accounting:write') && (
-              <Link to={`/accounting/${type}/new`} className="new-shipment-btn">
-                + New {cfg.title}
-              </Link>
-            )}
+            {canWrite &&
+              (isCn ? (
+                <button type="button" className="new-shipment-btn" onClick={() => setPicking(true)}>
+                  + New {cfg.title}
+                </button>
+              ) : (
+                <Link to={`${base}/new`} className="new-shipment-btn">
+                  + New {cfg.title}
+                </Link>
+              ))}
           </div>
         </div>
         <div className="plans-table-scroll">
@@ -128,8 +140,8 @@ function DocsList({ type }: { type: BillingDocType }) {
                   key={d.id}
                   className="plans-row-clickable"
                   tabIndex={0}
-                  onClick={() => navigate(`/accounting/${type}/${d.id}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/accounting/${type}/${d.id}`)}
+                  onClick={() => navigate(`${base}/${d.id}`)}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`${base}/${d.id}`)}
                 >
                   <td className="val-bold">{d.number ?? d.declareNo ?? '-'}</td>
                   <td>{fmtDate(d.date)}</td>
@@ -149,6 +161,7 @@ function DocsList({ type }: { type: BillingDocType }) {
         </div>
         {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
       </div>
+      {picking && <NewCreditNoteModal base={base} onClose={() => setPicking(false)} />}
     </section>
   );
 }

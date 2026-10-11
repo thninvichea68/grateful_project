@@ -5,6 +5,7 @@ import { useCompany, useDoc, type CompanyInfo } from '../../features/accounting'
 import { useLookups } from '../../features/hooks';
 import { fmtDate } from '../../lib/format';
 import s from './print.module.css';
+import cn from './creditNote.module.css';
 
 const money = (v: string | number | undefined | null) =>
   Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -42,7 +43,7 @@ export function PrintDocPage() {
         {type === 'tax-invoices' && <TaxOrDisbursement d={d} c={c} tax />}
         {type === 'disbursements' && <TaxOrDisbursement d={d} c={c} tax={false} />}
         {type === 'debit-notes' && <DebitNote d={d} c={c} />}
-        {type === 'credit-notes' && <CreditNote d={d} c={c} />}
+        {type === 'credit-notes' && <CreditNote d={d} />}
         {type === 'record-summaries' && <RecordSummary d={d} c={c} />}
       </div>
     </div>
@@ -367,48 +368,100 @@ function DebitNote({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
   );
 }
 
-function CreditNote({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-08-21 → 21-Aug-2026, as on the broker's voucher. */
+const longDate = (iso: string) => {
+  const [y, m, d] = iso.split('-');
+  return y && m && d ? `${d}-${MONTHS[Number(m) - 1]}-${y}` : iso;
+};
+/** 2420 → 2,420 and 1.5 → 1.5: no padded decimals. */
+const plain = (v: string | number | null | undefined) =>
+  v === '' || v === null || v === undefined
+    ? ''
+    : Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 });
+
+/** Credit Noted sheet (no letterhead, like the broker's voucher); also the editor's live preview. */
+export function CreditNote({ d }: { d: BillingDoc }) {
   const lookups = useLookups();
   const port = lookups.data?.ports.find((p) => p.id === h(d, 'portId'));
   const refLabel =
-    { HOUSE_BILL: 'HOUSE BILL', BILL_NO: 'BILL NO', HAWB_NO: 'HAWB NO' }[
+    { HOUSE_BILL: 'HOUS BILL', BILL_NO: 'BILL NO', HAWB_NO: 'HAWB NO' }[
       h(d, 'refType') as 'HOUSE_BILL'
     ] ?? 'REF';
+  const left: [string, string][] = [
+    ['BILL TO:', h(d, 'billTo')],
+    ['ADDRESS:', h(d, 'address')],
+    ['SHIPPER:', h(d, 'shipper')],
+    ['PORT:', port?.name.toUpperCase() ?? ''],
+    ['CTNR:', h(d, 'containerNo')],
+  ];
+  const right: [string, string][] = [
+    ['DECLARE NO:', h(d, 'declareNo')],
+    [`${refLabel}:`, h(d, 'refNo')],
+    ['DATE:', longDate(d.date)],
+    ["Q'TY:", h(d, 'quantityText')],
+    ['G.W:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
+    ['CBM:', plain(h(d, 'cbm'))],
+  ];
+  const kv = (rows: [string, string][], cls: string | undefined) => (
+    <dl className={cls}>
+      {rows.map(([k, v]) => (
+        <div key={k} style={{ display: 'contents' }}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
   return (
-    <>
-      <CompanyHead c={c} khmer={false} />
-      <div className={s.title}>
-        <div className={s.titleEn}>CREDIT NOTED</div>
+    <div className={cn.cn}>
+      <div className={cn.title}>CREDIT NOTED</div>
+      <div className={cn.head}>
+        {kv(left, cn.kv)}
+        {kv(right, `${cn.kv} ${cn.right}`)}
       </div>
-      <div className={s.grid2}>
-        <KV
-          rows={[
-            ['BILL TO:', <b key="b">{h(d, 'billTo')}</b>],
-            ['ADDRESS:', h(d, 'address')],
-            ['SHIPPER:', h(d, 'shipper')],
-            ['PORT:', port ? `${port.code} · ${port.name}` : ''],
-            ['CTNR:', h(d, 'containerNo')],
-            ['DECLARE NO:', h(d, 'declareNo')],
-          ]}
-        />
-        <KV
-          rows={[
-            ['CN NO:', <b key="n">{d.number}</b>],
-            [`${refLabel}:`, h(d, 'refNo')],
-            ['DATE:', fmtDate(d.date)],
-            ["Q'TY:", h(d, 'quantityText')],
-            ['G.W:', h(d, 'grossWeightKg') && `${qty(h(d, 'grossWeightKg'))} KGS`],
-            ['CBM:', h(d, 'cbm') && qty(h(d, 'cbm'))],
-          ]}
-        />
-      </div>
-      <SimpleLines d={d} showMark unitHeader="SHIP" totalLabel="TOTAL:" />
-      <div className={s.signs}>
-        <div>Prepared by</div>
-        <div>Checked by</div>
-        <div>Approved by</div>
-      </div>
-    </>
+      <table className={cn.table}>
+        <colgroup>
+          <col style={{ width: '5%' }} />
+          <col style={{ width: '45%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '10%' }} />
+          <col style={{ width: '16%' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>NO</th>
+            <th>DESCRIPTION</th>
+            <th>Q&apos;TY</th>
+            <th>SHIP</th>
+            <th>PRICE</th>
+            <th>SHPT</th>
+            <th>MARK</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.lines.map((l) => (
+            <tr key={l.id}>
+              <td className={cn.c}>{l.lineNo}</td>
+              <td>{l.description}</td>
+              <td className={cn.c}>{plain(l.qty)}</td>
+              <td className={cn.c}>{l.unit}</td>
+              <td className={cn.r}>{money(l.unitPrice)}</td>
+              <td className={cn.r}>{money(l.subtotal)}</td>
+              <td>{l.mark}</td>
+            </tr>
+          ))}
+          <tr className={cn.total}>
+            <td colSpan={4} />
+            <td className={cn.r}>TOTAL:</td>
+            <td className={cn.r}>{money(d.totals.total)}</td>
+            <td />
+          </tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 

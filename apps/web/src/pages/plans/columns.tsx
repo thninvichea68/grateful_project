@@ -43,7 +43,6 @@ export const BASE_COLUMNS: PlanColumn[] = [
 export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'reference', label: 'Reference', render: (r) => r.reference },
   { key: 'client', label: 'Client', render: (r) => r.clientCode },
-  { key: 'transport', label: 'Transport', render: (r) => r.direction },
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
   { key: 'invoiceDate', label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },

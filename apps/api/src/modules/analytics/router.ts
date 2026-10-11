@@ -9,6 +9,7 @@ import {
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import * as svc from './service';
+import { scopeClients } from '../../lib/clientScope';
 
 /** Parse filters; default period is the current business year. */
 async function filters(req: Request) {
@@ -16,7 +17,14 @@ async function filters(req: Request) {
   const today = await svc.businessToday();
   const year = Number(today.slice(0, 4));
   const range = svc.yearRange(year);
-  return { ...q, from: q.from ?? range.from, to: q.to ?? range.to, today };
+  return {
+    ...q,
+    // Users limited to some clients only ever see those clients' figures.
+    clientId: scopeClients(req, q.clientId),
+    from: q.from ?? range.from,
+    to: q.to ?? range.to,
+    today,
+  };
 }
 
 export const analyticsRouter = Router();
@@ -76,10 +84,10 @@ overviewRouter.get('/summary', async (req, res) => {
     .toISOString()
     .slice(0, 10);
   const [kpis, monthly, profit] = await Promise.all([
-    svc.kpis({ from: monthStart, to: monthEnd }),
-    svc.monthlyVolume(svc.yearRange(year)),
+    svc.kpis({ from: monthStart, to: monthEnd, clientId: scopeClients(req) }),
+    svc.monthlyVolume({ ...svc.yearRange(year), clientId: scopeClients(req) }),
     hasPermission(req.auth!.permissions, 'accounting:read')
-      ? svc.profit(year, today)
+      ? svc.profit(year, today, scopeClients(req))
       : Promise.resolve(undefined),
   ]);
   const body: OverviewSummary = { year, today, kpis, monthly, ...(profit ? { profit } : {}) };
@@ -88,5 +96,5 @@ overviewRouter.get('/summary', async (req, res) => {
 
 overviewRouter.get('/live-consignments', async (req, res) => {
   const f = parse(analyticsQuerySchema, req.query);
-  res.json(await svc.liveConsignments(f));
+  res.json(await svc.liveConsignments({ ...f, clientId: scopeClients(req, f.clientId) }));
 });

@@ -4,11 +4,15 @@ import {
   CHEA_STATUSES,
   CONTAINER_SIZES,
   CREDIT_NOTE_REF_TYPES,
+  CREDIT_NOTE_REVIEW_STATUSES,
   DIRECTIONS,
   LOAD_TYPES,
   TRANSPORT_MODES,
   type BillingDocStatus,
   type CheaStatus,
+  type CreditNoteReviewStatus,
+  type Direction,
+  type TransportMode,
 } from '../enums';
 import { paginationQuerySchema } from './common';
 import { decimal, optDate, optText, optUuid } from './fields';
@@ -261,6 +265,41 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
 });
+
+/** Accounting → Credit Noted: submitted credit notes waiting for (or past) accounting's check. */
+export const creditNoteReviewQuerySchema = paginationQuerySchema.extend({
+  clientId: z.string().uuid().optional(),
+  direction: z.enum(DIRECTIONS).optional(),
+  q: z.string().trim().max(100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
+});
+export const creditNoteReviewInputSchema = z.object({
+  reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES),
+});
+
+export interface CreditNoteReviewRow {
+  id: string;
+  number: string;
+  date: string;
+  clientId: string;
+  clientCode: string;
+  clientName: string;
+  direction: Direction | null;
+  transportMode: TransportMode | null;
+  declareNo: string | null;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+  reviewStatus: CreditNoteReviewStatus;
+}
+export interface CreditNoteReviewCounts {
+  total: number;
+  checked: number;
+  unchecked: number;
+  revised: number;
+}
 
 /** Header + lines as stored. Field names follow the document type's input schema. */
 export interface BillingDoc {

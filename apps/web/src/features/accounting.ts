@@ -3,6 +3,9 @@ import type {
   BillingDoc,
   BillingDocListItem,
   BillingDocType,
+  CreditNoteReviewCounts,
+  CreditNoteReviewRow,
+  CreditNoteReviewStatus,
   DeclarationOption,
   LedgerEntryInput,
   LedgerRow,
@@ -87,15 +90,59 @@ export function useDoc(type: BillingDocType, id: string | undefined) {
   });
 }
 
-export function usePrefill(type: BillingDocType, recordId: string | null) {
+/** A ready-to-edit draft from a ledger row (or, for credit notes, from a declaration). */
+export function usePrefill(
+  type: BillingDocType,
+  recordId: string | null,
+  declarationId: string | null = null,
+) {
   return useQuery({
-    queryKey: [...KEY, 'prefill', type, recordId],
+    queryKey: [...KEY, 'prefill', type, recordId, declarationId],
     queryFn: () =>
       api<Record<string, unknown>>(`/accounting/docs/${type}/prefill`, {
-        query: { recordId: recordId! },
+        query: declarationId ? { declarationId } : { recordId: recordId! },
       }),
-    enabled: !!recordId,
+    enabled: !!recordId || !!declarationId,
     staleTime: Infinity,
+  });
+}
+
+export type CreditNoteDeclaration = DeclarationOption & { creditNoteNo: string | null };
+
+/** Declarations a new Credit Noted can start from (with or without a ledger row). */
+export function useCreditNoteDeclarations(q: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...KEY, 'cn-declarations', q],
+    queryFn: () =>
+      api<CreditNoteDeclaration[]>('/accounting/credit-notes/declarations', {
+        query: { q: q || undefined },
+      }),
+    enabled,
+  });
+}
+
+/** Accounting → Credit Noted: submitted notes with Checked / Unchecked / Revised counts. */
+export function useCreditNoteReview(q: Query) {
+  return useQuery({
+    queryKey: [...KEY, 'cn-review', q],
+    queryFn: () =>
+      api<Paginated<CreditNoteReviewRow> & { counts: CreditNoteReviewCounts }>(
+        '/accounting/credit-notes/review',
+        { query: q },
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useSetCreditNoteReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reviewStatus }: { id: string; reviewStatus: CreditNoteReviewStatus }) =>
+      api<undefined>(`/accounting/docs/credit-notes/${id}/review`, {
+        method: 'PATCH',
+        json: { reviewStatus },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'cn-review'] }),
   });
 }
 

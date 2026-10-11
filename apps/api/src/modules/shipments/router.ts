@@ -13,19 +13,24 @@ import { parse } from '../../lib/validate';
 import { attachmentName, excelUpload, requireFile } from '../../lib/http';
 import * as svc from './service';
 import { parseCargoWorkbook } from './excel';
+import { assertClientAllowed, assertClientVisible, scopeClients } from '../../lib/clientScope';
 
 const idParam = z.object({ id: z.string().uuid('Invalid shipment id') });
 export const shipmentsRouter = Router();
 shipmentsRouter.use(requireAuth);
 
 shipmentsRouter.get('/', requirePermission('shipments:read'), async (req, res) => {
-  res.json(await svc.listShipments(parse(shipmentListQuerySchema, req.query)));
+  const q = parse(shipmentListQuerySchema, req.query);
+  res.json(await svc.listShipments({ ...q, clientId: scopeClients(req, q.clientId) }));
 });
 
 /** Same filters as the list, as an .xlsx with every "Expand All" column. */
 shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (req, res) => {
   const { page: _p, pageSize: _s, ...filters } = parse(shipmentListQuerySchema, req.query);
-  const rows = await svc.listShipmentsForExport(filters);
+  const rows = await svc.listShipmentsForExport({
+    ...filters,
+    clientId: scopeClients(req, filters.clientId),
+  });
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Grateful Solutions Logistics Command Center';
   const ws = wb.addWorksheet('Shipping Plans', {
@@ -139,11 +144,14 @@ shipmentsRouter.post(
 );
 
 shipmentsRouter.get('/:id', requirePermission('shipments:read'), async (req, res) => {
-  res.json(await svc.getShipment(parse(idParam, req.params).id));
+  const detail = await svc.getShipment(parse(idParam, req.params).id);
+  assertClientVisible(req, detail.clientId, 'Shipment');
+  res.json(detail);
 });
 
 shipmentsRouter.post('/', requirePermission('shipments:write'), async (req, res) => {
   const input = parse(shipmentInputSchema, req.body);
+  assertClientAllowed(req, input.clientId);
   const id = await svc.createShipment(
     input,
     { userId: req.auth!.userId, permissions: req.auth!.permissions },
@@ -155,6 +163,8 @@ shipmentsRouter.post('/', requirePermission('shipments:write'), async (req, res)
 shipmentsRouter.put('/:id', requirePermission('shipments:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
   const input = parse(shipmentInputSchema, req.body);
+  assertClientVisible(req, await svc.shipmentClientId(id), 'Shipment');
+  assertClientAllowed(req, input.clientId);
   await svc.updateShipment(
     id,
     input,
@@ -165,6 +175,8 @@ shipmentsRouter.put('/:id', requirePermission('shipments:write'), async (req, re
 });
 
 shipmentsRouter.delete('/:id', requirePermission('shipments:delete'), async (req, res) => {
-  await svc.deleteShipment(parse(idParam, req.params).id, req);
+  const { id } = parse(idParam, req.params);
+  assertClientVisible(req, await svc.shipmentClientId(id), 'Shipment');
+  await svc.deleteShipment(id, req);
   res.status(204).end();
 });

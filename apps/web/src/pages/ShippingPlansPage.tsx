@@ -38,7 +38,10 @@ export function ShippingPlansPage() {
 
   const filters = {
     clientId: params.getAll('clientId'),
-    direction: (params.get('direction') ?? '') as PlansFilterValue['direction'],
+    // Always Import or Export (Import unless the link asks for Export).
+    direction: (params.get('direction') === 'EXPORT'
+      ? 'EXPORT'
+      : 'IMPORT') as PlansFilterValue['direction'],
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
@@ -50,7 +53,7 @@ export function ShippingPlansPage() {
     sort: filters.sort,
     q: filters.q || undefined,
     clientId: filters.clientId,
-    direction: filters.direction || undefined,
+    direction: filters.direction,
     status: filters.status || undefined,
   };
   const list = useShipments(query);
@@ -59,7 +62,7 @@ export function ShippingPlansPage() {
   const apply = (v: PlansFilterValue) => {
     const next = new URLSearchParams();
     v.clientIds.forEach((id) => next.append('clientId', id));
-    if (v.direction) next.set('direction', v.direction);
+    if (v.direction === 'EXPORT') next.set('direction', 'EXPORT');
     if (v.status) next.set('status', v.status);
     if (filters.q) next.set('q', filters.q);
     setParams(next);
@@ -212,7 +215,10 @@ export function ShippingPlansPage() {
                 error={list.error}
                 empty={list.data?.data.length === 0}
                 emptyText={
-                  filters.q || filters.clientId.length || filters.direction || filters.status
+                  filters.q ||
+                  filters.clientId.length ||
+                  filters.direction === 'EXPORT' ||
+                  filters.status
                     ? 'No shipments match the selected filters.'
                     : 'No shipments yet. Create one with “New Shipment”.'
                 }

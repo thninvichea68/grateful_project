@@ -12,12 +12,13 @@ import { clients, consignees, countries, forwarders, lookupValues, ports } from 
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
+import { allowedClients, assertClientAllowed } from '../../lib/clientScope';
 
 export const lookupsRouter = Router();
 lookupsRouter.use(requireAuth);
 
 /** Everything the forms' dropdowns need, in one request. */
-lookupsRouter.get('/', async (_req, res) => {
+lookupsRouter.get('/', async (req, res) => {
   const [c, cn, f, p, co, v] = await Promise.all([
     db
       .select({
@@ -71,9 +72,11 @@ lookupsRouter.get('/', async (_req, res) => {
     LOOKUP_TYPES.map((t) => [t, [] as { value: string; label: string }[]]),
   ) as LookupsResponse['values'];
   for (const row of v) values[row.type as LookupType].push({ value: row.value, label: row.label });
+  // Users limited to some clients only get those clients (and their consignees).
+  const allowed = allowedClients(req);
   const body: LookupsResponse = {
-    clients: c,
-    consignees: cn,
+    clients: allowed ? c.filter((x) => allowed.includes(x.id)) : c,
+    consignees: allowed ? cn.filter((x) => !x.clientId || allowed.includes(x.clientId)) : cn,
     forwarders: f,
     ports: p,
     countries: co,
@@ -84,6 +87,7 @@ lookupsRouter.get('/', async (_req, res) => {
 
 lookupsRouter.post('/consignees', requirePermission('shipments:write'), async (req, res) => {
   const input = parse(consigneeInputSchema, req.body);
+  if (input.clientId) assertClientAllowed(req, input.clientId);
   const row = await db.transaction(async (tx) => {
     const [created] = await tx.insert(consignees).values(input).returning();
     await audit(

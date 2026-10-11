@@ -27,6 +27,7 @@ import {
   useLiveConsignments,
   usePorts,
 } from '../../features/analytics';
+import { useAuth } from '../../auth/AuthProvider';
 import { ShipmentStatusPill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import {
@@ -42,6 +43,8 @@ import {
   niceMax,
 } from './parts';
 import { WorldMap } from './WorldMap';
+import { SingleClientVolume } from './SingleClientVolume';
+import acc from './AccountsCard.module.css';
 export { KpiRow } from './KpiRow';
 
 /* ------------------------------ Shipment Summary ------------------------------ */
@@ -323,8 +326,28 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
 }
 
 /** Shown instead of profit to roles without accounting access: shipment share per client. */
-export function ClientShareCard({ accounts, year }: { accounts: AccountRow[]; year: number }) {
+export function ClientShareCard({
+  accounts,
+  year,
+  monthly,
+  currentMonth,
+}: {
+  accounts: AccountRow[];
+  year: number;
+  monthly: MonthlyVolumeRow[];
+  currentMonth: string;
+}) {
   const total = accounts.reduce((s, a) => s + a.all.total, 0);
+  // One client: a share-of-total donut is always 100%, so show their year month by month.
+  if (accounts.length === 1)
+    return (
+      <SingleClientVolume
+        a={accounts[0]!}
+        year={year}
+        monthly={monthly}
+        currentMonth={currentMonth}
+      />
+    );
   return (
     <div className="rc-card ga-revenue">
       <div className="rc-header">
@@ -462,71 +485,225 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
 
 export function AccountsCard({ filters }: { filters: { from: string; to: string } }) {
   const [type, setType] = useState<'all' | 'import' | 'export'>('all');
-  const q = useAccounts(filters);
+  // A user limited to one client picks a year and month instead of All / Import / Export
+  // (their card already shows the import/export split).
+  const { user } = useAuth();
+  const single = user?.clientIds?.length === 1;
+  const thisYear = Number(filters.from.slice(0, 4));
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' })
+    .format(new Date())
+    .slice(0, 7);
+  const [year, setYear] = useState(String(thisYear));
+  const [month, setMonth] = useState(''); // '' = the whole year
+  // Months up to the current one in the current year; all twelve for a past year.
+  const lastMonth = year === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
+  const range = !single
+    ? filters
+    : month
+      ? {
+          from: `${year}-${month}-01`,
+          to: new Date(Date.UTC(Number(year), Number(month), 0)).toISOString().slice(0, 10),
+        }
+      : { from: `${year}-01-01`, to: `${year}-12-31` };
+  const q = useAccounts(range);
+  const period = month ? `${MONTHS_LONG[Number(month) - 1]} ${year}` : year;
   return (
     <div className="accounts-card ga-accounts">
       <div className="accounts-card-header">
         <h3>Key Logistics Accounts</h3>
-        <div className="accounts-seg-control" role="tablist">
-          {(['all', 'import', 'export'] as const).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={type === t}
-              className={`accounts-seg-btn${type === t ? ' active' : ''}`}
-              onClick={() => setType(t)}
-            >
-              {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
-            </button>
-          ))}
-        </div>
+        {single ? (
+          <div className={acc.controls}>
+            <CardDropdown
+              label="Year"
+              value={year}
+              onChange={(y) => {
+                setYear(y);
+                // Keep the month only if it exists in that year so far.
+                const last = y === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
+                if (Number(month) > last) setMonth('');
+              }}
+              options={[0, 1, 2].map((d) => ({
+                value: String(thisYear - d),
+                label: String(thisYear - d),
+              }))}
+            />
+            <CardDropdown
+              label="Month"
+              value={month}
+              onChange={setMonth}
+              options={[
+                { value: '', label: 'All months' },
+                ...Array.from({ length: lastMonth }, (_, i) => ({
+                  value: String(i + 1).padStart(2, '0'),
+                  label: MONTHS[i]!,
+                })),
+              ]}
+            />
+          </div>
+        ) : (
+          <div className="accounts-seg-control" role="tablist">
+            {(['all', 'import', 'export'] as const).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={type === t}
+                className={`accounts-seg-btn${type === t ? ' active' : ''}`}
+                onClick={() => setType(t)}
+              >
+                {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="accounts-table-wrap">
-        <ChartState loading={q.isLoading} error={q.error} empty={!q.data?.length} height={120}>
-          <table className="accounts-table">
-            <thead>
-              <tr>
-                <th>CLIENT NAME</th>
-                <th style={{ textAlign: 'center' }}>Total</th>
-                <th style={{ textAlign: 'center' }}>CY / CY</th>
-                <th style={{ textAlign: 'center' }}>LCL</th>
-                <th style={{ textAlign: 'center' }}>AIR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {q.data?.map((a) => {
-                const d = a[type];
-                return (
-                  <tr key={a.clientId}>
-                    <td>
-                      <Link to={`/clients/${a.clientId}`} className="accounts-name">
-                        {a.name}
-                      </Link>
-                    </td>
-                    <td className="accounts-val-bold" style={{ textAlign: 'center' }}>
-                      {d.total.toLocaleString()}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.cy}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.lcl}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.air}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <ChartState
+          loading={q.isLoading}
+          error={q.error}
+          empty={!q.data?.length}
+          emptyText={single ? `No shipments in ${period}` : undefined}
+          height={120}
+        >
+          {q.data?.length === 1 ? (
+            <SingleAccount
+              a={q.data[0]!}
+              type={single ? 'all' : type}
+              period={single ? period : 'this year'}
+            />
+          ) : (
+            <table className="accounts-table">
+              <thead>
+                <tr>
+                  <th>CLIENT NAME</th>
+                  <th style={{ textAlign: 'center' }}>Total</th>
+                  <th style={{ textAlign: 'center' }}>CY / CY</th>
+                  <th style={{ textAlign: 'center' }}>LCL</th>
+                  <th style={{ textAlign: 'center' }}>AIR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.data?.map((a) => {
+                  const d = a[type];
+                  return (
+                    <tr key={a.clientId}>
+                      <td>
+                        <Link to={`/clients/${a.clientId}`} className="accounts-name">
+                          {a.name}
+                        </Link>
+                      </td>
+                      <td className="accounts-val-bold" style={{ textAlign: 'center' }}>
+                        {d.total.toLocaleString()}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.cy}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.lcl}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.air}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </ChartState>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One client only (e.g. a user limited to one client): a summary instead of a one-row
+ * table: total, import/export split, then CY/CY, LCL and AIR with their share.
+ */
+function SingleAccount({
+  a,
+  type,
+  period,
+}: {
+  a: AccountRow;
+  type: 'all' | 'import' | 'export';
+  /** "this year", "2025" or "October 2026". */
+  period: string;
+}) {
+  const d = a[type];
+  const pct = (n: number) => (d.total ? Math.round((n / d.total) * 100) : 0);
+  const flows = a.all.total
+    ? { imp: (a.import.total / a.all.total) * 100, exp: (a.export.total / a.all.total) * 100 }
+    : { imp: 0, exp: 0 };
+  return (
+    <div className={acc.single}>
+      <div className={acc.head}>
+        <span className={acc.badge}>{a.code}</span>
+        <div className={acc.who}>
+          <Link to={`/clients/${a.clientId}`} className={acc.name}>
+            {a.name}
+          </Link>
+          <span className={acc.sub}>
+            {type === 'all' ? 'All shipments' : type === 'import' ? 'Imports' : 'Exports'}{' '}
+            {period === 'this year' ? period : `in ${period}`}
+          </span>
+        </div>
+        <div className={acc.total}>
+          <b>{d.total.toLocaleString()}</b>
+          <span>shipments</span>
+        </div>
+      </div>
+
+      <div className={acc.flow}>
+        <div className={acc.flowBar} role="img" aria-label="Import and export split">
+          <span style={{ width: `${flows.imp}%` }} data-on={type !== 'export' || undefined} />
+          <span style={{ width: `${flows.exp}%` }} data-on={type !== 'import' || undefined} />
+        </div>
+        <div className={acc.flowLegend}>
+          <span>
+            <i data-kind="imp" /> Import <b>{a.import.total}</b>
+          </span>
+          <span>
+            <i data-kind="exp" /> Export <b>{a.export.total}</b>
+          </span>
+        </div>
+      </div>
+
+      <div className={acc.modes}>
+        {(
+          [
+            ['CY / CY', d.cy],
+            ['LCL', d.lcl],
+            ['AIR', d.air],
+          ] as const
+        ).map(([label, n]) => (
+          <div key={label} className={acc.mode}>
+            <span className={acc.modeLabel}>{label}</span>
+            <span className={acc.modeVal}>
+              {n.toLocaleString()} <small>{pct(n)}%</small>
+            </span>
+            <span className={acc.modeBar}>
+              <span style={{ width: `${pct(n)}%` }} />
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -616,16 +793,15 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
 
 /* ------------------------------ Forwarder radar ------------------------------ */
 
-type ForwarderMetric = 'factory' | 'imports' | 'exports' | 'onTimePct';
+type ForwarderMetric = 'imports' | 'exports';
 
 export function ForwarderCard({ filters }: { filters: { from: string; to: string } }) {
-  const [metric, setMetric] = useState<ForwarderMetric>('factory');
+  const [metric, setMetric] = useState<ForwarderMetric>('imports');
   const q = useForwarders(filters);
   const data = (q.data ?? []).slice(0, 6).map((f) => ({
     name: f.name.replace(' Logistics', '').replace('Global Forwarding', ''),
     v: f[metric] ?? 0,
   }));
-  const unit = metric === 'onTimePct' ? '%' : '';
   return (
     <div className="forwarder-card ga-forwarder">
       <div className="forwarder-card-header">
@@ -639,10 +815,8 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
           onChange={setMetric}
           triggerClass="forwarder-filter-trigger"
           options={[
-            { value: 'factory', label: 'Factory' },
             { value: 'imports', label: 'Import' },
             { value: 'exports', label: 'Export' },
-            { value: 'onTimePct', label: 'On-time %' },
           ]}
         />
       </div>
@@ -663,20 +837,13 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
                 dataKey="name"
                 tick={{ fontSize: 10.5, fontWeight: 700, fill: 'var(--text-secondary)' }}
               />
-              <PolarRadiusAxis
-                tick={false}
-                axisLine={false}
-                domain={[0, metric === 'onTimePct' ? 100 : 'auto']}
-              />
+              <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 'auto']} />
               <Tooltip
                 content={({ active, payload }) =>
                   active && payload?.length ? (
                     <div className={dash.tooltipPlain}>
                       {(payload[0]!.payload as { name: string }).name}:{' '}
-                      <b>
-                        {payload[0]!.value}
-                        {unit}
-                      </b>
+                      <b>{payload[0]!.value} shipments</b>
                     </div>
                   ) : null
                 }

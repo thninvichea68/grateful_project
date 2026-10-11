@@ -1,0 +1,75 @@
+/* Declaration picker for a new Credit Noted. */
+.list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.empty {
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  background: var(--bg-surface);
+  font-family: var(--font-main);
+  text-align: left;
+  cursor: pointer;
+}
+.row:hover,
+.row:focus-visible {
+  background: var(--bg-subtle);
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.main b {
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+.main span {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imp,
+.exp,
+.has {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.imp {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.exp {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.has {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}

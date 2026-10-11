@@ -68,6 +68,90 @@ select[class]:disabled {
   opacity: 0.6;
 }
 
+/*
+ * The open list of every dropdown in the system, styled like our card dropdown menu
+ * (rounded panel, pill rows, accent row with a tick for the chosen option) instead of the
+ * browser's grey list. Uses the customizable <select> (`appearance: base-select`, Chrome and
+ * Edge 135+); other browsers keep their native list, so forms work the same everywhere.
+ */
+@supports (appearance: base-select) {
+  select,
+  select::picker(select) {
+    appearance: base-select;
+  }
+  /* Our own chevron is the background image; hide the built-in one. */
+  select[class]::picker-icon {
+    display: none;
+  }
+  select[class] {
+    align-items: center;
+    color: var(--text-primary);
+  }
+  select::picker(select) {
+    margin-block: 6px;
+    padding: 6px;
+    min-width: anchor-size(width);
+    max-height: min(340px, 60vh);
+    overflow-y: auto;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface-elevated);
+    box-shadow: 0 16px 36px -18px rgba(15, 23, 42, 0.35);
+    scrollbar-width: thin;
+  }
+  select option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-main);
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 0.12s ease,
+      color 0.12s ease;
+  }
+  select option + option {
+    margin-top: 2px;
+  }
+  select option:hover,
+  select option:focus-visible {
+    outline: none;
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+  }
+  select option:checked {
+    background: var(--accent-primary);
+    color: #041b2d;
+    font-weight: 800;
+  }
+  /* Tick on the right of the chosen option (the browser puts it on the left). */
+  select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    content: '✓';
+    font-size: 12px;
+    font-weight: 900;
+  }
+  select option:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  select optgroup {
+    padding: 6px 4px 2px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+}
+
 /* Mobile: dim the page behind the open sidebar and close it on tap. */
 .sidebar-scrim {
   display: none;

@@ -35,6 +35,17 @@ export const users = pgTable(
       .notNull()
       .references(() => roles.id, { onDelete: 'restrict' }),
     isActive: boolean('is_active').notNull().default(true),
+    /** Per-user tweaks on top of the role's permissions. */
+    permissionsAdd: text('permissions_add')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    permissionsRemove: text('permissions_remove')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** Clients this user may work with; NULL = every client. */
+    clientIds: uuid('client_ids').array(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...timestamps,
     ...softDelete,

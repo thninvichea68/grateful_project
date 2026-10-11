@@ -50,7 +50,12 @@ export function OverviewPage() {
         {can('accounting:read') && s?.profit ? (
           <ProfitCard profit={s.profit} />
         ) : (
-          <ClientShareCard accounts={accounts.data ?? []} year={year} />
+          <ClientShareCard
+            accounts={accounts.data ?? []}
+            year={year}
+            monthly={s?.monthly ?? []}
+            currentMonth={today.slice(0, 7)}
+          />
         )}
         <CountryMapCard filters={yearFilters} />
         <AccountsCard filters={yearFilters} />

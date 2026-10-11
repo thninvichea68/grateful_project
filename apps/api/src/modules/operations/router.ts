@@ -5,6 +5,7 @@ import { db } from '../../db/client';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
+import { clientCondition, scopeClients } from '../../lib/clientScope';
 
 export const operationsRouter = Router();
 operationsRouter.use(requireAuth, requirePermission('shipments:read'));
@@ -14,6 +15,8 @@ operationsRouter.get('/declarations', async (req, res) => {
   const q = parse(declarationRegisterQuerySchema, req.query);
   const c = [sql`s.deleted_at IS NULL`];
   if (q.clientId) c.push(sql`s.client_id = ${q.clientId}`);
+  const scoped = clientCondition(sql`s.client_id`, scopeClients(req));
+  if (scoped) c.push(scoped);
   if (q.direction) c.push(sql`s.direction = ${q.direction}`);
   if (q.month)
     c.push(

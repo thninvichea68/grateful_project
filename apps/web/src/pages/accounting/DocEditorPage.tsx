@@ -25,7 +25,7 @@ import { NotFoundPage } from '../NotFoundPage';
 import { DOC_CONFIG } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
 
-type Values = Record<string, unknown> & {
+export type Values = Record<string, unknown> & {
   clientId: string;
   lines: { description: string; qty: string; unit: string; unitPrice: string; mark: string }[];
 };
@@ -75,7 +75,7 @@ function Loader({
 const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(Number(v)));
 
-function initialValues(
+export function initialValues(
   type: BillingDocType,
   doc: BillingDoc | undefined,
   prefill: Record<string, unknown> | undefined,

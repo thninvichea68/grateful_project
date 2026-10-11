@@ -1,4 +1,14 @@
-import { pgTable, text, uuid, date, integer, index, check, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  uuid,
+  date,
+  integer,
+  index,
+  check,
+  uniqueIndex,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   id,
@@ -14,6 +24,7 @@ import {
   loadTypeEnum,
   containerSizeEnum,
   creditNoteRefTypeEnum,
+  creditNoteReviewEnum,
 } from './_common';
 import { users } from './auth';
 import { clients, ports, forwarders } from './reference';
@@ -212,6 +223,10 @@ export const creditNotes = pgTable('credit_notes', {
   cbm: qty('cbm'),
   declareNo: text('declare_no'),
   total: money('total').notNull().default('0'),
+  /** Accounting's check of the submitted note (Accounting → Credit Noted). */
+  reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 });
 
 export const creditNoteLines = pgTable(
