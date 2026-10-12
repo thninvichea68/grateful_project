@@ -11,6 +11,8 @@ import { icons } from '../../layout/icons';
 import { NewCreditNoteModal } from './NewCreditNoteModal';
 import { InboxTable, InboxToggle } from './Inbox';
 import { cnSeq } from './seq';
+import { PackMenu } from './PackMenu';
+import { packFilters } from './creditNotePack';
 // Same look as Accounting → Chea Payments.
 import s from '../accounting/CreditNotesReview.module.css';
 
@@ -148,6 +150,9 @@ export function CreditNotedList() {
             <button type="button" className={s.newBtn} onClick={() => setPicking(true)}>
               {icons.plus({ width: 15, height: 15 })} New Credit Noted
             </button>
+          )}
+          {!inboxView && (
+            <PackMenu filters={packFilters(params)} count={list.data?.meta.total ?? 0} />
           )}
         </div>
 

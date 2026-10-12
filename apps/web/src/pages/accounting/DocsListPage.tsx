@@ -20,7 +20,7 @@ export const DOC_STATUS_PILL: Record<
 > = {
   DRAFT: { tone: 'pending', label: 'Draft' },
   ISSUED: { tone: 'completed', label: 'Issued' },
-  VOID: { tone: 'exception', label: 'Void' },
+  VOID: { tone: 'exception', label: 'Cancelled' },
 };
 
 /** `base` is where rows link to: /accounting/<type>, or /credit-noted for the broker tab. */
@@ -103,7 +103,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
               <option value="">All statuses</option>
               <option value="DRAFT">Draft</option>
               <option value="ISSUED">Issued</option>
-              <option value="VOID">Void</option>
+              <option value="VOID">Cancelled</option>
             </select>
             {canWrite &&
               (isCn ? (

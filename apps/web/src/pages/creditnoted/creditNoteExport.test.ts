@@ -6,7 +6,8 @@ const saved: { blob?: Blob; name?: string } = {};
 vi.mock('../../lib/files', () => ({
   saveBlob: (blob: Blob, name: string) => Object.assign(saved, { blob, name }),
 }));
-const { creditNoteFileName, exportCreditNoteExcel } = await import('./creditNoteExport');
+const { creditNoteFileName, exportCreditNoteExcel, exportCreditNotePackExcel } =
+  await import('./creditNoteExport');
 
 const doc = {
   id: 'x',
@@ -106,5 +107,42 @@ describe('Credit Noted Excel export', () => {
     const fonts = new Set<string>();
     ws.eachRow((row) => row.eachCell((cell) => fonts.add(String(cell.font?.name))));
     expect([...fonts]).toEqual(['Calibri']);
+  });
+
+  it('packs several credit notes into one workbook, one sheet each', async () => {
+    const second = {
+      ...doc,
+      id: 'y',
+      number: 'CN26-002',
+      header: { ...doc.header, declareNo: 'E 41101' },
+    } as BillingDoc;
+    const noDeclare = {
+      ...doc,
+      id: 'z',
+      number: 'CN26-003',
+      header: { ...doc.header, declareNo: '', refNo: 'KHS2609038' },
+    } as BillingDoc;
+    await exportCreditNotePackExcel(
+      [doc, second, noDeclare, doc].map((d) => ({ doc: d, portName: 'Sihanoukville' })),
+      'CreditNoted_2026-09.xlsx',
+    );
+    expect(saved.name).toBe('CreditNoted_2026-09.xlsx');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(
+      await new Promise<ArrayBuffer>((resolve) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result as ArrayBuffer);
+        fr.readAsArrayBuffer(saved.blob!);
+      }),
+    );
+    // Named after the note and its declare no. (house bill when there is none); a repeated
+    // name gets a number, since Excel sheet names must be unique.
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      'CN26-001 I 95116',
+      'CN26-002 E 41101',
+      'CN26-003 KHS2609038',
+      'CN26-001 I 95116 2',
+    ]);
+    expect(wb.getWorksheet('CN26-002 E 41101')!.getCell('A1').value).toBe('CREDIT NOTED');
   });
 });

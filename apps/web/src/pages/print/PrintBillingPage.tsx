@@ -319,7 +319,7 @@ export function ReceiptBlock({ r, c }: { r: ReceiptView; c: CompanyInfo }) {
   const letterhead = r.kind !== 'DEBIT_NOTE';
   return (
     <div className={p.receipt}>
-      {r.status === 'VOID' && <div className={p.void}>VOID</div>}
+      {r.status === 'VOID' && <div className={p.void}>CANCELLED</div>}
       <div className={p.rcHead}>
         {letterhead && <img src="/logo.png" alt="" />}
         <div className={p.rcCompany}>

@@ -235,10 +235,12 @@ function Editor({
   };
   const voidDoc = async () => {
     if (!doc) return;
-    const reason = window.prompt('Why is this document void? (kept in the audit log)');
+    const reason = window.prompt(
+      'Why is this document being cancelled? It keeps its number. (Kept in the audit log)',
+    );
     if (!reason) return;
     await action.mutateAsync({ action: 'void', id: doc.id, body: { reason } });
-    toast(`${cfg.title} voided.`);
+    toast(`${cfg.title} cancelled.`);
   };
   const remove = async () => {
     if (!doc || !window.confirm('Delete this draft?')) return;
@@ -302,7 +304,7 @@ function Editor({
             )}
             {can('accounting:write') && doc && doc.status !== 'VOID' && doc.status !== 'DRAFT' && (
               <button type="button" className="btn-delete-shipment" onClick={() => void voidDoc()}>
-                Void
+                Cancel document
               </button>
             )}
             {editable && (
@@ -548,7 +550,7 @@ function Editor({
           <p className={ui.dialogSub} style={{ marginTop: 12 }}>
             {doc.status === 'DRAFT'
               ? 'Read only for your role.'
-              : `This document is ${doc.status.toLowerCase()} and can't be edited.`}
+              : `This document is ${doc.status === 'VOID' ? 'cancelled' : doc.status.toLowerCase()} and can't be edited.`}
           </p>
         )}
       </div>

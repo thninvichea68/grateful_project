@@ -347,7 +347,7 @@ export async function updateDoc(
       const before = await lockDoc(tx, type, id);
       if (before.status !== 'DRAFT')
         throw conflict(
-          `${BILLING_LABEL[type]} is ${String(before.status).toLowerCase()} and can no longer be edited. Void it and create a new one.`,
+          `${BILLING_LABEL[type]} is ${before.status === 'VOID' ? 'cancelled' : String(before.status).toLowerCase()} and can no longer be edited. Cancel it and create a new one.`,
         );
       await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
@@ -380,7 +380,9 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
   await db.transaction(async (tx) => {
     const doc = await lockDoc(tx, type, id);
     if (doc.status !== 'DRAFT')
-      throw conflict(`Only drafts can be issued; this one is ${String(doc.status).toLowerCase()}`);
+      throw conflict(
+        `Only drafts can be issued; this one is ${doc.status === 'VOID' ? 'cancelled' : String(doc.status).toLowerCase()}`,
+      );
     await tx
       .update(cfg.table)
       // A credit note accounting sent back comes back to them as Unchecked.
@@ -477,7 +479,7 @@ export async function voidDoc(
   const cfg = CONFIG[type];
   await db.transaction(async (tx) => {
     const doc = await lockDoc(tx, type, id);
-    if (doc.status === 'VOID') throw conflict('Already void');
+    if (doc.status === 'VOID') throw conflict('Already cancelled');
     await tx
       .update(cfg.table)
       .set({ status: 'VOID' } as never)
@@ -503,7 +505,7 @@ export async function deleteDoc(type: BillingDocType, id: string, req: Request):
   await db.transaction(async (tx) => {
     const doc = await lockDoc(tx, type, id);
     if (doc.status !== 'DRAFT')
-      throw conflict('Only drafts can be deleted. Void an issued document instead.');
+      throw conflict('Only drafts can be deleted. Cancel an issued document instead.');
     await tx.delete(cfg.table).where(eq(col(cfg.table, 'id'), id));
     await audit(tx, { action: 'DELETE', entity: cfg.sqlTable, entityId: id, before: doc }, req);
   });

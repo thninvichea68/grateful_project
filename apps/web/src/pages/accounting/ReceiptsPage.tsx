@@ -15,7 +15,7 @@ import { PrintLink } from '../../components/PrintLink';
 
 /**
  * Every official receipt (payments against the clients' account statements). Receipts are
- * recorded from Client Billing; this is the register to find, print or void one.
+ * recorded from Client Billing; this is the register to find, print or cancel one.
  */
 export function ReceiptsPage() {
   const { can } = useAuth();
@@ -41,11 +41,11 @@ export function ReceiptsPage() {
   };
   const doVoid = async (r: OfficialReceipt) => {
     const reason = window.prompt(
-      `Void receipt ${r.receiptNo} (${fmtMoney(r.amount)})? The amount becomes due again on the statement.\n\nReason (kept in the audit log):`,
+      `Cancel receipt ${r.receiptNo} (${fmtMoney(r.amount)})? It keeps its number, and the amount becomes due again on the statement.\n\nReason (kept in the audit log):`,
     );
     if (!reason) return;
     await voidReceipt.mutateAsync({ id: r.id, reason });
-    toast(`Receipt ${r.receiptNo} voided.`);
+    toast(`Receipt ${r.receiptNo} cancelled.`);
   };
 
   return (
@@ -100,9 +100,9 @@ export function ReceiptsPage() {
               onChange={(e) => set('status', e.target.value)}
               aria-label="Status"
             >
-              <option value="">Issued &amp; void</option>
+              <option value="">Issued &amp; cancelled</option>
               <option value="ISSUED">Issued</option>
-              <option value="VOID">Void</option>
+              <option value="VOID">Cancelled</option>
             </select>
           </div>
         </div>
@@ -152,7 +152,7 @@ export function ReceiptsPage() {
                   <td className={`${b.num} ${b.strong}`}>{fmtMoney(r.amount)}</td>
                   <td>
                     <Pill tone={r.status === 'VOID' ? 'exception' : 'completed'}>
-                      {r.status === 'VOID' ? 'Void' : 'Issued'}
+                      {r.status === 'VOID' ? 'Cancelled' : 'Issued'}
                     </Pill>
                   </td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
@@ -169,7 +169,7 @@ export function ReceiptsPage() {
                             style={{ marginLeft: 12 }}
                             onClick={() => void doVoid(r)}
                           >
-                            Void
+                            Cancel
                           </button>
                         )}
                       </>

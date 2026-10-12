@@ -332,7 +332,7 @@ export async function deleteLedger(id: string, req: Request): Promise<void> {
             + (SELECT count(*) FROM credit_notes WHERE accounting_record_id = ${id} AND status = 'ISSUED')
             + (SELECT count(*) FROM record_summaries WHERE accounting_record_id = ${id} AND status = 'ISSUED'))::int AS n`,
     );
-    if (issued!.n) throw conflict('This ledger entry has issued documents. Void them first.');
+    if (issued!.n) throw conflict('This ledger entry has issued documents. Cancel them first.');
     await tx.delete(accountingRecords).where(eq(accountingRecords.id, id));
     await audit(tx, { action: 'DELETE', entity: 'accounting_record', entityId: id, before }, req);
   });

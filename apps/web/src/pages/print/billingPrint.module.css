@@ -221,11 +221,12 @@
   top: 46%;
   left: 50%;
   transform: translate(-50%, -50%) rotate(-18deg);
-  font-size: 80px;
+  font-size: 64px;
   font-weight: 700;
-  letter-spacing: 8px;
+  letter-spacing: 6px;
   color: rgba(220, 38, 38, 0.16);
   pointer-events: none;
+  white-space: nowrap;
 }
 
 /* ---------- Handover checklist ---------- */

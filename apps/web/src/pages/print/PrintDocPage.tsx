@@ -44,7 +44,9 @@ export function PrintDocPage() {
         </button>
       </div>
       <div className={sheetClass(d.type)}>
-        {d.status !== 'ISSUED' && <div className={s.stamp}>{d.status}</div>}
+        {d.status !== 'ISSUED' && (
+          <div className={s.stamp}>{d.status === 'VOID' ? 'CANCELLED' : d.status}</div>
+        )}
         {type === 'tax-invoices' && <TaxOrDisbursement d={d} c={c} tax />}
         {type === 'disbursements' && <TaxOrDisbursement d={d} c={c} tax={false} />}
         {type === 'debit-notes' && <DebitNote d={d} c={c} />}

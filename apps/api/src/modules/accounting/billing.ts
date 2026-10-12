@@ -547,7 +547,7 @@ export async function voidReceipt(id: string, reason: string, req: Request): Pro
       .where(eq(officialReceipts.id, id))
       .for('update');
     if (!r) throw notFound('Official receipt');
-    if (r.status === 'VOID') throw conflict('Already void');
+    if (r.status === 'VOID') throw conflict('Already cancelled');
     await tx.update(officialReceipts).set({ status: 'VOID' }).where(eq(officialReceipts.id, id));
     await audit(
       tx,

@@ -473,11 +473,11 @@ function StatementPanel({
   const total = Number(st.total);
   const doVoid = async (r: OfficialReceipt) => {
     const reason = window.prompt(
-      `Void receipt ${r.receiptNo} (${fmtMoney(r.amount)})? The amount becomes due again.\n\nReason (kept in the audit log):`,
+      `Cancel receipt ${r.receiptNo} (${fmtMoney(r.amount)})? It keeps its number, and the amount becomes due again.\n\nReason (kept in the audit log):`,
     );
     if (!reason) return;
     await voidReceipt.mutateAsync({ id: r.id, reason });
-    toast(`Receipt ${r.receiptNo} voided.`);
+    toast(`Receipt ${r.receiptNo} cancelled.`);
   };
   return (
     <div className={b.statement}>
@@ -563,7 +563,7 @@ function StatementPanel({
             <span className={b.payDesc}>
               {fmtDate(r.receiptDate)} · {PAYMENT_METHOD_LABEL[r.paymentMethod]}
               {r.paymentRef ? ` · ${r.paymentRef}` : ''}
-              {r.status === 'VOID' ? ' · void' : ''}
+              {r.status === 'VOID' ? ' · cancelled' : ''}
             </span>
             <span className={b.payAmount}>{fmtMoney(r.amount)}</span>
             {r.status !== 'VOID' && (
@@ -578,7 +578,7 @@ function StatementPanel({
                     data-danger="true"
                     onClick={() => void doVoid(r)}
                   >
-                    Void
+                    Cancel
                   </button>
                 )}
               </>

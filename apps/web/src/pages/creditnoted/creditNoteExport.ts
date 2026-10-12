@@ -1,3 +1,4 @@
+import type { Workbook } from 'exceljs';
 import type { BillingDoc } from '@gs/shared';
 import { saveBlob } from '../../lib/files';
 import { creditNoteHeader } from '../print/PrintDocPage';
@@ -88,9 +89,57 @@ export function breakLines(text: string, max: number): string[] {
  */
 export async function exportCreditNoteExcel(d: BillingDoc, portName: string | undefined) {
   const { default: ExcelJS } = await import('exceljs');
-  const FONT = 'Calibri';
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Credit Note', {
+  addCreditNoteSheet(wb, d, portName, 'Credit Note');
+  await saveWorkbook(wb, `${creditNoteFileName(d)}.xlsx`);
+}
+
+/**
+ * Several credit notes in one workbook, one sheet each (named after the note and its declare
+ * no. or house bill, e.g. "CN26-003 E 264562"), in the order given.
+ */
+export async function exportCreditNotePackExcel(
+  notes: { doc: BillingDoc; portName: string | undefined }[],
+  fileName: string,
+) {
+  const { default: ExcelJS } = await import('exceljs');
+  const wb = new ExcelJS.Workbook();
+  const used = new Set<string>();
+  for (const { doc, portName } of notes) {
+    // Excel sheet names: at most 31 characters, none of : \ / ? * [ ], unique.
+    const base = [doc.number, doc.header.declareNo || doc.header.refNo]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/[:\\/?*[\]]/g, '-')
+      .slice(0, 31)
+      .trim();
+    let name = base || 'Credit Note';
+    for (let i = 2; used.has(name.toLowerCase()); i++)
+      name = `${base.slice(0, 31 - String(i).length - 1)} ${i}`;
+    used.add(name.toLowerCase());
+    addCreditNoteSheet(wb, doc, portName, name);
+  }
+  await saveWorkbook(wb, fileName);
+}
+
+async function saveWorkbook(wb: Workbook, fileName: string) {
+  const buffer = await wb.xlsx.writeBuffer();
+  saveBlob(
+    new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    fileName,
+  );
+}
+
+function addCreditNoteSheet(
+  wb: Workbook,
+  d: BillingDoc,
+  portName: string | undefined,
+  sheetName: string,
+) {
+  const FONT = 'Calibri';
+  const ws = wb.addWorksheet(sheetName, {
     views: [{ showGridLines: false }],
     pageSetup: {
       paperSize: 9, // A4
@@ -222,12 +271,4 @@ export async function exportCreditNoteExcel(d: BillingDoc, portName: string | un
   ws.getCell(r, 1).alignment = { horizontal: 'right' };
   ws.getCell(r, 6).alignment = { horizontal: 'right' };
   ws.getCell(r, 6).numFmt = money;
-
-  const buffer = await wb.xlsx.writeBuffer();
-  saveBlob(
-    new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }),
-    `${creditNoteFileName(d)}.xlsx`,
-  );
 }

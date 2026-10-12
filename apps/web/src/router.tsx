@@ -91,6 +91,11 @@ const PrintQuotationPage = lazy(() =>
 const PrintDocPage = lazy(() =>
   import('./pages/print/PrintDocPage').then((m) => ({ default: m.PrintDocPage })),
 );
+const PrintCreditNotePackPage = lazy(() =>
+  import('./pages/print/PrintCreditNotePackPage').then((m) => ({
+    default: m.PrintCreditNotePackPage,
+  })),
+);
 const guard = (permission: Permission, el: ReactNode) => (
   <RequirePermission permission={permission}>
     <Suspense fallback={<PageLoading />}>{el}</Suspense>
@@ -181,6 +186,19 @@ export const router = createBrowserRouter([
         <RequirePermission permission="accounting:read">
           <Suspense fallback={null}>
             <PrintReceiptPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
+    // Credit Noted → ⋯ → PDF Pack: every credit note matching the list's filters.
+    path: '/print/credit-noted-pack',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="creditnotes:read">
+          <Suspense fallback={null}>
+            <PrintCreditNotePackPage />
           </Suspense>
         </RequirePermission>
       </RequireAuth>
