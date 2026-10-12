@@ -20,7 +20,7 @@
   place-items: center;
   border-radius: 12px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--accent-primary);
   background: var(--status-completed-bg);
@@ -37,7 +37,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -57,7 +57,7 @@
 }
 .total b {
   font-size: 30px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -1px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -112,7 +112,7 @@
   border-radius: 2px;
 }
 .flowLegend b {
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 
@@ -139,7 +139,7 @@
 }
 .modeVal {
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.5px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;

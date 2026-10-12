@@ -9,6 +9,7 @@ import type {
   DeclarationRegisterRow,
   DocumentRow,
   FollowUpRow,
+  MarketPrices,
   Paginated,
   QuotationDetail,
   QuotationRow,
@@ -37,6 +38,13 @@ export const useRoles = () =>
   useQuery({ queryKey: ['staff', 'roles'], queryFn: () => api<RoleInfo[]>('/staff/roles') });
 export const useSettings = () =>
   useQuery({ queryKey: ['settings'], queryFn: () => api<SettingsBundle>('/settings') });
+/** Settings → Rates (fuel and metal boxes). Refetched every 5 minutes so the hourly metal prices show up. */
+export const useMarketPrices = () =>
+  useQuery({
+    queryKey: ['settings', 'market'],
+    queryFn: () => api<MarketPrices>('/settings/market-prices'),
+    refetchInterval: 5 * 60_000,
+  });
 
 export const useFollowUps = (q: Query) =>
   useQuery({

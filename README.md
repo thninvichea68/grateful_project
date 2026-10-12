@@ -203,6 +203,29 @@ Hardening in this phase:
 - **Paths** — relative `UPLOAD_DIR` / `WEB_DIST_DIR` resolve from the project folder whether started by `pnpm dev` or `pnpm start`.
 - **Backups** verified by restoring a dump into a fresh database.
 
+## Client Billing — the month-end pack per client
+
+Replaces the monthly Excel workbook per client (e.g. `09-JR-INV`: a tax invoice + disbursement and a debit note per shipment, the two account statements `ST-INV` / `STA-DN`, the official receipts `OR-INV` and the checking list). **Accounting → Client Billing** (`/accounting/billing`) lists every client with billing in a month and where it stands (Not invoiced → Drafts to issue → Awaiting payment → Partly paid → Paid). Opening a client shows its month in three steps:
+
+1. **Shipment documents** — one row per Monthly Ledger entry of the month (by invoice date) with its tax invoice, disbursement and debit note. **Create missing drafts** fills every missing one from the shipment and copies the line items of the client's last issued document of the same import/export (same container size first), or puts one line with the ledger amount. **+ Other debit note** is for charges of no shipment (monthly MIH / payroll fee). **Issue drafts** issues the month's drafts (a $0.00 draft is skipped).
+2. **Account statements** — "Invoices & disbursements" (tax invoice total with VAT + disbursement per shipment) and "Debit notes", read from the issued documents. A number typed in the ledger for a document made outside the system (the Excel days) still counts, marked "ledger".
+3. **Payments** — **Record payment** issues an official receipt (`OR26-001`…) against one statement, never more than its balance; the amount in words is generated. Void keeps the number and puts the amount due again. **Official Receipt** (`/accounting/receipts`) is the register.
+
+**Print month pack** (`/print/billing/:clientId?month=YYYY-MM`) prints, in order, each shipment's tax invoice, disbursement and debit note, the statements, the receipts (two A5 receipts per A4 sheet) and the handover checklist; each part can be switched off. The document editor gained **Copy lines from…** (a recent issued document of the client) and returns to Client Billing when opened from there.
+
+Automatic tax invoice / disbursement / debit note numbers now continue after the highest number already used, including numbers typed into the ledger, so they never repeat an Excel-era number. Statements are not stored (always computed from the documents); receipts are, in `official_receipts` (migration `0010_official_receipts`).
+
+```
+GET  /accounting/billing?month                        every client's month: totals and stage
+GET  /accounting/billing/:clientId?month              shipments + documents, statements, receipts
+GET  /accounting/billing/:clientId/pack?month         the same plus every issued document in full (print)
+POST /accounting/billing/:clientId/drafts             { month, types[], lines: previous|ledger }
+POST /accounting/billing/:clientId/issue              { month }
+GET  /accounting/receipts?month&clientId&status&q     POST /accounting/receipts
+GET  /accounting/receipts/:receiptId                  POST /accounting/receipts/:receiptId/void { reason }
+GET  /accounting/docs/:type/prefill?clientId&date     a document of no shipment, from the client
+```
+
 ## Phase 5b features
 
 **Staff & Roles** (`/staff`) — add staff with a temporary password, edit role/department/status, reset passwords, remove; **Roles & permissions** matrix (Admin always has everything). Safeguards: you can't change your own role or deactivate yourself, the last active Admin can't be removed, and deactivating or resetting a password signs that person out everywhere. Everyone can **change their own password** by clicking their name in the sidebar (min. 10 characters with a number).

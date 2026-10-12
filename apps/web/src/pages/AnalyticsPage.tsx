@@ -193,13 +193,10 @@ export function AnalyticsPage() {
   return (
     <section className="view active" id="view-analytics">
       <div className="an-head-row">
-        <div>
-          <h1>Analytics — Full Operations Breakdown</h1>
-          <div className="an-sub">
-            Every figure is calculated from the shipments in the database for the filters below (by
-            ETA month).
-          </div>
-        </div>
+        <p className="an-sub">
+          Every figure is calculated from the shipments in the database for the filters below (by
+          ETA month).
+        </p>
         <div className={dash.filters} role="group" aria-label="Analytics filters">
           <select
             className={dash.filterInput}
@@ -645,7 +642,7 @@ export function AnalyticsPage() {
                   </tr>
                 ))}
                 {accounts.data && accounts.data.length > 1 && (
-                  <tr style={{ fontWeight: 800 }}>
+                  <tr style={{ fontWeight: 700 }}>
                     <td className="an-client-name">All clients</td>
                     {(['total', 'import', 'export', 'cy', 'lcl', 'air'] as const).map((c) => (
                       <td className="center" key={c}>

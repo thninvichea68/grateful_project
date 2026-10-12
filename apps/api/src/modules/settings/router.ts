@@ -11,6 +11,7 @@ import {
   type ExchangeRateImportResult,
   forwarderInputSchema,
   forwarderUpdateSchema,
+  fuelPriceInputSchema,
   lookupValueInputSchema,
   portInputSchema,
   type SettingsBundle,
@@ -20,6 +21,7 @@ import {
   consignees,
   exchangeRates,
   forwarders,
+  fuelPrices,
   lookupValues,
   ports,
   settings,
@@ -30,6 +32,7 @@ import { audit } from '../../lib/audit';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { env } from '../../config/env';
 import { lastSync, syncExchangeRate } from './rateSync';
+import { marketPrices, syncFuelPrices, syncMetalPrices } from './marketSync';
 import { excelUpload, requireFile } from '../../lib/http';
 import { queryRows } from '../../lib/listing';
 import { parseRateWorkbook } from './rateImport';
@@ -239,6 +242,53 @@ settingsRouter.post('/exchange-rates/sync', manage, async (req, res) => {
   const status = await syncExchangeRate('manual', req.auth!.userId);
   if (!status.ok)
     throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get the rate from MEF: ${status.error}`);
+  res.json(status);
+});
+
+/* ---------- Fuel & metal prices ---------- */
+
+settingsRouter.get('/market-prices', requirePermission('settings:read'), async (_req, res) => {
+  res.json(await marketPrices());
+});
+
+/** Add a fuel period by hand (e.g. the notice is out but MEF hasn't published it yet). */
+settingsRouter.post('/fuel-prices', manage, async (req, res) => {
+  const v = parse(fuelPriceInputSchema, req.body);
+  const values = {
+    startDate: v.startDate,
+    endDate: v.endDate,
+    gasoline92: v.gasoline92!,
+    gasoil: v.gasoil!,
+    source: 'manual',
+  };
+  const [row] = await db
+    .insert(fuelPrices)
+    .values({ ...values, createdById: req.auth!.userId })
+    .onConflictDoUpdate({ target: fuelPrices.startDate, set: values })
+    .returning();
+  await audit(db, { action: 'UPDATE', entity: 'fuel_price', entityId: row!.id, after: row }, req);
+  res.status(201).json(row);
+});
+
+settingsRouter.delete('/fuel-prices/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const [row] = await db.delete(fuelPrices).where(eq(fuelPrices.id, id)).returning();
+  if (!row) throw notFound('Fuel price');
+  await audit(db, { action: 'DELETE', entity: 'fuel_price', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
+settingsRouter.post('/fuel-prices/sync', manage, async (req, res) => {
+  const status = await syncFuelPrices('manual', req.auth!.userId);
+  if (!status.ok)
+    throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get fuel prices: ${status.error}`);
+  res.json(status);
+});
+
+settingsRouter.post('/metal-prices/sync', manage, async (req, res) => {
+  const status = await syncMetalPrices('manual', req.auth!.userId);
+  if (!status.ok)
+    throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get metal prices: ${status.error}`);
   res.json(status);
 });
 

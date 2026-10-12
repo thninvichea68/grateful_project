@@ -57,6 +57,27 @@
       "when": 1791724120891,
       "tag": "0007_client_cdc",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791782376345,
+      "tag": "0008_market_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791791332564,
+      "tag": "0009_charge_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791793661536,
+      "tag": "0010_official_receipts",
+      "breakpoints": true
     }
   ]
 }

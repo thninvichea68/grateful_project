@@ -128,7 +128,7 @@ select[class]:disabled {
   select option:checked {
     background: var(--accent-primary);
     color: #041b2d;
-    font-weight: 800;
+    font-weight: 700;
   }
   /* Tick on the right of the chosen option (the browser puts it on the left). */
   select option::checkmark {
@@ -136,7 +136,7 @@ select[class]:disabled {
     margin-left: auto;
     content: '✓';
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 700;
   }
   select option:disabled {
     cursor: not-allowed;
@@ -145,7 +145,7 @@ select[class]:disabled {
   select optgroup {
     padding: 6px 4px 2px;
     font-size: 10.5px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: 0.4px;
     text-transform: uppercase;
     color: var(--text-tertiary);
@@ -178,7 +178,7 @@ select[class]:disabled {
   border-radius: var(--radius-md);
   background: var(--accent-primary);
   color: #001018;
-  font-weight: 800;
+  font-weight: 700;
 }
 .skip-link:focus {
   top: 12px;

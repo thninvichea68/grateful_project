@@ -2,9 +2,9 @@
 /* Wide dialog: Profile + Client access left, Permissions right. */
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .col {
   display: flex;
@@ -15,9 +15,35 @@
 .col > .panel {
   margin: 0;
 }
-/* Wide enough for full client names; long names wrap rather than being cut off. */
+/* Client access and Permissions stretch so both columns end on the same line. */
+.grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.grow .count {
+  margin-top: auto;
+  padding-top: 14px;
+}
+/* Profile: Full name / Role / Status, Job title / Department / Phone, Email. */
+.profileGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 16px;
+}
+.profileGrid input[readonly] {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  cursor: default;
+}
+@media (max-width: 560px) {
+  .profileGrid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Two client cards per row; long names wrap rather than being cut off. */
 .clientGrid {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
 .clientName {
   white-space: normal !important;
@@ -55,7 +81,7 @@
 .panelHead h4 {
   margin: 0;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .panelHead p {
@@ -158,7 +184,7 @@
   border-radius: 8px;
   text-align: center;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.3px;
   color: var(--text-secondary);
   background: var(--bg-subtle);
@@ -204,7 +230,7 @@
   color: #fff;
 }
 .count {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-tertiary);
@@ -256,7 +282,7 @@
 }
 .area b {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .area span {
@@ -372,7 +398,7 @@
   background: var(--bg-surface-elevated);
   text-align: center;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .matrix thead th:first-child {
@@ -400,7 +426,7 @@
 }
 .groupRow b {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .groupRow span {
@@ -489,6 +515,11 @@
 }
 
 /* Members list. */
+.member {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .custom {
   font-size: 11px;
   font-weight: 700;

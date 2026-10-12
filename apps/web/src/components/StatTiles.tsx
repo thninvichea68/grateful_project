@@ -10,7 +10,7 @@ export function StatTiles({ columns, children }: { columns: number; children: Re
   );
 }
 
-type Tone = 'success' | 'warning' | 'danger';
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'paid';
 
 /**
  * One tile. `tone` colours it (e.g. net profit, unpaid, over-imported). Pass `onClick` to make it

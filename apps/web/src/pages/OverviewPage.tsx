@@ -13,7 +13,6 @@ import {
   ShipmentSummaryCard,
 } from './dashboard/OverviewCards';
 import { KpiRowSkeleton } from './dashboard/KpiRow';
-import { MONTHS_LONG } from './dashboard/parts';
 
 export function OverviewPage() {
   const { can } = useAuth();
@@ -26,16 +25,6 @@ export function OverviewPage() {
 
   return (
     <section className="view active" id="view-overview">
-      <div className="ov-top-row">
-        <div>
-          <h1>Logistics Operations Overview</h1>
-        </div>
-        <span className="time-pill-btn" title="Refreshes every minute">
-          {today
-            ? `${MONTHS_LONG[Number(today.slice(5, 7)) - 1]} ${today.slice(0, 4)} (Live)`
-            : 'Live'}
-        </span>
-      </div>
       <ErrorBanner error={summary.error} />
       {s ? <KpiRow k={s.kpis} monthly={s.monthly} /> : <KpiRowSkeleton />}
 

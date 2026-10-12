@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { BILLING_DOC_SCHEMAS, computeLinesTotal, lineAmount, type BillingDoc } from '@gs/shared';
+import {
+  BILLING_DOC_SCHEMAS,
+  DEFAULT_CHARGE_UNITS,
+  computeLinesTotal,
+  lineAmount,
+  type BillingDoc,
+} from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import {
   useCompany,
@@ -14,7 +21,8 @@ import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
-import { downloadFile } from '../../lib/files';
+import { api } from '../../lib/api';
+import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
@@ -24,11 +32,15 @@ import { CreditNote } from '../print/PrintDocPage';
 import ps from '../print/print.module.css';
 import { timeAgo } from './Inbox';
 import { cnSeq } from './seq';
+import { creditNoteFileName, exportCreditNoteExcel, printCreditNote } from './creditNoteExport';
 import s from './CreditNotedEditor.module.css';
 
 const TYPE = 'credit-notes' as const;
 const CN_STATUS_LABEL = { DRAFT: 'Draft', ISSUED: 'Submitted', VOID: 'Discarded' } as const;
 const A4_WIDTH = 794; // 210mm at 96dpi
+
+/** The "+ Add New Item" choice in a line's description dropdown. */
+const NEW_ITEM = '__new__';
 
 /** /credit-noted/:id (or /accounting/credit-notes/:id): loads the note or a fresh draft. */
 export function CreditNotedRoute({ base }: { base: string }) {
@@ -95,7 +107,9 @@ function CreditNotedEditor({
     register,
     control,
     handleSubmit,
-    formState: { errors, isDirty },
+    setValue,
+    getValues,
+    formState: { errors },
   } = useForm<Values>({
     resolver: formResolver(BILLING_DOC_SCHEMAS[TYPE]) as never,
     defaultValues: defaults,
@@ -105,6 +119,53 @@ function CreditNotedEditor({
     name: 'lines',
   });
   const values = useWatch({ control }) as Values;
+
+  // The company details may load after the form opened: fill Bill to / Address if still empty.
+  useEffect(() => {
+    if (!editable || !company.data) return;
+    if (!getValues('billTo') && company.data.nameEn)
+      setValue('billTo', company.data.nameEn.toUpperCase());
+    if (!getValues('address') && company.data.addressEn)
+      setValue('address', company.data.addressEn);
+  }, [company.data, editable, getValues, setValue]);
+
+  // Line descriptions come from Settings → Dropdown lists → Charge descriptions.
+  const qc = useQueryClient();
+  const charges = (lookups.data?.values.CHARGE ?? []).map((c) => c.label);
+  // Units: the standard ones, then any added to Settings → Dropdown lists → Charge units.
+  const units = [
+    ...new Set([
+      ...DEFAULT_CHARGE_UNITS,
+      ...(lookups.data?.values.CHARGE_UNIT ?? []).map((u) => u.label),
+    ]),
+  ];
+  /** "+ Add New" in a line's Description or Unit dropdown: ask, use it, and add it to the list. */
+  const chooseNew = async (
+    i: number,
+    field: 'description' | 'unit',
+    el: HTMLSelectElement,
+    current: string,
+  ) => {
+    if (el.value !== NEW_ITEM) return false;
+    el.value = current; // keep showing the old choice while asking
+    const typed = window.prompt(field === 'unit' ? 'New unit' : 'New item description')?.trim();
+    if (!typed) return true;
+    const label = typed.toUpperCase();
+    setValue(`lines.${i}.${field}`, label, { shouldDirty: true, shouldValidate: true });
+    // Also add it to the list so it's there next time (already there = no change).
+    try {
+      await api(field === 'unit' ? '/lookups/charge-units' : '/lookups/charges', {
+        method: 'POST',
+        json: { label },
+      });
+      await qc.invalidateQueries({ queryKey: queryKeys.lookups });
+    } catch {
+      toast(
+        `${field === 'unit' ? 'Unit' : 'Item'} used on this line, but it could not be added to the list.`,
+      );
+    }
+    return true;
+  };
   const total = computeLinesTotal(
     (values.lines ?? []).map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
   );
@@ -183,8 +244,23 @@ function CreditNotedEditor({
     toast('Draft deleted.');
     navigate(base);
   };
-  const needsSave = !doc || isDirty;
-  const openPrint = () => window.open(`/print/${TYPE}/${doc!.id}`, '_blank', 'noreferrer');
+  // Print / PDF / Excel use the live preview, so what's on screen is what comes out.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const portName = lookups.data?.ports.find((p) => p.id === values.portId)?.name;
+  const printSheet = (title: string) => {
+    if (sheetRef.current) printCreditNote(sheetRef.current, title);
+  };
+  const [exporting, setExporting] = useState(false);
+  const exportExcel = async () => {
+    setExporting(true);
+    try {
+      await exportCreditNoteExcel(preview, portName);
+    } catch {
+      toast('Excel export failed. Try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const err = (name: string) =>
     (errors as Record<string, { message?: string } | undefined>)[name]?.message;
@@ -192,13 +268,24 @@ function CreditNotedEditor({
     (errors.lines as unknown as Record<number, Record<string, { message?: string }>> | undefined)?.[
       i
     ]?.[f]?.message;
-  const field = (name: string, label: string, opts: { type?: string; span?: boolean } = {}) => (
+  // Bill to / Address come from Settings → Company and can't be typed over. Until the company
+  // has them set, the box stays editable so it is never stuck empty.
+  const lockBillTo = !!company.data?.nameEn;
+  const lockAddress = !!company.data?.addressEn;
+  const LOCKED_HINT = 'From Settings → Company. Change it there.';
+  const field = (
+    name: string,
+    label: string,
+    opts: { type?: string; span?: boolean; locked?: boolean } = {},
+  ) => (
     <label className={s.field} style={opts.span ? { gridColumn: '1 / -1' } : undefined}>
       <span>{label}</span>
       <input
         type={opts.type ?? 'text'}
-        className="form-field-box"
+        className={`form-field-box${opts.locked ? ` ${s.locked}` : ''}`}
         {...register(name)}
+        readOnly={opts.locked}
+        title={opts.locked ? LOCKED_HINT : undefined}
         aria-invalid={!!err(name)}
       />
       <FieldError message={err(name)} />
@@ -265,7 +352,7 @@ function CreditNotedEditor({
             <section className={s.card}>
               <h3>1. Header information</h3>
               <div className={s.grid}>
-                {field('billTo', 'Bill to', { span: true })}
+                {field('billTo', 'Bill to', { span: true, locked: lockBillTo })}
                 {field('cnDate', 'Date', { type: 'date' })}
                 {field('declareNo', 'Declare no')}
                 <label className={s.field}>
@@ -287,7 +374,13 @@ function CreditNotedEditor({
                 {field('shipper', 'Shipper / factory')}
                 <label className={s.field} style={{ gridColumn: '1 / -1' }}>
                   <span>Address</span>
-                  <textarea rows={2} className="form-field-box" {...register('address')} />
+                  <textarea
+                    rows={2}
+                    className={`form-field-box${lockAddress ? ` ${s.locked}` : ''}`}
+                    {...register('address')}
+                    readOnly={lockAddress}
+                    title={lockAddress ? LOCKED_HINT : undefined}
+                  />
                 </label>
                 <label className={s.field}>
                   <span>Port</span>
@@ -328,7 +421,6 @@ function CreditNotedEditor({
                 <span>Unit</span>
                 <span>Price</span>
                 <span>Mark</span>
-                <span className={s.right}>Total</span>
                 <span />
               </div>
               {lines.fields.map((f, i) => {
@@ -336,18 +428,64 @@ function CreditNotedEditor({
                 return (
                   <div className={s.line} key={f.id}>
                     <span className={s.no}>{i + 1}</span>
-                    <input
-                      className="form-field-box"
-                      {...register(`lines.${i}.description`)}
-                      aria-invalid={!!lineErr(i, 'description')}
-                      title={lineErr(i, 'description')}
-                    />
+                    {(() => {
+                      const current = String(l?.description ?? '');
+                      const reg = register(`lines.${i}.description`);
+                      return (
+                        <select
+                          className="form-select-box"
+                          {...reg}
+                          onChange={async (e) => {
+                            if (!(await chooseNew(i, 'description', e.target, current)))
+                              await reg.onChange(e);
+                          }}
+                          aria-label={`Line ${i + 1} description`}
+                          aria-invalid={!!lineErr(i, 'description')}
+                          title={lineErr(i, 'description') ?? current}
+                        >
+                          <option value="">Choose…</option>
+                          <option value={NEW_ITEM}>+ Add New Item</option>
+                          {current && !charges.includes(current) && (
+                            <option value={current}>{current}</option>
+                          )}
+                          {charges.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                     <input
                       className="form-field-box"
                       inputMode="decimal"
                       {...register(`lines.${i}.qty`)}
                     />
-                    <input className="form-field-box" {...register(`lines.${i}.unit`)} />
+                    {(() => {
+                      const current = String(l?.unit ?? '');
+                      const reg = register(`lines.${i}.unit`);
+                      return (
+                        <select
+                          className="form-select-box"
+                          {...reg}
+                          onChange={async (e) => {
+                            if (!(await chooseNew(i, 'unit', e.target, current)))
+                              await reg.onChange(e);
+                          }}
+                          aria-label={`Line ${i + 1} unit`}
+                        >
+                          {current && !units.includes(current) && (
+                            <option value={current}>{current}</option>
+                          )}
+                          {units.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                          <option value={NEW_ITEM}>+ Add New</option>
+                        </select>
+                      );
+                    })()}
                     <input
                       className="form-field-box"
                       inputMode="decimal"
@@ -357,17 +495,26 @@ function CreditNotedEditor({
                       title={lineErr(i, 'unitPrice')}
                     />
                     <input className="form-field-box" {...register(`lines.${i}.mark`)} />
-                    <span className={s.lineTotal}>
-                      {fmtMoney(lineAmount(l?.qty, l?.unitPrice))}
-                    </span>
-                    {editable && lines.fields.length > 1 ? (
+                    {editable ? (
+                      // The last line can't go (a note needs one), so the bin clears it instead.
                       <button
                         type="button"
                         className={s.remove}
-                        onClick={() => lines.remove(i)}
+                        onClick={() =>
+                          lines.fields.length > 1
+                            ? lines.remove(i)
+                            : lines.update(i, {
+                                description: '',
+                                qty: '1',
+                                unit: 'SHIP',
+                                unitPrice: '',
+                                mark: '',
+                              })
+                        }
                         aria-label={`Remove line ${i + 1}`}
+                        title={lines.fields.length > 1 ? 'Remove item' : 'Clear this item'}
                       >
-                        ×
+                        {icons.trash({})}
                       </button>
                     ) : (
                       <span />
@@ -413,33 +560,27 @@ function CreditNotedEditor({
           <button
             type="button"
             className={s.footBtn}
-            disabled={needsSave}
-            title={needsSave ? 'Save first' : undefined}
-            onClick={openPrint}
+            onClick={() => printSheet(document.title)}
+            title="Print the credit note as shown on the right"
           >
             Print
           </button>
           <button
             type="button"
             className={`${s.footBtn} ${s.footPrimary}`}
-            disabled={needsSave}
-            title={needsSave ? 'Save first' : 'Opens the print view: choose "Save as PDF"'}
-            onClick={openPrint}
+            onClick={() => printSheet(creditNoteFileName(preview))}
+            title={`Choose "Save as PDF" in the print window (${creditNoteFileName(preview)}.pdf)`}
           >
             PDF File
           </button>
           <button
             type="button"
             className={`${s.footBtn} ${s.footExcel}`}
-            disabled={needsSave}
-            title={needsSave ? 'Save first' : undefined}
-            onClick={() =>
-              downloadFile(`/accounting/docs/${TYPE}/${doc!.id}/export.xlsx`).catch(() =>
-                toast('Export failed.'),
-              )
-            }
+            disabled={exporting}
+            onClick={() => void exportExcel()}
+            title={`${creditNoteFileName(preview)}.xlsx`}
           >
-            Excel Export
+            {exporting ? 'Exporting…' : 'Excel Export'}
           </button>
           {editable && doc?.status === 'DRAFT' && (
             <button type="button" className={s.deleteLink} onClick={() => void remove()}>
@@ -450,7 +591,9 @@ function CreditNotedEditor({
       </div>
 
       <Preview>
-        <CreditNote d={preview} />
+        <div ref={sheetRef}>
+          <CreditNote d={preview} />
+        </div>
       </Preview>
     </section>
   );

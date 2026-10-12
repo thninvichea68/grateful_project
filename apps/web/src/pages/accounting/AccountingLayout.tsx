@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { NavLink, Outlet, useOutletContext } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import { BILLING_SECTION_PATHS } from './billingParts';
 
-/** The accounting engine's six tabs, as native routes (no iframe). */
+/**
+ * The accounting engine's tabs, as native routes (no iframe). Client Billing (each client's
+ * month: documents → statements → receipts) holds the tax invoice, disbursement, debit note
+ * and receipt registers as its own sections, so its tab stays lit on those pages.
+ */
 const TABS = [
   { to: '/accounting', label: 'Monthly Ledger', end: true },
+  { to: '/accounting/billing', label: 'Client Billing' },
   { to: '/accounting/credit-notes', label: 'Chea Payments' },
   { to: '/accounting/record-summaries', label: 'Record Summary' },
-  { to: '/accounting/tax-invoices', label: 'Tax Invoice' },
-  { to: '/accounting/disbursements', label: 'Disbursement' },
-  { to: '/accounting/debit-notes', label: 'Debit Note' },
 ];
 
 interface AccountingContext {
@@ -21,6 +24,8 @@ export const useAccountingLayout = (): AccountingContext =>
 
 export function AccountingLayout() {
   const [tabsAside, setTabsAside] = useState<HTMLElement | null>(null);
+  const { pathname } = useLocation();
+  const inBilling = BILLING_SECTION_PATHS.some((p) => pathname.startsWith(p));
   return (
     <>
       <div
@@ -39,7 +44,9 @@ export function AccountingLayout() {
               key={t.to}
               to={t.to}
               end={t.end}
-              className={({ isActive }) => `filter-btn${isActive ? ' active' : ''}`}
+              className={({ isActive }) =>
+                `filter-btn${isActive || (inBilling && t.to === '/accounting/billing') ? ' active' : ''}`
+              }
             >
               {t.label}
             </NavLink>

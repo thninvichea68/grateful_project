@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ExchangeRateImportResult, ExchangeRateSyncStatus, SettingsBundle } from '@gs/shared';
+import type { ExchangeRateImportResult, SettingsBundle } from '@gs/shared';
 import { useApiMutation } from '../../features/admin';
 import { FilePicker } from '../../components/FilePicker';
 import { ErrorBanner, Modal, ui } from '../../components/ui';
@@ -118,58 +118,6 @@ export function RateRow({ rate, manage }: { rate: Rate; manage: boolean }) {
         )}
       </td>
     </tr>
-  );
-}
-
-/** One line under the card title: where rates come from and how the last MEF check went. */
-export function MefSyncStatus({
-  status,
-  auto,
-}: {
-  status: ExchangeRateSyncStatus | null;
-  auto: boolean;
-}) {
-  const when = status
-    ? new Date(status.at).toLocaleString('en-GB', {
-        timeZone: 'Asia/Phnom_Penh',
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
-  return (
-    <div className={r.sync} data-tone={status && !status.ok ? 'error' : undefined}>
-      <span className={r.syncDot} />
-      <span>
-        <strong>{auto ? 'Auto-updated' : 'Automatic updates off'}</strong>
-        {auto ? ' every 3 hours' : ''} from the{' '}
-        <a
-          href="https://data.mef.gov.kh/datasets/pd_66a0cd503e0bd300012638fb4"
-          target="_blank"
-          rel="noreferrer"
-        >
-          MEF official rate
-        </a>
-        {status &&
-          (status.ok ? (
-            <>
-              {' '}
-              · Last check {when}: {fmtNum(status.usdToKhr)} KHR for {fmtDate(status.effectiveDate)}
-              {status.result === 'same'
-                ? ' (already up to date)'
-                : status.result === 'new'
-                  ? ' (added)'
-                  : ' (updated)'}
-            </>
-          ) : (
-            <>
-              {' '}
-              · Last check {when} failed: {status.error}
-            </>
-          ))}
-      </span>
-    </div>
   );
 }
 

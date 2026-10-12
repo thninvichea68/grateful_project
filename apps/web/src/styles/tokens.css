@@ -36,6 +36,8 @@
   --status-pending-fg: #fbbf24;
   --status-exception-bg: rgba(244, 63, 94, 0.12);
   --status-exception-fg: #fb7185;
+  --status-paid-bg: rgba(16, 185, 129, 0.12);
+  --status-paid-fg: #34d399;
 
   /* Geometry - Box Shadows Removed */
   --radius-xl: 20px;
@@ -71,6 +73,8 @@
   --status-pending-fg: #b45309;
   --status-exception-bg: #ffe4e6;
   --status-exception-fg: #be123c;
+  --status-paid-bg: #d1fae5;
+  --status-paid-fg: #047857;
 
   --shadow-card: none;
   --shadow-glow: none;

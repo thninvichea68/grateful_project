@@ -25,14 +25,6 @@
 
 @font-face {
   font-family: 'Helvetica';
-  src: url('/fonts/helvetica-rounded-bold-5871d05ead8de.otf') format('opentype');
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Helvetica';
   src: url('/fonts/Helvetica-Oblique.ttf') format('truetype');
   font-weight: 400;
   font-style: italic;

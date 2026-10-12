@@ -43,7 +43,7 @@
   background: var(--accent-rose);
   color: #fff;
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 /* Rows */
@@ -71,7 +71,7 @@
   background: var(--tone-bg);
   color: var(--tone);
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .remark {
   display: -webkit-box;
@@ -95,7 +95,7 @@
   border-radius: 7px;
   font-family: var(--font-main);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
 }

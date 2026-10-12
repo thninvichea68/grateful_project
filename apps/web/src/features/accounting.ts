@@ -7,6 +7,7 @@ import type {
   CreditNoteReviewCounts,
   CreditNoteReviewRow,
   CreditNoteReviewStatus,
+  CreditNoteDeclaration,
   DeclarationOption,
   LedgerEntryInput,
   LedgerRow,
@@ -75,11 +76,12 @@ export function useDeleteLedger() {
   });
 }
 
-export function useDocs(type: BillingDocType, q: Query) {
+export function useDocs(type: BillingDocType, q: Query, enabled = true) {
   return useQuery({
     queryKey: [...KEY, 'docs', type, q],
     queryFn: () => api<Paginated<BillingDocListItem>>(`/accounting/docs/${type}`, { query: q }),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 
@@ -91,24 +93,31 @@ export function useDoc(type: BillingDocType, id: string | undefined) {
   });
 }
 
-/** A ready-to-edit draft from a ledger row (or, for credit notes, from a declaration). */
+/**
+ * A ready-to-edit draft from a ledger row (or, for credit notes, from a declaration; for a
+ * document of no shipment, e.g. a monthly fee debit note, from a client and date).
+ */
 export function usePrefill(
   type: BillingDocType,
   recordId: string | null,
   declarationId: string | null = null,
+  client: { clientId: string; date: string } | null = null,
 ) {
   return useQuery({
-    queryKey: [...KEY, 'prefill', type, recordId, declarationId],
+    queryKey: [...KEY, 'prefill', type, recordId, declarationId, client],
     queryFn: () =>
       api<Record<string, unknown>>(`/accounting/docs/${type}/prefill`, {
-        query: declarationId ? { declarationId } : { recordId: recordId! },
+        query: declarationId
+          ? { declarationId }
+          : recordId
+            ? { recordId }
+            : { clientId: client!.clientId, date: client!.date },
       }),
-    enabled: !!recordId || !!declarationId,
+    enabled: !!recordId || !!declarationId || !!client,
     staleTime: Infinity,
   });
 }
 
-export type CreditNoteDeclaration = DeclarationOption & { creditNoteNo: string | null };
 
 /** Declarations a new Credit Noted can start from (with or without a ledger row). */
 export function useCreditNoteDeclarations(q: string, enabled: boolean) {

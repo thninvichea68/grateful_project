@@ -1,8 +1,9 @@
 import { sql } from 'drizzle-orm';
-import type { BillingDocType } from '@gs/shared';
+import type { BillingDocType, BillingLineInput, BillingPackType } from '@gs/shared';
 import { db } from '../../db/client';
-import { notFound } from '../../lib/errors';
+import { badRequest, notFound } from '../../lib/errors';
 import { queryRows } from '../../lib/listing';
+import { rateOn } from './ledger';
 
 interface Ctx {
   recordId: string;
@@ -12,6 +13,10 @@ interface Ctx {
   invNo: string | null;
   disNo: string | null;
   dnNo: string | null;
+  /** The ledger's typed number when no document has it yet (the new document takes it). */
+  freeInvNo: string | null;
+  freeDisNo: string | null;
+  freeDnNo: string | null;
   clearFee: string;
   thc: string;
   otherPay: string;
@@ -64,7 +69,11 @@ export async function prefill(
     db,
     sql`
     SELECT a.id AS "recordId", a.client_id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", a.exchange_rate::text AS "exchangeRate",
-           a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.clear_fee::text AS "clearFee", a.thc::text AS thc,
+           a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
+           CASE WHEN NOT EXISTS (SELECT 1 FROM tax_invoices t WHERE upper(t.invoice_no) = upper(a.inv_no)) THEN a.inv_no END AS "freeInvNo",
+           CASE WHEN NOT EXISTS (SELECT 1 FROM disbursements t WHERE upper(t.dis_no) = upper(a.dis_no)) THEN a.dis_no END AS "freeDisNo",
+           CASE WHEN NOT EXISTS (SELECT 1 FROM debit_notes t WHERE upper(t.dn_no) = upper(a.dn_no)) THEN a.dn_no END AS "freeDnNo",
+           a.clear_fee::text AS "clearFee", a.thc::text AS thc,
            a.other_pay::text AS "otherPay", a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
            d.declare_no AS "declareNo", s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.forwarder_id AS "forwarderId",
            coalesce(d.port_id, s.clearance_port_id) AS "portId", p.name AS "portName", oc.name AS "originName", dc.name AS "destinationName",
@@ -123,6 +132,7 @@ export async function prefill(
         ...base,
         ...customer,
         ...ship,
+        invoiceNo: c.freeInvNo,
         invoiceDate: c.invDate,
         exchangeRate: c.exchangeRate,
         lines: [line(fee, c.invRevenue)],
@@ -132,6 +142,7 @@ export async function prefill(
         ...base,
         ...customer,
         ...ship,
+        disNo: c.freeDisNo,
         disDate: c.invDate,
         exchangeRate: c.exchangeRate,
         reference: c.declareNo,
@@ -141,6 +152,7 @@ export async function prefill(
       return {
         ...base,
         ...ship,
+        dnNo: c.freeDnNo,
         dnDate: c.invDate,
         billTo: customer.customerNameEn,
         address: c.address,
@@ -252,4 +264,137 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
       line('LOLO'),
     ],
   };
+}
+
+/**
+ * A draft for a document that belongs to no shipment (e.g. a monthly service-fee debit
+ * note): the client's billing details, the date, and no lines yet.
+ */
+export async function clientPrefill(
+  type: BillingDocType,
+  clientId: string,
+  date: string,
+): Promise<Record<string, unknown>> {
+  const [c] = await queryRows<{
+    name: string;
+    legalName: string | null;
+    legalNameKm: string | null;
+    address: string | null;
+    vattin: string | null;
+  }>(
+    db,
+    sql`SELECT name, legal_name AS "legalName", legal_name_km AS "legalNameKm", address, vattin
+        FROM clients WHERE id = ${clientId} AND deleted_at IS NULL`,
+  );
+  if (!c) throw notFound('Client');
+  const billTo = (c.legalName ?? c.name).toUpperCase();
+  const customer = {
+    customerNameEn: billTo,
+    customerNameKm: c.legalNameKm,
+    customerAddress: c.address,
+    customerVattin: c.vattin,
+  };
+  switch (type) {
+    case 'tax-invoices':
+      return {
+        clientId,
+        ...customer,
+        invoiceDate: date,
+        exchangeRate: await rateOn(db, date),
+        lines: [],
+      };
+    case 'disbursements':
+      return {
+        clientId,
+        ...customer,
+        disDate: date,
+        exchangeRate: await rateOn(db, date),
+        lines: [],
+      };
+    case 'debit-notes':
+      return { clientId, billTo, address: c.address, dnDate: date, lines: [] };
+    default:
+      throw badRequest('Start this document from a ledger entry');
+  }
+}
+
+const LINES_SQL: Record<
+  BillingPackType,
+  { doc: string; lines: string; fk: string; date: string; no: string }
+> = {
+  'tax-invoices': {
+    doc: 'tax_invoices',
+    lines: 'tax_invoice_lines',
+    fk: 'tax_invoice_id',
+    date: 'invoice_date',
+    no: 'invoice_no',
+  },
+  disbursements: {
+    doc: 'disbursements',
+    lines: 'disbursement_lines',
+    fk: 'disbursement_id',
+    date: 'dis_date',
+    no: 'dis_no',
+  },
+  'debit-notes': {
+    doc: 'debit_notes',
+    lines: 'debit_note_lines',
+    fk: 'debit_note_id',
+    date: 'dn_date',
+    no: 'dn_no',
+  },
+};
+
+/**
+ * The line items of the client's last issued shipment document of a type, to start a new
+ * one from: same direction (import/export) as the ledger entry, the same container size
+ * first, then the most recent. Null when the client has none yet.
+ */
+export async function previousLines(
+  type: BillingPackType,
+  clientId: string,
+  recordId: string | null,
+): Promise<{ number: string | null; lines: BillingLineInput[] } | null> {
+  const t = LINES_SQL[type];
+  const firstSize = (shipment: string) =>
+    sql.raw(
+      `(SELECT size FROM containers WHERE shipment_id = ${shipment} ORDER BY sort_order LIMIT 1)`,
+    );
+  const [src] = await queryRows<{ id: string; number: string | null }>(
+    db,
+    sql`
+    WITH target AS (
+      SELECT s.direction, ${firstSize('s.id')} AS size
+      FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+      JOIN shipments s ON s.id = d.shipment_id
+      WHERE a.id = ${recordId}::uuid
+    )
+    SELECT t.id, t.${sql.raw(t.no)} AS number
+    FROM ${sql.raw(t.doc)} t
+    JOIN accounting_records a ON a.id = t.accounting_record_id
+    JOIN customs_declarations d ON d.id = a.declaration_id JOIN shipments s ON s.id = d.shipment_id
+    LEFT JOIN target ON true
+    WHERE t.client_id = ${clientId} AND t.status = 'ISSUED'
+      -- Import and export lines differ (IMPORT vs EXPORT PROCESSING FEE, THC vs HBL fee…).
+      AND (target.direction IS NULL OR s.direction = target.direction)
+    ORDER BY (${firstSize('s.id')} = target.size) DESC NULLS LAST,
+             t.${sql.raw(t.date)} DESC, t.created_at DESC
+    LIMIT 1`,
+  );
+  if (!src) return null;
+  const lines = await queryRows<BillingLineInput>(
+    db,
+    sql`SELECT description, qty::text AS qty, coalesce(unit, '') AS unit, unit_price::text AS "unitPrice", coalesce(mark, '') AS mark
+        FROM ${sql.raw(t.lines)} WHERE ${sql.raw(t.fk)} = ${src.id} ORDER BY line_no`,
+  );
+  return lines.length
+    ? {
+        number: src.number,
+        lines: lines.map((l) => ({
+          ...l,
+          qty: n(String(l.qty)),
+          unitPrice: n(String(l.unitPrice)),
+        })),
+      }
+    : null;
 }

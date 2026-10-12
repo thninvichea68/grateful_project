@@ -10,7 +10,9 @@ import { Pill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { NotFoundPage } from '../NotFoundPage';
 import { NewCreditNoteModal } from '../creditnoted/NewCreditNoteModal';
+import { BILLING_SECTION_PATHS, BillingSections } from './billingParts';
 import { DOC_CONFIG } from './docConfig';
+import b from './Billing.module.css';
 
 export const DOC_STATUS_PILL: Record<
   BillingDocStatus,
@@ -54,6 +56,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
   };
   return (
     <section className="view active">
+      {BILLING_SECTION_PATHS.includes(base) && <BillingSections className={b.sectionsTop} />}
       <div className="card">
         <div className="card-header-row">
           <div>
@@ -148,7 +151,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
                   <td>{d.clientCode}</td>
                   <td>{d.billTo ?? '-'}</td>
                   <td>{d.declareNo ?? '-'}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 800 }}>{fmtMoney(d.total)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtMoney(d.total)}</td>
                   <td>
                     <Pill tone={DOC_STATUS_PILL[d.status].tone}>
                       {DOC_STATUS_PILL[d.status].label}

@@ -126,6 +126,23 @@ export interface DeclarationOption {
   direction: 'IMPORT' | 'EXPORT';
 }
 
+/** A declaration in the "New Credit Noted" picker, with the shipment details the form copies. */
+export interface CreditNoteDeclaration extends DeclarationOption {
+  clientName: string;
+  transportMode: 'SEA' | 'AIR' | 'ROAD' | 'RAIL';
+  loadType: 'FCL' | 'LCL' | 'NONE';
+  portName: string | null;
+  hblNo: string | null;
+  /** First container number, how many there are, and the first one's size (e.g. "40HC"). */
+  containerNo: string | null;
+  containerCount: number;
+  containerSize: string | null;
+  grossWeightKg: string;
+  cbm: string;
+  /** Live (non-void) credit note already made for this declare no. */
+  creditNoteNo: string | null;
+}
+
 /* ------------------------------ Billing documents ------------------------------ */
 
 export const BILLING_DOC_TYPES = [

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -13,17 +13,19 @@ import {
   type BillingDocType,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useDoc, useDocAction, usePrefill } from '../../features/accounting';
+import { useDoc, useDocAction, useDocs, usePrefill } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, ui } from '../../components/ui';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
+import { api } from '../../lib/api';
 import { downloadFile } from '../../lib/files';
-import { fmtMoney } from '../../lib/format';
+import { fmtDate, fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { NotFoundPage } from '../NotFoundPage';
 import { DOC_CONFIG } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
+import { PrintLink } from '../../components/PrintLink';
 
 export type Values = Record<string, unknown> & {
   clientId: string;
@@ -35,27 +37,48 @@ export function DocEditorPage() {
   const [params] = useSearchParams();
   if (!(BILLING_DOC_TYPES as readonly string[]).includes(type)) return <NotFoundPage />;
   const t = type as BillingDocType;
+  const clientId = params.get('clientId');
+  const date = params.get('date');
   return (
     <Loader
-      key={`${t}-${id}-${params.get('recordId') ?? ''}`}
+      key={`${t}-${id}-${params.get('recordId') ?? ''}-${clientId ?? ''}`}
       type={t}
       id={id === 'new' ? undefined : id}
       recordId={params.get('recordId')}
+      client={clientId && date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? { clientId, date } : null}
     />
   );
+}
+
+/** Where "back" goes: the page that opened the editor (e.g. Client Billing), else the list. */
+function useBack(type: BillingDocType) {
+  const [params] = useSearchParams();
+  const back = params.get('back');
+  // Only paths inside accounting, never an outside URL.
+  const safe = back && /^\/accounting(\/|\?|$)/.test(back) ? back : null;
+  return {
+    to: safe ?? `/accounting/${type}`,
+    label: safe?.startsWith('/accounting/billing')
+      ? 'Client Billing'
+      : `${DOC_CONFIG[type].title}s`,
+    /** Keep the way back when the URL changes (e.g. a new draft gets its id). */
+    query: safe ? `?back=${encodeURIComponent(safe)}` : '',
+  };
 }
 
 function Loader({
   type,
   id,
   recordId,
+  client,
 }: {
   type: BillingDocType;
   id?: string | undefined;
   recordId: string | null;
+  client: { clientId: string; date: string } | null;
 }) {
   const doc = useDoc(type, id);
-  const pre = usePrefill(type, id ? null : recordId);
+  const pre = usePrefill(type, id ? null : recordId, null, id || recordId ? null : client);
   const lookups = useLookups();
   if (doc.isLoading || pre.isLoading || lookups.isLoading)
     return (
@@ -129,6 +152,7 @@ function Editor({
   const toast = useToast();
   const lookups = useLookups();
   const action = useDocAction(type);
+  const back = useBack(type);
   const editable = can('accounting:write') && (!doc || doc.status === 'DRAFT');
   const defaults = useMemo(() => initialValues(type, doc, prefill), [type, doc, prefill]);
   const {
@@ -147,6 +171,28 @@ function Editor({
   });
   const watched = useWatch({ control, name: 'lines' });
   const rate = useWatch({ control, name: 'exchangeRate' }) as unknown as string | undefined;
+  const clientId = useWatch({ control, name: 'clientId' });
+  /** Most shipments repeat the same charges: start from an earlier document's lines. */
+  const copyLines = (src: BillingDoc) => {
+    const filled = (watched ?? []).some((l) => l.description.trim() || Number(l.unitPrice));
+    if (
+      filled &&
+      !window.confirm(
+        `Replace the ${watched.length} line(s) here with the ${src.lines.length} of ${src.number ?? 'that document'}?`,
+      )
+    )
+      return;
+    lines.replace(
+      src.lines.map((l) => ({
+        description: l.description,
+        qty: num(l.qty),
+        unit: str(l.unit),
+        unitPrice: num(l.unitPrice),
+        mark: str(l.mark),
+      })),
+    );
+    toast(`Lines copied from ${src.number ?? 'the document'}. Check quantities and prices.`);
+  };
 
   const totals = cfg.tax
     ? computeTaxDocument(
@@ -172,7 +218,8 @@ function Editor({
     toast(
       doc ? 'Saved.' : `${cfg.title} ${(saved as BillingDoc).number ?? ''} created as a draft.`,
     );
-    if (!doc) navigate(`/accounting/${type}/${(saved as BillingDoc).id}`, { replace: true });
+    if (!doc)
+      navigate(`/accounting/${type}/${(saved as BillingDoc).id}${back.query}`, { replace: true });
   });
   const issue = async () => {
     if (!doc) return;
@@ -197,7 +244,7 @@ function Editor({
     if (!doc || !window.confirm('Delete this draft?')) return;
     await action.mutateAsync({ action: 'delete', id: doc.id });
     toast('Draft deleted.');
-    navigate(`/accounting/${type}`);
+    navigate(back.to);
   };
 
   const err = (name: string) =>
@@ -212,8 +259,8 @@ function Editor({
       <div className="shipment-create-container">
         <div className="create-top-bar">
           <div>
-            <Link to={`/accounting/${type}`} className="create-header-desc">
-              ← {cfg.title}s
+            <Link to={back.to} className="create-header-desc">
+              ← {back.label}
             </Link>
             <div className="create-header-title">
               {cfg.title} {doc?.number ?? (doc ? (doc.declareNo ?? '') : '(new)')}{' '}
@@ -224,21 +271,16 @@ function Editor({
               )}
             </div>
             <div className="create-header-desc">
-              {doc?.declareNo || prefill
-                ? `Declaration ${doc?.declareNo ?? str(prefill?.declareNo) ?? ''}`
+              {(doc?.declareNo ?? str(prefill?.declareNo))
+                ? `Declaration ${doc?.declareNo ?? str(prefill?.declareNo)}`
                 : 'Not linked to a ledger entry'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             {doc && (
-              <a
-                className="filter-btn"
-                href={`/print/${type}/${doc.id}`}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <PrintLink className="filter-btn" href={`/print/${type}/${doc.id}`}>
                 Print / PDF
-              </a>
+              </PrintLink>
             )}
             {doc && (
               <button
@@ -355,6 +397,9 @@ function Editor({
                     <p>{cfg.tax ? 'VAT 10% is added per line' : 'No VAT on this document'}</p>
                   </div>
                 </div>
+                {editable && (
+                  <CopyLines type={type} clientId={clientId} exclude={doc?.id} onPick={copyLines} />
+                )}
               </div>
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
               <div className="cdc-lines-wrap">
@@ -424,7 +469,7 @@ function Editor({
                             <>
                               <td style={{ textAlign: 'right' }}>{fmtMoney(tl.subtotal)}</td>
                               <td style={{ textAlign: 'right' }}>{fmtMoney(tl.vat)}</td>
-                              <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                              <td style={{ textAlign: 'right', fontWeight: 700 }}>
                                 {fmtMoney(tl.amount)}
                               </td>
                             </>
@@ -436,7 +481,7 @@ function Editor({
                                   {...register(`lines.${i}.mark`)}
                                 />
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 800 }}>
+                              <td style={{ textAlign: 'right', fontWeight: 700 }}>
                                 {fmtMoney(lineAmount(l?.qty, l?.unitPrice))}
                               </td>
                             </>
@@ -484,7 +529,7 @@ function Editor({
                   flexWrap: 'wrap',
                   marginTop: 16,
                   fontSize: 13.5,
-                  fontWeight: 800,
+                  fontWeight: 700,
                 }}
               >
                 {cfg.tax && <span>Sub total {fmtMoney(totals.subtotal)}</span>}
@@ -508,5 +553,48 @@ function Editor({
         )}
       </div>
     </section>
+  );
+}
+
+/** "Copy lines from…": the client's recent issued documents of this type. */
+function CopyLines({
+  type,
+  clientId,
+  exclude,
+  onPick,
+}: {
+  type: BillingDocType;
+  clientId: string;
+  exclude: string | undefined;
+  onPick: (doc: BillingDoc) => void;
+}) {
+  const recent = useDocs(type, { clientId, status: 'ISSUED', pageSize: 15 }, !!clientId);
+  const [busy, setBusy] = useState(false);
+  const options = (recent.data?.data ?? []).filter((d) => d.id !== exclude);
+  if (!clientId || !options.length) return null;
+  return (
+    <select
+      className="form-select-box"
+      style={{ width: 'auto', maxWidth: 320 }}
+      value=""
+      disabled={busy}
+      aria-label="Copy lines from an earlier document"
+      onChange={(e) => {
+        const id = e.target.value;
+        if (!id) return;
+        setBusy(true);
+        api<BillingDoc>(`/accounting/docs/${type}/${id}`)
+          .then(onPick)
+          .finally(() => setBusy(false));
+      }}
+    >
+      <option value="">{busy ? 'Copying…' : 'Copy lines from…'}</option>
+      {options.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.number ?? '—'} · {fmtDate(d.date)} · {fmtMoney(d.total)}
+          {d.declareNo ? ` · ${d.declareNo}` : ''}
+        </option>
+      ))}
+    </select>
   );
 }

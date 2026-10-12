@@ -480,6 +480,31 @@ describe('billing documents', () => {
   });
 });
 
+describe('credit note charge descriptions', () => {
+  it('"+ Add New Item" adds to the Charge list once; viewers cannot', async () => {
+    const h = await as('CUSTOMS_BROKER');
+    const add = (label: string, who = h) =>
+      request(app).post('/api/v1/lookups/charges').set(who).send({ label });
+    expect((await add(' Overtime clearance ')).status).toBe(201);
+    expect((await add('OVERTIME CLEARANCE')).status).toBe(200); // already there
+    const charges = (await request(app).get('/api/v1/lookups').set(h)).body.values.CHARGE;
+    expect(charges.filter((c: { label: string }) => c.label === 'OVERTIME CLEARANCE')).toHaveLength(
+      1,
+    );
+    expect((await add('Something', await as('VIEWER'))).status).toBe(403);
+
+    // Units work the same way, into the Charge units list.
+    const unit = await request(app)
+      .post('/api/v1/lookups/charge-units')
+      .set(h)
+      .send({ label: 'pallet' });
+    expect(unit.status).toBe(201);
+    expect(unit.body).toEqual({ value: 'PALLET', label: 'PALLET' });
+    const units = (await request(app).get('/api/v1/lookups').set(h)).body.values.CHARGE_UNIT;
+    expect(units.map((u: { label: string }) => u.label)).toContain('PALLET');
+  });
+});
+
 describe('customs broker: Credit Noted only', () => {
   it('drafts and submits credit notes, creating the ledger row, but sees no other accounting', async () => {
     const declId = await declaration(b.jr.id, 'I 122050', '2026-08-21', 'IMPORT');

@@ -617,3 +617,129 @@ describe('operations', () => {
     ).toBe(0);
   });
 });
+
+describe('fuel & metal prices', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  const fuel = (...items: [string, string, number, number][]) =>
+    json({
+      items: items.map(([start, end, g, o]) => ({
+        start_date: start,
+        end_date: end,
+        gasoline_92_unit_price: g,
+        gasoline_92_unit_price_change: 0,
+        gasoil_50ppm_unit_price: o,
+        gasoil_50ppm_unit_price_change: 0,
+        source_link: 'https://www.moc.gov.kh/kh/news/4621',
+      })),
+      total_items: items.length,
+    });
+  const metal = (price: number, updatedAt = '2026-10-12T05:17:39Z') =>
+    json({ name: 'Gold', price, symbol: 'XAU', updatedAt });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('syncs fuel periods from MEF by start date; repeats change nothing', async () => {
+    const h = await as('ADMIN');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        fuel(['2026-10-01', '2026-10-11', 5150, 5650], ['2026-09-21', '2026-10-01', 5250, 6100]),
+      )
+      .mockResolvedValueOnce(fuel(['2026-10-01', '2026-10-11', 5150, 5650]))
+      .mockResolvedValueOnce(fuel(['2026-10-01', '2026-10-11', 5100, 5650]));
+
+    const first = await api('post', '/settings/fuel-prices/sync').set(h);
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ ok: true, trigger: 'manual', added: 2, updated: 0 });
+    expect(fetchSpy.mock.calls[0]![0]).toContain('pd_681d89b4dbc953000126f5e7');
+    expect((await api('post', '/settings/fuel-prices/sync').set(h)).body).toMatchObject({
+      added: 0,
+      updated: 0,
+    });
+    expect((await api('post', '/settings/fuel-prices/sync').set(h)).body.updated).toBe(1);
+
+    const m = (await api('get', '/settings/market-prices').set(h)).body;
+    expect(m.fuel).toEqual([
+      expect.objectContaining({
+        startDate: '2026-10-01',
+        endDate: '2026-10-11',
+        gasoline92: '5100',
+        gasoil: '5650',
+        source: 'MEF',
+      }),
+      expect.objectContaining({ startDate: '2026-09-21', gasoline92: '5250' }),
+    ]);
+    expect(m.fuelSync).toMatchObject({ ok: true, updated: 1 });
+  });
+
+  it('adds and deletes a fuel period by hand; Viewers can read but not change', async () => {
+    const h = await as('ADMIN');
+    const add = await api('post', '/settings/fuel-prices')
+      .set(h)
+      .send({ startDate: '2026-10-11', endDate: '', gasoline92: '5,050', gasoil: 5600 });
+    expect(add.status).toBe(201);
+    expect(
+      (
+        await api('post', '/settings/fuel-prices')
+          .set(h)
+          .send({ startDate: '2026-10-11', endDate: '2026-10-01', gasoline92: 1, gasoil: 1 })
+      ).status,
+    ).toBe(400);
+
+    const v = await as('VIEWER');
+    const m = (await api('get', '/settings/market-prices').set(v)).body;
+    expect(m.fuel).toEqual([
+      expect.objectContaining({ gasoline92: '5050', gasoil: '5600', source: 'manual' }),
+    ]);
+    expect((await api('delete', `/settings/fuel-prices/${add.body.id}`).set(v)).status).toBe(403);
+    expect((await api('delete', `/settings/fuel-prices/${add.body.id}`).set(h)).status).toBe(204);
+    expect((await api('get', '/settings/market-prices').set(h)).body.fuel).toEqual([]);
+  });
+
+  it('stores one price per metal per day and compares with the day before', async () => {
+    const h = await as('ADMIN');
+    vi.spyOn(globalThis, 'fetch')
+      // Day 1: gold, silver, platinum.
+      .mockResolvedValueOnce(metal(4100, '2026-10-11T05:00:00Z'))
+      .mockResolvedValueOnce(metal(60, '2026-10-11T05:00:00Z'))
+      .mockResolvedValueOnce(metal(1700, '2026-10-11T05:00:00Z'))
+      // Day 2.
+      .mockResolvedValueOnce(metal(4189))
+      .mockResolvedValueOnce(metal(60.994))
+      .mockResolvedValueOnce(metal(1701));
+    expect((await api('post', '/settings/metal-prices/sync').set(h)).body.added).toBe(3);
+    expect((await api('post', '/settings/metal-prices/sync').set(h)).body.added).toBe(3);
+
+    const m = (await api('get', '/settings/market-prices').set(h)).body;
+    expect(m.metals.map((x: { symbol: string }) => x.symbol)).toEqual(['XAU', 'XAG', 'XPT']);
+    expect(m.metals[0]).toMatchObject({
+      latest: { usdPerOz: '4189.0000', priceDate: '2026-10-12' },
+      previous: { usdPerOz: '4100.0000', priceDate: '2026-10-11' },
+    });
+  });
+
+  it('reports an outage or a broken price without saving anything', async () => {
+    const h = await as('ADMIN');
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('oops', { status: 503 }))
+      .mockResolvedValueOnce(fuel(['2026-10-01', '2026-10-11', 5.15, 5.65]));
+    const down = await api('post', '/settings/fuel-prices/sync').set(h);
+    expect(down.status).toBe(502);
+    expect(down.body.error.message).toContain('503');
+    expect((await api('post', '/settings/fuel-prices/sync').set(h)).status).toBe(502);
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(metal(-1));
+    expect((await api('post', '/settings/metal-prices/sync').set(h)).status).toBe(502);
+
+    const m = (await api('get', '/settings/market-prices').set(h)).body;
+    expect(m.fuel).toEqual([]);
+    expect(m.metals[0].latest).toBeNull();
+    expect(m.fuelSync).toMatchObject({ ok: false });
+    expect((await api('post', '/settings/metal-prices/sync').set(await as('VIEWER'))).status).toBe(
+      403,
+    );
+  });
+});

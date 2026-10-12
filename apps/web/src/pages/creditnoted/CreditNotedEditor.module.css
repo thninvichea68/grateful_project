@@ -42,7 +42,7 @@
 .head h2 {
   margin: 2px 0 0;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
 }
 .number {
@@ -69,7 +69,7 @@
   color: var(--status-completed-fg);
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 .submit:hover:not(:disabled) {
@@ -115,7 +115,7 @@
 }
 .bannerHead b {
   color: var(--tone);
-  font-weight: 800;
+  font-weight: 700;
 }
 .bannerHead span {
   font-size: 11.5px;
@@ -159,7 +159,7 @@
 .card h3 {
   margin: 0 0 12px;
   font-size: 11.5px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-primary);
@@ -186,6 +186,16 @@
   resize: vertical;
   font-family: var(--font-main);
 }
+/* Bill to / Address: the company's details from Settings → Company, not editable here. */
+.field .locked {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  resize: none;
+}
+.field .locked:focus {
+  border-color: var(--border-subtle);
+}
 .pair {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
@@ -196,7 +206,7 @@
 .lineHead,
 .line {
   display: grid;
-  grid-template-columns: 20px minmax(120px, 1fr) 46px 56px 72px 60px 76px 26px;
+  grid-template-columns: 20px minmax(120px, 1fr) 46px 100px 72px 80px 38px;
   gap: 6px;
   align-items: center;
 }
@@ -211,9 +221,15 @@
 .line {
   margin-bottom: 6px;
 }
-.line :global(.form-field-box) {
-  padding: 7px 9px;
+/* Every box on a line (inputs, dropdowns, the bin) is the same height. */
+.line :global(.form-field-box),
+.line :global(.form-select-box) {
+  box-sizing: border-box;
+  height: 38px;
   font-size: 12px;
+}
+.line :global(.form-field-box) {
+  padding: 0 9px;
 }
 .no {
   text-align: center;
@@ -221,29 +237,29 @@
   font-weight: 700;
   color: var(--text-tertiary);
 }
-.right {
-  text-align: right;
-}
-.lineTotal {
-  text-align: right;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
+/* Square bin button, red icon; tints red on hover. */
 .remove {
-  width: 26px;
-  height: 26px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-surface);
   color: var(--status-exception-fg);
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.remove svg {
+  width: 16px;
+  height: 16px;
 }
 .remove:hover {
   background: var(--status-exception-bg);
+  border-color: var(--status-exception-fg);
 }
 .addLine {
   width: 100%;
@@ -298,7 +314,7 @@
   color: var(--text-primary);
   font-family: var(--font-main);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
 }
 .footBtn:hover:not(:disabled) {

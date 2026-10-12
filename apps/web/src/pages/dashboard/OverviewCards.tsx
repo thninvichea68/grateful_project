@@ -12,6 +12,7 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -60,18 +61,25 @@ function SummaryTooltip({
     total: number;
     imports: number;
     exports: number;
+    future: boolean;
   };
   return (
     <div className={dash.tooltip}>
       <div>
         {MONTHS_LONG[Number(p.month.slice(5, 7)) - 1]} {year}
       </div>
-      <div>
-        Shipments <b>{p.total}</b>
-      </div>
-      <div style={{ fontWeight: 600 }}>
-        Import {p.imports} · Export {p.exports}
-      </div>
+      {p.future ? (
+        <div style={{ fontWeight: 600 }}>Not available yet</div>
+      ) : (
+        <>
+          <div>
+            Shipments <b>{p.total}</b>
+          </div>
+          <div style={{ fontWeight: 600 }}>
+            Import {p.imports} · Export {p.exports}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -92,25 +100,29 @@ export function ShipmentSummaryCard({
   const [selected, setSelected] = useState(
     currentMonth.startsWith(String(year)) ? currentMonth : `${year}-01`,
   );
-  const data = monthly.map((m) => ({ ...m, label: monthLabel(m.month) }));
-  const sel = data.find((d) => d.month === selected);
+  // Months after the current one haven't happened yet: no line, a hatched "not available" band.
+  const data = monthly.map((m) => {
+    const future = !!currentMonth && m.month > currentMonth;
+    return { ...m, label: monthLabel(m.month), future, actual: future ? null : m.total };
+  });
+  const firstFuture = data.findIndex((d) => d.future);
+  const futureFrom = firstFuture > 0 ? data[firstFuture - 1]!.label : data[0]?.label;
+  const sel = data.find((d) => d.month === selected && !d.future);
   const empty = !loading && data.every((d) => d.total === 0);
   return (
     <div className="shipment-summary-card ga-chart">
       <div className="ss-header-row">
         <h3>Shipment Summary of {year}</h3>
-        <select
-          className={dash.ssMonthSelect}
+        <CardDropdown
+          label="Highlight month"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          aria-label="Highlight month"
-        >
-          {data.map((d) => (
-            <option key={d.month} value={d.month}>
-              {MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: {d.total}
-            </option>
-          ))}
-        </select>
+          onChange={setSelected}
+          options={data.map((d) => ({
+            value: d.month,
+            label: `${MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: ${d.future ? '—' : d.total}`,
+            disabled: d.future,
+          }))}
+        />
       </div>
       <div className="ss-chart-wrap">
         <ChartState loading={loading} error={error} empty={empty} height={250}>
@@ -119,16 +131,33 @@ export function ShipmentSummaryCard({
               <AreaChart
                 data={data}
                 margin={{ top: 16, right: 16, bottom: 0, left: -12 }}
-                onClick={(e) =>
-                  e?.activeLabel &&
-                  setSelected(data.find((d) => d.label === e.activeLabel)?.month ?? selected)
-                }
+                onClick={(e) => {
+                  const hit = data.find((d) => d.label === e?.activeLabel);
+                  if (hit && !hit.future) setSelected(hit.month);
+                }}
               >
                 <defs>
                   <linearGradient id="ssAreaGlow" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.25} />
                     <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
                   </linearGradient>
+                  <pattern
+                    id="ssFutureHatch"
+                    width="8"
+                    height="8"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <line
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="8"
+                      stroke="var(--text-tertiary)"
+                      strokeOpacity={0.22}
+                      strokeWidth={2}
+                    />
+                  </pattern>
                 </defs>
                 <CartesianGrid
                   vertical={false}
@@ -139,18 +168,22 @@ export function ShipmentSummaryCard({
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  tick={(p: { x: number; y: number; payload: { value: string } }) => (
-                    <text
-                      x={p.x}
-                      y={p.y + 12}
-                      textAnchor="middle"
-                      fontSize={10}
-                      fontWeight={p.payload.value === sel?.label ? 800 : 700}
-                      fill={p.payload.value === sel?.label ? '#22D3EE' : 'var(--text-tertiary)'}
-                    >
-                      {p.payload.value}
-                    </text>
-                  )}
+                  tick={(p: { x: number; y: number; payload: { value: string } }) => {
+                    const future = data.find((d) => d.label === p.payload.value)?.future;
+                    return (
+                      <text
+                        x={p.x}
+                        y={p.y + 12}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fontWeight={p.payload.value === sel?.label ? 800 : 700}
+                        fill={p.payload.value === sel?.label ? '#22D3EE' : 'var(--text-tertiary)'}
+                        fillOpacity={future ? 0.45 : 1}
+                      >
+                        {p.payload.value}
+                      </text>
+                    );
+                  }}
                 />
                 <YAxis
                   allowDecimals={false}
@@ -163,6 +196,18 @@ export function ShipmentSummaryCard({
                   content={<SummaryTooltip year={year} />}
                   cursor={{ stroke: '#22D3EE', strokeDasharray: '2 3', strokeWidth: 1.5 }}
                 />
+                {firstFuture >= 0 && (
+                  <ReferenceArea
+                    x1={futureFrom}
+                    x2={data[data.length - 1]!.label}
+                    fill="url(#ssFutureHatch)"
+                    fillOpacity={1}
+                    stroke="var(--border-strong)"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    ifOverflow="extendDomain"
+                  />
+                )}
                 {sel && (
                   <ReferenceLine
                     x={sel.label}
@@ -174,13 +219,13 @@ export function ShipmentSummaryCard({
                       position: 'top',
                       fill: '#22D3EE',
                       fontSize: 11,
-                      fontWeight: 900,
+                      fontWeight: 700,
                     }}
                   />
                 )}
                 <Area
                   type="monotone"
-                  dataKey="total"
+                  dataKey="actual"
                   stroke="#22D3EE"
                   strokeWidth={3}
                   fill="url(#ssAreaGlow)"

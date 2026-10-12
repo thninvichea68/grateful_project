@@ -182,14 +182,14 @@ export function FollowUpPage() {
                 <td>{r.clientName ?? '-'}</td>
                 <td
                   style={
-                    r.overdue ? { color: 'var(--status-exception-fg)', fontWeight: 800 } : undefined
+                    r.overdue ? { color: 'var(--status-exception-fg)', fontWeight: 700 } : undefined
                   }
                 >
                   {dueLabel(r.dueAt)}
                   {r.overdue ? ' · overdue' : ''}
                 </td>
                 <td>
-                  <span style={{ color: PRIORITY_COLOR[r.priority], fontWeight: 800 }}>
+                  <span style={{ color: PRIORITY_COLOR[r.priority], fontWeight: 700 }}>
                     {r.priority[0]}
                     {r.priority.slice(1).toLowerCase()}
                   </span>

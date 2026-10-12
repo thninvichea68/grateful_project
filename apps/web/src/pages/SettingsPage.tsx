@@ -6,30 +6,28 @@ import {
   PORT_KINDS,
   companySchema,
   type CompanyInput,
-  type ExchangeRateSyncStatus,
   type LookupType,
   type SettingsBundle,
 } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useSettings } from '../features/admin';
 import { useLookups } from '../features/hooks';
-import { ErrorBanner, FieldError, TableState, ui } from '../components/ui';
+import { ErrorBanner, FieldError, ui } from '../components/ui';
 import { InlineName } from '../components/InlineName';
 import { MyProfile } from './settings/MyProfile';
-import { MefSyncStatus, RateImportModal, RateRow } from './settings/ExchangeRates';
+import { RatesTab } from './settings/RatesTab';
 import st from './SettingsPage.module.css';
 import r from './settings/ExchangeRates.module.css';
 import { icons } from '../layout/icons';
 import { useToast } from '../components/Toast';
 import { ApiError, api } from '../lib/api';
-import { fmtDate, fmtNum } from '../lib/format';
 import { queryKeys } from '../lib/queryKeys';
 import { formResolver } from '../lib/zodForm';
 
 const TABS = [
   ['profile', 'My profile'],
   ['company', 'Company'],
-  ['rates', 'Exchange rates'],
+  ['rates', 'Rates'],
   ['ports', 'Ports'],
   ['forwarders', 'Forwarders'],
   ['consignees', 'Consignees'],
@@ -43,6 +41,7 @@ const LIST_LABEL: Record<LookupType, string> = {
   BROKER: 'Brokers',
   DEPARTMENT: 'Departments',
   CHARGE: 'Charge descriptions',
+  CHARGE_UNIT: 'Charge units',
 };
 const INVALIDATE = [['settings'], queryKeys.lookups, ['meta', 'company']];
 
@@ -55,7 +54,8 @@ export function SettingsPage() {
   const canRead = can('settings:read');
   const [params, setParams] = useSearchParams();
   const tabs = canRead ? TABS : TABS.filter(([k]) => k === 'profile');
-  const asked = params.get('tab');
+  // "market" was the old Fuel & metals tab; it now lives under Rates.
+  const asked = params.get('tab') === 'market' ? 'rates' : params.get('tab');
   const tab: Tab = tabs.some(([k]) => k === asked)
     ? (asked as Tab)
     : canRead
@@ -102,7 +102,7 @@ function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
       {settings.data && (
         <>
           {tab === 'company' && <CompanyForm initial={settings.data.company} manage={manage} />}
-          {tab === 'rates' && <Rates manage={manage} />}
+          {tab === 'rates' && <RatesTab manage={manage} />}
           {tab === 'ports' && <Ports manage={manage} />}
           {tab === 'forwarders' && <SimpleList kind="forwarders" manage={manage} />}
           {tab === 'consignees' && <SimpleList kind="consignees" manage={manage} />}
@@ -200,134 +200,6 @@ function CompanyForm({ initial, manage }: { initial: CompanyInput; manage: boole
           )}
         </fieldset>
       </form>
-    </Card>
-  );
-}
-
-function Rates({ manage }: { manage: boolean }) {
-  const s = useSettings().data!;
-  const toast = useToast();
-  const [date, setDate] = useState(
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()),
-  );
-  const [rate, setRate] = useState('');
-  const [importing, setImporting] = useState(false);
-  const add = useApiMutation(
-    () =>
-      api('/settings/exchange-rates', {
-        method: 'POST',
-        json: { effectiveDate: date, usdToKhr: rate },
-      }),
-    INVALIDATE,
-  );
-  const base = useApiMutation(
-    (value: string) => api('/settings/base-exchange-rate', { method: 'PUT', json: { value } }),
-    INVALIDATE,
-  );
-  const sync = useApiMutation(
-    () => api<ExchangeRateSyncStatus>('/settings/exchange-rates/sync', { method: 'POST' }),
-    INVALIDATE,
-  );
-  return (
-    <Card
-      title="USD → KHR exchange rates"
-      sub={`New ledger rows use the rate in force on their invoice date. Before the first rate, the base rate (${fmtNum(s.baseExchangeRate)}) is used.`}
-      action={
-        manage ? (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              className="filter-btn"
-              disabled={sync.isPending}
-              onClick={() =>
-                void sync
-                  .mutateAsync(undefined)
-                  .then((r) =>
-                    toast(
-                      r.result === 'same'
-                        ? `Already up to date: ${fmtNum(r.usdToKhr)} KHR for ${fmtDate(r.effectiveDate)}.`
-                        : `Official rate ${r.result === 'new' ? 'added' : 'updated'}: ${fmtNum(r.usdToKhr)} KHR for ${fmtDate(r.effectiveDate)}.`,
-                    ),
-                  )
-              }
-            >
-              {sync.isPending ? 'Updating…' : 'Update from MEF'}
-            </button>
-            <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
-              Import Excel
-            </button>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => {
-                const v = window.prompt('Base rate (1 USD = ? KHR)', String(s.baseExchangeRate));
-                if (v) void base.mutateAsync(v).then(() => toast('Base rate saved.'));
-              }}
-            >
-              Set base rate
-            </button>
-          </div>
-        ) : undefined
-      }
-    >
-      {importing && <RateImportModal onClose={() => setImporting(false)} />}
-      <MefSyncStatus status={s.exchangeRateSync} auto={s.exchangeRateAutoSync} />
-      <ErrorBanner error={add.error ?? base.error ?? sync.error} />
-      {manage && (
-        <div className={ui.toolbar} style={{ marginBottom: 14 }}>
-          <input
-            type="date"
-            className={ui.input}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            aria-label="Effective from"
-          />
-          <input
-            className={ui.input}
-            inputMode="decimal"
-            placeholder="e.g. 4026"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            aria-label="KHR per USD"
-          />
-          <button
-            type="button"
-            className="new-shipment-btn"
-            disabled={!rate || add.isPending}
-            onClick={() =>
-              void add.mutateAsync(undefined).then(() => {
-                setRate('');
-                toast('Rate saved.');
-              })
-            }
-          >
-            Add rate
-          </button>
-        </div>
-      )}
-      <div className={st.tableScroll}>
-        <table className="data-table-clean">
-          <thead>
-            <tr>
-              <th>Effective from</th>
-              <th>1 USD =</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            <TableState
-              cols={3}
-              loading={false}
-              error={null}
-              empty={!s.exchangeRates.length}
-              emptyText="No dated rates yet."
-            />
-            {s.exchangeRates.map((r) => (
-              <RateRow key={r.id} rate={r} manage={manage} />
-            ))}
-          </tbody>
-        </table>
-      </div>
     </Card>
   );
 }

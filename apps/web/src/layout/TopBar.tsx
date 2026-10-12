@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { icons } from './icons';
 import { AskAi } from './AskAi';
 import { LiveClock } from './LiveClock';
+import { LiveMonthPill } from './LiveMonthPill';
 import { useNavCounts } from './useNavCounts';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 
 export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { can } = useAuth();
   const counts = useNavCounts();
   const [q, setQ] = useState('');
@@ -41,6 +43,7 @@ export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
         <h1 className="page-title" id="pageTitle">
           {title}
         </h1>
+        {pathname.startsWith('/overview') && <LiveMonthPill />}
       </div>
 
       <div className="topbar-right">

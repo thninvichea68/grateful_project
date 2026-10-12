@@ -39,7 +39,13 @@ import { audit } from '../../lib/audit';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
-import { formatNumber, nextNumber } from '../../lib/numbering';
+import {
+  formatNumber,
+  highestNumber,
+  nextNumber,
+  nextNumberAtLeast,
+  regexLiteral,
+} from '../../lib/numbering';
 import { insertLedger, recompute } from './ledger';
 
 type Row = Record<string, unknown>;
@@ -78,11 +84,19 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'invoice_date',
     billToSql: 'customer_name_en',
     kind: 'tax',
-    allocate: async (tx, date) =>
-      formatNumber.taxInvoice(
-        date.slice(2, 4),
-        await nextNumber(tx, `TAX_INVOICE:${date.slice(0, 4)}`),
-      ),
+    allocate: async (tx, date) => {
+      const yy = date.slice(2, 4);
+      // Past numbers typed into the ledger (from the Excel days) are never handed out again.
+      const used = await highestNumber(
+        tx,
+        sql`SELECT invoice_no FROM tax_invoices UNION ALL SELECT inv_no FROM accounting_records`,
+        `^GS${yy}-(\\d{1,9})$`,
+      );
+      return formatNumber.taxInvoice(
+        yy,
+        await nextNumberAtLeast(tx, `TAX_INVOICE:${date.slice(0, 4)}`, used + 1),
+      );
+    },
     ledger: { numberCol: 'invNo', totalCol: 'invRevenue' },
   },
   disbursements: {
@@ -96,7 +110,14 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'dis_date',
     billToSql: 'customer_name_en',
     kind: 'khr',
-    allocate: async (tx) => formatNumber.disbursement(await nextNumber(tx, 'DISBURSEMENT')),
+    allocate: async (tx) => {
+      const used = await highestNumber(
+        tx,
+        sql`SELECT dis_no FROM disbursements UNION ALL SELECT dis_no FROM accounting_records`,
+        '^DIS(\\d{1,9})$',
+      );
+      return formatNumber.disbursement(await nextNumberAtLeast(tx, 'DISBURSEMENT', used + 1));
+    },
     ledger: { numberCol: 'disNo', totalCol: 'disTotal' },
   },
   'debit-notes': {
@@ -112,7 +133,16 @@ const CONFIG: Record<BillingDocType, Config> = {
     kind: 'plain',
     allocate: async (tx, date, code) => {
       const yymm = date.slice(2, 4) + date.slice(5, 7);
-      return formatNumber.debitNote(code, yymm, await nextNumber(tx, `DEBIT_NOTE:${code}:${yymm}`));
+      const used = await highestNumber(
+        tx,
+        sql`SELECT dn_no FROM debit_notes UNION ALL SELECT dn_no FROM accounting_records`,
+        `^${regexLiteral(code.toUpperCase())}${yymm}(\\d{3})$`,
+      );
+      return formatNumber.debitNote(
+        code,
+        yymm,
+        await nextNumberAtLeast(tx, `DEBIT_NOTE:${code}:${yymm}`, used + 1),
+      );
     },
     ledger: { numberCol: 'dnNo', totalCol: 'dnTotal' },
   },

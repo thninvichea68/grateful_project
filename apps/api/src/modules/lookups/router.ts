@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asc, eq, isNull } from 'drizzle-orm';
 import {
   LOOKUP_TYPES,
@@ -121,3 +122,38 @@ lookupsRouter.post('/forwarders', requirePermission('shipments:write'), async (r
   });
   res.status(201).json({ id: row.id, code: row.code, name: row.name });
 });
+
+/**
+ * "+ Add New" in a credit note line's dropdowns: adds a charge description (Charge descriptions)
+ * or a unit (Charge units) to its list in Settings → Dropdown lists. Stored in capitals; one
+ * that already exists is returned as is.
+ */
+const quickAdd = (type: 'CHARGE' | 'CHARGE_UNIT', min: number, max: number) =>
+  lookupsRouter.post(
+    type === 'CHARGE' ? '/charges' : '/charge-units',
+    requirePermission('creditnotes:write'),
+    async (req, res) => {
+      const { label } = parse(
+        z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
+        req.body,
+      );
+      const value = label.toUpperCase();
+      const row = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(lookupValues)
+          .values({ type, value, label: value, sortOrder: 999 })
+          .onConflictDoNothing()
+          .returning();
+        if (!created) return null;
+        await audit(
+          tx,
+          { action: 'CREATE', entity: 'lookup_value', entityId: created.id, after: created },
+          req,
+        );
+        return created;
+      });
+      res.status(row ? 201 : 200).json({ value, label: value });
+    },
+  );
+quickAdd('CHARGE', 2, 200);
+quickAdd('CHARGE_UNIT', 1, 20);

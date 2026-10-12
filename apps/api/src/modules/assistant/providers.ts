@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ApiError as GeminiApiError, GoogleGenAI } from '@google/genai';
 import { env } from '../../config/env';
+import type { Attachment } from './attachments';
 
 export interface ChatInput {
   system: string;
   /** Per-request context (role, permissions, page) — kept apart so the system prompt caches. */
   userContext: string;
-  messages: { role: 'user' | 'assistant'; content: string }[];
+  messages: { role: 'user' | 'assistant'; content: string; attachments?: Attachment[] }[];
   signal: AbortSignal;
   onText: (text: string) => void;
 }
@@ -16,6 +17,13 @@ type Provider = (input: ChatInput) => Promise<ChatOutcome>;
 
 /** An error whose message is safe to show to the user. */
 export class AssistantError extends Error {}
+
+/** A Word / Excel file's extracted text, labelled so the model knows which file it is. */
+const fileText = (a: Extract<Attachment, { kind: 'text' }>) =>
+  `Attached file "${a.name}" (its text content):
+<file name="${a.name}">
+${a.text}
+</file>`;
 
 const BUSY = 'The assistant is busy or has reached its usage limit. Wait a moment and try again.';
 const badKey = (name: string) =>
@@ -36,7 +44,38 @@ function anthropicProvider(apiKey: string): Provider {
           { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
           { type: 'text', text: userContext },
         ],
-        messages,
+        messages: messages.map((m) =>
+          m.attachments?.length
+            ? {
+                role: m.role,
+                content: [
+                  ...m.attachments.map((a) =>
+                    a.kind === 'image'
+                      ? {
+                          type: 'image' as const,
+                          source: {
+                            type: 'base64' as const,
+                            media_type: a.mimeType as 'image/png',
+                            data: a.data.toString('base64'),
+                          },
+                        }
+                      : a.kind === 'pdf'
+                        ? {
+                            type: 'document' as const,
+                            title: a.name,
+                            source: {
+                              type: 'base64' as const,
+                              media_type: 'application/pdf' as const,
+                              data: a.data.toString('base64'),
+                            },
+                          }
+                        : { type: 'text' as const, text: fileText(a) },
+                  ),
+                  { type: 'text' as const, text: m.content },
+                ],
+              }
+            : { role: m.role, content: m.content },
+        ),
       },
       { signal },
     );
@@ -75,7 +114,14 @@ function geminiProvider(apiKey: string): Provider {
   return async ({ system, userContext, messages, signal, onText }) => {
     const contents = messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
+      parts: [
+        ...(m.attachments ?? []).map((a) =>
+          a.kind === 'text'
+            ? { text: fileText(a) }
+            : { inlineData: { mimeType: a.mimeType, data: a.data.toString('base64') } },
+        ),
+        { text: m.content },
+      ],
     }));
     for (let i = 0; ; i++) {
       const { model, delay } = attempts[i]!;

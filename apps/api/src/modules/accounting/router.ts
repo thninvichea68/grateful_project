@@ -6,6 +6,11 @@ import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
   billingDocListQuerySchema,
+  billingDraftsInputSchema,
+  billingIssueInputSchema,
+  billingMonthQuerySchema,
+  receiptInputSchema,
+  receiptListQuerySchema,
   creditNoteListQuerySchema,
   creditNoteReviewInputSchema,
   creditNoteReviewQuerySchema,
@@ -20,7 +25,8 @@ import { notFound } from '../../lib/errors';
 import { attachmentName } from '../../lib/http';
 import * as ledger from './ledger';
 import * as docs from './docs';
-import { creditNotePrefill, prefill } from './prefill';
+import * as billing from './billing';
+import { clientPrefill, creditNotePrefill, prefill } from './prefill';
 import {
   allowedClients,
   assertClientAllowed,
@@ -29,6 +35,8 @@ import {
 } from '../../lib/clientScope';
 
 const idParam = z.object({ id: z.string().uuid('Invalid id') });
+const clientParam = z.object({ clientId: z.string().uuid('Invalid client') });
+const receiptParam = z.object({ receiptId: z.string().uuid('Invalid receipt') });
 const typeParam = z.object({
   type: z.enum(BILLING_DOC_TYPES, { message: 'Unknown document type' }),
 });
@@ -233,6 +241,77 @@ accountingRouter.post('/credit-notes/inbox/read', async (req, res) => {
   res.status(204).end();
 });
 
+/* ---------- Client Billing: a client's month (documents, statements, receipts) ---------- */
+accountingRouter.get('/billing', async (req, res) => {
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.overview(month, scopeClients(req)));
+});
+accountingRouter.get('/billing/:clientId', async (req, res) => {
+  const { clientId } = parse(clientParam, req.params);
+  assertClientVisible(req, clientId, 'Client');
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.clientMonth(clientId, month));
+});
+/** Everything to print the month's pack: issued documents in full, statements, receipts. */
+accountingRouter.get('/billing/:clientId/pack', async (req, res) => {
+  const { clientId } = parse(clientParam, req.params);
+  assertClientVisible(req, clientId, 'Client');
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.pack(clientId, month));
+});
+accountingRouter.post(
+  '/billing/:clientId/drafts',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientParam, req.params);
+    assertClientAllowed(req, clientId);
+    const input = parse(billingDraftsInputSchema, req.body);
+    res.status(201).json(await billing.createDrafts(clientId, input, req));
+  },
+);
+accountingRouter.post(
+  '/billing/:clientId/issue',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientParam, req.params);
+    assertClientAllowed(req, clientId);
+    const { month } = parse(billingIssueInputSchema, req.body);
+    res.json(await billing.issueDrafts(clientId, month, req));
+  },
+);
+
+/* ---------- Official receipts (payments against the account statements) ---------- */
+accountingRouter.get('/receipts', async (req, res) => {
+  const q = parse(receiptListQuerySchema, req.query);
+  if (q.clientId) assertClientAllowed(req, q.clientId);
+  res.json(await billing.listReceipts({ ...q, clientIds: scopeClients(req) }));
+});
+accountingRouter.post('/receipts', requirePermission('accounting:write'), async (req, res) => {
+  const input = parse(receiptInputSchema, req.body);
+  assertClientAllowed(req, input.clientId);
+  const id = await billing.createReceipt(input, req);
+  res.status(201).json(await billing.getReceipt(id));
+});
+accountingRouter.get('/receipts/:receiptId', async (req, res) => {
+  const receipt = await billing.getReceipt(parse(receiptParam, req.params).receiptId);
+  assertClientVisible(req, receipt.clientId, 'Official receipt');
+  res.json(receipt);
+});
+accountingRouter.post(
+  '/receipts/:receiptId/void',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { receiptId } = parse(receiptParam, req.params);
+    const { reason } = parse(
+      z.object({ reason: z.string().trim().min(3, 'Give a reason for voiding').max(300) }),
+      req.body,
+    );
+    assertClientVisible(req, (await billing.getReceipt(receiptId)).clientId, 'Official receipt');
+    await billing.voidReceipt(receiptId, reason, req);
+    res.json(await billing.getReceipt(receiptId));
+  },
+);
+
 /* ---------- Billing documents (one set of routes for all five types) ---------- */
 accountingRouter.get('/docs/:type', async (req, res) => {
   const { type } = parse(typeParam, req.params);
@@ -253,6 +332,18 @@ accountingRouter.get('/docs/:type/prefill', async (req, res) => {
     const draft = await creditNotePrefill(declarationId);
     assertClientVisible(req, draft.clientId as string, 'Declaration');
     return void res.json(draft);
+  }
+  // A document of no shipment (e.g. a monthly service-fee debit note): from the client.
+  if (typeof req.query.clientId === 'string' && !req.query.recordId) {
+    const { clientId, date } = parse(
+      z.object({
+        clientId: z.string().uuid('Choose a client'),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+      }),
+      req.query,
+    );
+    assertClientVisible(req, clientId, 'Client');
+    return void res.json(await clientPrefill(type, clientId, date));
   }
   const { recordId } = parse(
     z.object({ recordId: z.string().uuid('Choose a ledger entry') }),

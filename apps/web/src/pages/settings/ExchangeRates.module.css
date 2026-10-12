@@ -51,38 +51,6 @@
   width: 120px;
 }
 
-/* MEF auto-update status line */
-.sync {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -6px 0 14px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-.sync strong {
-  color: var(--text-secondary);
-}
-.sync a {
-  color: var(--accent-primary);
-  font-weight: 700;
-}
-.syncDot {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--status-completed-fg);
-  box-shadow: 0 0 0 3px var(--status-completed-bg);
-}
-.sync[data-tone='error'] {
-  color: var(--status-exception-fg);
-}
-.sync[data-tone='error'] .syncDot {
-  background: var(--status-exception-fg);
-  box-shadow: 0 0 0 3px var(--status-exception-bg);
-}
-
 /* Import preview */
 .preview {
   margin-top: 16px;

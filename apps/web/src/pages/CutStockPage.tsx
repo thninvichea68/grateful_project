@@ -205,7 +205,7 @@ export function CutStockPage() {
                   <td>{fmtNum(r.importedNw, 2)}</td>
                   <td
                     style={{
-                      fontWeight: 800,
+                      fontWeight: 700,
                       color:
                         Number(r.balance) < 0
                           ? 'var(--status-exception-fg)'
@@ -215,7 +215,7 @@ export function CutStockPage() {
                     {fmtNum(r.balance)}
                   </td>
                   <td>{fmtPct(r.balancePct)}</td>
-                  <td style={{ fontWeight: 800, ...COND_STYLE[r.condition] }}>{r.condition}</td>
+                  <td style={{ fontWeight: 700, ...COND_STYLE[r.condition] }}>{r.condition}</td>
                   <td>{r.declareRef}</td>
                 </tr>
               ))}

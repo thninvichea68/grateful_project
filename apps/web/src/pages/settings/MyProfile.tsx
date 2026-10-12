@@ -8,17 +8,9 @@ import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import { formResolver } from '../../lib/zodForm';
 import s from './MyProfile.module.css';
+import { initials } from '../../components/Avatar';
 
 const SIZE = 320; // px; pictures are cropped square and resized before upload
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
 /** Centre-crop to a square and shrink, so every avatar is small and looks the same. */
 async function squareImage(file: File): Promise<Blob> {

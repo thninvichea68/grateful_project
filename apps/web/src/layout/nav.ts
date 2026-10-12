@@ -48,7 +48,7 @@ export const NAV: NavGroup[] = [
       {
         to: '/analytics',
         label: 'Analytics',
-        title: 'Analytics',
+        title: 'Analytics — Full Operations Breakdown',
         icon: 'analytics',
         permission: 'dashboard:read',
       },

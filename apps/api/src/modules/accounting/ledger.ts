@@ -3,6 +3,7 @@ import {
   computeLedger,
   nextBusinessDay,
   toMoneyString,
+  type CreditNoteDeclaration,
   type DeclarationOption,
   type LedgerRow,
   type LedgerSummary,
@@ -158,17 +159,24 @@ export async function declarationOptions(
 export async function creditNoteDeclarations(
   q: string | undefined,
   clientIds?: string[],
-): Promise<(DeclarationOption & { creditNoteNo: string | null })[]> {
+): Promise<CreditNoteDeclaration[]> {
   const like = q ? likePattern(q) : null;
   const scoped = clientCondition(sql`s.client_id`, clientIds);
   return queryRows(
     db,
     sql`
     SELECT d.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", s.reference AS "shipmentReference",
-           c.id AS "clientId", c.code AS "clientCode", s.direction,
+           c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", s.direction,
+           s.transport_mode AS "transportMode", s.load_type AS "loadType", p.short_name AS "portName", s.hbl_no AS "hblNo",
+           (SELECT container_no FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerNo",
+           (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
+           (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
+           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS "grossWeightKg",
+           coalesce((SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS cbm,
            (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
-    WHERE true ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
+    LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id)
+    WHERE true ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like} OR c.name ILIKE ${like} OR s.hbl_no ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 40`,
   );
 }

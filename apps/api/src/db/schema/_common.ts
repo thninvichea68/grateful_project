@@ -11,6 +11,8 @@ import {
   CUT_STOCK_CATEGORIES,
   CHEA_STATUSES,
   BILLING_DOC_STATUSES,
+  STATEMENT_KINDS,
+  PAYMENT_METHODS,
   QUOTATION_STATUSES,
   DOCUMENT_CATEGORIES,
   FOLLOW_UP_PRIORITIES,
@@ -36,6 +38,8 @@ export const clientStatusEnum = pgEnum('client_status', CLIENT_STATUSES);
 export const cutStockCategoryEnum = pgEnum('cut_stock_category', CUT_STOCK_CATEGORIES);
 export const cheaStatusEnum = pgEnum('chea_status', CHEA_STATUSES);
 export const billingDocStatusEnum = pgEnum('billing_doc_status', BILLING_DOC_STATUSES);
+export const statementKindEnum = pgEnum('statement_kind', STATEMENT_KINDS);
+export const paymentMethodEnum = pgEnum('payment_method', PAYMENT_METHODS);
 export const quotationStatusEnum = pgEnum('quotation_status', QUOTATION_STATUSES);
 export const documentCategoryEnum = pgEnum('document_category', DOCUMENT_CATEGORIES);
 export const followUpPriorityEnum = pgEnum('follow_up_priority', FOLLOW_UP_PRIORITIES);

@@ -55,6 +55,24 @@ const envSchema = z.object({
     .string()
     .url()
     .default('https://data.mef.gov.kh/api/v1/realtime-api/exchange-rate?currency_id=USD'),
+  /** Fetch Ministry of Commerce retail fuel prices from the MEF open-data API on a schedule. */
+  FUEL_PRICE_SYNC: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  FUEL_PRICE_API_URL: z
+    .string()
+    .url()
+    .default(
+      'https://data.mef.gov.kh/api/v1/public-datasets/pd_681d89b4dbc953000126f5e7/json?page=1&page_size=30',
+    ),
+  /** Fetch gold / silver / platinum spot prices (gold-api.com, free, no key) on a schedule. */
+  METAL_PRICE_SYNC: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** Base URL; the metal symbol is appended (…/price/XAU). */
+  METAL_PRICE_API_URL: z.string().url().default('https://api.gold-api.com/price'),
 });
 
 export type Env = z.infer<typeof envSchema>;

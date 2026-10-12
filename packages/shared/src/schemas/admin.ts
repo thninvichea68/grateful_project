@@ -68,6 +68,8 @@ export interface StaffMember {
   id: string;
   email: string;
   fullName: string;
+  /** Profile picture URL (set in My profile), or null to show initials. */
+  avatarUrl: string | null;
   role: RoleCode;
   jobTitle: string | null;
   department: string | null;
@@ -341,6 +343,79 @@ export interface ExchangeRateSyncStatus {
   result?: 'new' | 'changed' | 'same';
   error?: string;
 }
+
+/* ---------- Fuel & precious-metal prices (Settings → Rates) ---------- */
+
+/** Last automatic or manual fetch of fuel or metal prices. */
+export interface MarketSyncStatus {
+  at: string; // ISO timestamp of the attempt
+  trigger: 'auto' | 'manual';
+  ok: boolean;
+  /** Rows the fetch added / changed (0 + 0 = already up to date). */
+  added?: number;
+  updated?: number;
+  error?: string;
+}
+
+export const METAL_SYMBOLS = ['XAU', 'XAG', 'XPT'] as const;
+export type MetalSymbol = (typeof METAL_SYMBOLS)[number];
+export const METAL_LABEL: Record<MetalSymbol, string> = {
+  XAU: 'Gold',
+  XAG: 'Silver',
+  XPT: 'Platinum',
+};
+/** Grams per troy ounce, and the Cambodian gold weights (1 chi = 3.75 g, 1 damlung = 10 chi). */
+export const GRAMS_PER_TROY_OZ = 31.1034768;
+export const GRAMS_PER_CHI = 3.75;
+export const GRAMS_PER_DAMLUNG = 37.5;
+
+/** Retail fuel price ceiling set by the Ministry of Commerce, in riel per litre. */
+export interface FuelPriceRow {
+  id: string;
+  startDate: string;
+  endDate: string | null;
+  gasoline92: string;
+  gasoil: string;
+  sourceLink: string | null;
+  source: 'MEF' | 'manual';
+}
+
+export interface MetalQuote {
+  symbol: MetalSymbol;
+  /** Latest international spot price (USD per troy ounce) and the day before it, if known. */
+  latest: { usdPerOz: string; priceDate: string; fetchedAt: string } | null;
+  previous: { usdPerOz: string; priceDate: string } | null;
+}
+
+export interface MarketPrices {
+  /** Newest period first. */
+  fuel: FuelPriceRow[];
+  fuelSync: MarketSyncStatus | null;
+  /** False when the server has automatic updates turned off (FUEL_PRICE_SYNC=false). */
+  fuelAutoSync: boolean;
+  metals: MetalQuote[];
+  metalSync: MarketSyncStatus | null;
+  metalAutoSync: boolean;
+  /** Latest dated USD→KHR rate, for showing metal prices in riel. */
+  usdToKhr: string | null;
+}
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date');
+export const fuelPriceInputSchema = z
+  .object({
+    startDate: isoDate,
+    endDate: isoDate
+      .nullish()
+      .or(z.literal(''))
+      .transform((v) => v || null),
+    gasoline92: decimal(0, { min: 1, allowEmpty: false }),
+    gasoil: decimal(0, { min: 1, allowEmpty: false }),
+  })
+  .refine((v) => !v.endDate || v.endDate >= v.startDate, {
+    message: 'The end date is before the start date',
+    path: ['endDate'],
+  });
+export type FuelPriceInput = z.input<typeof fuelPriceInputSchema>;
 
 export interface SettingsBundle {
   company: CompanyInput;

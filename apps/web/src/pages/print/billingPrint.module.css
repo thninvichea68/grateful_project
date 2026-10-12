@@ -1,0 +1,297 @@
+/* Client Billing prints: the month pack (several A4 sheets), account statements, official
+   receipts (A5 landscape, two to an A4 sheet) and the handover checklist. Black on white. */
+
+.toolbar {
+  max-width: 210mm;
+  margin: 0 auto 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  justify-content: space-between;
+  font-family: 'Helvetica', Arial, sans-serif;
+}
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+.toggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.toggles input {
+  accent-color: #0891b2;
+}
+.buttons {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.pack > * + * {
+  margin-top: 18px;
+}
+.hint {
+  max-width: 210mm;
+  margin: 0 auto 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fef3c7;
+  color: #92400e;
+  font:
+    700 12.5px/1.5 'Helvetica',
+    Arial,
+    sans-serif;
+}
+
+/* ---------- Account statement ---------- */
+.stTitle {
+  text-align: center;
+  margin: 18px 0 2px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.stPeriod {
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+.billTo {
+  margin-bottom: 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.billTo b {
+  display: block;
+  font-size: 12.5px;
+}
+.stTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.stTable th,
+.stTable td {
+  border: 1px solid #6b7280;
+  padding: 6px 8px;
+}
+.stTable th {
+  background: #f3f4f6;
+  font-weight: 700;
+  text-align: center;
+}
+.stTable td {
+  white-space: nowrap;
+}
+.balanceRow td {
+  font-weight: 700;
+  background: #f3f4f6;
+}
+.lessRow td {
+  font-weight: 600;
+}
+.r {
+  text-align: right;
+}
+.c {
+  text-align: center;
+}
+
+/* ---------- Official receipt: A5 landscape blocks, two per A4 sheet ---------- */
+.receiptSheet {
+  padding: 0 !important;
+}
+.receipt {
+  position: relative;
+  height: 148mm;
+  padding: 10mm 14mm 8mm;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  overflow: hidden;
+}
+.receipt + .receipt {
+  border-top: 1px dashed #9ca3af;
+}
+.rcHead {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.rcHead img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+.rcCompany {
+  flex: 1;
+}
+.rcCompany b {
+  display: block;
+  font-size: 16px;
+  letter-spacing: 0.3px;
+}
+.rcCompany span {
+  font-size: 10px;
+  color: #374151;
+}
+.rcNo {
+  text-align: right;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.rcNo b {
+  font-size: 13px;
+}
+/* Receipt number line on a receipt printed before payment (written in by hand). */
+.blank {
+  display: inline-block;
+  width: 26mm;
+  border-bottom: 1px solid #111827;
+}
+.rcTitle {
+  margin: 10px 0 12px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.rcRows {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 10px;
+  align-items: baseline;
+}
+.rcRows dt {
+  font-weight: 700;
+}
+.rcRows dt::after {
+  content: ' :';
+}
+.rcRows dd {
+  margin: 0;
+  padding-bottom: 3px;
+  border-bottom: 1px dotted #9ca3af;
+}
+.rcAmount {
+  font-size: 14px;
+  font-weight: 700;
+}
+.rcMethods {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.box {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-right: 5px;
+  border: 1px solid #111827;
+  vertical-align: -1px;
+  text-align: center;
+  font-size: 9px;
+  line-height: 10px;
+  font-weight: 700;
+}
+.rcSign {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+.rcSign div {
+  width: 62mm;
+  text-align: center;
+  font-size: 11px;
+}
+.rcSign .line {
+  height: 18mm;
+  border-bottom: 1px solid #111827;
+  margin-bottom: 4px;
+}
+.void {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  font-size: 80px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  color: rgba(220, 38, 38, 0.16);
+  pointer-events: none;
+}
+
+/* ---------- Handover checklist ---------- */
+.clMeta {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 20px;
+  margin: 6px 0 18px;
+  font-size: 12.5px;
+}
+.clMeta b {
+  font-weight: 700;
+}
+.clSubject {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  font-weight: 700;
+}
+.clTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.clTable th,
+.clTable td {
+  border: 1px solid #6b7280;
+  padding: 6px 8px;
+}
+.clTable th {
+  background: #fde68a;
+  font-weight: 700;
+  text-align: center;
+}
+.clTotal {
+  margin-top: 10px;
+  font-weight: 700;
+}
+.clSigns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-top: 40px;
+  font-size: 11.5px;
+  line-height: 2.2;
+}
+.clSigns b {
+  display: block;
+  font-weight: 700;
+}
+.blank {
+  display: inline-block;
+  min-width: 55mm;
+  border-bottom: 1px solid #111827;
+}
+
+@media print {
+  .toolbar,
+  .hint {
+    display: none;
+  }
+  .pack > * + * {
+    margin-top: 0;
+    break-before: page;
+  }
+  /* Each sheet is exactly one page: no forced height, so nothing spills onto a blank page. */
+  .pack > * {
+    min-height: 0 !important;
+  }
+}

@@ -94,7 +94,7 @@
 }
 .value {
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -1.2px;
   line-height: 1;
   color: var(--text-primary);
@@ -114,7 +114,7 @@
   padding: 2px 7px;
   border-radius: 999px;
   font-size: 11.5px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--status-completed-fg);
   background: var(--status-completed-bg);
 }
@@ -252,7 +252,7 @@
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }

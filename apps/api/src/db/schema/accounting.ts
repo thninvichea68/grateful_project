@@ -25,6 +25,8 @@ import {
   containerSizeEnum,
   creditNoteRefTypeEnum,
   creditNoteReviewEnum,
+  statementKindEnum,
+  paymentMethodEnum,
 } from './_common';
 import { users } from './auth';
 import { clients, ports, forwarders } from './reference';
@@ -272,6 +274,38 @@ export const recordSummaryLines = pgTable(
   (t) => [
     index('record_summary_lines_doc_idx').on(t.recordSummaryId),
     check('record_summary_lines_qty', sql`qty >= 0`),
+  ],
+);
+
+/**
+ * Official receipt: a client's payment against one of its monthly account statements
+ * (tax invoices + disbursements, or debit notes). Issued when saved; void keeps the number.
+ * The statements themselves are not stored: they are read from the month's documents.
+ */
+export const officialReceipts = pgTable(
+  'official_receipts',
+  {
+    id: id(),
+    receiptNo: text('receipt_no').notNull().unique(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'restrict' }),
+    /** First day of the statement month the payment is for. */
+    periodMonth: date('period_month').notNull(),
+    kind: statementKindEnum('kind').notNull(),
+    receiptDate: date('receipt_date').notNull(),
+    amount: money('amount').notNull(),
+    paymentMethod: paymentMethodEnum('payment_method').notNull(),
+    paymentRef: text('payment_ref'),
+    note: text('note'),
+    status: billingDocStatusEnum('status').notNull().default('ISSUED'),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    index('official_receipts_client_period_idx').on(t.clientId, t.periodMonth),
+    index('official_receipts_date_idx').on(t.receiptDate),
+    check('official_receipts_amount_positive', sql`amount > 0`),
   ],
 );
 

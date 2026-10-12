@@ -56,6 +56,21 @@ const DocsListPage = lazy(() =>
 const DocEditorPage = lazy(() =>
   import('./pages/accounting/DocEditorPage').then((m) => ({ default: m.DocEditorPage })),
 );
+const BillingPage = lazy(() =>
+  import('./pages/accounting/BillingPage').then((m) => ({ default: m.BillingPage })),
+);
+const BillingClientPage = lazy(() =>
+  import('./pages/accounting/BillingClientPage').then((m) => ({ default: m.BillingClientPage })),
+);
+const ReceiptsPage = lazy(() =>
+  import('./pages/accounting/ReceiptsPage').then((m) => ({ default: m.ReceiptsPage })),
+);
+const PrintPackPage = lazy(() =>
+  import('./pages/print/PrintBillingPage').then((m) => ({ default: m.PrintPackPage })),
+);
+const PrintReceiptPage = lazy(() =>
+  import('./pages/print/PrintBillingPage').then((m) => ({ default: m.PrintReceiptPage })),
+);
 const CreditNotesReview = lazy(() =>
   import('./pages/accounting/CreditNotesReview').then((m) => ({ default: m.CreditNotesReview })),
 );
@@ -147,6 +162,31 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    // A client's month pack (documents, statements, receipts, checklist) for printing.
+    path: '/print/billing/:clientId',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="accounting:read">
+          <Suspense fallback={null}>
+            <PrintPackPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
+    path: '/print/receipts/:id',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="accounting:read">
+          <Suspense fallback={null}>
+            <PrintReceiptPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
     // Printable documents: full page, no sidebar.
     path: '/print/:type/:id',
     element: (
@@ -183,6 +223,30 @@ export const router = createBrowserRouter([
             element: (
               <Suspense fallback={null}>
                 <LedgerPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'billing',
+            element: (
+              <Suspense fallback={null}>
+                <BillingPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'billing/:clientId',
+            element: (
+              <Suspense fallback={null}>
+                <BillingClientPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'receipts',
+            element: (
+              <Suspense fallback={null}>
+                <ReceiptsPage />
               </Suspense>
             ),
           },

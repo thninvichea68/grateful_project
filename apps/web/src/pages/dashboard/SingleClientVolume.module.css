@@ -36,7 +36,7 @@
 }
 .total {
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -1.2px;
   line-height: 1;
   color: var(--text-primary);
@@ -69,7 +69,7 @@
   border-radius: 2px;
 }
 .legend b {
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
@@ -130,7 +130,7 @@
 }
 .stats b {
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }

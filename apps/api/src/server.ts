@@ -3,16 +3,19 @@ import { env } from './config/env';
 import { logger } from './lib/logger';
 import { pool } from './db/client';
 import { startExchangeRateSync } from './modules/settings/rateSync';
+import { startMarketSync } from './modules/settings/marketSync';
 
 const app = createApp();
 const server = app.listen(env.PORT, () => {
   logger.info(`API listening on http://localhost:${env.PORT}  (docs: /api/docs)`);
 });
 const stopRateSync = startExchangeRateSync();
+const stopMarketSync = startMarketSync();
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down');
   stopRateSync();
+  stopMarketSync();
   server.close(() => {
     void pool.end().finally(() => process.exit(0));
   });

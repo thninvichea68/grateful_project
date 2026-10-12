@@ -18,7 +18,7 @@ import { queryRows, isoTs } from '../../lib/listing';
 import { hashToken } from '../auth/tokens';
 
 const SELECT = sql`
-  SELECT u.id, u.email, u.full_name AS "fullName", r.code AS role, p.job_title AS "jobTitle", p.department, p.phone,
+  SELECT u.id, u.email, u.full_name AS "fullName", u.avatar_url AS "avatarUrl", r.code AS role, p.job_title AS "jobTitle", p.department, p.phone,
          coalesce(p.status, 'ACTIVE') AS status, u.is_active AS "isActive",
          u.permissions_add AS "permissionsAdd", u.permissions_remove AS "permissionsRemove", u.client_ids AS "clientIds", ${isoTs('u.last_login_at')} AS "lastLoginAt", ${isoTs('u.created_at')} AS "createdAt"
   FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff_profiles p ON p.user_id = u.id`;

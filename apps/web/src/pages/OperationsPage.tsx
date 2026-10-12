@@ -151,7 +151,7 @@ export function OperationsPage() {
                     {r.ledgerId ? (
                       (r.invNo ?? 'Entered')
                     ) : (
-                      <span style={{ color: 'var(--status-pending-fg)', fontWeight: 800 }}>
+                      <span style={{ color: 'var(--status-pending-fg)', fontWeight: 700 }}>
                         Not yet
                       </span>
                     )}
@@ -160,7 +160,7 @@ export function OperationsPage() {
                   <td
                     style={{
                       textAlign: 'center',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       color: r.documents ? 'var(--text-primary)' : 'var(--text-tertiary)',
                     }}
                   >

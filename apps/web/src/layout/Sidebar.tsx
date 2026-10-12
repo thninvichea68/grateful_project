@@ -4,20 +4,12 @@ import { useAuth } from '../auth/AuthProvider';
 import { NAV } from './nav';
 import { icons } from './icons';
 import { useNavCounts } from './useNavCounts';
+import { initials } from '../components/Avatar';
 
 interface Props {
   open: boolean;
   onNavigate: () => void;
   onToggleCollapse: () => void;
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
@@ -68,7 +60,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             ) : (
               <span
                 aria-hidden="true"
-                style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent-primary)' }}
+                style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-primary)' }}
               >
                 {initials(user.fullName)}
               </span>

@@ -91,7 +91,7 @@
 }
 .statValue {
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -185,7 +185,7 @@
   font-size: 12px;
 }
 .fee {
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .muted {
@@ -260,7 +260,7 @@
   color: var(--tone);
   font-family: var(--font-main);
   font-size: 11.5px;
-  font-weight: 800;
+  font-weight: 700;
 }
 .table select.status:hover:not(:disabled, :focus) {
   border-color: var(--tone);
@@ -280,7 +280,7 @@
 
 /* Sidebar → Credit Noted (same page style) */
 .cn {
-  font-weight: 800;
+  font-weight: 700;
   color: var(--accent-primary) !important;
 }
 .newBtn {
@@ -296,7 +296,7 @@
   color: #041b2d;
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
 }

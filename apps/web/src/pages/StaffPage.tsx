@@ -16,6 +16,7 @@ import { useApiMutation, useRoles, useStaff } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { ErrorBanner, FieldError, Modal, TableState, ui } from '../components/ui';
 import { Pill } from '../components/StatusPill';
+import { Avatar } from '../components/Avatar';
 import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
@@ -36,6 +37,7 @@ const AREAS: Record<string, { label: string; desc: string }> = {
   clients: { label: 'Clients', desc: 'Client list and details' },
   cutstock: { label: 'CDC Master List', desc: 'Licensed items and balances' },
   accounting: { label: 'Accounting', desc: 'Ledger, invoices and notes' },
+  creditnotes: { label: 'Credit Noted', desc: 'Customs broker credit notes' },
   quotations: { label: 'Quotations', desc: 'Quotation builder' },
   documents: { label: 'Documents', desc: 'Uploaded files' },
   followups: { label: 'Follow-ups', desc: 'Tasks and reminders' },
@@ -202,15 +204,24 @@ export function StaffPage() {
                     onKeyDown={(e) => manage && e.key === 'Enter' && setEditing(m)}
                   >
                     <td>
-                      <div className="val-bold">
-                        {m.fullName}
-                        {m.id === user?.id ? ' (you)' : ''}
-                      </div>
-                      <div
-                        style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 700 }}
-                      >
-                        {m.email}
-                        {m.jobTitle ? ` · ${m.jobTitle}` : ''}
+                      <div className={st.member}>
+                        <Avatar name={m.fullName} src={m.avatarUrl} muted={!m.isActive} />
+                        <div>
+                          <div className="val-bold">
+                            {m.fullName}
+                            {m.id === user?.id ? ' (you)' : ''}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              color: 'var(--text-tertiary)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {m.email}
+                            {m.jobTitle ? ` · ${m.jobTitle}` : ''}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -373,7 +384,7 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
         member ? member.email : 'They sign in with this email and the temporary password you set.'
       }
       onClose={onClose}
-      width={1760}
+      width={1800}
     >
       <ErrorBanner error={save.error ?? reset.error ?? remove.error} />
       <form onSubmit={(e) => void submit(e)} noValidate>
@@ -388,9 +399,8 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
                   <p>Name, role and contact details.</p>
                 </div>
               </header>
-              <div className="form-fields-grid">
-                {!member && f('email', 'Work email', 'email', 2)}
-                {f('fullName', 'Full name', 'text', 2)}
+              <div className={st.profileGrid}>
+                {f('fullName', 'Full name')}
                 <div className="form-field-group">
                   <label htmlFor="st-role">Role</label>
                   <select
@@ -438,11 +448,32 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
                   </select>
                 </div>
                 {f('phone', 'Phone')}
-                {!member && f('password', 'Temporary password', 'text', 2)}
+                {member ? (
+                  <div className="form-field-group">
+                    <label htmlFor="st-email">Email address</label>
+                    <input
+                      id="st-email"
+                      type="email"
+                      className="form-field-box"
+                      value={member.email}
+                      readOnly
+                      title="The sign-in email can't be changed"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {f('email', 'Email address', 'email')}
+                    {f('password', 'Temporary password')}
+                  </>
+                )}
               </div>
             </section>
 
-            <fieldset className={st.panel} disabled={self} aria-labelledby="st-clients">
+            <fieldset
+              className={`${st.panel} ${st.grow}`}
+              disabled={self}
+              aria-labelledby="st-clients"
+            >
               <header className={st.panelHead}>
                 <span className={st.panelIcon}>{ICONS.clients}</span>
                 <div>
@@ -505,7 +536,11 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
           </div>
 
           <div className={st.col}>
-            <fieldset className={st.panel} disabled={self} aria-labelledby="st-perms">
+            <fieldset
+              className={`${st.panel} ${st.grow}`}
+              disabled={self}
+              aria-labelledby="st-perms"
+            >
               <header className={st.panelHead}>
                 <span className={st.panelIcon}>{ICONS.shield}</span>
                 <div>
