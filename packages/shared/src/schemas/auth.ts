@@ -31,5 +31,17 @@ export const navCountsSchema = z.object({
   openFollowUps: z.number().int(),
   overdueFollowUps: z.number().int(),
   unreadNotifications: z.number().int(),
+  /** Unread messages from accounting in my Credit Noted inbox. */
+  creditNoteInbox: z.number().int(),
 });
 export type NavCounts = z.infer<typeof navCountsSchema>;
+
+/** My profile (Settings → My profile): the name shown in the sidebar and on records. */
+export const profileUpdateSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2, 'Enter at least 2 characters')
+    .max(80, 'Keep it under 80 characters'),
+});
+export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;

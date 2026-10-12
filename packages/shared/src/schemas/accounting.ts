@@ -76,6 +76,8 @@ export interface LedgerRow {
   clientCode: string;
   clientName: string;
   portCode: string | null;
+  portNo: string | null;
+  portName: string | null;
   invNo: string | null;
   disNo: string | null;
   dnNo: string | null;
@@ -275,9 +277,48 @@ export const creditNoteReviewQuerySchema = paginationQuerySchema.extend({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
 });
-export const creditNoteReviewInputSchema = z.object({
-  reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES),
+/** Sidebar → Credit Noted: every credit note, by document status. */
+export const creditNoteListQuerySchema = creditNoteReviewQuerySchema.omit({ review: true }).extend({
+  status: z.enum(BILLING_DOC_STATUSES).optional(),
 });
+/**
+ * Accounting's check. "Revised" sends the note back to the broker to fix, so it needs a
+ * message saying what to change; "Checked" can carry an optional note.
+ */
+export const creditNoteReviewInputSchema = z
+  .object({
+    reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES),
+    message: z.string().trim().max(1000).optional(),
+  })
+  .refine((v) => v.reviewStatus !== 'REVISED' || (v.message ?? '').length >= 3, {
+    message: 'Tell the broker what to change',
+    path: ['message'],
+  });
+
+/** A message from accounting in the broker's Credit Noted inbox. */
+export interface CreditNoteMessage {
+  id: string;
+  creditNoteId: string;
+  number: string;
+  declareNo: string | null;
+  clientName: string;
+  /** CHECKED, or REVISED (returned to the broker to fix). */
+  kind: CreditNoteReviewStatus;
+  body: string;
+  senderName: string | null;
+  createdAt: string;
+  /** When I accepted (read) it; null = new. */
+  readAt: string | null;
+  // The credit note's details, for the inbox table.
+  clientCode: string;
+  date: string;
+  status: BillingDocStatus;
+  direction: Direction | null;
+  transportMode: TransportMode | null;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+}
 
 export interface CreditNoteReviewRow {
   id: string;
@@ -292,6 +333,7 @@ export interface CreditNoteReviewRow {
   quantityText: string | null;
   port: string | null;
   total: string;
+  status: BillingDocStatus;
   reviewStatus: CreditNoteReviewStatus;
 }
 export interface CreditNoteReviewCounts {

@@ -191,3 +191,52 @@ export async function me(userId: string): Promise<SessionUser> {
   if (!user) throw unauthenticated();
   return user;
 }
+
+/* ---------- My profile ---------- */
+
+export async function updateOwnName(
+  userId: string,
+  fullName: string,
+  req: Request,
+): Promise<SessionUser> {
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, userId));
+    await tx.update(users).set({ fullName, updatedAt: new Date() }).where(eq(users.id, userId));
+    await audit(
+      tx,
+      { action: 'UPDATE', entity: 'user', entityId: userId, before, after: { fullName } },
+      req,
+    );
+  });
+  return me(userId);
+}
+
+/** Sets (or, with null, removes) my profile picture. */
+export async function setOwnAvatar(
+  userId: string,
+  avatarUrl: string | null,
+  req: Request,
+): Promise<SessionUser> {
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ avatarUrl, updatedAt: new Date() }).where(eq(users.id, userId));
+    await audit(
+      tx,
+      { action: 'UPDATE', entity: 'user', entityId: userId, after: { avatarUrl } },
+      req,
+    );
+  });
+  return me(userId);
+}
+
+/** True when the URL is someone's current avatar (the public avatar route serves only those). */
+export async function isAvatar(url: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.avatarUrl, url), isNull(users.deletedAt)))
+    .limit(1);
+  return !!row;
+}

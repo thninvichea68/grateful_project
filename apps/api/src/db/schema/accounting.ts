@@ -274,3 +274,29 @@ export const recordSummaryLines = pgTable(
     check('record_summary_lines_qty', sql`qty >= 0`),
   ],
 );
+
+/**
+ * Accounting → broker messages about a credit note ("Checked", or "Revised" with what to fix).
+ * Shown in the broker's Credit Noted inbox.
+ */
+export const creditNoteMessages = pgTable(
+  'credit_note_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    creditNoteId: uuid('credit_note_id')
+      .notNull()
+      .references(() => creditNotes.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    senderId: uuid('sender_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: creditNoteReviewEnum('kind').notNull(),
+    body: text('body').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('credit_note_messages_recipient_idx').on(t.recipientId, t.createdAt),
+    index('credit_note_messages_note_idx').on(t.creditNoteId),
+  ],
+);

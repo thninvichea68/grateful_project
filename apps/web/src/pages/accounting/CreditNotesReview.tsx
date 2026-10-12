@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { CreditNoteReviewStatus } from '@gs/shared';
+import type { CreditNoteReviewRow, CreditNoteReviewStatus } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCreditNoteReview, useSetCreditNoteReview } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
-import { ErrorBanner, Pager } from '../../components/ui';
+import { ErrorBanner, Modal, Pager, ui } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { useToast } from '../../components/Toast';
 import { fmtMoney } from '../../lib/format';
@@ -59,6 +59,7 @@ export function CreditNotesReview() {
   const toast = useToast();
   const lookups = useLookups();
   const setReview = useSetCreditNoteReview();
+  const [revising, setRevising] = useState<CreditNoteReviewRow | null>(null);
   const [params, setParams] = useSearchParams();
   const get = (k: string) => params.get(k) || undefined;
   const q = {
@@ -281,7 +282,15 @@ export function CreditNotesReview() {
                   <td>{r.transportMode ? MODE[r.transportMode] : '-'}</td>
                   <td className={`${s.num} ${s.fee}`}>{fmtMoney(r.total)}</td>
                   <td onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    {canCheck ? (
+                    {r.status === 'DRAFT' ? (
+                      // Sent back; it returns as Unchecked when the broker submits it again.
+                      <span
+                        className={`${s.statusPill} ${s.revised}`}
+                        title="Returned to the broker for revision"
+                      >
+                        Revised · with broker
+                      </span>
+                    ) : canCheck ? (
                       <select
                         className={`${s.status} ${REVIEW[r.reviewStatus].cls}`}
                         value={r.reviewStatus}
@@ -289,6 +298,10 @@ export function CreditNotesReview() {
                         disabled={setReview.isPending}
                         onChange={(e) => {
                           const v = e.target.value as CreditNoteReviewStatus;
+                          if (v === 'REVISED') {
+                            setRevising(r);
+                            return;
+                          }
                           setReview.mutate(
                             { id: r.id, reviewStatus: v },
                             {
@@ -338,6 +351,62 @@ export function CreditNotesReview() {
           </div>
         )}
       </div>
+      {revising && <ReviseModal row={revising} onClose={() => setRevising(null)} />}
     </section>
+  );
+}
+
+/** "Revised": send the note back to the broker with what to change. */
+function ReviseModal({ row, onClose }: { row: CreditNoteReviewRow; onClose: () => void }) {
+  const toast = useToast();
+  const setReview = useSetCreditNoteReview();
+  const [message, setMessage] = useState('');
+  const send = () =>
+    setReview.mutate(
+      { id: row.id, reviewStatus: 'REVISED', message: message.trim() },
+      {
+        onSuccess: () => {
+          toast(`${row.declareNo ?? 'Credit note'} sent back to the broker.`);
+          onClose();
+        },
+      },
+    );
+  return (
+    <Modal
+      title="Send back for revision"
+      sub={`${row.declareNo ?? '-'} · ${row.clientName} · ${fmtMoney(row.total)}`}
+      onClose={onClose}
+      width={500}
+    >
+      <ErrorBanner error={setReview.error} />
+      <label className={s.reviseField}>
+        <span>What should the broker change?</span>
+        <textarea
+          className="form-field-box"
+          rows={4}
+          maxLength={1000}
+          placeholder="e.g. LOLO should be 62.70, and add the generator line."
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+      </label>
+      <p className={s.reviseNote}>
+        The broker gets this in their Credit Noted inbox. The credit note goes back to them as a
+        draft and its Clear Fee leaves the Monthly Ledger until they submit it again.
+      </p>
+      <div className={ui.actions}>
+        <button type="button" className="btn-cancel-shipment" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn-create-submit"
+          disabled={message.trim().length < 3 || setReview.isPending}
+          onClick={send}
+        >
+          Send back
+        </button>
+      </div>
+    </Modal>
   );
 }

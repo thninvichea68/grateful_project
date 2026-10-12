@@ -95,6 +95,333 @@ describe('shipments', () => {
     expect(res.body.declarations[0]).toMatchObject({ declareNo: 'E 41001', hasLedgerEntry: false });
   });
 
+  it('exports the invoice + packing list in the JR layout, one sheet per invoice', async () => {
+    const h = await as('OPERATOR');
+    await db.execute(sql`
+      UPDATE clients SET legal_name = 'JR APPAREL CO., LTD', legal_name_km = 'ជេអ អឹភែរឹល ឯ.ក', contact_name = 'NI, CUNLAN',
+        contact_phone = '+855 85 441 621', cdc_no = 'QIP25021226-C01996', cdc_issue_date = '2026-05-21'
+      WHERE id = ${basics.jr.id}`);
+    const created = (
+      await request(app)
+        .post('/api/v1/shipments')
+        .set(h)
+        .send(
+          exportShipment({
+            invoices: [
+              {
+                invoiceNo: 'JRA26057',
+                invoiceDate: '2026-09-23',
+                lines: [
+                  {
+                    description: 'Ladies pant knitted',
+                    poNo: '005387',
+                    styleNo: 'TC26644APCHU',
+                    htsCode: '6104.69',
+                    pcs: 2416,
+                    ctns: 76,
+                    netWeightKg: '1283.5',
+                    grossWeightKg: '1359.5',
+                    cbm: '5.98',
+                    fobUnitPrice: '2.05',
+                  },
+                  {
+                    description: 'Ladies pant knitted',
+                    poNo: '005386',
+                    styleNo: 'TC25805BCHU',
+                    htsCode: '6104.69',
+                    pcs: 9727,
+                    ctns: 304,
+                    netWeightKg: 4742,
+                    grossWeightKg: '5045.9',
+                    cbm: '20.43',
+                    fobUnitPrice: '2.05',
+                  },
+                  {
+                    description: 'Ladies pant 78% nylon',
+                    poNo: '005186',
+                    styleNo: 'TK25716ECHU',
+                    htsCode: '6104.69',
+                    pcs: 576,
+                    ctns: 36,
+                    netWeightKg: 324,
+                    grossWeightKg: 360,
+                    cbm: '1.72',
+                    fobUnitPrice: '2',
+                  },
+                ],
+              },
+              {
+                invoiceNo: 'JRA26058',
+                invoiceDate: '2026-09-23',
+                lines: [{ poNo: '1', styleNo: 'S1', pcs: 10, fobUnitPrice: '1' }],
+              },
+            ],
+          }),
+        )
+    ).body;
+
+    const res = await request(app)
+      .get(`/api/v1/shipments/${created.id}/invoice-packing-list.xlsx`)
+      .set(h)
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(
+      decodeURIComponent(
+        /filename\*=UTF-8''(.+)$/.exec(String(res.headers['content-disposition']))![1]!,
+      ),
+    ).toBe("INV+PL-TO USA-1X40'HQ-JRA26057,JRA26058-ETD 01-AUG.xlsx");
+
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body as Buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['JRA26057', 'JRA26058']);
+    const ws = wb.getWorksheet('JRA26057')!;
+    const v = (a: string) => ws.getCell(a).value;
+    expect([v('A1'), v('I1'), v('A2'), v('A4'), v('A5'), v('I5')]).toEqual([
+      'ជេអ អឹភែរឹល ឯ.ក',
+      'ជេអ អឹភែរឹល ឯ.ក',
+      'JR APPAREL CO., LTD',
+      'TEL +855 85 441 621',
+      'INVOICE',
+      'PACKING LIST',
+    ]);
+    expect([v('H6'), v('Q6'), v('B12'), v('B13')]).toEqual([
+      'JRA26057',
+      'JRA26057',
+      'SEA',
+      expect.stringMatching(/^FROM .* KINGDOM OF CAMBODIA.* TO USA$/),
+    ]);
+    // Goods: first description, the PO/STYLE header, two lines, the next description, one line, HTS.
+    expect([
+      v('B18'),
+      v('B19'),
+      v('C19'),
+      v('B20'),
+      v('C20'),
+      v('F20'),
+      v('G20'),
+      v('H20'),
+    ]).toEqual([
+      'LADIES PANT KNITTED',
+      'P.O NO.:',
+      'STYLE NO.:',
+      '005387',
+      'TC26644APCHU',
+      2416,
+      2.05,
+      4952.8,
+    ]);
+    expect([v('N21'), v('O21'), v('P21'), v('Q21'), v('R21')]).toEqual([
+      9727, 304, 4742, 5045.9, 20.43,
+    ]);
+    expect([v('B22'), v('B23'), v('B24'), v('C24')]).toEqual([
+      'LADIES PANT 78% NYLON',
+      '005186',
+      'HTS CODE:',
+      '6104.69',
+    ]);
+    // Totals on row 41 (as in the original), CDC + signature below.
+    expect([v('B41'), v('F41'), v('H41'), v('O41'), v('P41'), v('R41')]).toEqual([
+      'TOTAL',
+      12719,
+      26045.15,
+      416,
+      6349.5,
+      28.13,
+    ]);
+    expect([v('B45'), v('G45'), v('G46'), v('G56'), v('B48')]).toEqual([
+      'QIP25021226-C01996',
+      'JR APPAREL CO., LTD',
+      'SIGNATURE',
+      'NI, CUNLAN',
+      416,
+    ]);
+    // The INVOICE and the PACKING LIST print on separate pages.
+    const JSZip = (await import('jszip')).default;
+    const xml = await (
+      await JSZip.loadAsync(res.body as Buffer)
+    )
+      .file('xl/worksheets/sheet1.xml')!
+      .async('string');
+    expect(xml).toContain('<colBreaks count="1" manualBreakCount="1"><brk id="8"');
+  });
+
+  it('exports an import as INVOICE + PL with the customs cover and transfer letters (JR layout)', async () => {
+    const h = await as('OPERATOR');
+    await db.execute(sql`
+      UPDATE clients SET legal_name = 'JR APPAREL CO., LTD', contact_name = 'NI, CUNLAN',
+        contact_phone = '+855 85 441 621', vattin = 'L001-902501613',
+        cdc_no = 'QIP25021226-C01996', cdc_issue_date = '2026-05-21'
+      WHERE id = ${basics.jr.id}`);
+    // The CDC master list supplies the item no. and unit (and the price when the line has none).
+    await db.insert(cutStockItems).values(
+      [
+        ['II-125', 'KNITTED FABRIC', '1'],
+        ['III-130', 'INTERLINING', '0.2'],
+      ].map(([declareRef, name, unitPrice], i) => ({
+        clientId: basics.jr.id,
+        lineNo: i + 1,
+        declareRef: declareRef!,
+        category: 'RAW_MATERIAL' as const,
+        name: name!,
+        unit: 'MTR',
+        qty: '100000',
+        unitPrice: unitPrice!,
+      })),
+    );
+    const created = (
+      await request(app)
+        .post('/api/v1/shipments')
+        .set(h)
+        .send({
+          clientId: basics.jr.id,
+          direction: 'IMPORT',
+          transportMode: 'SEA',
+          loadType: 'FCL',
+          shipperName: 'SHANGHAI YONGYUE IMP.&EXP. TRADING CO., LTD.',
+          originCountryIso2: 'CN',
+          clearancePortId: basics.port.id,
+          quantityUnit: 'ROLLS',
+          hblNo: 'SHSIN6090031',
+          etd: '2026-09-13',
+          containers: [{ containerNo: 'ZCSU7954124', size: '40HQ', linerSeal: 'A4250250303' }],
+          invoices: [
+            {
+              invoiceNo: 'CNQ26044',
+              invoiceDate: '2026-08-31',
+              lines: [
+                {
+                  description: 'Knitted fabric',
+                  pcs: '32636.7',
+                  ctns: 597,
+                  netWeightKg: '17932.6',
+                  grossWeightKg: '18111.7',
+                  fobUnitPrice: '1',
+                },
+                {
+                  description: 'Interlining',
+                  pcs: '4968.8',
+                  ctns: 38,
+                  netWeightKg: '678.8',
+                  grossWeightKg: '697.8',
+                },
+              ],
+            },
+          ],
+        })
+    ).body;
+
+    const res = await request(app)
+      .get(`/api/v1/shipments/${created.id}/invoice-packing-list.xlsx`)
+      .set(h)
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    expect(
+      decodeURIComponent(
+        /filename\*=UTF-8''(.+)$/.exec(String(res.headers['content-disposition']))![1]!,
+      ),
+    ).toBe('SHANGHAI YONGYUE IMP 635 ROLLS.xlsx');
+
+    const ExcelJS = (await import('exceljs')).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(res.body as Buffer);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['INVOICE', 'Cover', 'AUTHOR ']);
+    const inv = wb.getWorksheet('INVOICE')!;
+    // Plain values, or a formula's cached result.
+    const v = (ws: typeof inv, a: string) => {
+      const x = ws.getCell(a).value;
+      return x && typeof x === 'object' && 'result' in x ? x.result : x;
+    };
+    const formula = (ws: typeof inv, a: string) =>
+      (ws.getCell(a).value as { formula?: string } | null)?.formula;
+    expect(
+      ['A1', 'A6', 'H6', 'B7', 'B10', 'B13', 'B14', 'G14', 'F17'].map((a) => v(inv, a)),
+    ).toEqual([
+      'SHANGHAI YONGYUE IMP.&EXP. TRADING CO., LTD.',
+      'INVOICE',
+      'PACKING LIST',
+      'CNQ26044',
+      'JR APPAREL CO., LTD',
+      'ATTN: NI, CUNLAN TEL 085441621',
+      'VAT# L001-902501613',
+      'CHINA',
+      'CIF SIHANOUKVILLE',
+    ]);
+    expect(formula(inv, 'I7')).toBe('B7');
+    expect(['B', 'C', 'D', 'E', 'F', 'G', 'I', 'K', 'L'].map((c) => v(inv, `${c}19`))).toEqual([
+      'KNITTED FABRIC',
+      'II-125',
+      32636.7,
+      'MTR',
+      1,
+      32636.7,
+      597,
+      17932.6,
+      18111.7,
+    ]);
+    expect(['C20', 'F20', 'G20'].map((a) => v(inv, a))).toEqual(['III-130', 0.2, 993.76]);
+    expect(formula(inv, 'G20')).toBe('ROUND(F20*D20,2)');
+    // Totals on row 25, containers, and the notes the letters read (rows 41–45).
+    expect(['G25', 'I25', 'J25', 'K25', 'L25'].map((a) => v(inv, a))).toEqual([
+      33630.46,
+      635,
+      'Rolls',
+      18611.4,
+      18809.5,
+    ]);
+    expect(v(inv, 'B30')).toBe("ZCSU7954124 / A4250250303 / 40'HQ");
+    expect(['A41', 'D42', 'B43', 'E44'].map((a) => v(inv, a))).toEqual([
+      2,
+      'QIP25021226-C01996',
+      'SHSIN6090031',
+      '635Rolls',
+    ]);
+    expect(v(inv, 'B41')).toMatch(/^ថ្ងៃ.+ ពុទ្ធសករាជ [០-៩]{4}$/);
+    expect(v(inv, 'B42')).toMatch(/^រាជធានីភ្នំពេញ ថ្ងៃទី[០-៩]+ ខែ.+ ឆ្នាំ[០-៩]{4}$/);
+    expect(v(inv, 'B45')).toBe(
+      'កំពង់ផែក្រុងព្រះសីហនុ (បញ្ចេញទំនិញនៅមាត់ច្រក\u200b កំពង់ផែក្រុងព្រះសីហនុ)',
+    );
+    expect(inv.pageSetup.printArea).toBe('A1:L40');
+
+    const cover = wb.getWorksheet('Cover')!;
+    expect(formula(cover, 'AO12')).toBe('INVOICE!G25');
+    expect(['F2', 'AO12', 'AD12', 'O16', 'AF29'].map((a) => v(cover, a))).toEqual([
+      'JR APPAREL CO., LTD',
+      33630.46,
+      18809.5,
+      'CNQ26044',
+      'LIN LEE BI JEN',
+    ]);
+    expect(v(cover, 'D14')).toBe(
+      '-លិខិតលេខ 1343/26 គ.វ.ក ចុះថ្ងៃទី 21-05-2026 ពន្យារសុពលភាពលើលិខិតលេខ QIP25021226-C01996 គ.វ.ក។',
+    );
+    const author = wb.getWorksheet('AUTHOR ')!;
+    expect(['M18', 'M20', 'W33'].map((a) => v(author, a))).toEqual([
+      'CNQ26044',
+      'SHSIN6090031',
+      'LIN LEE BI JEN',
+    ]);
+
+    // The PACKING LIST (H–L) prints on its own page.
+    const JSZip = (await import('jszip')).default;
+    const xml = await (
+      await JSZip.loadAsync(res.body as Buffer)
+    )
+      .file('xl/worksheets/sheet1.xml')!
+      .async('string');
+    expect(xml).toContain('<brk id="7"');
+  });
+
   it('lists with totals and filters by client, direction and search text', async () => {
     const h = await as('OPERATOR');
     await request(app).post('/api/v1/shipments').set(h).send(exportShipment());

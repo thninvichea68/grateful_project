@@ -90,6 +90,39 @@
   color: var(--text-secondary);
   font-weight: 700;
 }
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.exportBtn svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-emerald);
+}
+.exportBtn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+.exportBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .deleteBtn {
   display: inline-flex;
   align-items: center;

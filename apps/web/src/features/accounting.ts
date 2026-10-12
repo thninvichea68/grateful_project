@@ -3,6 +3,7 @@ import type {
   BillingDoc,
   BillingDocListItem,
   BillingDocType,
+  CreditNoteMessage,
   CreditNoteReviewCounts,
   CreditNoteReviewRow,
   CreditNoteReviewStatus,
@@ -134,15 +135,71 @@ export function useCreditNoteReview(q: Query) {
   });
 }
 
+/** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
+export function useCreditNoteList(q: Query) {
+  return useQuery({
+    queryKey: [...KEY, 'cn-list', q],
+    queryFn: () =>
+      api<Paginated<CreditNoteReviewRow>>('/accounting/credit-notes/list', { query: q }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Accounting's check; "Revised" sends the note back to the broker with a message. */
 export function useSetCreditNoteReview() {
-  const qc = useQueryClient();
+  const invalidate = useInvalidateAccounting();
   return useMutation({
-    mutationFn: ({ id, reviewStatus }: { id: string; reviewStatus: CreditNoteReviewStatus }) =>
+    mutationFn: ({
+      id,
+      reviewStatus,
+      message,
+    }: {
+      id: string;
+      reviewStatus: CreditNoteReviewStatus;
+      message?: string;
+    }) =>
       api<undefined>(`/accounting/docs/credit-notes/${id}/review`, {
         method: 'PATCH',
-        json: { reviewStatus },
+        json: { reviewStatus, message },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'cn-review'] }),
+    // Revising takes the fee out of the ledger, so refresh everything accounting shows.
+    onSuccess: invalidate,
+  });
+}
+
+/** My Credit Noted inbox (messages from accounting). */
+export function useCreditNoteInbox(enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, 'cn-inbox'],
+    queryFn: () =>
+      api<{ data: CreditNoteMessage[]; unread: number }>('/accounting/credit-notes/inbox'),
+    refetchInterval: 60_000,
+    enabled,
+  });
+}
+
+export function useMarkInboxRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId?: string) =>
+      api<undefined>('/accounting/credit-notes/inbox/read', {
+        method: 'POST',
+        json: { messageId },
+      }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: [...KEY, 'cn-inbox'] }),
+        qc.invalidateQueries({ queryKey: queryKeys.navCounts }),
+      ]),
+  });
+}
+
+/** Accounting's messages about one credit note, newest first. */
+export function useCreditNoteMessages(id: string | undefined) {
+  return useQuery({
+    queryKey: [...KEY, 'cn-messages', id],
+    queryFn: () => api<CreditNoteMessage[]>(`/accounting/docs/credit-notes/${id}/messages`),
+    enabled: !!id,
   });
 }
 

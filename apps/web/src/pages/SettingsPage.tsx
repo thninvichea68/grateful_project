@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import {
   LOOKUP_TYPES,
@@ -7,21 +8,26 @@ import {
   type CompanyInput,
   type ExchangeRateSyncStatus,
   type LookupType,
+  type SettingsBundle,
 } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useSettings } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { ErrorBanner, FieldError, TableState, ui } from '../components/ui';
 import { InlineName } from '../components/InlineName';
+import { MyProfile } from './settings/MyProfile';
 import { MefSyncStatus, RateImportModal, RateRow } from './settings/ExchangeRates';
 import st from './SettingsPage.module.css';
+import r from './settings/ExchangeRates.module.css';
+import { icons } from '../layout/icons';
 import { useToast } from '../components/Toast';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import { fmtDate, fmtNum } from '../lib/format';
 import { queryKeys } from '../lib/queryKeys';
 import { formResolver } from '../lib/zodForm';
 
 const TABS = [
+  ['profile', 'My profile'],
   ['company', 'Company'],
   ['rates', 'Exchange rates'],
   ['ports', 'Ports'],
@@ -40,19 +46,32 @@ const LIST_LABEL: Record<LookupType, string> = {
 };
 const INVALIDATE = [['settings'], queryKeys.lookups, ['meta', 'company']];
 
+/**
+ * Settings. "My profile" is open to everyone (the sidebar's user card links to it); the
+ * workspace tabs need settings:read.
+ */
 export function SettingsPage() {
   const { can } = useAuth();
-  const settings = useSettings();
-  const [tab, setTab] = useState<Tab>('company');
-  const manage = can('settings:manage');
+  const canRead = can('settings:read');
+  const [params, setParams] = useSearchParams();
+  const tabs = canRead ? TABS : TABS.filter(([k]) => k === 'profile');
+  const asked = params.get('tab');
+  const tab: Tab = tabs.some(([k]) => k === asked)
+    ? (asked as Tab)
+    : canRead
+      ? 'company'
+      : 'profile';
+  const setTab = (k: Tab) => setParams({ tab: k }, { replace: true });
   return (
-    // Every tab but Company is a list: fill the window so only its rows scroll.
-    <section className={`view active${tab !== 'company' ? ` ${st.fill}` : ''}`}>
+    // The list tabs fill the window so only their rows scroll.
+    <section
+      className={`view active${tab !== 'company' && tab !== 'profile' ? ` ${st.fill}` : ''}`}
+    >
       <nav
         style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}
         aria-label="Settings sections"
       >
-        {TABS.map(([k, l]) => (
+        {tabs.map(([k, l]) => (
           <button
             key={k}
             type="button"
@@ -63,6 +82,17 @@ export function SettingsPage() {
           </button>
         ))}
       </nav>
+      {tab === 'profile' ? <MyProfile /> : <Workspace tab={tab} />}
+    </section>
+  );
+}
+
+function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
+  const { can } = useAuth();
+  const settings = useSettings();
+  const manage = can('settings:manage');
+  return (
+    <>
       <ErrorBanner error={settings.error} />
       {!manage && (
         <p className={ui.dialogSub} style={{ marginBottom: 12 }}>
@@ -79,7 +109,7 @@ export function SettingsPage() {
           {tab === 'lists' && <Lists manage={manage} />}
         </>
       )}
-    </section>
+    </>
   );
 }
 
@@ -394,44 +424,187 @@ function Ports({ manage }: { manage: boolean }) {
               <th>Kind</th>
               <th style={{ textAlign: 'center' }}>Shipments</th>
               <th>Active</th>
+              {manage && <th style={{ textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {s.ports.map((p) => (
-              <tr key={p.id}>
-                <td className="val-bold">{p.code}</td>
-                <td>{p.customsPortNo ?? '-'}</td>
-                <td>
-                  <InlineName
-                    value={p.name}
-                    label="Port name"
-                    onSave={
-                      manage
-                        ? (name) => void patch.mutateAsync({ id: p.id, v: { name } })
-                        : undefined
-                    }
-                  />
-                </td>
-                <td>{p.shortName}</td>
-                <td>{p.kind}</td>
-                <td style={{ textAlign: 'center' }}>{p.shipments}</td>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={p.isActive}
-                    disabled={!manage}
-                    aria-label={`${p.code} active`}
-                    onChange={(e) =>
-                      void patch.mutateAsync({ id: p.id, v: { isActive: e.target.checked } })
-                    }
-                  />
-                </td>
-              </tr>
+              <PortRow
+                key={p.id}
+                port={p}
+                manage={manage}
+                onActive={(isActive) => void patch.mutateAsync({ id: p.id, v: { isActive } })}
+              />
             ))}
           </tbody>
         </table>
       </div>
     </Card>
+  );
+}
+
+type PortItem = SettingsBundle['ports'][number];
+const errorMessage = (e: unknown) =>
+  e instanceof ApiError ? e.message : 'Something went wrong. Try again.';
+
+/** One port: view, or edit every field in place (pencil); delete it if nothing uses it (bin). */
+function PortRow({
+  port: p,
+  manage,
+  onActive,
+}: {
+  port: PortItem;
+  manage: boolean;
+  onActive: (isActive: boolean) => void;
+}) {
+  const toast = useToast();
+  const [draft, setDraft] = useState<null | {
+    code: string;
+    customsPortNo: string;
+    name: string;
+    shortName: string;
+    kind: string;
+  }>(null);
+  const save = useApiMutation(
+    () => api(`/settings/ports/${p.id}`, { method: 'PATCH', json: draft }),
+    INVALIDATE,
+  );
+  const del = useApiMutation(
+    () => api(`/settings/ports/${p.id}`, { method: 'DELETE' }),
+    INVALIDATE,
+  );
+  const err = save.error ?? del.error;
+
+  if (draft) {
+    const set = (k: keyof typeof draft) => (e: { target: { value: string } }) =>
+      setDraft({ ...draft, [k]: e.target.value });
+    return (
+      <tr className={st.editRow}>
+        <td>
+          <input className={ui.input} value={draft.code} onChange={set('code')} aria-label="Code" />
+        </td>
+        <td>
+          <input
+            className={ui.input}
+            value={draft.customsPortNo}
+            onChange={set('customsPortNo')}
+            aria-label="Customs port no."
+            style={{ width: 70 }}
+          />
+        </td>
+        <td>
+          <input className={ui.input} value={draft.name} onChange={set('name')} aria-label="Name" />
+        </td>
+        <td>
+          <input
+            className={ui.input}
+            value={draft.shortName}
+            onChange={set('shortName')}
+            aria-label="Chart label"
+          />
+        </td>
+        <td>
+          <select className={ui.input} value={draft.kind} onChange={set('kind')} aria-label="Kind">
+            {PORT_KINDS.map((k) => (
+              <option key={k}>{k}</option>
+            ))}
+          </select>
+        </td>
+        <td style={{ textAlign: 'center' }}>{p.shipments}</td>
+        <td colSpan={2}>
+          <div className={r.actions}>
+            <button
+              type="button"
+              className="btn-cancel-shipment"
+              onClick={() => {
+                setDraft(null);
+                save.reset();
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-create-submit"
+              disabled={
+                save.isPending ||
+                !draft.code.trim() ||
+                !draft.name.trim() ||
+                !draft.shortName.trim()
+              }
+              onClick={() =>
+                void save.mutateAsync(undefined).then(() => {
+                  setDraft(null);
+                  toast(`Port ${draft.code.toUpperCase()} saved.`);
+                })
+              }
+            >
+              Save
+            </button>
+          </div>
+          <ErrorBanner error={err} />
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr>
+      <td className="val-bold">{p.code}</td>
+      <td>{p.customsPortNo ?? '-'}</td>
+      <td className="val-bold">{p.name}</td>
+      <td>{p.shortName}</td>
+      <td>{p.kind}</td>
+      <td style={{ textAlign: 'center' }}>{p.shipments}</td>
+      <td>
+        <input
+          type="checkbox"
+          checked={p.isActive}
+          disabled={!manage}
+          aria-label={`${p.code} active`}
+          onChange={(e) => onActive(e.target.checked)}
+        />
+      </td>
+      {manage && (
+        <td>
+          <div className={r.actions}>
+            <button
+              type="button"
+              className={r.icon}
+              title="Edit"
+              aria-label={`Edit port ${p.code}`}
+              onClick={() =>
+                setDraft({
+                  code: p.code,
+                  customsPortNo: p.customsPortNo ?? '',
+                  name: p.name,
+                  shortName: p.shortName,
+                  kind: p.kind,
+                })
+              }
+            >
+              {icons.edit({})}
+            </button>
+            <button
+              type="button"
+              className={`${r.icon} ${r.danger}`}
+              title={p.shipments > 0 ? 'In use: untick Active to hide it instead' : 'Delete'}
+              aria-label={`Delete port ${p.code}`}
+              disabled={del.isPending}
+              onClick={() =>
+                window.confirm(`Delete port ${p.code} (${p.name})? This can't be undone.`) &&
+                void del
+                  .mutateAsync(undefined)
+                  .then(() => toast(`Port ${p.code} deleted.`))
+                  .catch((e: unknown) => toast(errorMessage(e)))
+              }
+            >
+              {icons.trash({})}
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
   );
 }
 

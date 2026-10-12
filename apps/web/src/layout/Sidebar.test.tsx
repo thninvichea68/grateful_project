@@ -20,7 +20,12 @@ vi.mock('../auth/AuthProvider', () => ({
   }),
 }));
 vi.mock('../lib/api', () => ({
-  api: vi.fn(async () => ({ openFollowUps: 8, overdueFollowUps: 4, unreadNotifications: 0 })),
+  api: vi.fn(async () => ({
+    openFollowUps: 8,
+    overdueFollowUps: 4,
+    unreadNotifications: 0,
+    creditNoteInbox: 0,
+  })),
 }));
 
 function renderAs(role: RoleCode, path = '/overview') {

@@ -302,6 +302,30 @@ crud(
   lookupValueInputSchema.partial(),
 );
 
+/**
+ * Delete a port nobody uses yet (e.g. one added by mistake). A port that shipments,
+ * declarations or accounting already point to can't go; untick Active to hide it instead.
+ */
+settingsRouter.delete('/ports/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  let row: Record<string, unknown> | undefined;
+  try {
+    [row] = await db.delete(ports).where(eq(ports.id, id)).returning();
+  } catch (err) {
+    const code =
+      (err as { code?: string; cause?: { code?: string } }).code ??
+      (err as { cause?: { code?: string } }).cause?.code;
+    if (code === '23503')
+      throw conflict(
+        'This port is already used by shipments or records. Untick Active to hide it instead.',
+      );
+    throw err;
+  }
+  if (!row) throw notFound('Port');
+  await audit(db, { action: 'DELETE', entity: 'port', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
 settingsRouter.delete('/lookups/:id', manage, async (req, res) => {
   const { id } = parse(idParam, req.params);
   const [row] = await db.delete(lookupValues).where(eq(lookupValues.id, id)).returning();

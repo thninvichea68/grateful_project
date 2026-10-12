@@ -502,8 +502,22 @@ describe('customs broker: Credit Noted only', () => {
     const cn = await api('post', '/docs/credit-notes').send(draft);
     expect(cn.status).toBe(201);
 
+    // The broker's list shows the draft with its shipment details.
+    const mine = async () => (await api('get', '/credit-notes/list')).body.data[0];
+    expect(await mine()).toMatchObject({
+      declareNo: 'I 122050',
+      direction: 'IMPORT',
+      clientCode: 'JR',
+      total: '115.00',
+      status: 'DRAFT',
+    });
+
     // Submit to Monthly: no ledger row yet, so one is created with the clear fee.
     expect((await api('post', `/docs/credit-notes/${cn.body.id}/issue`)).status).toBe(200);
+    expect((await mine()).status).toBe('ISSUED');
+    expect(
+      (await api('get', '/credit-notes/list').query({ status: 'DRAFT' })).body.data,
+    ).toHaveLength(0);
     const ledger = await request(app)
       .get('/api/v1/accounting/ledger')
       .query({ year: '2026' })
@@ -541,5 +555,99 @@ describe('customs broker: Credit Noted only', () => {
     expect(list.counts).toMatchObject({ checked: 1, unchecked: 0 });
     expect((await review().query({ review: 'UNCHECKED' })).body.data).toHaveLength(0);
     expect((await review().query({ q: 'I122050', direction: 'IMPORT' })).body.data).toHaveLength(1);
+
+    // "Checked" lands in the broker's inbox.
+    const inbox = async () => (await api('get', '/credit-notes/inbox')).body;
+    let box = await inbox();
+    expect(box.unread).toBe(1);
+    expect(box.data[0]).toMatchObject({ kind: 'CHECKED', declareNo: 'I 122050', readAt: null });
+
+    // "Revised" needs a message, sends the note back as a draft and takes the fee out.
+    const revise = (body: object) =>
+      request(app)
+        .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
+        .set(acc)
+        .send({ reviewStatus: 'REVISED', ...body });
+    expect((await revise({})).status).toBe(400);
+    expect((await revise({ message: 'LOLO should be 62.70' })).status).toBe(204);
+    expect((await mine()).status).toBe('DRAFT');
+    const fee = async () =>
+      (await request(app).get('/api/v1/accounting/ledger').query({ year: '2026' }).set(acc)).body
+        .data[0].clearFee;
+    expect(await fee()).toBe('0.00');
+    // Accounting still sees it, as Revised.
+    expect((await review()).body.counts).toMatchObject({ total: 1, revised: 1 });
+
+    box = await inbox();
+    expect(box.unread).toBe(2);
+    expect(box.data[0]).toMatchObject({ kind: 'REVISED', body: 'LOLO should be 62.70' });
+    const msgs = (await api('get', `/docs/credit-notes/${cn.body.id}/messages`)).body;
+    expect(msgs[0].kind).toBe('REVISED');
+
+    // The broker fixes it and submits again: back in the ledger, Unchecked for accounting.
+    const doc = (await api('get', `/docs/credit-notes/${cn.body.id}`)).body;
+    const fixed = await request(app)
+      .put(`/api/v1/accounting/docs/credit-notes/${cn.body.id}`)
+      .set(h)
+      .send({
+        ...doc.header,
+        clientId: doc.clientId,
+        accountingRecordId: doc.accountingRecordId,
+        lines: [
+          { description: 'IMPORT-CLEARANCE', qty: '1', unit: "40'", unitPrice: '115' },
+          { description: 'LOLO', qty: '1', unit: "40'", unitPrice: '62.70' },
+        ],
+      });
+    expect(fixed.status).toBe(200);
+    expect((await api('post', `/docs/credit-notes/${cn.body.id}/issue`)).status).toBe(200);
+    expect(await fee()).toBe('177.70');
+    expect((await review()).body.data[0]).toMatchObject({
+      reviewStatus: 'UNCHECKED',
+      total: '177.70',
+    });
+
+    // Reading messages clears the badge.
+    await api('post', '/credit-notes/inbox/read').send({ messageId: box.data[0].id });
+    expect((await inbox()).unread).toBe(1);
+    await api('post', '/credit-notes/inbox/read').send({});
+    expect((await inbox()).unread).toBe(0);
+  });
+
+  it("accounting's remarks reach the broker even when someone else created the note", async () => {
+    const declId = await declaration(b.jr.id, 'I 95120', '2026-09-19', 'IMPORT');
+    const admin = await as('ADMIN');
+    const broker = await as('CUSTOMS_BROKER');
+    const draft = (
+      await request(app)
+        .get('/api/v1/accounting/docs/credit-notes/prefill')
+        .query({ declarationId: declId })
+        .set(admin)
+    ).body;
+    draft.lines = [{ description: 'LOLO', qty: '1', unit: 'SHIP', unitPrice: '50' }];
+    const cn = await request(app)
+      .post('/api/v1/accounting/docs/credit-notes')
+      .set(admin)
+      .send(draft);
+    await request(app).post(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/issue`).set(admin);
+    await request(app)
+      .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
+      .set(admin)
+      .send({ reviewStatus: 'REVISED', message: 'LOLO should be 62.70' });
+
+    const box = (await request(app).get('/api/v1/accounting/credit-notes/inbox').set(broker)).body;
+    expect(box.unread).toBe(1);
+    expect(box.data[0]).toMatchObject({
+      kind: 'REVISED',
+      body: 'LOLO should be 62.70',
+      declareNo: 'I 95120',
+      direction: 'IMPORT',
+      clientName: expect.any(String),
+      total: '50.00',
+      status: 'DRAFT',
+    });
+    // The sender doesn't message themselves.
+    expect(
+      (await request(app).get('/api/v1/accounting/credit-notes/inbox').set(admin)).body.unread,
+    ).toBe(0);
   });
 });

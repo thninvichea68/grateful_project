@@ -22,6 +22,10 @@
   --tone: #a78bfa;
   --tone-bg: rgba(139, 92, 246, 0.14);
 }
+.void {
+  --tone: var(--status-exception-fg);
+  --tone-bg: var(--status-exception-bg);
+}
 :global([data-theme='light']) .checked {
   --tone: #059669;
   --tone-bg: #d1fae5;
@@ -264,7 +268,40 @@
 .statusPill {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   padding-right: 12px;
+}
+.pillDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+
+/* Sidebar → Credit Noted (same page style) */
+.cn {
+  font-weight: 800;
+  color: var(--accent-primary) !important;
+}
+.newBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0 14px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 8px;
+  background: var(--accent-primary);
+  color: #041b2d;
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.newBtn:hover {
+  background: var(--accent-lime-bright);
 }
 
 .foot {
@@ -297,4 +334,27 @@
   .toolbar {
     flex-wrap: wrap;
   }
+}
+
+/* The "Send back for revision" dialog */
+.reviseField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reviseField span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.reviseField textarea {
+  resize: vertical;
+  font-family: var(--font-main);
+  line-height: 1.5;
+}
+.reviseNote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
 }

@@ -13,6 +13,8 @@ import { parse } from '../../lib/validate';
 import { attachmentName, excelUpload, requireFile } from '../../lib/http';
 import * as svc from './service';
 import { parseCargoWorkbook } from './excel';
+import { buildInvoicePackingList } from './invoicePackingList';
+import { buildImportInvoicePackingList } from './importInvoicePackingList';
 import { assertClientAllowed, assertClientVisible, scopeClients } from '../../lib/clientScope';
 
 const idParam = z.object({ id: z.string().uuid('Invalid shipment id') });
@@ -140,6 +142,30 @@ shipmentsRouter.post(
         message: `Invoice ${no} is already on shipment ${ref}; saving will be refused unless you change it.`,
       });
     res.json(result);
+  },
+);
+
+/**
+ * Invoice + packing list workbook in JR's layouts: the export INV+PL (one sheet per cargo
+ * invoice), or for an import the INVOICE sheets plus the customs cover and transfer letters.
+ */
+shipmentsRouter.get(
+  '/:id/invoice-packing-list.xlsx',
+  requirePermission('shipments:read'),
+  async (req, res) => {
+    const { id } = parse(idParam, req.params);
+    const detail = await svc.getShipment(id);
+    assertClientVisible(req, detail.clientId, 'Shipment');
+    const { buffer, fileName } =
+      detail.direction === 'IMPORT'
+        ? await buildImportInvoicePackingList(id)
+        : await buildInvoicePackingList(id);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', attachmentName(fileName));
+    res.send(buffer);
   },
 );
 

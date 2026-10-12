@@ -4,6 +4,7 @@ import { useCreditNoteDeclarations } from '../../features/accounting';
 import { ErrorBanner, Modal, ui } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { fmtDate } from '../../lib/format';
+import { cnSeq } from './seq';
 import s from './NewCreditNoteModal.module.css';
 
 /** Pick the customs declaration a new Credit Noted is for; the form fills from its shipment. */
@@ -45,7 +46,7 @@ export function NewCreditNoteModal({ base, onClose }: { base: string; onClose: (
               </span>
               {d.creditNoteNo && (
                 <span className={s.has} title="This declaration already has a credit note">
-                  Has {d.creditNoteNo}
+                  Has No. {cnSeq(d.creditNoteNo)}
                 </span>
               )}
             </button>

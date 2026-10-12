@@ -12,6 +12,7 @@ import {
   type BillingDoc,
   type BillingDocListItem,
   type BillingDocType,
+  type CreditNoteMessage,
   type CreditNoteReviewCounts,
   type CreditNoteReviewRow,
   type CreditNoteReviewStatus,
@@ -352,7 +353,12 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       throw conflict(`Only drafts can be issued; this one is ${String(doc.status).toLowerCase()}`);
     await tx
       .update(cfg.table)
-      .set({ status: 'ISSUED' } as never)
+      // A credit note accounting sent back comes back to them as Unchecked.
+      .set(
+        (type === 'credit-notes'
+          ? { status: 'ISSUED', reviewStatus: 'UNCHECKED' }
+          : { status: 'ISSUED' }) as never,
+      )
       .where(eq(col(cfg.table, 'id'), id));
     if (type === 'credit-notes' && !doc.accountingRecordId) {
       doc.accountingRecordId = await ledgerRowForCreditNote(tx, doc, req);
@@ -412,6 +418,25 @@ async function ledgerRowForCreditNote(tx: Tx, doc: Row, req: Request): Promise<s
   return d.recordId ?? insertLedger(tx, ledgerInputSchema.parse({ declarationId: d.id }), req);
 }
 
+/** Undo what issuing wrote into the Monthly Ledger row (if that row still shows this document). */
+async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
+  if (!cfg.ledger || !doc.accountingRecordId) return;
+  const [r] = await tx
+    .select()
+    .from(accountingRecords)
+    .where(eq(accountingRecords.id, doc.accountingRecordId as string));
+  const numberCol = cfg.ledger.numberCol;
+  const stillOurs = numberCol
+    ? !!cfg.numberCol && r?.[numberCol] === doc[cfg.numberCol]
+    : Number(r?.[cfg.ledger.totalCol]) === Number(doc.total);
+  if (!r || !stillOurs) return;
+  await tx
+    .update(accountingRecords)
+    .set({ ...(numberCol ? { [numberCol]: null } : {}), [cfg.ledger.totalCol]: '0' } as never)
+    .where(eq(accountingRecords.id, r.id));
+  await recompute(tx, r.id);
+}
+
 /** Void: keeps the record (numbers are never reused) and takes it back out of the ledger. */
 export async function voidDoc(
   type: BillingDocType,
@@ -427,26 +452,7 @@ export async function voidDoc(
       .update(cfg.table)
       .set({ status: 'VOID' } as never)
       .where(eq(col(cfg.table, 'id'), id));
-    if (cfg.ledger && doc.status === 'ISSUED' && doc.accountingRecordId) {
-      const [r] = await tx
-        .select()
-        .from(accountingRecords)
-        .where(eq(accountingRecords.id, doc.accountingRecordId as string));
-      const numberCol = cfg.ledger.numberCol;
-      const stillOurs = numberCol
-        ? !!cfg.numberCol && r?.[numberCol] === doc[cfg.numberCol]
-        : Number(r?.[cfg.ledger.totalCol]) === Number(doc.total);
-      if (r && stillOurs) {
-        await tx
-          .update(accountingRecords)
-          .set({
-            ...(numberCol ? { [numberCol]: null } : {}),
-            [cfg.ledger.totalCol]: '0',
-          } as never)
-          .where(eq(accountingRecords.id, r.id));
-        await recompute(tx, r.id);
-      }
-    }
+    if (doc.status === 'ISSUED') await takeOutOfLedger(tx, cfg, doc);
     await audit(
       tx,
       {
@@ -611,8 +617,14 @@ export async function listCreditNoteReview(p: {
   month?: number | undefined;
   year?: number | undefined;
   review?: string | undefined;
+  /** The broker's own list (sidebar → Credit Noted): drafts and void too, optionally one status. */
+  allStatuses?: boolean;
+  status?: string | undefined;
 }): Promise<Paginated<CreditNoteReviewRow> & { counts: CreditNoteReviewCounts }> {
-  const c = [sql`t.status = 'ISSUED'`];
+  const c = p.allStatuses
+    ? [p.status ? sql`t.status = ${p.status}` : sql`true`]
+    : // Submitted ones, plus those sent back to the broker that are still being revised.
+      [sql`(t.status = 'ISSUED' OR (t.status = 'DRAFT' AND t.review_status = 'REVISED'))`];
   if (p.clientId) c.push(sql`t.client_id = ${p.clientId}`);
   const scoped = clientCondition(sql`t.client_id`, p.clientIds);
   if (scoped) c.push(scoped);
@@ -649,40 +661,130 @@ export async function listCreditNoteReview(p: {
           cl.id AS "clientId", cl.code AS "clientCode", cl.name AS "clientName",
           x.direction, x.transport_mode AS "transportMode", t.declare_no AS "declareNo",
           t.quantity_text AS "quantityText", po.short_name AS port, t.total::text AS total,
-          t.review_status AS "reviewStatus", count(*) OVER () AS total_count
+          t.status, t.review_status AS "reviewStatus", count(*) OVER () AS total_count
         ${from} ${whereAll(c)}
         ORDER BY t.cn_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
   );
   return { ...toPaginated(rows, p.page, p.pageSize), counts: counts! };
 }
 
+/**
+ * Accounting's check of a submitted credit note.
+ * - CHECKED: the broker gets a "Checked" message (with an optional note).
+ * - REVISED: the note goes back to the broker as an editable draft, its Clear Fee comes out of
+ *   the Monthly Ledger until it is submitted again, and the broker gets the message saying
+ *   what to change.
+ */
 export async function setCreditNoteReview(
   id: string,
   reviewStatus: CreditNoteReviewStatus,
+  message: string | undefined,
   req: Request,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const [before] = await tx
-      .select({ status: creditNotes.status, reviewStatus: creditNotes.reviewStatus })
-      .from(creditNotes)
-      .where(eq(creditNotes.id, id));
-    if (!before) throw notFound('Credit note');
-    if (before.status !== 'ISSUED')
-      throw businessRule('Only a credit note submitted to the Monthly Ledger can be checked');
+    const doc = await lockDoc(tx, 'credit-notes', id);
+    if (doc.status !== 'ISSUED')
+      throw businessRule(
+        doc.status === 'DRAFT' && doc.reviewStatus === 'REVISED'
+          ? 'This credit note is with the broker for revision; it comes back when they submit it again'
+          : 'Only a credit note submitted to the Monthly Ledger can be checked',
+      );
+    if (reviewStatus === 'REVISED') {
+      await tx.update(creditNotes).set({ status: 'DRAFT' }).where(eq(creditNotes.id, id));
+      await takeOutOfLedger(tx, CONFIG['credit-notes'], doc);
+    }
     await tx
       .update(creditNotes)
       .set({ reviewStatus, reviewedBy: req.auth?.userId ?? null, reviewedAt: new Date() })
       .where(eq(creditNotes.id, id));
+    if (reviewStatus !== 'UNCHECKED')
+      await tx.execute(sql`
+        INSERT INTO credit_note_messages (credit_note_id, recipient_id, sender_id, kind, body)
+        SELECT ${id}::uuid, u.id, ${req.auth?.userId ?? null}::uuid, ${reviewStatus}::credit_note_review, ${message ?? ''}
+        FROM ${creditNoteRecipients(id, doc.createdById as string | null)} u
+        WHERE u.id IS DISTINCT FROM ${req.auth?.userId ?? null}::uuid`);
     await audit(
       tx,
       {
         action: 'UPDATE',
         entity: 'credit_note',
         entityId: id,
-        before: { reviewStatus: before.reviewStatus },
-        after: { reviewStatus },
+        before: { status: doc.status, reviewStatus: doc.reviewStatus },
+        after: {
+          status: reviewStatus === 'REVISED' ? 'DRAFT' : doc.status,
+          reviewStatus,
+          message,
+        },
       },
       req,
     );
   });
+}
+
+/**
+ * Who hears about a credit note: every active customs broker who can see its client, plus
+ * whoever created it (an accountant or admin may have drafted it for the broker).
+ */
+function creditNoteRecipients(creditNoteId: string, createdById: string | null) {
+  return sql`(
+    SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id
+    JOIN credit_notes t ON t.id = ${creditNoteId}::uuid
+    WHERE r.code = 'CUSTOMS_BROKER' AND u.is_active AND u.deleted_at IS NULL
+      AND (u.client_ids IS NULL OR t.client_id = ANY(u.client_ids))
+    UNION
+    SELECT id FROM users WHERE id = ${createdById}::uuid AND deleted_at IS NULL
+  )`;
+}
+
+/* ---------- The broker's inbox ---------- */
+
+const MESSAGE_COLUMNS = sql`m.id, m.credit_note_id AS "creditNoteId", t.cn_no AS number,
+  t.declare_no AS "declareNo", cl.code AS "clientCode", cl.name AS "clientName", m.kind, m.body,
+  u.full_name AS "senderName", m.created_at AS "createdAt", m.read_at AS "readAt",
+  to_char(t.cn_date, 'YYYY-MM-DD') AS date, t.status, x.direction, x.transport_mode AS "transportMode",
+  t.quantity_text AS "quantityText", po.short_name AS port, t.total::text AS total`;
+const MESSAGE_FROM = sql`FROM credit_note_messages m
+  JOIN credit_notes t ON t.id = m.credit_note_id JOIN clients cl ON cl.id = t.client_id
+  LEFT JOIN users u ON u.id = m.sender_id
+  LEFT JOIN ports po ON po.id = t.port_id
+  LEFT JOIN accounting_records a ON a.id = t.accounting_record_id
+  LEFT JOIN LATERAL (
+    SELECT s.direction, s.transport_mode
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id
+    WHERE d.id = a.declaration_id
+       OR (a.declaration_id IS NULL AND lower(d.declare_no) = lower(t.declare_no))
+    ORDER BY d.created_at DESC LIMIT 1
+  ) x ON true`;
+
+export async function creditNoteInbox(
+  userId: string,
+): Promise<{ data: CreditNoteMessage[]; unread: number }> {
+  const data = await queryRows<CreditNoteMessage>(
+    db,
+    sql`SELECT ${MESSAGE_COLUMNS} ${MESSAGE_FROM}
+        WHERE m.recipient_id = ${userId} ORDER BY m.created_at DESC LIMIT 50`,
+  );
+  const [r] = await queryRows<{ n: number }>(
+    db,
+    sql`SELECT count(*)::int AS n FROM credit_note_messages
+        WHERE recipient_id = ${userId} AND read_at IS NULL`,
+  );
+  return { data, unread: r?.n ?? 0 };
+}
+
+/** Marks my messages read: one, or all when no id is given. */
+export async function markCreditNoteMessagesRead(userId: string, id?: string): Promise<void> {
+  await db.execute(
+    sql`UPDATE credit_note_messages SET read_at = now()
+        WHERE recipient_id = ${userId} AND read_at IS NULL ${id ? sql`AND id = ${id}` : sql``}`,
+  );
+}
+
+/** Accounting's messages about one credit note, newest first (the editor's banner). */
+export async function creditNoteMessagesFor(id: string): Promise<CreditNoteMessage[]> {
+  return queryRows<CreditNoteMessage>(
+    db,
+    sql`SELECT ${MESSAGE_COLUMNS} ${MESSAGE_FROM}
+        WHERE m.credit_note_id = ${id} ORDER BY m.created_at DESC LIMIT 20`,
+  );
 }

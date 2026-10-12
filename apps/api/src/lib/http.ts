@@ -31,5 +31,10 @@ export function requireFile(file: Express.Multer.File | undefined): Express.Mult
 
 /** "SHP-26-0001.xlsx"-safe file name for Content-Disposition. */
 export function attachmentName(name: string): string {
-  return `attachment; filename="${name.replace(/[^A-Za-z0-9._-]/g, '_')}"`;
+  // Plain name for old clients; filename* (RFC 5987) keeps "+", "'" and spaces as they are.
+  const encoded = encodeURIComponent(name).replace(
+    /['()*]/g,
+    (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${name.replace(/[^A-Za-z0-9._-]/g, '_')}"; filename*=UTF-8''${encoded}`;
 }

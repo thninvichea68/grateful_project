@@ -20,10 +20,14 @@ metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
     WHERE f.deleted_at IS NULL ${scoped ? sql`AND ${scoped}` : sql``}
   `);
   const row = result.rows[0];
+  const inbox = await db.execute<{ n: string }>(sql`
+    SELECT count(*) AS n FROM credit_note_messages
+    WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL`);
   const body: NavCounts = {
     openFollowUps: Number(row?.open ?? 0),
     overdueFollowUps: Number(row?.overdue ?? 0),
     unreadNotifications: 0,
+    creditNoteInbox: Number(inbox.rows[0]?.n ?? 0),
   };
   res.json(body);
 });

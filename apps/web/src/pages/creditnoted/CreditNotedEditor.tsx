@@ -3,7 +3,13 @@ import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BILLING_DOC_SCHEMAS, computeLinesTotal, lineAmount, type BillingDoc } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useCompany, useDoc, useDocAction, usePrefill } from '../../features/accounting';
+import {
+  useCompany,
+  useCreditNoteMessages,
+  useDoc,
+  useDocAction,
+  usePrefill,
+} from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { Pill } from '../../components/StatusPill';
@@ -16,9 +22,12 @@ import { initialValues, type Values } from '../accounting/DocEditorPage';
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
 import { CreditNote } from '../print/PrintDocPage';
 import ps from '../print/print.module.css';
+import { timeAgo } from './Inbox';
+import { cnSeq } from './seq';
 import s from './CreditNotedEditor.module.css';
 
 const TYPE = 'credit-notes' as const;
+const CN_STATUS_LABEL = { DRAFT: 'Draft', ISSUED: 'Submitted', VOID: 'Discarded' } as const;
 const A4_WIDTH = 794; // 210mm at 96dpi
 
 /** /credit-noted/:id (or /accounting/credit-notes/:id): loads the note or a fresh draft. */
@@ -104,7 +113,7 @@ function CreditNotedEditor({
   const preview: BillingDoc = {
     id: doc?.id ?? 'preview',
     type: TYPE,
-    number: doc?.number ?? (String(values.cnNo ?? '') || 'CN (on save)'),
+    number: doc?.number ?? '',
     date: String(values.cnDate ?? ''),
     status: doc?.status ?? 'ISSUED',
     clientId: String(values.clientId ?? ''),
@@ -140,7 +149,7 @@ function CreditNotedEditor({
           : await action.mutateAsync({ action: 'create', body: v })
       ) as BillingDoc;
       if (after) await after(saved);
-      else toast(doc ? 'Saved.' : `Credit Noted ${saved.number ?? ''} saved as a draft.`);
+      else toast(doc ? 'Saved.' : `Credit Noted No. ${cnSeq(saved.number)} saved as a draft.`);
       if (!doc) navigate(`${base}/${saved.id}`, { replace: true });
     })();
 
@@ -148,24 +157,25 @@ function CreditNotedEditor({
     save(async (saved) => {
       if (
         !window.confirm(
-          `Submit Credit Noted ${saved.number ?? ''} to the Monthly Ledger?\n\n` +
+          `Submit Credit Noted No. ${cnSeq(saved.number)} to the Monthly Ledger?\n\n` +
             `${fmtMoney(saved.totals.total)} becomes the Clear Fee of declaration ${saved.declareNo ?? '(none)'}, ` +
             `and the credit note can no longer be edited.`,
         )
       )
         return;
       await action.mutateAsync({ action: 'issue', id: saved.id });
-      toast(`Credit Noted ${saved.number ?? ''} submitted to the Monthly Ledger.`);
+      toast(`Credit Noted No. ${cnSeq(saved.number)} submitted to the Monthly Ledger.`);
     });
 
-  const voidNote = async () => {
+  /** Discard (cancel) a submitted note: its Clear Fee comes back out of the Monthly Ledger. */
+  const discard = async () => {
     if (!doc) return;
     const reason = window.prompt(
-      'Why is this credit note void? Its Clear Fee is taken back out of the Monthly Ledger.',
+      'Why discard this credit note? Its Clear Fee is taken back out of the Monthly Ledger.',
     );
     if (!reason) return;
     await action.mutateAsync({ action: 'void', id: doc.id, body: { reason } });
-    toast('Credit Noted voided.');
+    toast('Credit Noted discarded.');
   };
   const remove = async () => {
     if (!doc || !window.confirm('Delete this draft?')) return;
@@ -205,11 +215,9 @@ function CreditNotedEditor({
             </Link>
             <h2>
               Credit Noted (Chea Payment){' '}
-              {doc?.number && <span className={s.number}>{doc.number}</span>}{' '}
+              {doc?.number && <span className={s.number}>No. {cnSeq(doc.number)}</span>}{' '}
               {doc && (
-                <Pill tone={DOC_STATUS_PILL[doc.status].tone}>
-                  {doc.status === 'ISSUED' ? 'Submitted' : DOC_STATUS_PILL[doc.status].label}
-                </Pill>
+                <Pill tone={DOC_STATUS_PILL[doc.status].tone}>{CN_STATUS_LABEL[doc.status]}</Pill>
               )}
             </h2>
             <p>Generate clean payment vouchers for operations &amp; finance</p>
@@ -236,12 +244,13 @@ function CreditNotedEditor({
               </button>
             )}
             {can('accounting:write') && doc?.status === 'ISSUED' && (
-              <button type="button" className="btn-delete-shipment" onClick={() => void voidNote()}>
-                Void
+              <button type="button" className="btn-delete-shipment" onClick={() => void discard()}>
+                Discard
               </button>
             )}
           </div>
         </header>
+        <ReviewBanner doc={doc} />
         <ErrorBanner error={action.error} />
 
         <form
@@ -306,7 +315,6 @@ function CreditNotedEditor({
                 {field('quantityText', 'Qty / unit')}
                 {field('grossWeightKg', 'Gross weight (kg)')}
                 {field('cbm', 'CBM')}
-                {field('cnNo', 'CN no. (blank = automatic)')}
               </div>
             </section>
 
@@ -395,7 +403,7 @@ function CreditNotedEditor({
                   ? 'Read only for your role.'
                   : doc.status === 'ISSUED'
                     ? 'Submitted to the Monthly Ledger; it can no longer be edited.'
-                    : 'This credit note is void.'}
+                    : 'This credit note was discarded.'}
               </p>
             )}
           </fieldset>
@@ -445,6 +453,30 @@ function CreditNotedEditor({
         <CreditNote d={preview} />
       </Preview>
     </section>
+  );
+}
+
+/** Accounting's latest word on this note: what to fix (returned as a draft), or Checked. */
+function ReviewBanner({ doc }: { doc?: BillingDoc | undefined }) {
+  const messages = useCreditNoteMessages(doc?.id);
+  const m = messages.data?.[0];
+  if (!doc || !m) return null;
+  const returned = m.kind === 'REVISED' && doc.status === 'DRAFT';
+  const checked = m.kind === 'CHECKED' && doc.status === 'ISSUED';
+  if (!returned && !checked) return null;
+  return (
+    <div className={`${s.banner} ${returned ? s.bannerRevise : s.bannerCheck}`} role="status">
+      <div className={s.bannerHead}>
+        <b>{returned ? 'Returned by accounting for revision' : 'Checked by accounting'}</b>
+        <span>
+          {m.senderName ?? 'Accounting'} · {timeAgo(m.createdAt)}
+        </span>
+      </div>
+      {m.body && <p className={s.bannerBody}>{m.body}</p>}
+      {returned && (
+        <p className={s.bannerHint}>Make the changes, then press “Submit to Monthly” again.</p>
+      )}
+    </div>
   );
 }
 

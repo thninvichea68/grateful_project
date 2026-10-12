@@ -91,6 +91,12 @@
     max-height: none;
   }
 }
+/* Long marks stay on one line (full text on hover). */
+.mark {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Keep the Total row in view while the rows scroll under it. */
 .tableScroll tbody tr:last-child td {
   position: sticky;

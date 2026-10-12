@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CLIENT_STATUSES, type ClientStatus, type Direction, type ShipmentStatus } from '../enums';
 import { paginationQuerySchema } from './common';
-import { decimal, optText } from './fields';
+import { decimal, optDate, optText } from './fields';
 
 export const clientInputSchema = z.object({
   code: z
@@ -24,6 +24,8 @@ export const clientInputSchema = z.object({
     .or(z.literal(''))
     .transform((v) => (v ? v : null)),
   contactPhone: optText(40),
+  cdcNo: optText(60),
+  cdcIssueDate: optDate,
   commissionUsd: decimal(2, { min: 0, allowEmpty: false }),
   status: z.enum(CLIENT_STATUSES).default('ACTIVE'),
 });
@@ -57,6 +59,8 @@ export interface ClientDetail extends ClientListItem {
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  cdcNo: string | null;
+  cdcIssueDate: string | null;
   createdAt: string;
   importCount: number;
   exportCount: number;

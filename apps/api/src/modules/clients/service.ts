@@ -107,6 +107,8 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
     contactName: row!.contactName,
     contactEmail: row!.contactEmail,
     contactPhone: row!.contactPhone,
+    cdcNo: row!.cdcNo,
+    cdcIssueDate: row!.cdcIssueDate,
     createdAt: row!.createdAt.toISOString(),
     importCount: e.imports,
     exportCount: e.exports,

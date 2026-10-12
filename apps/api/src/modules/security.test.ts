@@ -56,6 +56,10 @@ const PUBLIC = new Set([
 /** Endpoints any signed-in user may call (they act only on the caller, or change no data). */
 const SELF_SERVICE = new Set([
   'post /api/v1/auth/change-password',
+  'patch /api/v1/auth/me', // my own name
+  'post /api/v1/auth/me/avatar', // my own profile picture
+  'delete /api/v1/auth/me/avatar',
+  'post /api/v1/accounting/credit-notes/inbox/read', // marks my own inbox messages read
   'post /api/v1/assistant/chat', // "Ask AI": everyone may ask; it writes nothing
 ]);
 const concrete = (p: string) =>

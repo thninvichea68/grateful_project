@@ -213,6 +213,23 @@ describe('settings', () => {
         })
       ).body,
     ).toMatchObject({ code: 'PNH19', shortName: 'TECSRUN' });
+    // Edit every field of a port, then delete it (nothing uses it yet).
+    const port = (await api('get', '/settings').set(h)).body.ports.find(
+      (p: { code: string }) => p.code === 'PNH19',
+    );
+    expect(
+      (
+        await api('patch', `/settings/ports/${port.id}`).set(h).send({
+          code: 'PNH20',
+          customsPortNo: '20',
+          name: 'Tecsrun Dry Port 2',
+          shortName: 'tecsrun 2',
+          kind: 'SEA',
+        })
+      ).body,
+    ).toMatchObject({ code: 'PNH20', customsPortNo: '20', shortName: 'TECSRUN 2', kind: 'SEA' });
+    expect((await api('delete', `/settings/ports/${port.id}`).set(h)).status).toBe(204);
+    expect((await api('delete', `/settings/ports/${port.id}`).set(h)).status).toBe(404);
     const fw = (await api('post', '/settings/forwarders').set(h).send({ name: 'Hippo Logistics' }))
       .body;
     expect(

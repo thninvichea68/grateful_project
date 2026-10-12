@@ -86,6 +86,9 @@ export const clients = pgTable(
     contactName: text('contact_name'),
     contactEmail: text('contact_email'),
     contactPhone: text('contact_phone'),
+    /** QIP master list (CDC) number and issue date, printed on export invoices / packing lists. */
+    cdcNo: text('cdc_no'),
+    cdcIssueDate: date('cdc_issue_date'),
     /** "CM" deducted in the monthly ledger. Prototype rule: JR = 0, others = 50. */
     commissionUsd: money('commission_usd').notNull().default('50.00'),
     status: clientStatusEnum('status').notNull().default('ACTIVE'),

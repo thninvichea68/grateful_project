@@ -32,6 +32,7 @@ import { ErrorBanner, FieldError } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import { ApiError } from '../../lib/api';
+import { downloadFile } from '../../lib/files';
 import { formResolver } from '../../lib/zodForm';
 import { AddNewSelect } from './AddNewSelect';
 import { CargoSection } from './CargoSection';
@@ -175,6 +176,33 @@ function ShipmentForm({
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+  /** Why Export INV + PL can't run yet (shown as the button's tooltip), or null when it can. */
+  const exportBlocked = !detail
+    ? null
+    : isDirty
+      ? 'Save your changes first'
+      : detail.invoices.length === 0
+        ? detail.direction === 'EXPORT'
+          ? 'Add the cargo invoices first (Cargo, Pricing & FOB)'
+          : 'Add the cargo invoices first (Item, Costing & Forwarding)'
+        : null;
+  /**
+   * JR's "INV + PL" workbook: the commercial invoice and packing list side by side; for an
+   * import also the customs cover letter and the transfer of rights to the broker.
+   */
+  const exportInvPl = async () => {
+    if (!detail) return;
+    setExporting(true);
+    try {
+      await downloadFile(`/shipments/${detail.id}/invoice-packing-list.xlsx`);
+    } catch {
+      toast('Export failed. Check the cargo invoices and try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const cancel = () => {
     if (isDirty && !window.confirm('Discard your changes?')) return;
     if (detail) navigate('/plans');
@@ -251,17 +279,37 @@ function ShipmentForm({
                   )}
                 </div>
               </div>
-              {detail && can('shipments:delete') && (
-                <button
-                  type="button"
-                  className={f.deleteBtn}
-                  onClick={() => void remove()}
-                  disabled={del.isPending}
-                >
-                  {icons.trash({})}
-                  Delete shipment
-                </button>
-              )}
+              <div className={f.headerActions}>
+                {detail && (
+                  <button
+                    type="button"
+                    className={f.exportBtn}
+                    onClick={() => void exportInvPl()}
+                    // Always shown on a saved shipment; greyed out (with the reason) until it can run.
+                    disabled={exporting || !!exportBlocked}
+                    title={
+                      exportBlocked ??
+                      (detail.direction === 'IMPORT'
+                        ? 'Invoice + packing list, customs cover letter and transfer of rights in Excel'
+                        : 'Invoice + packing list in Excel, one sheet per invoice')
+                    }
+                  >
+                    {icons.download({})}
+                    {exporting ? 'Exporting…' : 'Export INV + PL'}
+                  </button>
+                )}
+                {detail && can('shipments:delete') && (
+                  <button
+                    type="button"
+                    className={f.deleteBtn}
+                    onClick={() => void remove()}
+                    disabled={del.isPending}
+                  >
+                    {icons.trash({})}
+                    Delete shipment
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

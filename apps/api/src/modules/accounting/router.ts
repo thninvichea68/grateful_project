@@ -6,6 +6,7 @@ import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
   billingDocListQuerySchema,
+  creditNoteListQuerySchema,
   creditNoteReviewInputSchema,
   creditNoteReviewQuerySchema,
   ledgerInputSchema,
@@ -193,6 +194,14 @@ accountingRouter.get(
     res.json(await docs.listCreditNoteReview({ ...q, clientIds: scopeClients(req) }));
   },
 );
+/** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
+accountingRouter.get('/credit-notes/list', async (req, res) => {
+  const q = parse(creditNoteListQuerySchema, req.query);
+  if (q.clientId) assertClientAllowed(req, q.clientId);
+  res.json(
+    await docs.listCreditNoteReview({ ...q, allStatuses: true, clientIds: scopeClients(req) }),
+  );
+});
 accountingRouter.patch(
   '/docs/:type/:id/review',
   requirePermission('accounting:write'),
@@ -200,11 +209,29 @@ accountingRouter.patch(
     const { type } = parse(typeParam, req.params);
     if (type !== 'credit-notes') throw notFound('Document');
     const { id } = parse(idParam, req.params);
-    const { reviewStatus } = parse(creditNoteReviewInputSchema, req.body);
-    await docs.setCreditNoteReview(id, reviewStatus, req);
+    const { reviewStatus, message } = parse(creditNoteReviewInputSchema, req.body);
+    await docs.setCreditNoteReview(id, reviewStatus, message, req);
     res.status(204).end();
   },
 );
+
+/** Accounting's messages about one credit note (the editor shows the latest one). */
+accountingRouter.get('/docs/:type/:id/messages', async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  if (type !== 'credit-notes') throw notFound('Document');
+  const { id } = parse(idParam, req.params);
+  res.json(await docs.creditNoteMessagesFor(id));
+});
+
+/* The broker's Credit Noted inbox: messages from accounting addressed to me. */
+accountingRouter.get('/credit-notes/inbox', async (req, res) => {
+  res.json(await docs.creditNoteInbox(req.auth!.userId));
+});
+accountingRouter.post('/credit-notes/inbox/read', async (req, res) => {
+  const { messageId } = parse(z.object({ messageId: z.string().uuid().optional() }), req.body);
+  await docs.markCreditNoteMessagesRead(req.auth!.userId, messageId);
+  res.status(204).end();
+});
 
 /* ---------- Billing documents (one set of routes for all five types) ---------- */
 accountingRouter.get('/docs/:type', async (req, res) => {

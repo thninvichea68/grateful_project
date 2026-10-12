@@ -10,7 +10,7 @@ export interface NavItem {
   permission: Permission;
   /** Rendered with the prototype's indented sub-item style. */
   sub?: boolean;
-  badge?: 'openFollowUps';
+  badge?: 'openFollowUps' | 'creditNoteInbox';
   /** Exact match for NavLink active state. */
   end?: boolean;
 }
@@ -92,6 +92,7 @@ export const NAV: NavGroup[] = [
         title: 'Credit Noted (Chea Payment)',
         icon: 'creditnote',
         permission: 'creditnotes:read',
+        badge: 'creditNoteInbox',
       },
       {
         to: '/quotations',

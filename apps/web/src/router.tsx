@@ -59,6 +59,9 @@ const DocEditorPage = lazy(() =>
 const CreditNotesReview = lazy(() =>
   import('./pages/accounting/CreditNotesReview').then((m) => ({ default: m.CreditNotesReview })),
 );
+const CreditNotedList = lazy(() =>
+  import('./pages/creditnoted/CreditNotedList').then((m) => ({ default: m.CreditNotedList })),
+);
 const CreditNotedRoute = lazy(() =>
   import('./pages/creditnoted/CreditNotedEditor').then((m) => ({ default: m.CreditNotedRoute })),
 );
@@ -203,10 +206,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'credit-noted',
-        element: guard(
-          'creditnotes:read',
-          <DocsListPage type="credit-notes" base="/credit-noted" />,
-        ),
+        element: guard('creditnotes:read', <CreditNotedList />),
       },
       {
         path: 'credit-noted/:id',
@@ -216,7 +216,15 @@ export const router = createBrowserRouter([
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },
       { path: 'operations', element: guard('shipments:read', <OperationsPage />) },
       { path: 'staff', element: guard('staff:read', <StaffPage />) },
-      { path: 'settings', element: guard('settings:read', <SettingsPage />) },
+      {
+        // Everyone reaches My profile; the workspace tabs check settings:read themselves.
+        path: 'settings',
+        element: (
+          <Suspense fallback={<PageLoading />}>
+            <SettingsPage />
+          </Suspense>
+        ),
+      },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
