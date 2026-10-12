@@ -180,9 +180,11 @@
 .num {
   text-align: right !important;
 }
+/* Declare no.: the app's Helvetica, with even-width digits so the numbers line up. */
 .mono {
-  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
 }
 .fee {
   font-weight: 700;

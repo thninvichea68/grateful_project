@@ -240,7 +240,7 @@ export function AnalyticsPage() {
             <option value="">All clients</option>
             {lookups.data?.clients.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.code} · {c.name}
+                {c.name}
               </option>
             ))}
           </select>

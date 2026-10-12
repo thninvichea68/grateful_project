@@ -20,13 +20,6 @@ const longDate = (iso: string) => {
   const [y, m, d] = iso.split('-');
   return y && m && d ? `${d}-${MON[Number(m) - 1]}-${y}` : iso;
 };
-/** 2026-06-02 → 2-Jun-2026 (debit note). */
-const dnDate = (iso: string) => {
-  const [y, m, d] = iso.split('-');
-  if (!y || !m || !d) return iso;
-  const mon = MON[Number(m) - 1]!;
-  return `${Number(d)}-${mon[0]}${mon.slice(1).toLowerCase()}-${y}`;
-};
 const kgs = (v: string) => (v ? `${money(v)} KGS` : '');
 const cbm = (v: string) =>
   v ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 })} CBM` : '';
@@ -51,22 +44,43 @@ const ColGroup = () => (
   </colgroup>
 );
 
-export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo; tax: boolean }) {
-  return (
-    <>
-      <div className={p.masthead}>
+/**
+ * The letterhead: the logo on the left and, centred, the company name in Khmer and English,
+ * VATTIN, address and phone (tax invoice, disbursement, invoices account statement).
+ * `compact` — the official receipt's: only the English name and VATTIN.
+ */
+export function Masthead({ c, compact = false }: { c: CompanyInfo; compact?: boolean }) {
+  if (compact)
+    return (
+      <div className={`${p.masthead} ${p.mastheadCompact}`}>
         <div className={p.logo}>
           <img src="/logo.png" alt="" />
         </div>
-        <div className={p.companyKm}>{c.nameKm}</div>
         <div className={p.companyEn}>{c.nameEn}</div>
-        <div className={p.vattin}>លេខអត្តសញ្ញាណកម្ម អតប (VATTIN) : {c.vattin}</div>
-        <div className={p.address}>
-          អាស័យដ្ឋាន : {c.addressKm}
-          <br />
-          លេខទូរស័ព្ទ: {c.phone}
-        </div>
+        <div className={p.vattin}>( VATTIN ) : {c.vattin}</div>
       </div>
+    );
+  return (
+    <div className={p.masthead}>
+      <div className={p.logo}>
+        <img src="/logo.png" alt="" />
+      </div>
+      <div className={p.companyKm}>{c.nameKm}</div>
+      <div className={p.companyEn}>{c.nameEn}</div>
+      <div className={p.vattin}>លេខអត្តសញ្ញាណកម្ម អតប (VATTIN) : {c.vattin}</div>
+      <div className={p.address}>
+        អាស័យដ្ឋាន : {c.addressKm}
+        <br />
+        លេខទូរស័ព្ទ: {c.phone}
+      </div>
+    </div>
+  );
+}
+
+export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo; tax: boolean }) {
+  return (
+    <>
+      <Masthead c={c} />
 
       <div className={p.titleBlock}>
         <div className={p.titleKm}>{tax ? 'វិក្កយបត្រអាករ' : 'វិក្កយបត្របង់ជំនួស'}</div>
@@ -282,38 +296,46 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
   return (
     <>
       <div className={p.dnHeadline}>DEBIT NOTE</div>
-      <div className={p.dnMeta}>
-        <div>CUSTOMER: {h(d, 'billTo')}</div>
-        <div className={p.dnNo}>
-          DN NO <b style={{ marginLeft: 35 }}>{d.number}</b>
-        </div>
-        <div>ADDRESS: {h(d, 'address')}</div>
-        <div>&nbsp;</div>
+      {/* Laid out like the tax invoice's details, in English only. */}
+      <div className={p.meta}>
         <div>
-          DATE <span style={{ marginLeft: 52 }}>{dnDate(d.date)}</span>
+          <div>
+            <span className={p.custLbl}>Customer: </span>
+            <span className={p.custEn}>{h(d, 'billTo')}</span>
+          </div>
+          <div>
+            <span className={p.metaLbl}>Address:</span>{' '}
+            <span className={p.metaVal}>{h(d, 'address')}</span>
+          </div>
+          {shipment ? (
+            <>
+              <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
+              <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
+              <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
+              <div className={p.ship}>PKGS: {h(d, 'pkgs')}</div>
+            </>
+          ) : (
+            <div className={p.ship}>CHARGE: {h(d, 'reference')}</div>
+          )}
         </div>
-        <div>&nbsp;</div>
-        {shipment ? (
-          <>
-            <div className={p.gap}>HBL NO : {h(d, 'hbl')}</div>
-            <div className={p.gap}>POL: {h(d, 'pol')}</div>
-            <div>G.W : {kgs(h(d, 'grossWeightKg'))}</div>
-            <div>POD: {h(d, 'pod')}</div>
-            <div>VOLUME: : {cbm(h(d, 'volumeCbm'))}</div>
-            <div>PKGS: {h(d, 'pkgs')}</div>
-            <div>CTNR No: {h(d, 'containerNo')}</div>
-            <div>&nbsp;</div>
-            <div className={p.gap}>Shipper : {h(d, 'shipper')}</div>
-            <div>&nbsp;</div>
-            <div>Consignee : {h(d, 'consignee')}</div>
-            <div>&nbsp;</div>
-          </>
-        ) : (
-          <>
-            <div className={p.gap}>CHARGE : {h(d, 'reference')}</div>
-            <div>&nbsp;</div>
-          </>
-        )}
+        <div className={p.metaRight}>
+          <div>
+            <span className={p.metaLbl}>DN No:</span> <span className={p.metaVal}>{d.number}</span>
+          </div>
+          <div>
+            <span className={p.metaLbl}>DN Date:</span>{' '}
+            <span className={p.metaVal}>{longDate(d.date)}</span>
+          </div>
+          {shipment && (
+            <>
+              <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
+              <div className={p.ship}>VOLUME: {cbm(h(d, 'volumeCbm'))}</div>
+              <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
+              <div className={p.ship}>POL: {h(d, 'pol')}</div>
+              <div className={p.ship}>POD: {h(d, 'pod')}</div>
+            </>
+          )}
+        </div>
       </div>
 
       <table className={p.dnTable}>

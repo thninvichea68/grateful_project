@@ -2,12 +2,11 @@ import { useEffect, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   amountInWords,
-  PAYMENT_METHOD_LABEL,
-  PAYMENT_METHODS,
   type BillingClient,
   type BillingPack,
   type BillingStatement,
   type OfficialReceipt,
+  type PaymentMethod,
   type StatementKind,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -20,8 +19,7 @@ import {
   STATEMENT_TITLE,
   type PackPart as Part,
 } from '../accounting/billingUi';
-import { CompanyHead } from './PrintDocPage';
-import { DebitNote, sheetClass, TaxOrDisbursement } from './InvoicePrint';
+import { DebitNote, Masthead, sheetClass, TaxOrDisbursement } from './InvoicePrint';
 import s from './print.module.css';
 import p from './billingPrint.module.css';
 import { useAutoPrint } from './useAutoPrint';
@@ -30,6 +28,22 @@ const money = (v: string | number | null | undefined) =>
   Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** 2026-09-03 → 03-09-2026, the date style of the Excel statements and receipts. */
 const dmy = (iso: string) => `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-09-30 → 30-Sep-26, the official receipt's date (as on the Excel OR-INV sheet). */
+const receiptDate = (iso: string) =>
+  `${iso.slice(8, 10)}-${MON[Number(iso.slice(5, 7)) - 1]}-${iso.slice(2, 4)}`;
+/** The receipt's payment boxes, in the Excel's order and wording. */
+const RECEIPT_METHOD: Record<PaymentMethod, string> = {
+  BANK_TRANSFER: 'BANK',
+  CASH: 'CASH',
+  CHEQUE: 'CHEQUE',
+};
+/** 2026-09-03 → 3-Sep-2026, the date style of the Excel account statements. */
+const shortDate = (iso: string) =>
+  `${Number(iso.slice(8, 10))}-${MON[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}`;
+/** 903.45 → 903.450: the statements show three decimals, as on the Excel sheets. */
+const money3 = (v: string | number) =>
+  Number(v).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const today = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
 
@@ -99,7 +113,7 @@ export function PrintPackPage() {
   for (const kind of ['INVOICE', 'DEBIT_NOTE'] as const)
     if (on(`st-${kind}`) && d.statements[kind].lines.length)
       sheets.push(
-        <div className={s.sheet} key={`st-${kind}`}>
+        <div className={`${s.sheet} ${p.statementSheet}`} key={`st-${kind}`}>
           <StatementSheet client={d.client} month={month} st={d.statements[kind]} c={c} />
         </div>,
       );
@@ -179,89 +193,70 @@ export function StatementSheet({
   c: CompanyInfo;
 }) {
   const inv = st.kind === 'INVOICE';
-  const paid = st.receipts.filter((r) => r.status === 'ISSUED');
-  const span = inv ? 5 : 4;
+  // Columns before Currency and Amount: No, Date, (INV, DIS | DN), REF.
+  const before = inv ? 5 : 4;
+  // The Excel sheets' headings: ST-INV in mixed case, STA-DN in capitals.
+  const heads = inv
+    ? ['No:', 'Date', 'INV Number', 'DISBURSEMENT', 'REF #', 'Currency', 'Amount']
+    : ['NO:', 'DATE', 'DN NUMBER', 'REF NO:', 'CURRENCY', 'AMOUNT'];
+  const total = (label: ReactNode, value: string, cls?: string) => (
+    <tr className={cls}>
+      <td />
+      <td colSpan={before - 1}>{label}</td>
+      <td />
+      <td className={p.r}>{money3(value)}</td>
+    </tr>
+  );
   return (
     <>
-      <CompanyHead c={c} khmer={inv} />
+      {/* As in the Excel: ST-INV has the invoice's letterhead, STA-DN none at all. */}
+      {inv && <Masthead c={c} />}
       <div className={p.stTitle}>Account Statement</div>
-      <div className={p.stPeriod}>
-        Date: {periodRange(month)}
-        {!inv && ' · Debit notes'}
-      </div>
+      <div className={p.stPeriod}>Date: {periodRange(month)}</div>
       <div className={p.billTo}>
         <b>{(client.legalName ?? client.name).toUpperCase()}</b>
-        {client.address}
+        {client.address?.toUpperCase()}
       </div>
+      {/* Laid out like the Excel ST-INV / STA-DN: a boxed table, ruled heading cells, open
+          rows, then the balance between a thin and a heavy rule. */}
       <table className={p.stTable}>
         <thead>
           <tr>
-            <th>No</th>
-            <th>Date</th>
-            {inv ? (
-              <>
-                <th>INV Number</th>
-                <th>Disbursement</th>
-              </>
-            ) : (
-              <th>DN Number</th>
-            )}
-            <th>{inv ? 'REF #' : 'REF NO'}</th>
-            <th>Currency</th>
-            <th>Amount</th>
+            {heads.map((t) => (
+              <th key={t}>{t}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {st.lines.map((l, i) => (
             <tr key={i}>
               <td className={p.c}>{i + 1}</td>
-              <td className={p.c}>{dmy(l.date)}</td>
+              <td className={p.c}>{shortDate(l.date)}</td>
               {inv ? (
                 <>
-                  <td className={p.c}>{l.invNo ?? '-'}</td>
-                  <td className={p.c}>{l.disNo ?? '-'}</td>
+                  <td className={p.c}>{l.invNo ?? ''}</td>
+                  <td className={p.c}>{l.disNo ?? ''}</td>
                 </>
               ) : (
                 <td className={p.c}>{l.dnNo}</td>
               )}
-              <td className={p.c}>{l.ref ?? '-'}</td>
+              <td className={p.c}>{l.ref ?? 'NON'}</td>
               <td className={p.c}>USD</td>
-              <td className={p.r}>{money(l.amount)}</td>
+              <td className={p.r}>{money3(l.amount)}</td>
             </tr>
           ))}
-          <tr className={p.balanceRow}>
-            <td colSpan={span} className={p.r}>
-              BALANCE AS {periodCode(month)}
-            </td>
-            <td className={p.c}>USD</td>
-            <td className={p.r}>{money(st.total)}</td>
+          <tr className={p.stGap}>
+            <td colSpan={before + 2} />
           </tr>
-          {paid.map((r) => (
-            <tr key={r.id} className={p.lessRow}>
-              <td colSpan={span} className={p.r}>
-                Less: received {dmy(r.receiptDate)} · {r.receiptNo}
-              </td>
-              <td className={p.c}>USD</td>
-              <td className={p.r}>-{money(r.amount)}</td>
-            </tr>
-          ))}
-          {paid.length > 0 && (
-            <tr className={p.balanceRow}>
-              <td colSpan={span} className={p.r}>
-                BALANCE DUE
-              </td>
-              <td className={p.c}>USD</td>
-              <td className={p.r}>{money(st.balance)}</td>
-            </tr>
+          {total(
+            <>
+              BALANCE AS <span className={p.stPeriodCode}>{periodCode(month)}</span>
+            </>,
+            st.total,
+            p.balanceRow,
           )}
         </tbody>
       </table>
-      <div className={s.note} style={{ marginTop: 18 }}>
-        <b>Note:</b> You can make payment by cross cheque to: <b>{c.bankAccountName}</b> or deposit
-        cash/cheque payment to bank as below:
-        <br />
-        <b>{c.bankName}</b> · A/NAME: {c.bankAccountName} · AC/NO: {c.bankAccountNo}
-      </div>
     </>
   );
 }
@@ -316,67 +311,53 @@ function statementReceipts(d: BillingPack, month: string, kind: StatementKind): 
  * As on that sheet, the debit-note receipt has no letterhead (logo and company details).
  */
 export function ReceiptBlock({ r, c }: { r: ReceiptView; c: CompanyInfo }) {
+  // As on the Excel OR-INV sheet: the invoices receipt has the letterhead, the DN one none.
   const letterhead = r.kind !== 'DEBIT_NOTE';
   return (
     <div className={p.receipt}>
       {r.status === 'VOID' && <div className={p.void}>CANCELLED</div>}
-      <div className={p.rcHead}>
-        {letterhead && <img src="/logo.png" alt="" />}
-        <div className={p.rcCompany}>
-          {letterhead && (
-            <>
-              <b>{c.nameEn}</b>
-              <span>( VATTIN ): {c.vattin}</span>
-              <br />
-              <span>
-                {c.addressEn}
-                {c.phone ? ` · Tel: ${c.phone}` : ''}
-              </span>
-            </>
-          )}
-        </div>
-        <div className={p.rcNo}>
-          No. {r.pending ? <span className={p.blank} /> : <b>{r.receiptNo}</b>}
-          <br />
-          Date: <b>{dmy(r.receiptDate)}</b>
-        </div>
-      </div>
+      {letterhead && <Masthead c={c} compact />}
       <div className={p.rcTitle}>OFFICIAL RECEIPT</div>
-      <dl className={p.rcRows}>
-        <dt>Received from</dt>
-        <dd>
+      <div className={p.rcGrid}>
+        <span className={p.rcLabel}>Received from</span>
+        <span className={p.rcField}>
           <b>{r.receivedFrom}</b>
-        </dd>
-        <dt>Amount</dt>
-        <dd className={p.rcAmount}>USD {money(r.amount)}</dd>
-        <dt>Amount in word</dt>
-        <dd>{amountInWords(r.amount)}</dd>
-        <dt>Received for</dt>
-        <dd>
-          {periodCode(r.month)} — Account statement ({STATEMENT_TITLE[r.kind].toLowerCase()})
+        </span>
+        <span className={p.rcSide}>
+          <span>Date:</span>
+          <span className={p.rcField}>{receiptDate(r.receiptDate)}</span>
+        </span>
+
+        <span className={p.rcLabel}>Amount</span>
+        <span className={`${p.rcField} ${p.rcAmount}`}>
+          <b>$</b>
+          <b>{money(r.amount)}</b>
+        </span>
+
+        <span className={p.rcLabel}>Amount in word</span>
+        <span className={`${p.rcField} ${p.rcWide}`}>{amountInWords(r.amount)}</span>
+
+        <span className={p.rcLabel}>Received for</span>
+        <span className={`${p.rcField} ${p.rcShort}`}>
+          {periodCode(r.month)}
           {r.note ? ` · ${r.note}` : ''}
-        </dd>
-        <dt>Payment Method</dt>
-        <dd>
-          <span className={p.rcMethods}>
-            {PAYMENT_METHODS.map((m) => (
-              <span key={m}>
-                <span className={p.box}>{r.paymentMethod === m ? '✓' : ''}</span>
-                {PAYMENT_METHOD_LABEL[m]}
-              </span>
-            ))}
-            {r.paymentRef && <span>Ref: {r.paymentRef}</span>}
-          </span>
-        </dd>
-      </dl>
+        </span>
+
+        <span className={p.rcLabel}>Payment Method</span>
+        <span className={`${p.rcField} ${p.rcMethods}`}>
+          {(Object.keys(RECEIPT_METHOD) as PaymentMethod[]).map((m) => (
+            <span key={m}>
+              <span className={p.box}>{r.paymentMethod === m ? '✓' : ''}</span>
+              {RECEIPT_METHOD[m]}
+            </span>
+          ))}
+          {r.paymentRef && <span>REF: {r.paymentRef}</span>}
+        </span>
+      </div>
+      <div className={p.rcRule} />
       <div className={p.rcSign}>
-        <div>
-          Received by:
-          <div className={p.line} />
-          {r.pending ? '' : (r.createdByName ?? '')}
-          <br />
-          Authorized Signature
-        </div>
+        <div>Received by:</div>
+        <div className={letterhead ? p.rcSigned : p.rcSignedBold}>Authorized Signature</div>
       </div>
     </div>
   );
