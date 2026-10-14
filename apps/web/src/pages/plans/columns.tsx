@@ -70,11 +70,11 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
       ),
   },
   { key: 'crd', label: 'CRD', render: (r) => fmtDate(r.crd) },
-  { key: 'thcHblNo', label: 'THC / HBL No.', render: (r) => dash(r.thcHblNo) },
-  { key: 'thcHblDate', label: 'THC / HBL Date', render: (r) => fmtDate(r.thcHblDate) },
+  { key: 'thcHblNo', label: 'INVOICE / THC No.', render: (r) => dash(r.thcHblNo) },
+  { key: 'thcHblDate', label: 'Invoice / THC Date', render: (r) => fmtDate(r.thcHblDate) },
   {
     key: 'thcHblAmount',
-    label: 'THC / HBL Amount',
+    label: 'Invoice / THC Amount',
     render: (r) => (r.thcHblAmount ? fmtMoney(r.thcHblAmount) : '-'),
   },
   {

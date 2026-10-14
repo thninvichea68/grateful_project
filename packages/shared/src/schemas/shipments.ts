@@ -94,6 +94,27 @@ export const declarationInputSchema = z.object({
   cdcLines: z.array(cdcLineInputSchema).default([]),
 });
 
+/** A declaration row left completely blank: the form always offers one to fill in later. */
+function blankDeclarationRow(d: unknown): boolean {
+  if (!d || typeof d !== 'object') return false;
+  const x = d as Record<string, unknown>;
+  const text = (v: unknown) => String(v ?? '').trim();
+  return (
+    !text(x.id) &&
+    !text(x.declareNo) &&
+    !text(x.declareDate) &&
+    !text(x.notes) &&
+    !(Array.isArray(x.cdcLines) && x.cdcLines.length)
+  );
+}
+const declarationArray = z.array(declarationInputSchema).default([]);
+/** Blank rows are dropped before validation, so an untouched one never blocks saving. */
+const declarationRows = z.preprocess(
+  (v) => (Array.isArray(v) ? v.filter((d) => !blankDeclarationRow(d)) : v),
+  declarationArray,
+  // zod 3 types a preprocess input as `unknown`; keep the array's own input type for forms.
+) as unknown as typeof declarationArray;
+
 export const shipmentInputSchema = z
   .object({
     clientId: z.string().uuid('Choose a client'),
@@ -132,7 +153,7 @@ export const shipmentInputSchema = z
     remark: optText(1000),
     containers: z.array(containerInputSchema).default([]),
     invoices: z.array(cargoInvoiceInputSchema).default([]),
-    declarations: z.array(declarationInputSchema).default([]),
+    declarations: declarationRows,
   })
   .superRefine((s, ctx) => {
     if (s.transportMode === 'AIR' && s.loadType !== 'NONE')

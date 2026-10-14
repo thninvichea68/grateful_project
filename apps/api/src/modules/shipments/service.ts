@@ -35,6 +35,7 @@ import {
   whereAll,
 } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
+import { shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
 
 /* ============================== List ============================== */
 
@@ -68,8 +69,9 @@ export function shipmentWhere(f: ShipmentFilters) {
     );
   if (f.transportMode) conds.push(sql`s.transport_mode = ${f.transportMode}`);
   if (f.loadType) conds.push(sql`s.load_type = ${f.loadType}`);
-  if (f.from) conds.push(sql`s.eta >= ${f.from}::date`);
-  if (f.to) conds.push(sql`s.eta <= ${f.to}::date`);
+  // An import by its ETA, an export by its ETD.
+  if (f.from) conds.push(sql`${shipmentDate()} >= ${f.from}::date`);
+  if (f.to) conds.push(sql`${shipmentDate()} <= ${f.to}::date`);
   if (f.q) {
     const like = likePattern(f.q);
     conds.push(sql`(s.reference ILIKE ${like} OR s.hbl_no ILIKE ${like} OR s.booking_no ILIKE ${like} OR c.code ILIKE ${like}
@@ -136,7 +138,7 @@ export async function listShipments(
     SELECT s.id, count(*) OVER () AS total_count
     FROM shipments s JOIN clients c ON c.id = s.client_id
     ${shipmentWhere(f)}
-    ${orderBy(f.sort, SORTS, sql`s.eta DESC NULLS LAST, s.reference DESC`)}
+    ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
     ${paginate(f.page, f.pageSize)}`,
   );
   if (!page.length) return toPaginated([], f.page, f.pageSize);
@@ -161,7 +163,7 @@ export async function listShipmentsForExport(
 ): Promise<ShipmentListItem[]> {
   return queryRows<ShipmentListItem>(
     db,
-    sql`${listSelect()} ${shipmentWhere(f)} ${orderBy(f.sort, SORTS, sql`s.eta DESC NULLS LAST`)} LIMIT ${limit}`,
+    sql`${listSelect()} ${shipmentWhere(f)} ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
   );
 }
 
@@ -564,7 +566,7 @@ export async function createShipment(
   try {
     return await db.transaction(async (tx) => {
       await assertReferences(tx, input, true);
-      const year = (input.eta ?? new Date().toISOString()).slice(0, 4);
+      const year = (shipmentDateOf(input) ?? new Date().toISOString()).slice(0, 4);
       const n = await nextNumber(tx, `SHIPMENT:${year}`);
       const [row] = await tx
         .insert(shipments)

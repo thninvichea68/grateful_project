@@ -81,7 +81,7 @@ export const shipments = pgTable(
     ata: date('ata'),
     arriveFty: date('arrive_fty'),
 
-    // THC / HBL
+    // Invoice / THC (shown as "INVOICE / THC No.")
     thcHblNo: text('thc_hbl_no'),
     thcHblDate: date('thc_hbl_date'),
     thcHblAmount: money('thc_hbl_amount'),

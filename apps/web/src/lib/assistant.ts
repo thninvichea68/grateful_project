@@ -23,6 +23,40 @@ export interface ChatMessage {
 
 export const assistantStatus = () => api<{ enabled: boolean }>('/assistant/status');
 
+/** Suggested questions for a page: written by the AI from its guide (a built-in list otherwise). */
+export const assistantSuggestions = (page: string) =>
+  api<{ questions: string[]; source: 'ai' | 'built-in' }>('/assistant/suggestions', {
+    query: { page },
+  });
+
+/** Three follow-up questions after an answer; never throws (no follow-ups on failure). */
+export const assistantFollowUps = (question: string, answer: string, page: string) =>
+  api<{ questions: string[] }>('/assistant/follow-ups', {
+    method: 'POST',
+    json: { question, answer, page },
+  })
+    .then((r) => r.questions)
+    .catch(() => [] as string[]);
+
+/** "/accounting/billing/abc" → "accounting/billing"; "/plans/123" → "plans" (as the API groups). */
+export function pageSection(page: string): string {
+  const parts = page.split('/').filter(Boolean);
+  if (!parts.length) return 'overview';
+  return parts[0] === 'accounting' && parts[1] ? `accounting/${parts[1]}` : parts[0]!;
+}
+
+/** `count` items of `list` in an order set by `seed` (a new seed, a new pick). */
+export function pickSome<T>(list: T[], count: number, seed: number): T[] {
+  const out = [...list];
+  let x = (seed * 9301 + 49297) % 233280 || 1;
+  for (let i = out.length - 1; i > 0; i--) {
+    x = (x * 9301 + 49297) % 233280;
+    const j = Math.floor((x / 233280) * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out.slice(0, count);
+}
+
 /** Large photos are shrunk before upload: quicker, and within every AI model's image limits. */
 const MAX_IMAGE_EDGE = 2048;
 const SHRINK_ABOVE_BYTES = 3 * 1024 * 1024;

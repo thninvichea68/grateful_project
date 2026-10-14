@@ -154,25 +154,34 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
               <br />
               Unit
             </th>
-            <th>
-              ថ្លៃឯកតា
-              <br />
-              Unit Price
+            {/* Money columns, headings included, are right-aligned like their figures. */}
+            <th className={p.r}>
+              <span className={p.thStack}>
+                ថ្លៃឯកតា
+                <br />
+                Unit Price
+              </span>
             </th>
-            <th>
-              សរុប
-              <br />
-              Sub Total
+            <th className={p.r}>
+              <span className={p.thStack}>
+                សរុប
+                <br />
+                Sub Total
+              </span>
             </th>
-            <th>
-              {tax ? 'អាករ 10%' : 'អាករ (0%)'}
-              <br />
-              {tax ? 'VAT (10%)' : 'VAT (0%)'}
+            <th className={p.r}>
+              <span className={p.thStack}>
+                {tax ? 'អាករ 10%' : 'អាករ (0%)'}
+                <br />
+                {tax ? 'VAT (10%)' : 'VAT (0%)'}
+              </span>
             </th>
-            <th>
-              ថ្លៃទំនិញ
-              <br />
-              Amount
+            <th className={p.r}>
+              <span className={p.thStack}>
+                ថ្លៃទំនិញ
+                <br />
+                Amount
+              </span>
             </th>
           </tr>
         </thead>
@@ -183,10 +192,11 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
               <td>{l.description}</td>
               <td className={p.c}>{money(l.qty)}</td>
               <td className={p.c}>{l.unit}</td>
-              <td className={p.c}>{money(l.unitPrice)}</td>
-              <td className={p.c}>{money(l.subtotal)}</td>
-              <td className={p.c}>{tax ? money(l.vat) : '-'}</td>
-              <td className={`${p.c} ${p.strong}`}>{money(tax ? l.amount : l.subtotal)}</td>
+              {/* Money right-aligned, as in Excel, so it lines up with the totals below. */}
+              <td className={p.r}>{money(l.unitPrice)}</td>
+              <td className={p.r}>{money(l.subtotal)}</td>
+              <td className={p.r}>{tax ? money(l.vat) : '-'}</td>
+              <td className={`${p.r} ${p.strong}`}>{money(tax ? l.amount : l.subtotal)}</td>
             </tr>
           ))}
         </tbody>
@@ -271,9 +281,10 @@ function TaxTotal({
       </td>
       <td className={p.c}>KHR</td>
       <td />
-      <td className={`${p.c}${strong ? ` ${p.strong}` : ''}`}>{riel(khr)}</td>
-      <td className={p.c}>USD</td>
-      <td className={`${p.c}${strong ? ` ${p.strong}` : ''}`}>{money(usd)}</td>
+      <td className={`${p.r}${strong ? ` ${p.strong}` : ''}`}>{riel(khr)}</td>
+      {/* In the VAT column: right-aligned like the VAT figures above it. */}
+      <td className={p.r}>USD</td>
+      <td className={`${p.r}${strong ? ` ${p.strong}` : ''}`}>{money(usd)}</td>
     </tr>
   );
 }
@@ -284,8 +295,8 @@ function UsdTotal({ label, value, strong }: { label: string; value: string; stro
       <td colSpan={6} className={p.label}>
         {label}
       </td>
-      <td className={p.c}>USD</td>
-      <td className={`${p.c}${strong ? ` ${p.strong}` : ''}`}>{value}</td>
+      <td className={p.r}>USD</td>
+      <td className={`${p.r}${strong ? ` ${p.strong}` : ''}`}>{value}</td>
     </tr>
   );
 }

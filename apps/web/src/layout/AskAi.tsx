@@ -12,7 +12,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ASSISTANT_FILE_ACCEPT, ASSISTANT_FILES_PER_MESSAGE } from '@gs/shared';
 import {
+  assistantFollowUps,
   assistantStatus,
+  assistantSuggestions,
+  pageSection,
+  pickSome,
   prepareFile,
   streamChat,
   type ChatFile,
@@ -54,12 +58,14 @@ function FileChip({ f, onRemove }: { f: ChatFile; onRemove?: () => void }) {
   );
 }
 
-const SUGGESTIONS = [
+/** Shown until the page's own suggestions arrive (or if they can't be fetched). */
+const FALLBACK_SUGGESTIONS = [
   'How do I create a new shipment?',
   'Where can I see unpaid invoices?',
   'How do I import a CDC master list?',
   'What does CY / CY mean?',
 ];
+const SHOWN_SUGGESTIONS = 4;
 
 /** Panel width: the default is also the minimum; drag the left edge to widen it. */
 const MIN_WIDTH = 420;
@@ -98,6 +104,11 @@ export function AskAi() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [width, setWidth] = useState(readWidth);
   const [resizing, setResizing] = useState(false);
+  // Which suggestions are shown: a new pick each time the panel opens or a chat restarts.
+  const [seed, setSeed] = useState(() => Date.now() % 997);
+  // Follow-up questions under the latest answer; askId ignores those of an older question.
+  const [followUps, setFollowUps] = useState<string[]>([]);
+  const askId = useRef(0);
 
   useEffect(() => {
     try {
@@ -132,9 +143,22 @@ export function AskAi() {
     staleTime: 5 * 60_000,
   });
   const disabled = status.data?.enabled === false;
+  const section = pageSection(location.pathname);
+  // Written by the AI from its guide for this page and role, so new features appear on their own.
+  const suggested = useQuery({
+    queryKey: ['assistant', 'suggestions', section],
+    queryFn: () => assistantSuggestions(location.pathname),
+    enabled: open && status.data?.enabled === true,
+    staleTime: 30 * 60_000,
+  });
+  const suggestionPool = suggested.data?.questions.length
+    ? suggested.data.questions
+    : FALLBACK_SUGGESTIONS;
+  const shownSuggestions = pickSome(suggestionPool, SHOWN_SUGGESTIONS, seed);
 
   useEffect(() => {
     if (!open) return;
+    setSeed((x) => x + 1);
     inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     window.addEventListener('keydown', onKey);
@@ -203,6 +227,9 @@ export function AskAi() {
     setFileNote(null);
     setError(null);
     setBusy(true);
+    setFollowUps([]);
+    const id = ++askId.current;
+    let answer = '';
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     try {
@@ -210,6 +237,7 @@ export function AskAi() {
         recent,
         location.pathname,
         (chunk) => {
+          answer += chunk;
           setMessages((m) => {
             const last = m[m.length - 1]!;
             return [...m.slice(0, -1), { ...last, content: last.content + chunk }];
@@ -217,6 +245,10 @@ export function AskAi() {
         },
         ctrl.signal,
       );
+      if (answer.trim())
+        void assistantFollowUps(text, answer, location.pathname).then((qs) => {
+          if (askId.current === id) setFollowUps(qs);
+        });
     } catch (err) {
       if (ctrl.signal.aborted) return;
       const message = err instanceof Error ? err.message : 'Something went wrong.';
@@ -245,6 +277,9 @@ export function AskAi() {
     abortRef.current?.abort();
     releaseAll();
     setMessages([]);
+    setFollowUps([]);
+    askId.current++;
+    setSeed((x) => x + 1);
     setPending([]);
     setFileNote(null);
     setError(null);
@@ -339,12 +374,22 @@ export function AskAi() {
                 or term means.
               </p>
               <div className="ai-suggestions">
-                {SUGGESTIONS.map((s) => (
+                {shownSuggestions.map((s) => (
                   <button key={s} type="button" onClick={() => void ask(s)} disabled={disabled}>
                     {s}
                   </button>
                 ))}
               </div>
+              {suggestionPool.length > SHOWN_SUGGESTIONS && (
+                <button
+                  type="button"
+                  className={a.moreQuestions}
+                  onClick={() => setSeed((x) => x + 1)}
+                  disabled={disabled}
+                >
+                  ↻ Other questions
+                </button>
+              )}
             </div>
           )}
           {messages.map((m, i) => (
@@ -373,6 +418,17 @@ export function AskAi() {
               )}
             </div>
           ))}
+          {/* Follow-ups the AI suggests after its latest answer. */}
+          {!busy && followUps.length > 0 && messages[messages.length - 1]?.role === 'assistant' && (
+            <div className={a.followUps}>
+              <span className={a.followLabel}>Related questions</span>
+              {followUps.map((q) => (
+                <button key={q} type="button" onClick={() => void ask(q)} disabled={disabled}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
           {error && (
             <div className="ai-error">
               {error.question && <div className="ai-error-q">“{error.question}”</div>}

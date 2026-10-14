@@ -70,7 +70,8 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     remark: '',
     containers: [],
     invoices: [blankInvoice()],
-    declarations: [],
+    // One row ready to fill in; it can stay blank and be filled in later.
+    declarations: [blankDeclaration()],
   };
 }
 
@@ -137,20 +138,22 @@ export function fromDetail(d: ShipmentDetail): FormValues {
           })),
         }))
       : [blankInvoice()],
-    declarations: d.declarations.map((x) => ({
-      id: x.id,
-      declareNo: x.declareNo,
-      declareDate: x.declareDate,
-      portId: s(x.portId),
-      notes: s(x.notes),
-      cdcLines: x.cdcLines.map((c) => ({
-        cutStockItemId: c.cutStockItemId,
-        qty: num(c.qty),
-        unitPrice: num(c.unitPrice),
-        netWeightKg: num(c.netWeightKg),
-        overrideReason: s(c.overrideReason),
-      })),
-    })),
+    declarations: d.declarations.length
+      ? d.declarations.map((x) => ({
+          id: x.id,
+          declareNo: x.declareNo,
+          declareDate: x.declareDate,
+          portId: s(x.portId),
+          notes: s(x.notes),
+          cdcLines: x.cdcLines.map((c) => ({
+            cutStockItemId: c.cutStockItemId,
+            qty: num(c.qty),
+            unitPrice: num(c.unitPrice),
+            netWeightKg: num(c.netWeightKg),
+            overrideReason: s(c.overrideReason),
+          })),
+        }))
+      : [blankDeclaration(s(d.clearancePortId))],
   };
 }
 
@@ -161,7 +164,7 @@ function num(v: string | null | undefined): string {
   return Number.isFinite(n) ? String(n) : v;
 }
 
-/** Drop invoices the user never filled in, so an untouched blank card doesn't fail validation. */
+/** Drop invoices and declarations the user never filled in, so untouched blank rows don't fail validation. */
 export function cleanForSubmit(v: FormValues): FormValues {
   const lineFilled = (l: LineValues) =>
     Object.values(l).some((x) => x !== '' && x !== null && x !== undefined);
@@ -171,10 +174,15 @@ export function cleanForSubmit(v: FormValues): FormValues {
     invoices: (v.invoices ?? [])
       .filter((i) => i.invoiceNo || i.lines.some(lineFilled))
       .map((i) => ({ ...i, lines: i.lines.filter(lineFilled) })),
-    declarations: (v.declarations ?? []).map((d) => ({
-      ...d,
-      cdcLines: v.direction === 'IMPORT' ? d.cdcLines : [],
-    })),
+    declarations: (v.declarations ?? [])
+      .filter(
+        (d) =>
+          d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim() || d.cdcLines?.length,
+      )
+      .map((d) => ({
+        ...d,
+        cdcLines: v.direction === 'IMPORT' ? d.cdcLines : [],
+      })),
   };
 }
 

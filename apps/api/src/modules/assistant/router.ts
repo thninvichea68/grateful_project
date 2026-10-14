@@ -9,6 +9,7 @@ import { logger } from '../../lib/logger';
 import { SYSTEM_GUIDE } from './guide';
 import { AssistantError, provider } from './providers';
 import { assistantUpload, readAttachments } from './attachments';
+import { followUps, suggestions } from './suggestions';
 
 const chatSchema = z.object({
   messages: z
@@ -41,6 +42,32 @@ assistantRouter.use(requireAuth);
 
 assistantRouter.get('/status', (_req, res) => {
   res.json({ enabled: provider !== null });
+});
+
+/**
+ * Suggested questions for the page the user has open: written by the AI from the guide (so
+ * new features appear on their own), cached per page and role; a built-in list otherwise.
+ */
+assistantRouter.get('/suggestions', async (req, res) => {
+  const { page } = parse(z.object({ page: z.string().max(200).optional() }), req.query);
+  const auth = req.auth!;
+  res.json(await suggestions(auth.role, auth.permissions, page));
+});
+
+/** Three follow-up questions after an answer (empty when the AI has none). */
+assistantRouter.post('/follow-ups', assistantLimiter, async (req, res) => {
+  const body = parse(
+    z.object({
+      question: z.string().trim().min(1).max(4000),
+      answer: z.string().trim().min(1).max(20000),
+      page: z.string().max(200).optional(),
+    }),
+    req.body,
+  );
+  const auth = req.auth!;
+  res.json({
+    questions: await followUps(auth.role, auth.permissions, body.page, body.question, body.answer),
+  });
 });
 
 /**

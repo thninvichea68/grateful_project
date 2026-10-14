@@ -35,13 +35,14 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
           </div>
           <div className="brand-text">
             <div className="title">Grateful Solutions</div>
-            <div className="subtitle">(Cambodia) Co., ltd</div>
+            <div className="subtitle">(Cambodia) Co., Ltd.</div>
           </div>
           <button
             type="button"
             className="sidebar-collapse-btn"
             onClick={onToggleCollapse}
             aria-label="Collapse sidebar"
+            title="Collapse sidebar"
           >
             {icons.collapse({})}
           </button>

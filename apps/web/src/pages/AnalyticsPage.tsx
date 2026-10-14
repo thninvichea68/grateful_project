@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -27,6 +27,7 @@ import {
 } from '../features/analytics';
 import { useAuth } from '../auth/AuthProvider';
 import { useLookups } from '../features/hooks';
+import { AccountsBreakdown } from './analytics/AccountsBreakdown';
 import { ClientRevenueCards } from './analytics/ClientRevenueCards';
 import { ChartState, HBarList, changePct, dash, monthLabel } from './dashboard/parts';
 
@@ -169,7 +170,7 @@ export function AnalyticsPage() {
           val: k.cleared,
           prev: k.previous.cleared,
           pct: k.total ? (k.cleared / k.total) * 100 : 0,
-          color: 'var(--accent-emerald)',
+          color: 'var(--accent-blue)',
           note: `${k.clearancePending} still pending`,
         },
       ]
@@ -599,72 +600,7 @@ export function AnalyticsPage() {
 
       {can('accounting:read') && <ClientRevenueCards filters={filters} periodLabel={periodLabel} />}
 
-      <div className="card">
-        <div className="an-section-title-row">
-          <div>
-            <h3>Key Logistics Accounts — Full Breakdown</h3>
-            <div className="an-section-sub">
-              Every account, every flow and every shipment type in one table.
-            </div>
-          </div>
-        </div>
-        <div className="an-table-wrap">
-          <ChartState
-            loading={accounts.isLoading}
-            error={accounts.error}
-            empty={!accounts.data?.length}
-            height={120}
-          >
-            <table className="an-detail-table">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th className="center">Total</th>
-                  <th className="center">Import Total</th>
-                  <th className="center">Export Total</th>
-                  <th className="center">CY / CY</th>
-                  <th className="center">LCL</th>
-                  <th className="center">AIR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.data?.map((a) => (
-                  <tr key={a.clientId}>
-                    <td className="an-client-name">
-                      <Link to={`/clients/${a.clientId}`}>{a.name}</Link>
-                    </td>
-                    <td className="center">{a.all.total}</td>
-                    <td className="center">{a.import.total}</td>
-                    <td className="center">{a.export.total}</td>
-                    <td className="center">{a.all.cy}</td>
-                    <td className="center">{a.all.lcl}</td>
-                    <td className="center">{a.all.air}</td>
-                  </tr>
-                ))}
-                {accounts.data && accounts.data.length > 1 && (
-                  <tr style={{ fontWeight: 700 }}>
-                    <td className="an-client-name">All clients</td>
-                    {(['total', 'import', 'export', 'cy', 'lcl', 'air'] as const).map((c) => (
-                      <td className="center" key={c}>
-                        {accounts.data!.reduce(
-                          (s, a) =>
-                            s +
-                            (c === 'import'
-                              ? a.import.total
-                              : c === 'export'
-                                ? a.export.total
-                                : a.all[c]),
-                          0,
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </ChartState>
-        </div>
-      </div>
+      <AccountsBreakdown rows={accounts.data} loading={accounts.isLoading} error={accounts.error} />
     </section>
   );
 }

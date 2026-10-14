@@ -45,6 +45,7 @@ import {
 } from './parts';
 import { WorldMap } from './WorldMap';
 import { SingleClientVolume } from './SingleClientVolume';
+import { ProfitBars } from './ProfitBars';
 import acc from './AccountsCard.module.css';
 export { KpiRow } from './KpiRow';
 
@@ -243,50 +244,87 @@ export function ShipmentSummaryCard({
 
 /* ------------------------------ Net profit (accounting roles) ------------------------------ */
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const monthName = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+
+/**
+ * Net profit for one month (this month to start; click a month on the line to change it):
+ * the figure, the change on the month before, and that month's split by client.
+ */
 export function ProfitCard({ profit }: { profit: ProfitSummary }) {
-  const ch = changePct(Number(profit.thisMonth), Number(profit.lastMonth));
-  const positive = profit.byClient.filter((c) => Number(c.netProfit) > 0);
-  const spark = profit.monthly.map((m) => ({ v: Number(m.netProfit) }));
+  const [picked, setPicked] = useState<{ year: number; month: string } | null>(null);
+  const month = picked?.year === profit.year ? picked.month : profit.currentMonth;
+  const idx = profit.monthly.findIndex((m) => m.month === month);
+  const value = Number(profit.monthly[idx]?.netProfit ?? 0);
+  const prevMonth = idx > 0 ? profit.monthly[idx - 1]! : null;
+  // January's "month before" is last December: only known for the current month.
+  const prevValue = prevMonth
+    ? Number(prevMonth.netProfit)
+    : month === profit.currentMonth
+      ? Number(profit.lastMonth)
+      : null;
+  const ch = prevValue === null ? null : changePct(value, prevValue);
+  const prevLabel = prevMonth ? MONTH_NAMES[Number(prevMonth.month.slice(5, 7)) - 1] : 'December';
+
+  const rows = profit.byClientMonthly.filter((c) => c.month === month);
+  const sum = rows.reduce((t, c) => t + Number(c.netProfit), 0);
+  const clients = rows.map((c) => ({
+    ...c,
+    pct: sum ? Math.round((Number(c.netProfit) / sum) * 1000) / 10 : 0,
+  }));
+  const positive = clients.filter((c) => Number(c.netProfit) > 0);
+
   return (
     <div className="rc-card ga-revenue">
       <div className="rc-header">
         <div className="rc-title">Total Net Profit</div>
-        <div className="rc-subtitle">Overview of profit across all clients, {profit.year}</div>
+        <div className="rc-subtitle">
+          {monthName(month)} · all clients · {profit.year} to date {fmtMoney(profit.total)}
+        </div>
       </div>
       <div className="rc-top-hero">
         <div className="rc-metric-left">
           <div
             className="rc-total-amount"
-            style={Number(profit.total) < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
+            style={value < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
           >
-            {fmtMoney(profit.total)}
+            {fmtMoney(value)}
           </div>
           <div className="rc-trend-pill">
-            <span className="rc-pill-badge">{ch?.text ?? '—'}</span>
-            <span className="rc-pill-text">this month vs last</span>
+            <span
+              className="rc-pill-badge"
+              style={
+                ch && !ch.up
+                  ? {
+                      background: 'var(--status-exception-bg)',
+                      color: 'var(--status-exception-fg)',
+                    }
+                  : undefined
+              }
+            >
+              {ch?.text ?? '—'}
+            </span>
+            <span className="rc-pill-text">vs {prevLabel}</span>
           </div>
         </div>
-        <div className="rc-sparkline-wrap" aria-hidden="true">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={spark} margin={{ top: 4, right: 4, bottom: 2, left: 2 }}>
-              <defs>
-                <linearGradient id="revenueSparkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00C2E8" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#00C2E8" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke="#00C2E8"
-                strokeWidth={2.5}
-                fill="url(#revenueSparkGrad)"
-                dot={false}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <ProfitBars
+          monthly={profit.monthly}
+          selected={month}
+          onSelect={(m) => setPicked({ year: profit.year, month: m })}
+        />
       </div>
       <div className="rc-main-body">
         <div className="rc-donut-wrapper">
@@ -315,7 +353,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
                   {positive.map((c) => (
                     <Cell
                       key={c.clientId}
-                      fill={CLIENT_COLORS[profit.byClient.indexOf(c) % CLIENT_COLORS.length]}
+                      fill={CLIENT_COLORS[clients.indexOf(c) % CLIENT_COLORS.length]}
                     />
                   ))}
                 </Pie>
@@ -323,12 +361,12 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
             </ResponsiveContainer>
           ) : null}
           <div className="rc-donut-center-text">
-            <span className="pct">{profit.byClient.length}</span>
+            <span className="pct">{clients.length}</span>
             <span className="tag">Clients</span>
           </div>
         </div>
         <div className="rc-client-list">
-          {profit.byClient.slice(0, 5).map((c, i) => (
+          {clients.slice(0, 5).map((c, i) => (
             <div className="rc-client-row" key={c.clientId}>
               <div className="rc-bar-group">
                 <div className="rc-client-name">
@@ -361,8 +399,8 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
               </div>
             </div>
           ))}
-          {!profit.byClient.length && (
-            <span className={dash.mutedNote}>No ledger entries this year yet.</span>
+          {!clients.length && (
+            <span className={dash.mutedNote}>No ledger entries in {monthName(month)} yet.</span>
           )}
         </div>
       </div>

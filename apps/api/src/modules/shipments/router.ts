@@ -80,9 +80,9 @@ shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (
           .join(', '),
     ],
     ['CRD', 12, (r) => r.crd],
-    ['THC / HBL No.', 14, (r) => r.thcHblNo],
-    ['THC / HBL Date', 12, (r) => r.thcHblDate],
-    ['THC / HBL Amount', 12, (r) => (r.thcHblAmount ? Number(r.thcHblAmount) : null)],
+    ['INVOICE / THC No.', 16, (r) => r.thcHblNo],
+    ['Invoice / THC Date', 14, (r) => r.thcHblDate],
+    ['Invoice / THC Amount', 14, (r) => (r.thcHblAmount ? Number(r.thcHblAmount) : null)],
     ['Clearance Status', 16, (r) => CLEARANCE_STATUS_LABEL[r.clearanceStatus]],
     ['Vessel Name', 18, (r) => r.vesselName],
     ['Voyage No.', 10, (r) => r.voyageNo],
@@ -105,7 +105,7 @@ shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (
   ws.columns = cols.map(([header, width]) => ({ header, width }));
   ws.getRow(1).font = { bold: true };
   for (const r of rows) ws.addRow(cols.map(([, , get]) => get(r)));
-  ['Total FOB (USD)', 'THC / HBL Amount'].forEach(
+  ['Total FOB (USD)', 'Invoice / THC Amount'].forEach(
     (h) => (ws.getColumn(cols.findIndex((c) => c[0] === h) + 1).numFmt = '#,##0.00'),
   );
   res.setHeader(

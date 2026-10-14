@@ -123,6 +123,16 @@ export interface ProfitSummary {
   lastMonth: string;
   monthly: { month: string; netProfit: string }[];
   byClient: { clientId: string; code: string; name: string; netProfit: string; pct: number }[];
+  /** The month the card opens on (YYYY-MM): this month, or December for a past year. */
+  currentMonth: string;
+  /** Each client's net profit per month of the year (months with ledger entries only). */
+  byClientMonthly: {
+    month: string;
+    clientId: string;
+    code: string;
+    name: string;
+    netProfit: string;
+  }[];
 }
 
 /** One client's ledger figures for a period (by invoice date), for the Analytics cards. */
@@ -158,7 +168,12 @@ export interface ClientRevenueRow {
 
 export interface OverviewSummary {
   year: number;
+  /** The day the figures run to: today for the live month, else the chosen month's last day. */
   today: string;
+  /** The month shown (YYYY-MM). */
+  month: string;
+  /** True for the current month (figures refresh); false for a past month. */
+  live: boolean;
   kpis: KpiResponse;
   monthly: MonthlyVolumeRow[];
   /** Present only for roles with accounting:read. */

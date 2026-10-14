@@ -16,6 +16,7 @@ import type {
 import { db } from '../../db/client';
 import { env } from '../../config/env';
 import { queryRows } from '../../lib/listing';
+import { shipmentDate } from '../../lib/shipmentDate';
 
 export interface Filters {
   from?: string | undefined;
@@ -40,13 +41,13 @@ export function yearRange(year: number): Period {
 }
 
 /**
- * WHERE for the shipments alias `s`. The period applies to ETA; shipments without an
- * ETA are excluded from period-bound figures (they have no month to belong to).
+ * WHERE for the shipments alias `s`. The period applies to the shipment's date (an import's
+ * ETA, an export's ETD); shipments with neither are left out of period-bound figures.
  */
 function shipWhere(f: Filters, opts: { ignoreDirection?: boolean } = {}): SQL {
   const c: SQL[] = [sql`s.deleted_at IS NULL`];
-  if (f.from) c.push(sql`s.eta >= ${f.from}::date`);
-  if (f.to) c.push(sql`s.eta <= ${f.to}::date`);
+  if (f.from) c.push(sql`${shipmentDate()} >= ${f.from}::date`);
+  if (f.to) c.push(sql`${shipmentDate()} <= ${f.to}::date`);
   if (f.clientId?.length)
     c.push(
       sql`s.client_id IN (${sql.join(
@@ -134,7 +135,7 @@ export async function monthlyVolume(f: Filters & Period): Promise<MonthlyVolumeR
     WITH months AS (
       SELECT generate_series(date_trunc('month', ${f.from}::date), date_trunc('month', ${f.to}::date), interval '1 month')::date AS m
     ), agg AS (
-      SELECT date_trunc('month', s.eta)::date AS m,
+      SELECT date_trunc('month', ${shipmentDate()})::date AS m,
              count(*) FILTER (WHERE s.direction = 'IMPORT') AS imports,
              count(*) FILTER (WHERE s.direction = 'EXPORT') AS exports
       FROM shipments s ${shipWhere(f)} GROUP BY 1
@@ -268,7 +269,7 @@ function monthsBetween(from: string, to: string): string[] {
   let y = Number(from.slice(0, 4));
   let m = Number(from.slice(5, 7));
   const end = to.slice(0, 7);
-  for (let key = from.slice(0, 7); key <= end && out.length < 600; ) {
+  for (let key = from.slice(0, 7); key <= end && out.length < 600;) {
     out.push(key);
     m += 1;
     if (m > 12) [y, m] = [y + 1, 1];
@@ -370,6 +371,15 @@ export async function profit(
     WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) ${cf}
     GROUP BY c.id ORDER BY sum(a.net_profit) DESC`,
   );
+  const byClientMonthly = await queryRows<ProfitSummary['byClientMonthly'][number]>(
+    db,
+    sql`
+    SELECT to_char(date_trunc('month', a.inv_date), 'YYYY-MM') AS month, c.id AS "clientId", c.code, c.name,
+           sum(a.net_profit)::text AS "netProfit"
+    FROM accounting_records a JOIN clients c ON c.id = a.client_id
+    WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) ${cf}
+    GROUP BY 1, c.id ORDER BY 1, sum(a.net_profit) DESC`,
+  );
   const thisKey = today.slice(0, 7);
   const prevDate = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1))
     .toISOString()
@@ -390,6 +400,8 @@ export async function profit(
     lastMonth: lm?.netProfit ?? '0',
     monthly,
     byClient,
+    currentMonth: thisKey.startsWith(String(year)) ? thisKey : `${year}-12`,
+    byClientMonthly,
   };
 }
 

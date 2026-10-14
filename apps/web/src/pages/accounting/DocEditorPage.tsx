@@ -26,6 +26,7 @@ import { NotFoundPage } from '../NotFoundPage';
 import { DOC_CONFIG } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { PrintLink } from '../../components/PrintLink';
+import dl from './DocLines.module.css';
 
 export type Values = Record<string, unknown> & {
   clientId: string;
@@ -404,28 +405,32 @@ function Editor({
                 )}
               </div>
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
-              <div className="cdc-lines-wrap">
-                <table className="cdc-lines-table">
+              <div className={dl.wrap}>
+                <table className={dl.table}>
                   <thead>
                     <tr>
-                      <th>#</th>
+                      <th style={{ width: 44 }}>#</th>
                       <th>Description</th>
-                      <th>Qty</th>
-                      <th>Unit</th>
-                      <th>Unit price</th>
+                      <th className={dl.num} style={{ width: 84 }}>
+                        Qty
+                      </th>
+                      <th style={{ width: 92 }}>Unit</th>
+                      <th className={dl.num} style={{ width: 116 }}>
+                        Unit price
+                      </th>
                       {cfg.tax ? (
                         <>
-                          <th>Sub total</th>
-                          <th>VAT</th>
-                          <th>Amount</th>
+                          <th className={dl.num}>Sub total</th>
+                          <th className={dl.num}>VAT 10%</th>
+                          <th className={dl.num}>Amount</th>
                         </>
                       ) : (
                         <>
-                          <th>Mark</th>
-                          <th>Total</th>
+                          <th style={{ width: 130 }}>Mark</th>
+                          <th className={dl.num}>Total</th>
                         </>
                       )}
-                      <th />
+                      <th style={{ width: 40 }} aria-label="Remove" />
                     </tr>
                   </thead>
                   <tbody>
@@ -436,32 +441,38 @@ function Editor({
                         : null;
                       return (
                         <tr key={f.id}>
-                          <td style={{ width: 28, textAlign: 'center', fontWeight: 700 }}>
-                            {i + 1}
+                          <td>
+                            <span className={dl.no}>{i + 1}</span>
                           </td>
-                          <td style={{ minWidth: 300 }}>
+                          <td style={{ minWidth: 280 }}>
                             <input
                               className="form-field-box"
+                              placeholder="Description"
                               {...register(`lines.${i}.description`)}
                               aria-invalid={!!lineErr(i, 'description')}
                             />
                             <FieldError message={lineErr(i, 'description')} />
                           </td>
-                          <td style={{ width: 80 }}>
+                          <td>
                             <input
-                              className="form-field-box"
+                              className={`form-field-box ${dl.numIn}`}
                               inputMode="decimal"
                               {...register(`lines.${i}.qty`)}
                               aria-invalid={!!lineErr(i, 'qty')}
                             />
                           </td>
-                          <td style={{ width: 80 }}>
-                            <input className="form-field-box" {...register(`lines.${i}.unit`)} />
-                          </td>
-                          <td style={{ width: 110 }}>
+                          <td>
                             <input
                               className="form-field-box"
+                              placeholder="SHIP"
+                              {...register(`lines.${i}.unit`)}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              className={`form-field-box ${dl.numIn}`}
                               inputMode="decimal"
+                              placeholder="0.00"
                               {...register(`lines.${i}.unitPrice`)}
                               aria-invalid={!!lineErr(i, 'unitPrice')}
                             />
@@ -469,22 +480,31 @@ function Editor({
                           </td>
                           {tl ? (
                             <>
-                              <td style={{ textAlign: 'right' }}>{fmtMoney(tl.subtotal)}</td>
-                              <td style={{ textAlign: 'right' }}>{fmtMoney(tl.vat)}</td>
-                              <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                                {fmtMoney(tl.amount)}
+                              <td>
+                                <span className={dl.calc}>{fmtMoney(tl.subtotal)}</span>
+                              </td>
+                              <td>
+                                <span className={dl.calc}>{fmtMoney(tl.vat)}</span>
+                              </td>
+                              <td>
+                                <span className={`${dl.calc} ${dl.calcStrong}`}>
+                                  {fmtMoney(tl.amount)}
+                                </span>
                               </td>
                             </>
                           ) : (
                             <>
-                              <td style={{ width: 120 }}>
+                              <td>
                                 <input
                                   className="form-field-box"
+                                  placeholder="Mark"
                                   {...register(`lines.${i}.mark`)}
                                 />
                               </td>
-                              <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                                {fmtMoney(lineAmount(l?.qty, l?.unitPrice))}
+                              <td>
+                                <span className={`${dl.calc} ${dl.calcStrong}`}>
+                                  {fmtMoney(lineAmount(l?.qty, l?.unitPrice))}
+                                </span>
                               </td>
                             </>
                           )}
@@ -493,6 +513,7 @@ function Editor({
                               <button
                                 type="button"
                                 className="cdc-remove-line-btn"
+                                style={{ marginTop: 4 }}
                                 onClick={() => lines.remove(i)}
                                 title="Remove line"
                               >
@@ -506,42 +527,49 @@ function Editor({
                   </tbody>
                 </table>
               </div>
-              {editable && (
-                <button
-                  type="button"
-                  className="cdc-add-line-btn"
-                  onClick={() =>
-                    lines.append({
-                      description: '',
-                      qty: '1',
-                      unit: 'SHIP',
-                      unitPrice: '',
-                      mark: '',
-                    })
-                  }
-                >
-                  + Add line
-                </button>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: 24,
-                  flexWrap: 'wrap',
-                  marginTop: 16,
-                  fontSize: 13.5,
-                  fontWeight: 700,
-                }}
-              >
-                {cfg.tax && <span>Sub total {fmtMoney(totals.subtotal)}</span>}
-                {cfg.tax && <span>VAT 10% {fmtMoney(totals.vat)}</span>}
-                <span style={{ color: 'var(--accent-primary)' }}>
-                  Grand total {fmtMoney(totals.total)}
-                </span>
-                {'totalKhr' in totals && totals.totalKhr !== undefined && (
-                  <span>{Number(totals.totalKhr).toLocaleString('en-US')} KHR</span>
+              <div className={dl.foot}>
+                {editable && (
+                  <button
+                    type="button"
+                    className="cdc-add-line-btn"
+                    style={{ marginTop: 0 }}
+                    onClick={() =>
+                      lines.append({
+                        description: '',
+                        qty: '1',
+                        unit: 'SHIP',
+                        unitPrice: '',
+                        mark: '',
+                      })
+                    }
+                  >
+                    + Add line
+                  </button>
                 )}
+                <div className={dl.totals}>
+                  {cfg.tax && (
+                    <>
+                      <div>
+                        <span>Sub total</span>
+                        <b>{fmtMoney(totals.subtotal)}</b>
+                      </div>
+                      <div>
+                        <span>VAT 10%</span>
+                        <b>{fmtMoney(totals.vat)}</b>
+                      </div>
+                    </>
+                  )}
+                  <div className={dl.grand}>
+                    <span>Grand total</span>
+                    <b>{fmtMoney(totals.total)}</b>
+                  </div>
+                  {'totalKhr' in totals && totals.totalKhr !== undefined && (
+                    <div className={dl.riel}>
+                      <span>In riel</span>
+                      <b>{Number(totals.totalKhr).toLocaleString('en-US')} KHR</b>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </fieldset>

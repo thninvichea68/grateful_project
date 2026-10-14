@@ -546,6 +546,22 @@ function Field({
   );
 }
 
+const CO_STATUSES = ['Pending', 'Draft', 'Submitted', 'Approved'];
+
+/** CO Status: one of the four stages; an older free-text value stays selectable until changed. */
+function CoStatusSelect() {
+  const current = useWatch<FormValues, 'coStatus'>({ name: 'coStatus' }) ?? '';
+  const options = [...CO_STATUSES, ...(current && !CO_STATUSES.includes(current) ? [current] : [])];
+  return (
+    <Select
+      name="coStatus"
+      label="CO Status"
+      options={options.map((v) => ({ value: v, label: v }))}
+      placeholder="Select status"
+    />
+  );
+}
+
 function Select({
   name,
   label,
@@ -787,9 +803,9 @@ function buildSteps(
     </Card>
   );
   const thcCard = (
-    <Card title="THC / HBL" sub="Terminal handling charge billed against the house bill">
-      <Field name="thcHblNo" label="THC / HBL No." span={2} />
-      <Field name="thcHblDate" label="THC / HBL Date" type="date" />
+    <Card title="Invoice / THC" sub="Terminal handling charge invoice for this shipment">
+      <Field name="thcHblNo" label="INVOICE / THC No." span={2} />
+      <Field name="thcHblDate" label="Invoice / THC Date" type="date" />
       <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" />
     </Card>
   );
@@ -845,10 +861,8 @@ function buildSteps(
           'crd',
           'hblNo',
           'clearancePortId',
-          'etdPort',
           'etd',
           'atd',
-          'eta',
           'status',
           'clearanceStatus',
           'containers',
@@ -867,12 +881,11 @@ function buildSteps(
                 placeholder="Select port"
                 span={2}
               />
-              <Field name="etdPort" label="ETD Port" span={2} placeholder="e.g. Sihanoukville" />
             </Card>
-            <Card title="Schedule" sub="Departure and arrival dates" cols={3}>
+            {/* An export is dated by its departure: no ETA or ETD port. */}
+            <Card title="Schedule" sub="Departure dates" cols={2}>
               <Field name="etd" label="ETD" type="date" />
               <Field name="atd" label="ATD (Actual Departure)" type="date" />
-              <Field name="eta" label="ETA Port" type="date" />
             </Card>
             <ContainersCard />
             {statusCard}
@@ -903,7 +916,7 @@ function buildSteps(
               <Field name="voyageNo" label="Voyage No." span={2} />
               <Select name="coForm" label="CO Form" options={coForms} placeholder="Select form" />
               <Field name="coNumber" label="CO Number" span={2} />
-              <Field name="coStatus" label="CO Status" placeholder="e.g. Active" />
+              <CoStatusSelect />
             </Card>
             {thcCard}
             <DeclarationsSection ports={lookups.ports} original={detail} />

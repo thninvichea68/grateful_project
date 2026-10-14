@@ -74,7 +74,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
 export const ROLE_LABEL: Record<RoleCode, string> = {
   ADMIN: 'Admin',
   MANAGER: 'Manager',
-  OPERATOR: 'Operator',
+  OPERATOR: 'Operations',
   ACCOUNTANT: 'Accountant',
   VIEWER: 'Viewer',
   CUSTOMS_BROKER: 'Customs Broker',

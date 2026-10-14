@@ -13,10 +13,13 @@ import {
   ShipmentSummaryCard,
 } from './dashboard/OverviewCards';
 import { KpiRowSkeleton } from './dashboard/KpiRow';
+import { useOverviewMonth } from './dashboard/overviewMonth';
 
 export function OverviewPage() {
   const { can } = useAuth();
-  const summary = useOverviewSummary();
+  // The month picker beside the title (?month=YYYY-MM); the current month when absent.
+  const { month } = useOverviewMonth();
+  const summary = useOverviewSummary(month);
   const s = summary.data;
   const year = s?.year ?? new Date().getFullYear();
   const yearFilters = { from: `${year}-01-01`, to: `${year}-12-31` };
@@ -37,7 +40,7 @@ export function OverviewPage() {
           error={summary.error}
         />
         {can('accounting:read') && s?.profit ? (
-          <ProfitCard profit={s.profit} />
+          <ProfitCard key={s.month} profit={s.profit} />
         ) : (
           <ClientShareCard
             accounts={accounts.data ?? []}
