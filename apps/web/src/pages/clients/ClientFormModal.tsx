@@ -8,6 +8,7 @@ import {
 } from '@gs/shared';
 import { useLookups, useSaveClient } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
 
 const STATUS_LABEL = { ACTIVE: 'Active', ONBOARDING: 'Onboarding', INACTIVE: 'Inactive' } as const;
@@ -60,21 +61,32 @@ export function ClientFormModal({
   const field = (
     name: keyof ClientInput,
     label: string,
-    opts: { span?: number; type?: string; placeholder?: string } = {},
+    opts: { span?: number; type?: string; placeholder?: string; decimals?: number } = {},
   ) => (
     <div
       className="form-field-group"
       style={opts.span ? { gridColumn: `span ${opts.span}` } : undefined}
     >
       <label htmlFor={`cl-${name}`}>{label}</label>
-      <input
-        id={`cl-${name}`}
-        className="form-field-box"
-        type={opts.type ?? 'text'}
-        placeholder={opts.placeholder ?? label}
-        {...register(name)}
-        aria-invalid={!!errors[name]}
-      />
+      {opts.decimals !== undefined ? (
+        <NumberInput
+          id={`cl-${name}`}
+          className="form-field-box"
+          decimals={opts.decimals}
+          placeholder={opts.placeholder ?? label}
+          {...register(name)}
+          aria-invalid={!!errors[name]}
+        />
+      ) : (
+        <input
+          id={`cl-${name}`}
+          className="form-field-box"
+          type={opts.type ?? 'text'}
+          placeholder={opts.placeholder ?? label}
+          {...register(name)}
+          aria-invalid={!!errors[name]}
+        />
+      )}
       <FieldError message={errors[name]?.message} />
     </div>
   );
@@ -118,7 +130,7 @@ export function ClientFormModal({
             <FieldError message={errors.countryIso2?.message} />
           </div>
           {field('vattin', 'VATTIN')}
-          {field('commissionUsd', 'Commission per declaration (USD)')}
+          {field('commissionUsd', 'Commission per declaration (USD)', { decimals: 2 })}
           <div className="form-field-group" style={{ alignSelf: 'end' }}>
             <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.4 }}>
               “CM” in the monthly ledger. JR is $0, other clients $50.

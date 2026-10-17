@@ -112,7 +112,7 @@ export async function listLedger(
     db,
     sql`
     ${SELECT}, count(*) OVER () AS total_count ${FROM} ${where(p)}
-    ${orderBy(p.sort, { invDate: sql`a.inv_date`, declareNo: sql`d.declare_no`, client: sql`c.code`, netProfit: sql`a.net_profit` }, sql`a.inv_date, d.declare_no`)}
+    ${orderBy(p.sort, { invDate: sql`a.inv_date`, declareNo: sql`d.declare_no`, client: sql`c.code`, netProfit: sql`a.net_profit` }, sql`date_trunc('month', a.inv_date), a.inv_no NULLS LAST, a.dis_no NULLS LAST, a.dn_no NULLS LAST, d.declare_no`)}
     ${paginate(p.page, p.pageSize)}`,
   );
   const [totals] = await queryRows<LedgerSummary>(

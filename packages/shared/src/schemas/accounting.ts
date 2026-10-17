@@ -116,6 +116,44 @@ export interface LedgerSummary {
   unpaid: number;
 }
 
+/* ------------------------ Clear fee payments (to Chea) ------------------------ */
+
+/**
+ * One payment to the customs broker against a month's clear fees. A month is often paid in
+ * two or three parts, each with its own date and remark ("Paid for next month").
+ */
+export const clearFeePaymentInputSchema = z.object({
+  /** The ledger month the payment is for. */
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM'),
+  paidOn: isoDate,
+  amount: decimal(2, { min: 0.01, allowEmpty: false }),
+  remark: optText(200),
+});
+export type ClearFeePaymentInput = z.input<typeof clearFeePaymentInputSchema>;
+export const clearFeePaymentUpdateSchema = clearFeePaymentInputSchema
+  .omit({ month: true })
+  .partial();
+export const clearFeePaymentsQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM'),
+});
+
+export interface ClearFeePayment {
+  id: string;
+  paidOn: string;
+  amount: string;
+  remark: string | null;
+  createdByName: string | null;
+}
+
+/** A month's clear fee against what has been paid; balance < 0 means overpaid. */
+export interface ClearFeePaymentMonth {
+  month: string;
+  clearFee: string;
+  paid: string;
+  balance: string;
+  payments: ClearFeePayment[];
+}
+
 /** INV (GS26-394), DIS (DIS437) or DN (JR2610001): a shipment's three numbers. */
 export type InvoiceNumberKind = 'INV' | 'DIS' | 'DN';
 /** A shipment given its numbers (on approval, or a released number passed on to it). */

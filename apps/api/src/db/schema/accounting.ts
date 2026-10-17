@@ -358,6 +358,29 @@ export const officialReceipts = pgTable(
 );
 
 /**
+ * Payment to the customs broker (Chea) against a ledger month's clear fees. A month can be
+ * paid in several parts; the month's balance is its clear fee total minus these.
+ */
+export const clearFeePayments = pgTable(
+  'clear_fee_payments',
+  {
+    id: id(),
+    /** First day of the ledger month the payment is for. */
+    periodMonth: date('period_month').notNull(),
+    paidOn: date('paid_on').notNull(),
+    amount: money('amount').notNull(),
+    remark: text('remark'),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    index('clear_fee_payments_period_idx').on(t.periodMonth, t.paidOn),
+    check('clear_fee_payments_amount_positive', sql`amount > 0`),
+  ],
+);
+
+/**
  * Accounting → broker messages about a credit note ("Checked", or "Revised" with what to fix).
  * Shown in the broker's Credit Noted inbox.
  */

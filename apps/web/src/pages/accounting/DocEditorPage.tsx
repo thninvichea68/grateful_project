@@ -17,6 +17,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useDoc, useDocAction, useDocs, useLedgerRow, usePrefill } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
@@ -453,12 +454,22 @@ function Editor({
                             </option>
                           ))}
                       </select>
+                    ) : f.type === 'number' ? (
+                      <NumberInput
+                        id={`d-${f.name}`}
+                        className="form-field-box"
+                        decimals={f.name === 'exchangeRate' ? 4 : 3}
+                        placeholder={f.placeholder ?? f.label}
+                        // Never typed for a shipment: its rate comes from the Monthly Ledger.
+                        readOnly={linked && f.name === 'exchangeRate'}
+                        {...register(f.name)}
+                        aria-invalid={!!err(f.name)}
+                      />
                     ) : (
                       <input
                         id={`d-${f.name}`}
                         className="form-field-box"
                         type={f.type === 'date' ? 'date' : 'text'}
-                        inputMode={f.type === 'number' ? 'decimal' : undefined}
                         placeholder={
                           f.name === cfg.numberField && isShipmentDoc(type)
                             ? 'Given automatically'
@@ -468,7 +479,7 @@ function Editor({
                         // come from the Monthly Ledger.
                         readOnly={
                           (f.name === cfg.numberField && isShipmentDoc(type)) ||
-                          (linked && (f.name === cfg.dateField || f.name === 'exchangeRate'))
+                          (linked && f.name === cfg.dateField)
                         }
                         {...register(f.name)}
                         aria-invalid={!!err(f.name)}
@@ -543,9 +554,9 @@ function Editor({
                             <FieldError message={lineErr(i, 'description')} />
                           </td>
                           <td>
-                            <input
+                            <NumberInput
                               className={`form-field-box ${dl.numIn}`}
-                              inputMode="decimal"
+                              decimals={3}
                               {...register(`lines.${i}.qty`)}
                               aria-invalid={!!lineErr(i, 'qty')}
                             />
@@ -559,9 +570,9 @@ function Editor({
                             />
                           </td>
                           <td>
-                            <input
+                            <NumberInput
                               className={`form-field-box ${dl.numIn}`}
-                              inputMode="decimal"
+                              decimals={4}
                               placeholder="0.00"
                               {...register(`lines.${i}.unitPrice`)}
                               aria-invalid={!!lineErr(i, 'unitPrice')}

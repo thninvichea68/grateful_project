@@ -5,6 +5,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useApiMutation, useQuotation, useQuotationTemplates } from '../../features/admin';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { ApiError, api } from '../../lib/api';
@@ -281,13 +282,23 @@ function Editor({
               ).map(([k, l, span]) => (
                 <div className="form-field-group" key={k} style={{ gridColumn: `span ${span}` }}>
                   <label htmlFor={`qt-${k}`}>{l}</label>
-                  <input
-                    id={`qt-${k}`}
-                    type={k === 'quoteDate' ? 'date' : 'text'}
-                    className="form-field-box"
-                    value={head[k]}
-                    onChange={(e) => setHead({ ...head, [k]: e.target.value })}
-                  />
+                  {k === 'paymentTermDays' || k === 'latePenaltyPctPerDay' ? (
+                    <NumberInput
+                      id={`qt-${k}`}
+                      decimals={k === 'paymentTermDays' ? 0 : 3}
+                      className="form-field-box"
+                      value={head[k]}
+                      onChange={(e) => setHead({ ...head, [k]: e.target.value })}
+                    />
+                  ) : (
+                    <input
+                      id={`qt-${k}`}
+                      type={k === 'quoteDate' ? 'date' : 'text'}
+                      className="form-field-box"
+                      value={head[k]}
+                      onChange={(e) => setHead({ ...head, [k]: e.target.value })}
+                    />
+                  )}
                 </div>
               ))}
             </div>

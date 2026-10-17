@@ -3,6 +3,7 @@ import type { ExchangeRateImportResult, SettingsBundle } from '@gs/shared';
 import { useApiMutation } from '../../features/admin';
 import { FilePicker } from '../../components/FilePicker';
 import { ErrorBanner, Modal, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import { api } from '../../lib/api';
@@ -46,9 +47,9 @@ export function RateRow({ rate, manage }: { rate: Rate; manage: boolean }) {
         </td>
         <td>
           <span className={r.rateInput}>
-            <input
+            <NumberInput
               className={ui.input}
-              inputMode="decimal"
+              decimals={4}
               value={draft.usdToKhr}
               autoFocus
               onChange={(e) => setDraft({ ...draft, usdToKhr: e.target.value })}

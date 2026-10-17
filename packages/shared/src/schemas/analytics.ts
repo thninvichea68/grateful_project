@@ -133,6 +133,11 @@ export interface ProfitSummary {
     name: string;
     netProfit: string;
   }[];
+  /**
+   * Ledger rows with costs but nothing billed yet (INV + DIS + DN = 0), per month (months
+   * with such rows only). They are left out of every profit figure above.
+   */
+  unbilled: { month: string; entries: number; costs: string }[];
 }
 
 /** One client's ledger figures for a period (by invoice date), for the Analytics cards. */
@@ -140,10 +145,14 @@ export interface ClientRevenueRow {
   clientId: string;
   code: string;
   name: string;
-  /** Ledger entries (one per customs declaration). */
+  /** Billed ledger entries (one per customs declaration); every figure below is from these. */
   entries: number;
-  /** Entries Chea hasn't been paid for yet. */
+  /** Billed entries Chea hasn't been paid for yet. */
   unpaid: number;
+  /** Entries with costs but nothing billed yet (INV + DIS + DN = 0): left out of the figures. */
+  unbilled: number;
+  /** Clear fee + THC + CM + Other of the unbilled entries. */
+  unbilledCosts: string;
   invRevenue: string;
   disTotal: string;
   dnTotal: string;

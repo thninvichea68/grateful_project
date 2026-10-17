@@ -170,6 +170,18 @@ function ClientCard({ r, link }: { r: ClientRevenueRow; link: string }) {
         <span data-warn={r.unpaid > 0 || undefined} className={s.unpaid}>
           {r.unpaid} unpaid (Chea)
         </span>
+        {r.unbilled > 0 && (
+          <>
+            <span className={s.dot} aria-hidden="true" />
+            <span
+              data-warn
+              className={s.unpaid}
+              title={`Costs ${fmtMoney(r.unbilledCosts)} not counted until billed`}
+            >
+              {r.unbilled} not billed yet
+            </span>
+          </>
+        )}
         <Link to={link} className={s.open}>
           Open ledger →
         </Link>
@@ -195,8 +207,8 @@ export function ClientRevenueCards({
         <div>
           <h3>Client Revenue — Full Breakdown</h3>
           <div className="an-section-sub">
-            Every revenue and cost line per client from the Monthly Ledger, by invoice date.{' '}
-            {periodLabel}
+            Every revenue and cost line per client from the Monthly Ledger, by invoice date. Entries
+            not billed yet are left out. {periodLabel}
             {ignored && ' · Import/export and transport filters don’t apply to the ledger.'}
           </div>
         </div>

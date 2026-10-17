@@ -65,14 +65,17 @@ export function Pager({
   total,
   pageSize,
   onPage,
+  children,
 }: {
   page: number;
   totalPages: number;
   total: number;
   pageSize: number;
   onPage: (p: number) => void;
+  /** Extra content in the free space between the count and the buttons. */
+  children?: ReactNode;
 }) {
-  if (total === 0) return null;
+  if (total === 0) return children ? <div className={s.pager}>{children}</div> : null;
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
   return (
@@ -80,6 +83,7 @@ export function Pager({
       <span className={s.pagerInfo}>
         {from}–{to} of {total.toLocaleString()}
       </span>
+      {children}
       <div className={s.pagerBtns}>
         <button
           type="button"

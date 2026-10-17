@@ -184,6 +184,21 @@ select[class]:disabled {
   top: 12px;
 }
 
+/* The whole field opens the picker (src/lib/datePicker.ts), so show it as clickable. */
+input:is([type='date'], [type='month'], [type='week'], [type='time'], [type='datetime-local']):not(
+    :disabled,
+    [readonly]
+  ),
+input:is(
+    [type='date'],
+    [type='month'],
+    [type='week'],
+    [type='time'],
+    [type='datetime-local']
+  )::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

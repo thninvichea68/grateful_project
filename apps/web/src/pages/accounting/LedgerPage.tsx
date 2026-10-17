@@ -14,6 +14,7 @@ import { SearchBox } from '../../components/SearchBox';
 import { StatTile, StatTiles } from '../../components/StatTiles';
 import { useAccountingLayout } from './AccountingLayout';
 import { LedgerModal } from './LedgerModal';
+import { ClearFeePayments } from './ClearFeePayments';
 import l from './LedgerPage.module.css';
 
 const MONTHS = [
@@ -358,7 +359,11 @@ export function LedgerPage() {
             </tbody>
           </table>
         </div>
-        {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
+        {list.data && (
+          <Pager {...list.data.meta} onPage={(p) => set('page', String(p))}>
+            {month && <ClearFeePayments month={month} />}
+          </Pager>
+        )}
       </div>
       {open && <LedgerModal row={open} onClose={() => setOpen(null)} />}
     </section>

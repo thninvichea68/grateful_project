@@ -13,6 +13,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useDeclarationOptions, useDeleteLedger, useSaveLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
@@ -121,15 +122,22 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
     onClose();
   };
 
-  const money = (name: keyof LedgerEntryInput, label: string, hint?: string) => (
+  const money = (
+    name: keyof LedgerEntryInput,
+    label: string,
+    hint?: string,
+    decimals = 2,
+    locked = false,
+  ) => (
     <div className="form-field-group">
       <label htmlFor={`lg-${name}`}>{label}</label>
-      <input
+      <NumberInput
         id={`lg-${name}`}
         className="form-field-box"
-        inputMode="decimal"
+        decimals={decimals}
         placeholder={hint ?? '0.00'}
-        readOnly={!editable}
+        readOnly={!editable || locked}
+        title={locked ? 'Set automatically' : undefined}
         {...register(name)}
         aria-invalid={!!errors[name]}
       />
@@ -257,7 +265,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           {text('disNo', 'DIS No.', 'Given when checked', 'text', true)}
           {text('dnNo', 'DN No.', 'Given when checked', 'text', true)}
           {text('invDate', 'Invoice date', 'auto: next working day', 'date', !!row)}
-          {text('exchangeRate', 'USD → KHR rate', 'auto: rate on invoice date', 'text', !!row)}
+          {money('exchangeRate', 'USD → KHR rate', 'auto: rate on invoice date', 4, !!row)}
           {text('mark', 'Mark', 'e.g. Use 40H Truck')}
         </div>
         <div

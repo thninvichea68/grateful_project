@@ -226,6 +226,80 @@ describe('monthly ledger', () => {
   });
 });
 
+describe('clear fee payments to Chea', () => {
+  const URL = '/api/v1/accounting/clear-fee-payments';
+
+  it("pays a month's clear fee in parts and shows the balance (negative = overpaid)", async () => {
+    const h = await as('ACCOUNTANT');
+    for (const [no, date, fee] of [
+      ['I 1', '2026-09-02', '600.25'],
+      ['I 2', '2026-09-03', '400'],
+    ] as const)
+      await request(app)
+        .post('/api/v1/accounting/ledger')
+        .set(h)
+        .send({ declarationId: await declaration(b.jr.id, no, date), clearFee: fee });
+
+    const empty = await request(app).get(URL).query({ month: '2026-09' }).set(h);
+    expect(empty.body).toMatchObject({ clearFee: '1000.25', paid: '0.00', balance: '1000.25' });
+    expect(empty.body.payments).toEqual([]);
+
+    // Entered out of order: listed by pay date.
+    await request(app)
+      .post(URL)
+      .set(h)
+      .send({
+        month: '2026-09',
+        paidOn: '2026-10-08',
+        amount: '600',
+        remark: 'Paid for next month',
+      });
+    const res = await request(app)
+      .post(URL)
+      .set(h)
+      .send({ month: '2026-09', paidOn: '2026-09-20', amount: '1,000.25' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ clearFee: '1000.25', paid: '1600.25', balance: '-600.00' });
+    expect(res.body.payments.map((p: { paidOn: string }) => p.paidOn)).toEqual([
+      '2026-09-20',
+      '2026-10-08',
+    ]);
+    expect(res.body.payments[1]).toMatchObject({ amount: '600.00', remark: 'Paid for next month' });
+
+    // Another month is untouched.
+    const oct = await request(app).get(URL).query({ month: '2026-10' }).set(h);
+    expect(oct.body).toMatchObject({ clearFee: '0.00', paid: '0.00', payments: [] });
+
+    const id = res.body.payments[1].id as string;
+    expect(
+      (await request(app).patch(`${URL}/${id}`).set(h).send({ amount: '0', remark: null })).status,
+    ).toBe(400);
+    await request(app).patch(`${URL}/${id}`).set(h).send({ amount: '500', remark: null });
+    await request(app).delete(`${URL}/${res.body.payments[0].id}`).set(h);
+    const after = await request(app).get(URL).query({ month: '2026-09' }).set(h);
+    expect(after.body).toMatchObject({ paid: '500.00', balance: '500.25' });
+    expect(after.body.payments).toEqual([
+      expect.objectContaining({ paidOn: '2026-10-08', amount: '500.00', remark: null }),
+    ]);
+  });
+
+  it('needs accounting:write to record a payment', async () => {
+    const res = await request(app)
+      .post(URL)
+      .set(await as('VIEWER'))
+      .send({ month: '2026-09', paidOn: '2026-09-20', amount: '100' });
+    expect(res.status).toBe(403);
+    expect(
+      (
+        await request(app)
+          .get(URL)
+          .query({ month: '2026-09' })
+          .set(await as('VIEWER'))
+      ).status,
+    ).toBe(200);
+  });
+});
+
 describe('billing documents', () => {
   /** The ledger row with the example amounts, approved in Chea Payments (so it has numbers). */
   async function ledgerRow(clientId = b.jr.id, declareNo = 'I 122050', date = '2026-08-21') {

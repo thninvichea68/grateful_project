@@ -29,6 +29,7 @@ import {
   useShipment,
 } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import { ApiError } from '../../lib/api';
@@ -556,12 +557,15 @@ function Field({
   type = 'text',
   span,
   placeholder,
+  decimals,
 }: {
   name: keyof FormValues;
   label: string;
   type?: string;
   span?: Span;
   placeholder?: string;
+  /** A number field (digits only, shown with commas) with at most this many decimals. */
+  decimals?: number;
 }) {
   const {
     register,
@@ -571,15 +575,26 @@ function Field({
   return (
     <div className="form-field-group" style={spanStyle(span)}>
       <label htmlFor={`f-${name}`}>{label}</label>
-      <input
-        id={`f-${name}`}
-        type={type}
-        className="form-field-box"
-        placeholder={placeholder ?? label}
-        title={type === 'text' ? undefined : label}
-        {...register(name)}
-        aria-invalid={!!err}
-      />
+      {decimals !== undefined ? (
+        <NumberInput
+          id={`f-${name}`}
+          decimals={decimals}
+          className="form-field-box"
+          placeholder={placeholder ?? label}
+          {...register(name)}
+          aria-invalid={!!err}
+        />
+      ) : (
+        <input
+          id={`f-${name}`}
+          type={type}
+          className="form-field-box"
+          placeholder={placeholder ?? label}
+          title={type === 'text' ? undefined : label}
+          {...register(name)}
+          aria-invalid={!!err}
+        />
+      )}
       <FieldError message={err?.message} />
     </div>
   );
@@ -869,7 +884,7 @@ function buildSteps(
     <Card title="Invoice / THC" sub="Terminal handling charge invoice for this shipment">
       <Field name="thcHblNo" label="INVOICE / THC No." span={2} />
       <Field name="thcHblDate" label="Invoice / THC Date" type="date" />
-      <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" />
+      <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" decimals={2} />
     </Card>
   );
   const remarkCard = (
@@ -904,7 +919,7 @@ function buildSteps(
                 options={countries}
                 placeholder="Select country"
               />
-              <Field name="quantity" label="Quantity" placeholder="0" />
+              <Field name="quantity" label="Quantity" placeholder="0" decimals={3} />
               <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
               <Select
                 name="material"
@@ -1012,7 +1027,7 @@ function buildSteps(
             <Field name="broker" label="Broker" span={2} placeholder="Customs broker" />
           </Card>
           <Card title="Cargo" sub="What is being imported and where it comes from">
-            <Field name="quantity" label="Quantity" placeholder="0" />
+            <Field name="quantity" label="Quantity" placeholder="0" decimals={3} />
             <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
             <Select
               name="material"

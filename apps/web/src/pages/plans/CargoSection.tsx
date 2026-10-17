@@ -12,6 +12,7 @@ import { uploadFile } from '../../lib/files';
 import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
 import { FieldError } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { blankInvoice, blankLine, toNum, type FormValues, type InvoiceValues } from './formModel';
 
 const CHEVRON = (
@@ -450,15 +451,25 @@ function InvoiceCard({
   ) => (
     <label className="cx-f">
       <span className="cx-lbl">{label}</span>
-      <input
-        type="text"
-        inputMode={num ? 'decimal' : undefined}
-        className={`cargo-cell${num ? ' cargo-cell-num' : ''}`}
-        placeholder={ph}
-        {...register(`invoices.${gi}.lines.${li}.${field}`)}
-        aria-invalid={!!lineErr(li, field)}
-        title={lineErr(li, field)}
-      />
+      {num ? (
+        <NumberInput
+          decimals={field === 'fobUnitPrice' ? 4 : 3}
+          className="cargo-cell cargo-cell-num"
+          placeholder={ph}
+          {...register(`invoices.${gi}.lines.${li}.${field}`)}
+          aria-invalid={!!lineErr(li, field)}
+          title={lineErr(li, field)}
+        />
+      ) : (
+        <input
+          type="text"
+          className="cargo-cell"
+          placeholder={ph}
+          {...register(`invoices.${gi}.lines.${li}.${field}`)}
+          aria-invalid={!!lineErr(li, field)}
+          title={lineErr(li, field)}
+        />
+      )}
     </label>
   );
 
@@ -800,15 +811,25 @@ function ImportInvoiceCard({
   ) => (
     <label className="cx-f">
       <span className="cx-lbl">{label}</span>
-      <input
-        type="text"
-        inputMode={num ? 'decimal' : undefined}
-        className={`cargo-cell${num ? ' cargo-cell-num' : ''}`}
-        placeholder={ph}
-        {...register(`invoices.${gi}.lines.${li}.${field}`)}
-        aria-invalid={!!lineErr(li, field)}
-        title={lineErr(li, field)}
-      />
+      {num ? (
+        <NumberInput
+          decimals={field === 'fobUnitPrice' ? 4 : 3}
+          className="cargo-cell cargo-cell-num"
+          placeholder={ph}
+          {...register(`invoices.${gi}.lines.${li}.${field}`)}
+          aria-invalid={!!lineErr(li, field)}
+          title={lineErr(li, field)}
+        />
+      ) : (
+        <input
+          type="text"
+          className="cargo-cell"
+          placeholder={ph}
+          {...register(`invoices.${gi}.lines.${li}.${field}`)}
+          aria-invalid={!!lineErr(li, field)}
+          title={lineErr(li, field)}
+        />
+      )}
     </label>
   );
 
@@ -838,9 +859,8 @@ function ImportInvoiceCard({
         </label>
         <label className="cx-f">
           <span className="cx-lbl">Qty Pkgs</span>
-          <input
-            type="text"
-            inputMode="decimal"
+          <NumberInput
+            decimals={3}
             className="cargo-cell cargo-cell-num"
             placeholder="0"
             {...register(`invoices.${gi}.packages`)}

@@ -12,6 +12,7 @@ import {
 } from '@gs/shared';
 import { useCreateDrafts, useCreateReceipt } from '../../features/billing';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
@@ -212,10 +213,10 @@ export function ReceiptModal({
           </div>
           <div className="form-field-group">
             <label htmlFor="rc-amount">Amount (USD)</label>
-            <input
+            <NumberInput
               id="rc-amount"
               className="form-field-box"
-              inputMode="decimal"
+              decimals={2}
               {...register('amount')}
               aria-invalid={!!errors.amount}
             />

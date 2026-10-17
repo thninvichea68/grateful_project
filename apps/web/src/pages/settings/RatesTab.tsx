@@ -12,6 +12,7 @@ import {
 } from '@gs/shared';
 import { useApiMutation, useMarketPrices, useSettings } from '../../features/admin';
 import { ErrorBanner, TableState, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import { api } from '../../lib/api';
@@ -459,10 +460,10 @@ function ExchangePanel({ manage }: { manage: boolean }) {
             onChange={(e) => setDate(e.target.value)}
             aria-label="Effective from"
           />
-          <input
+          <NumberInput
             className={ui.input}
-            inputMode="decimal"
-            placeholder="e.g. 4026"
+            decimals={4}
+            placeholder="e.g. 4,026"
             value={rate}
             onChange={(e) => setRate(e.target.value)}
             aria-label="KHR per USD"
@@ -543,17 +544,17 @@ function FuelPanel({ data, manage }: { data: MarketPrices; manage: boolean }) {
             onChange={(e) => setDraft({ ...draft, endDate: e.target.value })}
             aria-label="Period end (optional)"
           />
-          <input
+          <NumberInput
             className={ui.input}
-            inputMode="numeric"
+            decimals={0}
             placeholder="Gasoline 92 (៛)"
             value={draft.gasoline92}
             onChange={(e) => setDraft({ ...draft, gasoline92: e.target.value })}
             aria-label="Gasoline 92, riel per litre"
           />
-          <input
+          <NumberInput
             className={ui.input}
-            inputMode="numeric"
+            decimals={0}
             placeholder="Gasoil (៛)"
             value={draft.gasoil}
             onChange={(e) => setDraft({ ...draft, gasoil: e.target.value })}

@@ -19,6 +19,7 @@ import {
 } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
@@ -276,21 +277,27 @@ function CreditNotedEditor({
   const field = (
     name: string,
     label: string,
-    opts: { type?: string; span?: boolean; locked?: boolean } = {},
-  ) => (
-    <label className={s.field} style={opts.span ? { gridColumn: '1 / -1' } : undefined}>
-      <span>{label}</span>
-      <input
-        type={opts.type ?? 'text'}
-        className={`form-field-box${opts.locked ? ` ${s.locked}` : ''}`}
-        {...register(name)}
-        readOnly={opts.locked}
-        title={opts.locked ? LOCKED_HINT : undefined}
-        aria-invalid={!!err(name)}
-      />
-      <FieldError message={err(name)} />
-    </label>
-  );
+    opts: { type?: string; span?: boolean; locked?: boolean; decimals?: number } = {},
+  ) => {
+    const props = {
+      className: `form-field-box${opts.locked ? ` ${s.locked}` : ''}`,
+      ...register(name),
+      readOnly: opts.locked,
+      title: opts.locked ? LOCKED_HINT : undefined,
+      'aria-invalid': !!err(name),
+    };
+    return (
+      <label className={s.field} style={opts.span ? { gridColumn: '1 / -1' } : undefined}>
+        <span>{label}</span>
+        {opts.decimals !== undefined ? (
+          <NumberInput decimals={opts.decimals} {...props} />
+        ) : (
+          <input type={opts.type ?? 'text'} {...props} />
+        )}
+        <FieldError message={err(name)} />
+      </label>
+    );
+  };
 
   return (
     <section className={`view active ${s.wrap}`}>
@@ -406,8 +413,8 @@ function CreditNotedEditor({
                   </div>
                 </label>
                 {field('quantityText', 'Qty / unit')}
-                {field('grossWeightKg', 'Gross weight (kg)')}
-                {field('cbm', 'CBM')}
+                {field('grossWeightKg', 'Gross weight (kg)', { decimals: 3 })}
+                {field('cbm', 'CBM', { decimals: 3 })}
               </div>
             </section>
 
@@ -456,9 +463,9 @@ function CreditNotedEditor({
                         </select>
                       );
                     })()}
-                    <input
+                    <NumberInput
                       className="form-field-box"
-                      inputMode="decimal"
+                      decimals={3}
                       {...register(`lines.${i}.qty`)}
                     />
                     {(() => {
@@ -486,9 +493,9 @@ function CreditNotedEditor({
                         </select>
                       );
                     })()}
-                    <input
+                    <NumberInput
                       className="form-field-box"
-                      inputMode="decimal"
+                      decimals={4}
                       placeholder="0.00"
                       {...register(`lines.${i}.unitPrice`)}
                       aria-invalid={!!lineErr(i, 'unitPrice')}

@@ -3,6 +3,8 @@ import type {
   BillingDoc,
   BillingDocListItem,
   BillingDocType,
+  ClearFeePaymentInput,
+  ClearFeePaymentMonth,
   CreditNoteMessage,
   CreditNoteReviewCounts,
   CreditNoteReviewRow,
@@ -89,6 +91,39 @@ export function useDeleteInvoice() {
         json: { reason },
       }),
     onSuccess: invalidate,
+  });
+}
+
+/** A ledger month's clear fee against the payments made to Chea (in one or more parts). */
+export function useClearFeePayments(month: string, enabled = true) {
+  return useQuery({
+    queryKey: [...KEY, 'clear-fee-payments', month],
+    queryFn: () =>
+      api<ClearFeePaymentMonth>('/accounting/clear-fee-payments', { query: { month } }),
+    enabled: enabled && !!month,
+  });
+}
+
+export function useSaveClearFeePayment(month: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: Omit<ClearFeePaymentInput, 'month'> }) =>
+      id
+        ? api<undefined>(`/accounting/clear-fee-payments/${id}`, { method: 'PATCH', json: body })
+        : api<ClearFeePaymentMonth>('/accounting/clear-fee-payments', {
+            method: 'POST',
+            json: { ...body, month },
+          }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'clear-fee-payments', month] }),
+  });
+}
+
+export function useDeleteClearFeePayment(month: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<undefined>(`/accounting/clear-fee-payments/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'clear-fee-payments', month] }),
   });
 }
 

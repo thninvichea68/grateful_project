@@ -286,6 +286,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
     pct: sum ? Math.round((Number(c.netProfit) / sum) * 1000) / 10 : 0,
   }));
   const positive = clients.filter((c) => Number(c.netProfit) > 0);
+  const unbilled = profit.unbilled.find((u) => u.month === month);
 
   return (
     <div className="rc-card ga-revenue">
@@ -319,6 +320,15 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
             </span>
             <span className="rc-pill-text">vs {prevLabel}</span>
           </div>
+          {unbilled && (
+            <div
+              className={dash.mutedNote}
+              title="Ledger entries with costs but no INV, DIS or DN yet. They count once billed."
+            >
+              Provisional: {unbilled.entries} not billed yet ({fmtMoney(unbilled.costs)} costs not
+              counted)
+            </div>
+          )}
         </div>
         <ProfitBars
           monthly={profit.monthly}

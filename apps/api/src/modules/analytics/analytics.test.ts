@@ -250,10 +250,11 @@ describe('overview and profit', () => {
     clientId: string,
     invDate: string,
     netProfit: string,
+    invRevenue = '100.00',
   ) {
     await db
       .insert(accountingRecords)
-      .values({ declarationId, clientId, invDate, exchangeRate: '4026', netProfit });
+      .values({ declarationId, clientId, invDate, exchangeRate: '4026', netProfit, invRevenue });
   }
 
   it('profit is only for accounting roles, grouped by client and month', async () => {
@@ -302,6 +303,48 @@ describe('overview and profit', () => {
     // A month still to come falls back to the current one.
     const later = await get('/overview/summary', { month: '2999-01' }, 'ACCOUNTANT');
     expect(later.body.live).toBe(true);
+  });
+
+  it('leaves entries with nothing billed yet out of profit and reports them as unbilled', async () => {
+    const a = await ship({
+      eta: '2026-08-01',
+      declarations: [
+        { declareNo: 'U 1', declareDate: '2026-08-01' },
+        { declareNo: 'U 2', declareDate: '2026-08-02' },
+      ],
+    });
+    await ledger(a.declarations[0]!.id, b.jr.id, '2026-08-03', '120.00');
+    // Costs entered, INV/DIS/DN still 0: the spreadsheet would show this as a −330.21 loss.
+    await db.insert(accountingRecords).values({
+      declarationId: a.declarations[1]!.id,
+      clientId: b.jr.id,
+      invDate: '2026-08-04',
+      exchangeRate: '4047',
+      clearFee: '280.21',
+      commission: '50.00',
+      netProfit: '-330.21',
+    });
+
+    const res = await get('/analytics/profit', { year: '2026' }, 'ACCOUNTANT');
+    expect(res.body.monthly[7]).toEqual({ month: '2026-08', netProfit: '120.00' });
+    expect(res.body.total).toBe('120.00');
+    expect(res.body.byClient).toMatchObject([{ code: 'JR', netProfit: '120.00' }]);
+    expect(res.body.unbilled).toEqual([{ month: '2026-08', entries: 1, costs: '330.21' }]);
+
+    const cr = await get(
+      '/analytics/client-revenue',
+      { from: '2026-08-01', to: '2026-08-31' },
+      'ACCOUNTANT',
+    );
+    expect(cr.body[0]).toMatchObject({
+      code: 'JR',
+      entries: 1,
+      unbilled: 1,
+      unbilledCosts: '330.21',
+      revenue: '100.00',
+      costs: '0.00',
+      netProfit: '120.00',
+    });
   });
 
   it('client revenue breaks the ledger down per client with a monthly trend', async () => {

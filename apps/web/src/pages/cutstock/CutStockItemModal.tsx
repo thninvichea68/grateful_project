@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../../auth/AuthProvider';
 import { useCutStockItem, useDeleteCutStockItem, useSaveCutStockItem } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtNum, fmtPct } from '../../lib/format';
@@ -92,16 +93,33 @@ export function CutStockItemModal({
       </Modal>
     );
 
-  const input = (name: keyof CutStockItemInput, label: string, span?: number) => (
+  const input = (
+    name: keyof CutStockItemInput,
+    label: string,
+    span?: number,
+    /** A number field (digits only, shown with commas) with at most this many decimals. */
+    decimals?: number,
+  ) => (
     <div className="form-field-group" style={span ? { gridColumn: `span ${span}` } : undefined}>
       <label htmlFor={`cs-${name}`}>{label}</label>
-      <input
-        id={`cs-${name}`}
-        className="form-field-box"
-        {...register(name)}
-        readOnly={!editable}
-        aria-invalid={!!errors[name]}
-      />
+      {decimals !== undefined ? (
+        <NumberInput
+          id={`cs-${name}`}
+          className="form-field-box"
+          decimals={decimals}
+          {...register(name)}
+          readOnly={!editable}
+          aria-invalid={!!errors[name]}
+        />
+      ) : (
+        <input
+          id={`cs-${name}`}
+          className="form-field-box"
+          {...register(name)}
+          readOnly={!editable}
+          aria-invalid={!!errors[name]}
+        />
+      )}
       <FieldError message={errors[name]?.message} />
     </div>
   );
@@ -148,9 +166,9 @@ export function CutStockItemModal({
           {input('newOrUsed', 'New / Used')}
           {input('name', 'Item', 3)}
           {input('unit', 'Unit')}
-          {input('qty', 'Licensed quantity')}
-          {input('unitPrice', 'Unit price (USD)')}
-          {input('openingImportedQty', 'Imported before this system')}
+          {input('qty', 'Licensed quantity', undefined, 3)}
+          {input('unitPrice', 'Unit price (USD)', undefined, 4)}
+          {input('openingImportedQty', 'Imported before this system', undefined, 3)}
           {input('remarks', 'Remarks')}
         </div>
         {editable && (

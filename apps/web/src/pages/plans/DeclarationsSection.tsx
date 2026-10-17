@@ -10,6 +10,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useCutStock } from '../../features/hooks';
 import { fmtNum } from '../../lib/format';
 import { FieldError } from '../../components/ui';
+import { NumberInput } from '../../components/NumberInput';
 import { blankDeclaration, toNum, type FormValues } from './formModel';
 
 /** Customs declarations; on imports each one carries CDC lines that draw down the client's master list. */
@@ -306,9 +307,9 @@ function CdcLines({
                     />
                   </td>
                   <td>
-                    <input
+                    <NumberInput
                       className="form-field-box"
-                      inputMode="decimal"
+                      decimals={3}
                       placeholder="Quantity"
                       {...register(`declarations.${di}.cdcLines.${li}.qty`)}
                       aria-invalid={!!err?.qty}
@@ -325,9 +326,9 @@ function CdcLines({
                     />
                   </td>
                   <td>
-                    <input
+                    <NumberInput
                       className="form-field-box"
-                      inputMode="decimal"
+                      decimals={4}
                       placeholder="Unit Price"
                       {...register(`declarations.${di}.cdcLines.${li}.unitPrice`)}
                     />

@@ -9,6 +9,9 @@ import {
   billingDraftsInputSchema,
   billingIssueInputSchema,
   billingMonthQuerySchema,
+  clearFeePaymentInputSchema,
+  clearFeePaymentsQuerySchema,
+  clearFeePaymentUpdateSchema,
   receiptInputSchema,
   receiptListQuerySchema,
   creditNoteListQuerySchema,
@@ -26,6 +29,7 @@ import { attachmentName } from '../../lib/http';
 import * as ledger from './ledger';
 import * as docs from './docs';
 import * as billing from './billing';
+import * as clearFee from './clearFeePayments';
 import { clientPrefill, creditNotePrefill, prefill } from './prefill';
 import {
   allowedClients,
@@ -37,6 +41,7 @@ import {
 const idParam = z.object({ id: z.string().uuid('Invalid id') });
 const clientParam = z.object({ clientId: z.string().uuid('Invalid client') });
 const receiptParam = z.object({ receiptId: z.string().uuid('Invalid receipt') });
+const paymentParam = z.object({ paymentId: z.string().uuid('Invalid payment') });
 const typeParam = z.object({
   type: z.enum(BILLING_DOC_TYPES, { message: 'Unknown document type' }),
 });
@@ -118,7 +123,6 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     ...q,
     clientIds: scopeClients(req),
     pageSize: 100_000,
-    sort: 'invDate',
   });
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`Ledger ${period}`, {
@@ -216,6 +220,42 @@ accountingRouter.delete('/ledger/:id', requirePermission('accounting:write'), as
   await ledger.deleteLedger(parse(idParam, req.params).id, req);
   res.status(204).end();
 });
+
+/* ---------- Clear fee payments to Chea (a month paid in one or more parts) ---------- */
+accountingRouter.get('/clear-fee-payments', async (req, res) => {
+  const { month } = parse(clearFeePaymentsQuerySchema, req.query);
+  res.json(await clearFee.clearFeeMonth(month, scopeClients(req)));
+});
+accountingRouter.post(
+  '/clear-fee-payments',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const input = parse(clearFeePaymentInputSchema, req.body);
+    await clearFee.createClearFeePayment(input, req);
+    res.status(201).json(await clearFee.clearFeeMonth(input.month, scopeClients(req)));
+  },
+);
+accountingRouter.patch(
+  '/clear-fee-payments/:paymentId',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { paymentId } = parse(paymentParam, req.params);
+    await clearFee.updateClearFeePayment(
+      paymentId,
+      parse(clearFeePaymentUpdateSchema, req.body),
+      req,
+    );
+    res.status(204).end();
+  },
+);
+accountingRouter.delete(
+  '/clear-fee-payments/:paymentId',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    await clearFee.deleteClearFeePayment(parse(paymentParam, req.params).paymentId, req);
+    res.status(204).end();
+  },
+);
 
 /** Declarations to start a Credit Noted from (any declaration, ledger row or not). */
 accountingRouter.get('/credit-notes/declarations', async (req, res) => {
