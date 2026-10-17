@@ -305,10 +305,15 @@ export function CreditNotesReview() {
                           setReview.mutate(
                             { id: r.id, reviewStatus: v },
                             {
-                              onSuccess: () =>
+                              // Checked: into the Monthly Ledger with its INV / DIS / DN numbers.
+                              onSuccess: ({ numbered }) => {
+                                const mine = numbered.find((x) => x.declareNo === r.declareNo);
                                 toast(
-                                  `${r.declareNo ?? r.number} marked ${REVIEW[v].label.toLowerCase()}.`,
-                                ),
+                                  mine
+                                    ? `${r.declareNo} checked: ${mine.numbers.map((x) => x.number).join(' · ')} in the Monthly Ledger.`
+                                    : `${r.declareNo ?? r.number} marked ${REVIEW[v].label.toLowerCase()}.`,
+                                );
+                              },
                             },
                           );
                         }}

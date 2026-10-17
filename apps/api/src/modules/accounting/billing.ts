@@ -77,6 +77,8 @@ interface LedgerPart {
   vat: string;
   disTotal: string;
   dnTotal: string;
+  /** Approved through Chea Payments: its numbers are for documents made here, not typed ones. */
+  fromChea: boolean;
 }
 interface DocPart extends BillingDocSlot {
   recordId: string | null;
@@ -112,7 +114,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
            s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction, s.hbl_no AS hbl,
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.inv_revenue::text AS "invRevenue",
-           a.vat::text AS vat, a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal"
+           a.vat::text AS vat, a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
+           EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id AND cn.status <> 'VOID') AS "fromChea"
     FROM accounting_records a
     JOIN customs_declarations d ON d.id = a.declaration_id JOIN shipments s ON s.id = d.shipment_id
     WHERE a.client_id = ${clientId} AND ${inMonth(sql`a.inv_date`, month)}
@@ -173,7 +176,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     const manual = emptyByType<{ number: string; total: string } | null>(() => null);
     for (const type of BILLING_PACK_TYPES) {
       const [number, cents] = typed[type];
-      if (number && !docsByType[type].some((d) => d.status === 'ISSUED'))
+      // A number typed in the ledger for a document made outside the system (the Excel days).
+      if (number && !l.fromChea && !docsByType[type].some((d) => d.status === 'ISSUED'))
         manual[type] = { number, total: money(cents) };
     }
     return {

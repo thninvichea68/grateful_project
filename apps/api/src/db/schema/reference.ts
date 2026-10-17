@@ -153,6 +153,20 @@ export const fuelPrices = pgTable('fuel_prices', {
   ...timestamps,
 });
 
+/**
+ * Cambodian public holidays (Settings → Public holidays). Document issue dates skip them, as
+ * they skip weekends: the issue date is the next working day after the declaration date.
+ */
+export const publicHolidays = pgTable('public_holidays', {
+  id: id(),
+  holidayDate: date('holiday_date').notNull().unique(),
+  name: text('name').notNull(),
+  /** e.g. "Provisional: check against the sub-decree". */
+  note: text('note'),
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+  ...timestamps,
+});
+
 /** International spot price per metal per day (USD per troy ounce); the day's last fetch wins. */
 export const metalPrices = pgTable(
   'metal_prices',

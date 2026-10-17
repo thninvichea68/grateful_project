@@ -7,6 +7,7 @@ import { Pager, TableState, ui } from '../components/ui';
 import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
+import { ImportPlanDialog } from './plans/ImportPlanDialog';
 import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
@@ -45,7 +46,8 @@ export function ShippingPlansPage() {
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
-    sort: params.get('sort') ?? '-eta',
+    // Newest customs clearance (declaration) date first, unless another order is picked.
+    sort: params.get('sort') ?? '-clearanceDate',
   };
   const query = {
     page: filters.page,
@@ -104,6 +106,7 @@ export function ShippingPlansPage() {
     };
   };
 
+  const [importing, setImporting] = useState(false);
   const doExport = async () => {
     setExporting(true);
     try {
@@ -156,6 +159,8 @@ export function ShippingPlansPage() {
               onChange={(e) => setParam('sort', e.target.value)}
               aria-label="Sort"
             >
+              <option value="-clearanceDate">Newest clearance date first</option>
+              <option value="clearanceDate">Oldest clearance date first</option>
               <option value="-eta">Newest ETA first</option>
               <option value="eta">Oldest ETA first</option>
               <option value="-createdAt">Recently added</option>
@@ -170,6 +175,11 @@ export function ShippingPlansPage() {
             >
               {exporting ? 'Exporting…' : 'Export Excel'}
             </button>
+            {can('shipments:write') && (
+              <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
+                Import Excel
+              </button>
+            )}
             <PlansFilter
               value={filterValue}
               onApply={apply}
@@ -257,6 +267,7 @@ export function ShippingPlansPage() {
         </div>
         {list.data && <Pager {...list.data.meta} onPage={(p) => setParam('page', String(p))} />}
       </div>
+      {importing && <ImportPlanDialog onClose={() => setImporting(false)} />}
     </section>
   );
 }

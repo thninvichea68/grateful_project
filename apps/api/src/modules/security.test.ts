@@ -61,6 +61,7 @@ const SELF_SERVICE = new Set([
   'delete /api/v1/auth/me/avatar',
   'post /api/v1/accounting/credit-notes/inbox/read', // marks my own inbox messages read
   'post /api/v1/assistant/chat', // "Ask AI": everyone may ask; it writes nothing
+  'post /api/v1/assistant/follow-ups', // "Ask AI" follow-up questions: also writes nothing
 ]);
 const concrete = (p: string) =>
   p

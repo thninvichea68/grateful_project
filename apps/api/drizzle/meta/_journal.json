@@ -78,6 +78,34 @@
       "when": 1791793661536,
       "tag": "0010_official_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792117965766,
+      "tag": "0011_holidays_dis_year",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792135911274,
+      "tag": "0012_released_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792204284592,
+      "tag": "0013_import_cargo_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792205576870,
+      "tag": "0014_shipment_status_auto",
+      "breakpoints": true
     }
   ]
 }

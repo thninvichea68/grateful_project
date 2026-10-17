@@ -14,7 +14,8 @@ export type TransportMode = (typeof TRANSPORT_MODES)[number];
 export const LOAD_TYPES = ['FCL', 'LCL', 'NONE'] as const;
 export type LoadType = (typeof LOAD_TYPES)[number];
 
-export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'EXCEPTION'] as const;
+/** Worked out from the shipment's dates and declarations (see shipmentStatusOf), never chosen. */
+export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 export const CLEARANCE_STATUSES = ['PENDING', 'IN_PROGRESS', 'CLEARED', 'EXCEPTION'] as const;
@@ -125,18 +126,13 @@ export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   COMPLETED: 'Completed',
   IN_PROGRESS: 'In Progress',
   PENDING: 'Pending',
-  EXCEPTION: 'Exception',
 };
 
 /** CSS modifier used by the prototype's `.status-tag` / status pill classes. */
-export const SHIPMENT_STATUS_PILL: Record<
-  ShipmentStatus,
-  'completed' | 'progress' | 'pending' | 'exception'
-> = {
+export const SHIPMENT_STATUS_PILL: Record<ShipmentStatus, 'completed' | 'progress' | 'pending'> = {
   COMPLETED: 'completed',
   IN_PROGRESS: 'progress',
   PENDING: 'pending',
-  EXCEPTION: 'exception',
 };
 
 export const STATEMENT_KIND_LABEL: Record<StatementKind, string> = {

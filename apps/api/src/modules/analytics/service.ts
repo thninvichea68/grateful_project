@@ -100,7 +100,7 @@ async function counts(f: Filters) {
            (count(*) FILTER (WHERE s.direction = 'EXPORT'))::int AS exports,
            (count(*) FILTER (WHERE s.clearance_status = 'CLEARED'))::int AS cleared,
            (count(*) FILTER (WHERE s.clearance_status IN ('PENDING', 'IN_PROGRESS')))::int AS pending,
-           (count(*) FILTER (WHERE s.status = 'EXCEPTION' OR s.clearance_status = 'EXCEPTION'))::int AS exceptions
+           (count(*) FILTER (WHERE s.clearance_status = 'EXCEPTION'))::int AS exceptions
     FROM shipments s ${shipWhere(f)}`,
   );
   return r!;
@@ -195,7 +195,7 @@ export async function forwarders(f: Filters): Promise<ForwarderRow[]> {
            (count(*) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL))::int AS arrived,
            round(100.0 * count(*) FILTER (WHERE s.ata <= s.eta) / nullif(count(*) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL), 0), 1)::float AS "onTimePct",
            round(avg(greatest(s.ata - s.eta, 0)) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL), 1)::float AS "avgDelayDays",
-           round(100.0 * count(*) FILTER (WHERE s.status = 'EXCEPTION' OR s.clearance_status = 'EXCEPTION') / count(*), 1)::float AS "exceptionPct",
+           round(100.0 * count(*) FILTER (WHERE s.clearance_status = 'EXCEPTION') / count(*), 1)::float AS "exceptionPct",
            round(100.0 * count(*) FILTER (WHERE s.clearance_status = 'CLEARED') / count(*), 1)::float AS "clearedPct"
     FROM shipments s JOIN forwarders fw ON fw.id = s.forwarder_id
     ${shipWhere(f)}
@@ -414,8 +414,8 @@ export async function liveConsignments(f: Filters, limit = 8): Promise<LiveConsi
            fw.name AS "forwarderName", p.name AS "clearancePortName", to_char(s.eta, 'YYYY-MM-DD') AS eta, s.status, s.clearance_status AS "clearanceStatus"
     FROM shipments s JOIN clients c ON c.id = s.client_id
     LEFT JOIN forwarders fw ON fw.id = s.forwarder_id LEFT JOIN ports p ON p.id = s.clearance_port_id
-    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'EXCEPTION', 'PENDING')
-    ORDER BY CASE s.status WHEN 'EXCEPTION' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END,
+    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'PENDING')
+    ORDER BY CASE WHEN s.clearance_status = 'EXCEPTION' THEN 0 WHEN s.status = 'IN_PROGRESS' THEN 1 ELSE 2 END,
              abs(s.eta - (now() AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date) NULLS LAST
     LIMIT ${limit}`,
   );

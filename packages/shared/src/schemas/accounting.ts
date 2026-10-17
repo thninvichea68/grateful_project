@@ -116,6 +116,37 @@ export interface LedgerSummary {
   unpaid: number;
 }
 
+/** INV (GS26-394), DIS (DIS437) or DN (JR2610001): a shipment's three numbers. */
+export type InvoiceNumberKind = 'INV' | 'DIS' | 'DN';
+/** A shipment given its numbers (on approval, or a released number passed on to it). */
+export interface NumberedShipment {
+  recordId: string;
+  declareNo: string;
+  numbers: { kind: InvoiceNumberKind; number: string; reused: boolean }[];
+}
+/** The result of deleting a shipment's invoice set. */
+export interface ReleasedInvoiceSet {
+  declareNo: string;
+  /** `kept`: held for the next shipment (false when it was the latest of its run). */
+  released: { kind: InvoiceNumberKind; number: string; kept: boolean }[];
+  /** Approved shipments that were waiting and took numbers straight away. */
+  reassigned: NumberedShipment[];
+}
+
+/** A shipment ready for a tax invoice, DIS or debit note (numbered, none made yet). */
+export interface EligibleRecord {
+  recordId: string;
+  declareNo: string;
+  declareDate: string;
+  invDate: string;
+  clientId: string;
+  clientCode: string;
+  /** The number the document will take. */
+  number: string;
+  direction: 'IMPORT' | 'EXPORT';
+  hbl: string | null;
+}
+
 export interface DeclarationOption {
   id: string;
   declareNo: string;

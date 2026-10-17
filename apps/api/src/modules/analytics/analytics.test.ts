@@ -80,7 +80,7 @@ beforeEach(async () => {
     eta: '2026-03-20',
     ata: '2026-03-25',
     loadType: 'LCL',
-    status: 'EXCEPTION',
+    status: 'IN_PROGRESS',
     clearanceStatus: 'EXCEPTION',
   });
   await ship({
@@ -361,7 +361,7 @@ describe('overview and profit', () => {
 
   it('live consignments put exceptions first', async () => {
     const res = await get('/overview/live-consignments');
-    expect(res.body[0]).toMatchObject({ status: 'EXCEPTION', clientCode: 'JR' });
+    expect(res.body[0]).toMatchObject({ clearanceStatus: 'EXCEPTION', clientCode: 'JR' });
     expect(res.body.every((r: { status: string }) => r.status !== 'COMPLETED')).toBe(true);
   });
 });

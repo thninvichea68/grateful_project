@@ -132,6 +132,47 @@ describe('nextBusinessDay', () => {
   it('Saturday → Monday', () => expect(nextBusinessDay('2026-08-22').date).toBe('2026-08-24'));
   it('Sunday → Monday', () => expect(nextBusinessDay('2026-08-23').date).toBe('2026-08-24'));
   it('crosses year end', () => expect(nextBusinessDay('2026-12-31').date).toBe('2027-01-01'));
+
+  // Cambodian public holidays (2026: Sub-Decree No. 167).
+  const hol = new Set([
+    '2026-01-01',
+    '2026-01-07',
+    '2026-04-14',
+    '2026-04-15',
+    '2026-04-16',
+    '2026-05-01',
+    '2026-06-18',
+    '2026-10-10',
+    '2026-10-11',
+    '2026-10-12',
+    '2026-12-29',
+    '2027-01-01',
+  ]);
+  it('skips a holiday on the next day (6 Jan → 8 Jan, as in the Excel list)', () =>
+    expect(nextBusinessDay('2026-01-06', hol).date).toBe('2026-01-08'));
+  it('17 Jun → 19 Jun past the Queen Mother’s birthday, as in the Excel list', () =>
+    expect(nextBusinessDay('2026-06-17', hol).date).toBe('2026-06-19'));
+  it('Friday with a holiday Monday → Tuesday', () => {
+    const mondayOff = new Set(['2026-08-24']);
+    expect(nextBusinessDay('2026-08-21', mondayOff)).toEqual({
+      date: '2026-08-25',
+      weekday: 'Tuesday',
+    });
+  });
+  it('Saturday with a holiday Monday → Tuesday', () =>
+    expect(nextBusinessDay('2026-08-22', new Set(['2026-08-24'])).date).toBe('2026-08-25'));
+  it('a run of holidays: Khmer New Year 14–16 Apr 2026', () =>
+    expect(nextBusinessDay('2026-04-13', hol).date).toBe('2026-04-17'));
+  it('holidays then a weekend: Pchum Ben Sat 10 – Mon 12 Oct 2026', () =>
+    expect(nextBusinessDay('2026-10-09', hol).date).toBe('2026-10-13'));
+  it('into the next month: Thu 30 Apr 2026 → Mon 4 May (1 May off, then the weekend)', () =>
+    expect(nextBusinessDay('2026-04-30', hol).date).toBe('2026-05-04'));
+  it('Fri 31 Jul 2026 → Mon 3 Aug (always the next working day)', () =>
+    expect(nextBusinessDay('2026-07-31', hol).date).toBe('2026-08-03'));
+  it('year end: Thu 31 Dec 2026 → Mon 4 Jan 2027 (New Year’s Day, then the weekend)', () =>
+    expect(nextBusinessDay('2026-12-31', hol).date).toBe('2027-01-04'));
+  it('year end: Mon 28 Dec 2026 → Wed 30 Dec (Peace Day 29 Dec)', () =>
+    expect(nextBusinessDay('2026-12-28', hol).date).toBe('2026-12-30'));
 });
 
 describe('cut stock', () => {

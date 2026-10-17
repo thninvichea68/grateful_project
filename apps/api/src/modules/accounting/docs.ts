@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   BILLING_DOC_SCHEMAS,
@@ -17,6 +17,7 @@ import {
   type CreditNoteReviewRow,
   type CreditNoteReviewStatus,
   type Paginated,
+  type ReleasedInvoiceSet,
 } from '@gs/shared';
 import type { Request } from 'express';
 import type { z } from 'zod';
@@ -39,14 +40,19 @@ import { audit } from '../../lib/audit';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
+import { nextNumber } from '../../lib/numbering';
+import { issueDateFor } from '../../lib/issueDate';
+import { insertLedger, rateOn, recompute } from './ledger';
 import {
-  formatNumber,
-  highestNumber,
-  nextNumber,
-  nextNumberAtLeast,
-  regexLiteral,
-} from '../../lib/numbering';
-import { insertLedger, recompute } from './ledger';
+  assignNumbers,
+  lockNumbering,
+  numberEligible,
+  periodOf,
+  releaseNumber,
+  takeNumber,
+  type AssignedNumbers,
+  type NumberKind,
+} from './numbers';
 
 type Row = Record<string, unknown>;
 type Input = z.output<(typeof BILLING_DOC_SCHEMAS)[BillingDocType]> & Row;
@@ -84,19 +90,7 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'invoice_date',
     billToSql: 'customer_name_en',
     kind: 'tax',
-    allocate: async (tx, date) => {
-      const yy = date.slice(2, 4);
-      // Past numbers typed into the ledger (from the Excel days) are never handed out again.
-      const used = await highestNumber(
-        tx,
-        sql`SELECT invoice_no FROM tax_invoices UNION ALL SELECT inv_no FROM accounting_records`,
-        `^GS${yy}-(\\d{1,9})$`,
-      );
-      return formatNumber.taxInvoice(
-        yy,
-        await nextNumberAtLeast(tx, `TAX_INVOICE:${date.slice(0, 4)}`, used + 1),
-      );
-    },
+    allocate: async (tx, date, code) => (await takeNumber(tx, 'INV', date, code, null)).number,
     ledger: { numberCol: 'invNo', totalCol: 'invRevenue' },
   },
   disbursements: {
@@ -110,14 +104,8 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'dis_date',
     billToSql: 'customer_name_en',
     kind: 'khr',
-    allocate: async (tx) => {
-      const used = await highestNumber(
-        tx,
-        sql`SELECT dis_no FROM disbursements UNION ALL SELECT dis_no FROM accounting_records`,
-        '^DIS(\\d{1,9})$',
-      );
-      return formatNumber.disbursement(await nextNumberAtLeast(tx, 'DISBURSEMENT', used + 1));
-    },
+    // One company-wide sequence (every client), restarting at DIS001 each January.
+    allocate: async (tx, date, code) => (await takeNumber(tx, 'DIS', date, code, null)).number,
     ledger: { numberCol: 'disNo', totalCol: 'disTotal' },
   },
   'debit-notes': {
@@ -131,19 +119,7 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'dn_date',
     billToSql: 'bill_to',
     kind: 'plain',
-    allocate: async (tx, date, code) => {
-      const yymm = date.slice(2, 4) + date.slice(5, 7);
-      const used = await highestNumber(
-        tx,
-        sql`SELECT dn_no FROM debit_notes UNION ALL SELECT dn_no FROM accounting_records`,
-        `^${regexLiteral(code.toUpperCase())}${yymm}(\\d{3})$`,
-      );
-      return formatNumber.debitNote(
-        code,
-        yymm,
-        await nextNumberAtLeast(tx, `DEBIT_NOTE:${code}:${yymm}`, used + 1),
-      );
-    },
+    allocate: async (tx, date, code) => (await takeNumber(tx, 'DN', date, code, null)).number,
     ledger: { numberCol: 'dnNo', totalCol: 'dnTotal' },
   },
   'credit-notes': {
@@ -179,6 +155,13 @@ const CONFIG: Record<BillingDocType, Config> = {
 };
 
 const col = (t: PgTable, name: string) => (t as unknown as Record<string, PgColumn>)[name]!;
+
+/**
+ * The numbering period a document's date falls in: debit notes run per client per month
+ * (JR2610001), tax invoices (GS26-...), DIS and credit notes per year.
+ */
+const numberPeriod = (type: BillingDocType, date: string) =>
+  type === 'debit-notes' ? date.slice(0, 7) : date.slice(0, 4);
 
 /** Compute stored totals and line amounts with the shared formulas. */
 function totals(kind: Config['kind'], lines: Input['lines'], rate: string | null) {
@@ -250,6 +233,61 @@ async function assertRecord(tx: Tx, recordId: string | null, clientId: string) {
   if (r.clientId !== clientId) throw businessRule('The ledger entry belongs to a different client');
 }
 
+/** The ledger number kind each shipment document carries. */
+const KIND: Record<IssueDatedType, NumberKind> = {
+  'tax-invoices': 'INV',
+  disbursements: 'DIS',
+  'debit-notes': 'DN',
+};
+const LEDGER_FIELD = { INV: 'invNo', DIS: 'disNo', DN: 'dnNo' } as const;
+
+/**
+ * A shipment document's number, date and rate, from its Monthly Ledger entry: the number
+ * given when its Chea payment was checked, the issue date (next working day after
+ * clearance) and that day's exchange rate. One live document of each type per shipment.
+ */
+async function fromLedger(
+  tx: Tx,
+  type: IssueDatedType,
+  recordId: string,
+  exceptDocId: string | null,
+): Promise<Row> {
+  const cfg = CONFIG[type];
+  const [r] = await queryRows<{
+    declareNo: string;
+    invDate: string;
+    rate: string;
+    invNo: string | null;
+    disNo: string | null;
+    dnNo: string | null;
+  }>(
+    tx,
+    sql`SELECT d.declare_no AS "declareNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
+               a.exchange_rate::text AS rate, a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
+        FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+        WHERE a.id = ${recordId}`,
+  );
+  if (!r) throw businessRule('The linked ledger entry does not exist');
+  const number = r[LEDGER_FIELD[KIND[type]]];
+  const label = BILLING_LABEL[type].toLowerCase();
+  if (!number)
+    throw businessRule(
+      `${r.declareNo} has no ${label} number yet. It gets one when its Chea payment is marked Checked.`,
+    );
+  const [other] = await queryRows<{ number: string }>(
+    tx,
+    sql`SELECT ${sql.raw(cfg.numberSql!)} AS number FROM ${sql.raw(cfg.sqlTable)}
+        WHERE accounting_record_id = ${recordId} AND status <> 'VOID'
+          ${exceptDocId ? sql`AND id <> ${exceptDocId}` : sql``} LIMIT 1`,
+  );
+  if (other) throw conflict(`${r.declareNo} already has ${label} ${other.number}`);
+  return {
+    [cfg.numberCol!]: number,
+    [cfg.dateCol]: r.invDate,
+    ...(cfg.kind !== 'plain' ? { exchangeRate: r.rate } : {}),
+  };
+}
+
 function headerValues(type: BillingDocType, input: Input) {
   const { lines: _l, ...rest } = input;
   const numberCol = CONFIG[type].numberCol;
@@ -290,6 +328,12 @@ export async function createDoc(type: BillingDocType, input: Input, req: Request
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
+      if (isIssueDated(type)) {
+        // Never typed: a shipment's document takes its Monthly Ledger number and date.
+        values[cfg.numberCol!] = undefined;
+        if (input.accountingRecordId)
+          Object.assign(values, await fromLedger(tx, type, input.accountingRecordId, null));
+      }
       const date = values[cfg.dateCol] as string;
       if (cfg.numberCol && !values[cfg.numberCol] && cfg.allocate)
         values[cfg.numberCol] = await cfg.allocate(tx, date, client.code);
@@ -349,10 +393,25 @@ export async function updateDoc(
         throw conflict(
           `${BILLING_LABEL[type]} is ${before.status === 'VOID' ? 'cancelled' : String(before.status).toLowerCase()} and can no longer be edited. Cancel it and create a new one.`,
         );
-      await loadClient(tx, input.clientId);
+      const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
-      if (cfg.numberCol && !values[cfg.numberCol]) values[cfg.numberCol] = before[cfg.numberCol]; // keep the allocated number
+      const linked = isIssueDated(type) && !!input.accountingRecordId;
+      if (isIssueDated(type)) values[cfg.numberCol!] = undefined; // never typed
+      if (linked) Object.assign(values, await fromLedger(tx, type, input.accountingRecordId!, id));
+      else {
+        if (cfg.numberCol && !values[cfg.numberCol]) values[cfg.numberCol] = before[cfg.numberCol]; // keep the allocated number
+        // A draft whose date moves into another month (debit note) or year (the others) takes
+        // that period's next number, unless the user typed a number of their own.
+        const newDate = values[cfg.dateCol] as string;
+        if (
+          cfg.numberCol &&
+          cfg.allocate &&
+          values[cfg.numberCol] === before[cfg.numberCol] &&
+          numberPeriod(type, String(before[cfg.dateCol])) !== numberPeriod(type, newDate)
+        )
+          values[cfg.numberCol] = await cfg.allocate(tx, newDate, client.code);
+      }
       const t = totals(cfg.kind, input.lines, (values.exchangeRate as string | undefined) ?? null);
       await tx
         .update(cfg.table)
@@ -392,14 +451,8 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
           : { status: 'ISSUED' }) as never,
       )
       .where(eq(col(cfg.table, 'id'), id));
-    if (type === 'credit-notes' && !doc.accountingRecordId) {
-      doc.accountingRecordId = await ledgerRowForCreditNote(tx, doc, req);
-      await tx
-        .update(cfg.table)
-        .set({ accountingRecordId: doc.accountingRecordId } as never)
-        .where(eq(col(cfg.table, 'id'), id));
-    }
-    if (cfg.ledger && doc.accountingRecordId) {
+    // A credit note reaches the Monthly Ledger when accounting checks it, not on submission.
+    if (cfg.ledger && doc.accountingRecordId && type !== 'credit-notes') {
       const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
       await tx
         .update(accountingRecords)
@@ -469,7 +522,10 @@ async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
   await recompute(tx, r.id);
 }
 
-/** Void: keeps the record (numbers are never reused) and takes it back out of the ledger. */
+/**
+ * Cancel (void): keeps the document and its number (never reused) and takes it back out of
+ * the ledger; a shipment's entry then takes the next number for a replacement document.
+ */
 export async function voidDoc(
   type: BillingDocType,
   id: string,
@@ -485,6 +541,20 @@ export async function voidDoc(
       .set({ status: 'VOID' } as never)
       .where(eq(col(cfg.table, 'id'), id));
     if (doc.status === 'ISSUED') await takeOutOfLedger(tx, cfg, doc);
+    // The cancelled document keeps its number, so the shipment takes the next one.
+    if (isIssueDated(type) && doc.accountingRecordId) {
+      const field = LEDGER_FIELD[KIND[type]];
+      await tx
+        .update(accountingRecords)
+        .set({ [field]: null } as never)
+        .where(
+          and(
+            eq(accountingRecords.id, doc.accountingRecordId as string),
+            eq(accountingRecords[field], String(doc[cfg.numberCol!])),
+          ),
+        );
+      await assignNumbers(tx, doc.accountingRecordId as string, req, [KIND[type]]);
+    }
     await audit(
       tx,
       {
@@ -500,6 +570,199 @@ export async function voidDoc(
   });
 }
 
+/** The three documents dated from the clearance date and correctable once issued. */
+const ISSUE_DATED = ['tax-invoices', 'disbursements', 'debit-notes'] as const;
+export type IssueDatedType = (typeof ISSUE_DATED)[number];
+export const isIssueDated = (type: BillingDocType): type is IssueDatedType =>
+  (ISSUE_DATED as readonly string[]).includes(type);
+
+/**
+ * A declaration's clearance (declare) date changed. While none of its tax invoice, DIS and
+ * debit note is issued, its Monthly Ledger entry moves to the new issue date (the next
+ * working day) and that day's rate; a number whose period changes (a debit note's month, an
+ * INV or DIS year) is given back and the period's next one taken. Drafts follow the entry.
+ * Once one document is issued, the dates and numbers stay as they are.
+ */
+export async function applyClearanceDate(
+  tx: Tx,
+  declarationId: string,
+  req: Request,
+): Promise<void> {
+  const [rec] = await queryRows<{
+    id: string;
+    declareDate: string;
+    declareNo: string;
+    invDate: string;
+    code: string;
+    invNo: string | null;
+    disNo: string | null;
+    dnNo: string | null;
+  }>(
+    tx,
+    sql`SELECT a.id, to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", d.declare_no AS "declareNo",
+               to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
+               a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
+        FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+        JOIN clients c ON c.id = a.client_id WHERE a.declaration_id = ${declarationId}`,
+  );
+  if (!rec) return;
+  const [{ issued } = { issued: 0 }] = await queryRows<{ issued: number }>(
+    tx,
+    sql`SELECT ((SELECT count(*) FROM tax_invoices WHERE accounting_record_id = ${rec.id} AND status = 'ISSUED')
+              + (SELECT count(*) FROM disbursements WHERE accounting_record_id = ${rec.id} AND status = 'ISSUED')
+              + (SELECT count(*) FROM debit_notes WHERE accounting_record_id = ${rec.id} AND status = 'ISSUED'))::int AS issued`,
+  );
+  if (issued) return;
+  const date = await issueDateFor(tx, rec.declareDate);
+  if (date === rec.invDate) return;
+  const reason = `Declaration date changed to ${rec.declareDate}`;
+  const rate = await rateOn(tx, date);
+  await lockNumbering(tx);
+  // Numbers whose period changes come off the entry, then the new period's are taken.
+  const moved = ISSUE_DATED.map((type) => KIND[type]).filter((kind) => {
+    const n = rec[LEDGER_FIELD[kind]];
+    return !!n && periodOf(kind, rec.invDate, rec.code).key !== periodOf(kind, date, rec.code).key;
+  });
+  await tx
+    .update(accountingRecords)
+    .set({
+      invDate: date,
+      exchangeRate: rate,
+      ...Object.fromEntries(moved.map((k) => [LEDGER_FIELD[k], null])),
+      updatedById: req.auth?.userId ?? null,
+    })
+    .where(eq(accountingRecords.id, rec.id));
+  const assigned = moved.length ? await assignNumbers(tx, rec.id, req, moved) : null;
+  await audit(
+    tx,
+    {
+      action: 'UPDATE',
+      entity: 'accounting_record',
+      entityId: rec.id,
+      before: { invDate: rec.invDate, invNo: rec.invNo, disNo: rec.disNo, dnNo: rec.dnNo },
+      after: {
+        invDate: date,
+        exchangeRate: rate,
+        ...Object.fromEntries(
+          (assigned?.numbers ?? []).map((n) => [LEDGER_FIELD[n.kind], n.number]),
+        ),
+      },
+      reason,
+    },
+    req,
+  );
+  for (const type of ISSUE_DATED) {
+    const cfg = CONFIG[type];
+    const kind = KIND[type];
+    const number = assigned?.numbers.find((n) => n.kind === kind)?.number;
+    const drafts = (await tx
+      .select()
+      .from(cfg.table)
+      .where(
+        and(
+          eq(col(cfg.table, 'accountingRecordId'), rec.id),
+          eq(col(cfg.table, 'status'), 'DRAFT'),
+        ),
+      )) as Row[];
+    for (const d of drafts) {
+      const set: Row = {
+        [cfg.dateCol]: date,
+        ...(cfg.kind !== 'plain' ? { exchangeRate: rate } : {}),
+        ...(number ? { [cfg.numberCol!]: number } : {}),
+      };
+      await tx
+        .update(cfg.table)
+        .set(set as never)
+        .where(eq(col(cfg.table, 'id'), d.id as string));
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: cfg.sqlTable,
+          entityId: d.id as string,
+          before: { date: d[cfg.dateCol], number: d[cfg.numberCol!] },
+          after: set,
+          reason,
+        },
+        req,
+      );
+    }
+    // The old number is free once neither the entry nor a draft carries it.
+    const old = rec[LEDGER_FIELD[kind]];
+    if (number && old)
+      await releaseNumber(
+        tx,
+        kind,
+        old,
+        rec.invDate,
+        rec.code,
+        rec.declareNo,
+        req.auth?.userId ?? null,
+      );
+  }
+}
+
+/**
+ * An authorised correction of an issued tax invoice, DIS or debit note: its number and/or
+ * issue date, with a reason kept in the audit history. The Monthly Ledger entry follows a new
+ * number when it still shows the old one. Numbers stay unique (per year for DIS).
+ */
+export async function correctIssuedDoc(
+  type: IssueDatedType,
+  id: string,
+  input: { number?: string | undefined; date?: string | undefined; reason: string },
+  req: Request,
+): Promise<void> {
+  const cfg = CONFIG[type];
+  const numberCol = cfg.numberCol!;
+  try {
+    await db.transaction(async (tx) => {
+      const doc = await lockDoc(tx, type, id);
+      if (doc.status !== 'ISSUED')
+        throw conflict(
+          doc.status === 'DRAFT'
+            ? 'This is a draft: change its number or date in the editor and save'
+            : 'A cancelled document cannot be corrected',
+        );
+      const oldNumber = String(doc[numberCol]);
+      const oldDate = String(doc[cfg.dateCol]);
+      const number = input.number?.trim().toUpperCase() || oldNumber;
+      const date = input.date || oldDate;
+      if (number === oldNumber && date === oldDate)
+        throw businessRule('Change the number or the date, or close without correcting');
+      await tx
+        .update(cfg.table)
+        .set({ [numberCol]: number, [cfg.dateCol]: date } as never)
+        .where(eq(col(cfg.table, 'id'), id));
+      const ledgerCol = cfg.ledger?.numberCol;
+      if (ledgerCol && doc.accountingRecordId && number !== oldNumber)
+        await tx
+          .update(accountingRecords)
+          .set({ [ledgerCol]: number, updatedById: req.auth!.userId } as never)
+          .where(
+            and(
+              eq(accountingRecords.id, doc.accountingRecordId as string),
+              eq(accountingRecords[ledgerCol], oldNumber),
+            ),
+          );
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: cfg.sqlTable,
+          entityId: id,
+          before: { number: oldNumber, date: oldDate },
+          after: { number, date, correction: true },
+          reason: input.reason,
+        },
+        req,
+      );
+    });
+  } catch (err) {
+    friendlyUnique(err, type);
+  }
+}
+
 export async function deleteDoc(type: BillingDocType, id: string, req: Request): Promise<void> {
   const cfg = CONFIG[type];
   await db.transaction(async (tx) => {
@@ -507,6 +770,22 @@ export async function deleteDoc(type: BillingDocType, id: string, req: Request):
     if (doc.status !== 'DRAFT')
       throw conflict('Only drafts can be deleted. Cancel an issued document instead.');
     await tx.delete(cfg.table).where(eq(col(cfg.table, 'id'), id));
+    // A shipment's draft only borrowed its ledger number; a loose one gives its number back.
+    if (isIssueDated(type) && !doc.accountingRecordId && doc[cfg.numberCol!]) {
+      const [c] = await tx
+        .select({ code: clients.code })
+        .from(clients)
+        .where(eq(clients.id, doc.clientId as string));
+      await releaseNumber(
+        tx,
+        KIND[type],
+        String(doc[cfg.numberCol!]),
+        String(doc[cfg.dateCol]),
+        c?.code ?? '',
+        null,
+        req.auth?.userId ?? null,
+      );
+    }
     await audit(tx, { action: 'DELETE', entity: cfg.sqlTable, entityId: id, before: doc }, req);
   });
 }
@@ -633,6 +912,138 @@ export async function listDocs(
   return toPaginated(rows, p.page, p.pageSize);
 }
 
+/* ---------- Deleting a shipment's issued invoice set ---------- */
+
+export type ReleasedSet = ReleasedInvoiceSet;
+
+/**
+ * Deletes a shipment's tax invoice, DIS and debit note (drafts and issued; cancelled ones are
+ * kept), takes their numbers and totals off its Monthly Ledger entry, and sends its Chea
+ * payment back to Unchecked so it is "not invoiced" again. The numbers are released: the next
+ * approved shipment takes them (one already waiting takes them now, earliest clearance
+ * first); a number that was the highest of its run simply comes back as the next one.
+ */
+export async function releaseInvoiceSet(
+  recordId: string,
+  reason: string,
+  req: Request,
+): Promise<ReleasedSet> {
+  return db.transaction(async (tx) => {
+    await lockNumbering(tx);
+    const [rec] = await queryRows<{
+      declareNo: string;
+      invDate: string;
+      code: string;
+      invNo: string | null;
+      disNo: string | null;
+      dnNo: string | null;
+    }>(
+      tx,
+      sql`SELECT d.declare_no AS "declareNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
+                 a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
+          FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+          JOIN clients c ON c.id = a.client_id
+          WHERE a.id = ${recordId} FOR UPDATE OF a`,
+    );
+    if (!rec) throw notFound('Ledger entry');
+    const numbers = new Map<NumberKind, Set<string>>();
+    const add = (kind: NumberKind, n: string | null | undefined) => {
+      if (n) numbers.set(kind, (numbers.get(kind) ?? new Set()).add(n.toUpperCase()));
+    };
+    add('INV', rec.invNo);
+    add('DIS', rec.disNo);
+    add('DN', rec.dnNo);
+    const deleted: Row[] = [];
+    for (const type of ISSUE_DATED) {
+      const cfg = CONFIG[type];
+      const docs = (await tx
+        .delete(cfg.table)
+        .where(
+          and(
+            eq(col(cfg.table, 'accountingRecordId'), recordId),
+            sql`${col(cfg.table, 'status')} <> 'VOID'`,
+          ),
+        )
+        .returning()) as Row[];
+      for (const d of docs) {
+        add(KIND[type], d[cfg.numberCol!] as string | null);
+        deleted.push({ type, id: d.id, number: d[cfg.numberCol!], status: d.status });
+      }
+    }
+    if (!numbers.size && !deleted.length)
+      throw conflict(`${rec.declareNo} has no invoice numbers or documents to delete`);
+    await tx
+      .update(accountingRecords)
+      .set({
+        invNo: null,
+        disNo: null,
+        dnNo: null,
+        invRevenue: '0',
+        disTotal: '0',
+        dnTotal: '0',
+        updatedById: req.auth?.userId ?? null,
+      })
+      .where(eq(accountingRecords.id, recordId));
+    await recompute(tx, recordId);
+    // Not invoiced again: it waits for accounting to check its Chea payment once more.
+    await tx
+      .update(creditNotes)
+      .set({
+        reviewStatus: 'UNCHECKED',
+        reviewedBy: req.auth?.userId ?? null,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(creditNotes.accountingRecordId, recordId),
+          eq(creditNotes.status, 'ISSUED'),
+          eq(creditNotes.reviewStatus, 'CHECKED'),
+        ),
+      );
+    const released: ReleasedSet['released'] = [];
+    for (const [kind, set] of numbers)
+      for (const number of [...set].sort())
+        released.push({
+          kind,
+          number,
+          kept: await releaseNumber(
+            tx,
+            kind,
+            number,
+            rec.invDate,
+            rec.code,
+            rec.declareNo,
+            req.auth?.userId ?? null,
+          ),
+        });
+    const reassigned = await numberEligible(tx, req);
+    await audit(
+      tx,
+      {
+        action: 'UPDATE',
+        entity: 'accounting_record',
+        entityId: recordId,
+        before: { invNo: rec.invNo, disNo: rec.disNo, dnNo: rec.dnNo, documents: deleted },
+        after: {
+          invNo: null,
+          disNo: null,
+          dnNo: null,
+          invoiceDeleted: true,
+          released,
+          reassignedTo: reassigned.flatMap((r) =>
+            r.numbers
+              .filter((n) => n.reused)
+              .map((n) => ({ number: n.number, declareNo: r.declareNo })),
+          ),
+        },
+        reason: `Invoice deleted for ${rec.declareNo}: ${reason}`,
+      },
+      req,
+    );
+    return { declareNo: rec.declareNo, released, reassigned };
+  });
+}
+
 /* ---------- Accounting's check of submitted credit notes ---------- */
 
 /**
@@ -702,7 +1113,8 @@ export async function listCreditNoteReview(p: {
 
 /**
  * Accounting's check of a submitted credit note.
- * - CHECKED: the broker gets a "Checked" message (with an optional note).
+ * - CHECKED: the declaration goes into the Monthly Ledger (its clear fee is this note's
+ *   total) and gets its INV / DIS / DN numbers; the broker gets a "Checked" message.
  * - REVISED: the note goes back to the broker as an editable draft, its Clear Fee comes out of
  *   the Monthly Ledger until it is submitted again, and the broker gets the message saying
  *   what to change.
@@ -712,8 +1124,8 @@ export async function setCreditNoteReview(
   reviewStatus: CreditNoteReviewStatus,
   message: string | undefined,
   req: Request,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<AssignedNumbers[]> {
+  return db.transaction(async (tx) => {
     const doc = await lockDoc(tx, 'credit-notes', id);
     if (doc.status !== 'ISSUED')
       throw businessRule(
@@ -725,10 +1137,26 @@ export async function setCreditNoteReview(
       await tx.update(creditNotes).set({ status: 'DRAFT' }).where(eq(creditNotes.id, id));
       await takeOutOfLedger(tx, CONFIG['credit-notes'], doc);
     }
+    // Approved: the declaration goes into the Monthly Ledger with this clear fee.
+    if (reviewStatus === 'CHECKED') {
+      const recordId =
+        (doc.accountingRecordId as string | null) ?? (await ledgerRowForCreditNote(tx, doc, req));
+      await tx
+        .update(creditNotes)
+        .set({ accountingRecordId: recordId })
+        .where(eq(creditNotes.id, id));
+      await tx
+        .update(accountingRecords)
+        .set({ clearFee: String(doc.total), updatedById: req.auth?.userId ?? null })
+        .where(eq(accountingRecords.id, recordId));
+      await recompute(tx, recordId);
+    }
     await tx
       .update(creditNotes)
       .set({ reviewStatus, reviewedBy: req.auth?.userId ?? null, reviewedAt: new Date() })
       .where(eq(creditNotes.id, id));
+    // …and every approved shipment still waiting gets its INV / DIS / DN numbers.
+    const numbered = reviewStatus === 'CHECKED' ? await numberEligible(tx, req) : [];
     if (reviewStatus !== 'UNCHECKED')
       await tx.execute(sql`
         INSERT INTO credit_note_messages (credit_note_id, recipient_id, sender_id, kind, body)
@@ -750,6 +1178,7 @@ export async function setCreditNoteReview(
       },
       req,
     );
+    return numbered;
   });
 }
 

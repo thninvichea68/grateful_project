@@ -71,7 +71,7 @@ export async function prefill(
     SELECT a.id AS "recordId", a.client_id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", a.exchange_rate::text AS "exchangeRate",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM tax_invoices t WHERE upper(t.invoice_no) = upper(a.inv_no)) THEN a.inv_no END AS "freeInvNo",
-           CASE WHEN NOT EXISTS (SELECT 1 FROM disbursements t WHERE upper(t.dis_no) = upper(a.dis_no)) THEN a.dis_no END AS "freeDisNo",
+           CASE WHEN NOT EXISTS (SELECT 1 FROM disbursements t WHERE upper(t.dis_no) = upper(a.dis_no) AND extract(year FROM t.dis_date) = extract(year FROM a.inv_date)) THEN a.dis_no END AS "freeDisNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM debit_notes t WHERE upper(t.dn_no) = upper(a.dn_no)) THEN a.dn_no END AS "freeDnNo",
            a.clear_fee::text AS "clearFee", a.thc::text AS thc,
            a.other_pay::text AS "otherPay", a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",

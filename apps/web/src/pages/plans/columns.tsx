@@ -23,6 +23,12 @@ export const BASE_COLUMNS: PlanColumn[] = [
   },
   { key: 'qty', label: 'Quantity', render: qty },
   { key: 'eta', label: 'ETA Port', render: (r) => fmtDate(r.eta) },
+  // Customs clearance (declaration) date: the order the plan is listed in by default.
+  {
+    key: 'clearanceDate',
+    label: 'Clearance Date',
+    render: (r) => fmtDate(r.declarations[0]?.declareDate),
+  },
   { key: 'fwd', label: 'Forwarder', render: (r) => dash(r.forwarderName) },
   { key: 'clearance', label: 'Clearance Port', render: (r) => dash(r.clearancePortName) },
   { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },

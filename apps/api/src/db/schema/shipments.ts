@@ -143,6 +143,8 @@ export const cargoInvoices = pgTable(
     invoiceNo: text('invoice_no').notNull(),
     invoiceDate: date('invoice_date'),
     description: text('description'),
+    /** Imports: packages on the invoice (QTY PKGS of the import schedule). */
+    packages: qty('packages'),
     currency: char('currency', { length: 3 }).notNull().default('USD'),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
@@ -164,6 +166,10 @@ export const cargoInvoiceLines = pgTable(
     poNo: text('po_no'),
     styleNo: text('style_no'),
     htsCode: text('hts_code'),
+    /** Imports: CDC group, item no. on the client's CDC master list and its unit (MTR, SET…). */
+    material: text('material'),
+    cdcNo: text('cdc_no'),
+    unit: text('unit'),
     pcs: qty('pcs').notNull().default('0'),
     ctns: qty('ctns').notNull().default('0'),
     cbm: qty('cbm').notNull().default('0'),

@@ -36,6 +36,7 @@ import {
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readMasterList } from '../../lib/masterList';
+import { recomputeShipmentStatuses } from '../shipmentStatus';
 import quotationTemplates from './data/quotation-templates.json' with { type: 'json' };
 
 const YEAR = 2026;
@@ -335,18 +336,16 @@ async function main() {
       if (daysFromToday < -10)
         status = rng.weighted(
           [
-            ['COMPLETED', 92],
-            ['EXCEPTION', 5],
-            ['IN_PROGRESS', 3],
+            ['COMPLETED', 95],
+            ['IN_PROGRESS', 5],
           ] as const,
           (x) => x[1],
         )[0];
       else if (daysFromToday <= 7)
         status = rng.weighted(
           [
-            ['IN_PROGRESS', 60],
-            ['PENDING', 25],
-            ['EXCEPTION', 7],
+            ['IN_PROGRESS', 65],
+            ['PENDING', 27],
             ['COMPLETED', 8],
           ] as const,
           (x) => x[1],
@@ -355,13 +354,16 @@ async function main() {
       const clearanceStatus: ClearanceStatus =
         status === 'COMPLETED'
           ? 'CLEARED'
-          : status === 'EXCEPTION'
-            ? 'EXCEPTION'
-            : status === 'IN_PROGRESS'
-              ? rng.chance(0.6)
-                ? 'IN_PROGRESS'
-                : 'PENDING'
-              : 'PENDING';
+          : status === 'IN_PROGRESS'
+            ? rng.weighted(
+                [
+                  ['IN_PROGRESS', 55],
+                  ['PENDING', 35],
+                  ['EXCEPTION', 10],
+                ] as const,
+                (x) => x[1],
+              )[0]
+            : 'PENDING';
 
       const arrived = status === 'COMPLETED' || (status !== 'PENDING' && daysFromToday < 0);
       // Punctual forwarders arrive on/before ETA more often (drives the on-time % ranking).
@@ -545,7 +547,7 @@ async function main() {
             direction === 'EXPORT' ? `CO-${YY}${String(seqShipment).padStart(4, '0')}` : null,
           coStatus: direction === 'EXPORT' ? (status === 'COMPLETED' ? 'Active' : 'Pending') : null,
           remark:
-            status === 'EXCEPTION'
+            clearanceStatus === 'EXCEPTION'
               ? rng.pick([
                   'Customs physical inspection',
                   'Document mismatch on invoice value',
@@ -794,6 +796,9 @@ async function main() {
   );
   await db.insert(s.numberSequences).values({ key: 'FOLLOW_UP', nextValue: 91 + subjects.length });
   log(`${subjects.length} follow-ups`);
+
+  // Shipment statuses follow from the dates and declarations, as they do when saved in the app.
+  await recomputeShipmentStatuses(db);
 
   /* ---------- Summary ---------- */
   const summary = await db.execute<{ month: string; imports: string; exports: string }>(sql`

@@ -28,7 +28,7 @@ async function as(role: RoleCode) {
 
 /** An accounting API call (as the accountant unless another role is given). */
 async function acc(
-  m: 'get' | 'post' | 'put',
+  m: 'get' | 'post' | 'put' | 'patch',
   path: string,
   o: { body?: object; query?: Record<string, string>; role?: RoleCode } = {},
 ) {
@@ -82,6 +82,20 @@ async function shipment(
     body: { declarationId: ship.body.declarations[0].id, ...o.ledger },
   });
   if (rec.status !== 201) throw new Error(JSON.stringify(rec.body));
+  // Unless its numbers were typed (the Excel history), accounting approves its Chea payment,
+  // which gives it its INV / DIS / DN numbers.
+  if (!o.ledger?.invNo) {
+    const declarationId = ship.body.declarations[0].id as string;
+    const pre = (await acc('get', '/docs/credit-notes/prefill', { query: { declarationId } })).body;
+    const cn = await acc('post', '/docs/credit-notes', {
+      body: { ...pre, lines: [{ ...pre.lines[0], unitPrice: '100' }] },
+    });
+    await acc('post', `/docs/credit-notes/${cn.body.id}/issue`);
+    const ok = await acc('patch', `/docs/credit-notes/${cn.body.id}/review`, {
+      body: { reviewStatus: 'CHECKED' },
+    });
+    if (ok.status !== 200) throw new Error(JSON.stringify(ok.body));
+  }
   return rec.body.id as string;
 }
 
@@ -324,11 +338,12 @@ describe('client billing: a client month', () => {
         },
       })
     ).body;
+    // After the shipment's JR2609001, as D011 (JR2609011) followed the shipments in the pack.
     await acc('post', `/docs/debit-notes/${dn.id}/issue`);
     const m = (await month(b.jr.id)).body;
     expect(m.others).toEqual([
       expect.objectContaining({
-        number: 'JR2609001',
+        number: 'JR2609002',
         type: 'debit-notes',
         reference: 'MIH CHARGE AND PAYROLL FEE',
         total: '80.00',
@@ -336,7 +351,7 @@ describe('client billing: a client month', () => {
     ]);
     expect(m.statements.DEBIT_NOTE.lines).toEqual([
       expect.objectContaining({
-        dnNo: 'JR2609001',
+        dnNo: 'JR2609002',
         ref: 'MIH CHARGE AND PAYROLL FEE',
         amount: '80.00',
       }),

@@ -12,7 +12,7 @@ import {
   CLEARANCE_STATUSES,
   CLEARANCE_STATUS_LABEL,
   CONTAINER_SIZES,
-  SHIPMENT_STATUSES,
+  shipmentStatusOf,
   SHIPMENT_STATUS_LABEL,
   shipmentInputSchema,
   type LookupsResponse,
@@ -37,7 +37,13 @@ import { formResolver } from '../../lib/zodForm';
 import { AddNewSelect } from './AddNewSelect';
 import { CargoSection } from './CargoSection';
 import { DeclarationsSection } from './DeclarationsSection';
-import { cleanForSubmit, emptyForm, fromDetail, type FormValues } from './formModel';
+import {
+  blankContainer,
+  cleanForSubmit,
+  emptyForm,
+  fromDetail,
+  type FormValues,
+} from './formModel';
 import f from './ShipmentForm.module.css';
 
 interface Step {
@@ -57,8 +63,8 @@ const TERMS = [
   { value: 'LCL', label: 'CFS / CFS (LCL)' },
 ];
 const DIRECTIONS = [
-  { value: 'EXPORT', label: 'Export' },
-  { value: 'IMPORT', label: 'Import' },
+  { value: 'EXPORT', label: 'Export', sub: 'Goods shipped out of Cambodia', icon: '↗' },
+  { value: 'IMPORT', label: 'Import', sub: 'Goods arriving into Cambodia', icon: '↙' },
 ];
 
 const TONE: Record<string, string> = {
@@ -116,10 +122,20 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const [direction, transportMode, loadType, clientId, status, clearanceStatus] = useWatch({
-    control,
-    name: ['direction', 'transportMode', 'loadType', 'clientId', 'status', 'clearanceStatus'],
-  });
+  const [direction, transportMode, loadType, clientId, clearanceStatus, atd, arriveFty, decls] =
+    useWatch({
+      control,
+      name: [
+        'direction',
+        'transportMode',
+        'loadType',
+        'clientId',
+        'clearanceStatus',
+        'atd',
+        'arriveFty',
+        'declarations',
+      ],
+    });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
   const readOnly = !can('shipments:write');
@@ -209,7 +225,8 @@ function ShipmentForm({
     else navigate(-1);
   };
 
-  const shipStatus = status ?? 'PENDING';
+  // Worked out from the dates and declarations as they are typed (the server does the same).
+  const shipStatus = shipmentStatusOf({ direction, atd, arriveFty, declarations: decls });
   const clearStatus = clearanceStatus ?? 'PENDING';
   const clientName =
     lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
@@ -316,8 +333,9 @@ function ShipmentForm({
           <fieldset disabled={readOnly} style={{ border: 'none', minWidth: 0, padding: 0 }}>
             <div className={f.stack}>
               {/* ---------- Setup ---------- */}
+              {/* Client on its own row; the shipment choices below it, each in its own column. */}
               <div className="cx-card">
-                <div className={f.setup}>
+                <div className={f.setupClient}>
                   <div className={f.setupField}>
                     <label className={f.cap} htmlFor="f-clientId">
                       Client
@@ -342,12 +360,9 @@ function ShipmentForm({
                         ))}
                     </select>
                   </div>
-                  <Segmented
-                    name="direction"
-                    label="Shipment type"
-                    options={DIRECTIONS}
-                    onChange={() => setStep(0)}
-                  />
+                </div>
+                <div className={f.setupChoices}>
+                  <DirectionTiles onChange={() => setStep(0)} />
                   <Segmented
                     name="transportMode"
                     label="Freight"
@@ -480,6 +495,30 @@ type Span = number | 'full';
 const spanStyle = (span?: Span): CSSProperties | undefined =>
   span === 'full' ? { gridColumn: '1 / -1' } : span ? { gridColumn: `span ${span}` } : undefined;
 
+/** Export / Import as two large tiles, so the shipment type can't be mistaken for the client. */
+function DirectionTiles({ onChange }: { onChange: () => void }) {
+  const { register } = useFormContext<FormValues>();
+  return (
+    <fieldset className={f.setupField}>
+      <legend className={f.cap} style={{ marginBottom: 8 }}>
+        Shipment type
+      </legend>
+      <div className={f.typeTiles}>
+        {DIRECTIONS.map((o) => (
+          <label key={o.value} className={f.typeTile}>
+            <input type="radio" value={o.value} {...register('direction', { onChange })} />
+            <span>
+              <i aria-hidden="true">{o.icon}</i>
+              <b>{o.label}</b>
+              <small>{o.sub}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function Segmented({
   name,
   label,
@@ -596,6 +635,31 @@ function Select({
   );
 }
 
+/** The shipment status is not chosen: it is shown as it follows from the shipment's data. */
+function ShipmentStatusField() {
+  const { control } = useFormContext<FormValues>();
+  const [direction, atd, arriveFty, declarations] = useWatch({
+    control,
+    name: ['direction', 'atd', 'arriveFty', 'declarations'],
+  });
+  const status = shipmentStatusOf({ direction, atd, arriveFty, declarations });
+  const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
+  return (
+    <div className="form-field-group">
+      <label>Shipment Status</label>
+      <div>
+        <span className={f.badge} data-tone={TONE[status]}>
+          {SHIPMENT_STATUS_LABEL[status]}
+        </span>
+      </div>
+      <p className={f.note}>
+        Set automatically: Completed once {done} is filled in, In Progress once a customs
+        declaration is recorded, otherwise Pending.
+      </p>
+    </div>
+  );
+}
+
 /** A titled section card; `cols` sets the grid (fields span 1 unless told otherwise). */
 function Card({
   title,
@@ -707,7 +771,7 @@ function ContainersCard() {
                 <tr>
                   <th>Container No.</th>
                   <th>Size</th>
-                  <th>Liner Seal</th>
+                  {direction === 'EXPORT' && <th>Liner Seal</th>}
                   {direction === 'EXPORT' && <th>Customs Seal</th>}
                   <th />
                 </tr>
@@ -734,13 +798,15 @@ function ContainersCard() {
                         ))}
                       </select>
                     </td>
-                    <td>
-                      <input
-                        className="form-field-box"
-                        placeholder="Liner Seal"
-                        {...register(`containers.${i}.linerSeal`)}
-                      />
-                    </td>
+                    {direction === 'EXPORT' && (
+                      <td>
+                        <input
+                          className="form-field-box"
+                          placeholder="Liner Seal"
+                          {...register(`containers.${i}.linerSeal`)}
+                        />
+                      </td>
+                    )}
                     {direction === 'EXPORT' && (
                       <td>
                         <input
@@ -770,9 +836,7 @@ function ContainersCard() {
         <button
           type="button"
           className="cdc-add-line-btn"
-          onClick={() =>
-            arr.append({ containerNo: '', size: '40HQ', linerSeal: '', customsSeal: '' })
-          }
+          onClick={() => arr.append(blankContainer())}
         >
           + Add Container
         </button>
@@ -793,12 +857,11 @@ function buildSteps(
   const units = lookups.values.QUANTITY_UNIT.map((v) => ({ value: v.value, label: v.label }));
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
   const coForms = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
-  const statuses = SHIPMENT_STATUSES.map((s) => ({ value: s, label: SHIPMENT_STATUS_LABEL[s] }));
   const clearance = CLEARANCE_STATUSES.map((s) => ({ value: s, label: CLEARANCE_STATUS_LABEL[s] }));
 
   const statusCard = (
     <Card title="Status" sub="Where the shipment and its customs clearance stand" cols={2}>
-      <Select name="status" label="Shipment Status" options={statuses} />
+      <ShipmentStatusField />
       <Select name="clearanceStatus" label="Clearance Status" options={clearance} />
     </Card>
   );
@@ -863,7 +926,6 @@ function buildSteps(
           'clearancePortId',
           'etd',
           'atd',
-          'status',
           'clearanceStatus',
           'containers',
           'loadType',
@@ -983,14 +1045,11 @@ function buildSteps(
       fields: [
         'hblNo',
         'clearancePortId',
-        'etd',
         'eta',
-        'ata',
         'arriveFty',
         'vesselName',
         'voyageNo',
         'coNumber',
-        'status',
         'clearanceStatus',
         'containers',
         'loadType',
@@ -1010,10 +1069,8 @@ function buildSteps(
             />
             <Field name="coNumber" label="CO Number" span={2} />
           </Card>
-          <Card title="Schedule" sub="Arrival at port and delivery to the factory">
-            <Field name="etd" label="ETD" type="date" />
+          <Card title="Schedule" sub="Arrival at port and delivery to the factory" cols={2}>
             <Field name="eta" label="ETA Port" type="date" />
-            <Field name="ata" label="Actual Arrival (ATA)" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>
           <ContainersCard />

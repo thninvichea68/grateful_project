@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { LedgerRow } from '@gs/shared';
-import { useAuth } from '../../auth/AuthProvider';
 import { useLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
@@ -66,11 +65,10 @@ const docNo = (
 };
 
 export function LedgerPage() {
-  const { can } = useAuth();
   const toast = useToast();
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
-  const [open, setOpen] = useState<LedgerRow | 'new' | null>(null);
+  const [open, setOpen] = useState<LedgerRow | null>(null);
   // Period: a month (default) or a whole year (?year=2026, Jan–Dec).
   const year = params.get('year');
   const month = year ? '' : (params.get('month') ?? thisMonth());
@@ -119,7 +117,9 @@ export function LedgerPage() {
               {year ? 'Yearly Ledger' : 'Monthly Ledger'} ·{' '}
               <span className={l.period}>{periodLabel(month, year)}</span>
             </h3>
-            <div className={l.sub}>One row per customs declaration.</div>
+            <div className={l.sub}>
+              One row per declaration, added when its Chea payment is checked.
+            </div>
           </div>,
           tabsAside,
         )}
@@ -209,12 +209,6 @@ export function LedgerPage() {
               {icons.download({})}
               Export Excel
             </button>
-            {can('accounting:write') && (
-              <button type="button" className="new-shipment-btn" onClick={() => setOpen('new')}>
-                {icons.plus({})}
-                New Entry
-              </button>
-            )}
           </div>
         </div>
         {t && (
@@ -252,9 +246,9 @@ export function LedgerPage() {
                 <th>Declare</th>
                 <th>Date</th>
                 <th>Client</th>
-                <th>INV (Manual)</th>
-                <th>Disbursement (Manual)</th>
-                <th>DN (Manual)</th>
+                <th>INV</th>
+                <th>Disbursement</th>
+                <th>DN</th>
                 <th>Date (INV)</th>
                 <th style={{ textAlign: 'right' }}>Exchange Rate</th>
                 <th>Weekday</th>
@@ -297,7 +291,13 @@ export function LedgerPage() {
                   <td className="val-bold">{r.declareNo}</td>
                   <td>{fmtDate(r.declareDate)}</td>
                   <td>{r.clientCode}</td>
-                  <td>{docNo(r, 'tax-invoices', r.invNo)}</td>
+                  <td>
+                    {r.invNo ? (
+                      docNo(r, 'tax-invoices', r.invNo)
+                    ) : (
+                      <Pill tone="pending">Not invoiced</Pill>
+                    )}
+                  </td>
                   <td>{docNo(r, 'disbursements', r.disNo)}</td>
                   <td>{docNo(r, 'debit-notes', r.dnNo)}</td>
                   <td>{fmtDate(r.invDate)}</td>
@@ -360,7 +360,7 @@ export function LedgerPage() {
         </div>
         {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
       </div>
-      {open && <LedgerModal row={open === 'new' ? null : open} onClose={() => setOpen(null)} />}
+      {open && <LedgerModal row={open} onClose={() => setOpen(null)} />}
     </section>
   );
 }

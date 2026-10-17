@@ -75,6 +75,42 @@ export const accountingRecords = pgTable(
     uniqueIndex('accounting_records_inv_no_unique')
       .on(t.invNo)
       .where(sql`${t.invNo} IS NOT NULL`),
+    uniqueIndex('accounting_records_dn_no_unique')
+      .on(t.dnNo)
+      .where(sql`${t.dnNo} IS NOT NULL`),
+    // DIS restarts at DIS001 each January, so it is unique within its year.
+    uniqueIndex('accounting_records_dis_no_year_unique')
+      .on(t.disNo, sql`(extract(year from ${t.invDate}))`)
+      .where(sql`${t.disNo} IS NOT NULL`),
+  ],
+);
+
+/**
+ * INV / DIS / DN numbers given back when an issued invoice set is deleted. The next shipment
+ * to be numbered in the same period takes the lowest one before any new number, so the
+ * sequence has no gaps. A number above the highest one still in use is not kept: the running
+ * number simply comes back to it.
+ */
+export const releasedNumbers = pgTable(
+  'released_numbers',
+  {
+    id: id(),
+    /** INV, DIS or DN. */
+    kind: text('kind').notNull(),
+    /** '2026' for INV and DIS, 'JR:2610' for a debit note (client + YYMM). */
+    period: text('period').notNull(),
+    seq: integer('seq').notNull(),
+    number: text('number').notNull(),
+    fromDeclareNo: text('from_declare_no'),
+    releasedById: uuid('released_by_id').references(() => users.id, { onDelete: 'set null' }),
+    releasedAt: timestamp('released_at', { withTimezone: true }).notNull().defaultNow(),
+    reassignedToDeclareNo: text('reassigned_to_declare_no'),
+    reassignedAt: timestamp('reassigned_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('released_numbers_free_unique')
+      .on(t.kind, t.period, t.seq)
+      .where(sql`${t.reassignedAt} IS NULL`),
   ],
 );
 
@@ -143,29 +179,41 @@ export const taxInvoiceLines = pgTable(
   (t) => [index('tax_invoice_lines_doc_idx').on(t.taxInvoiceId)],
 );
 
-/** Disbursement voucher — VAT 0%. */
-export const disbursements = pgTable('disbursements', {
-  ...docHeader(),
-  disNo: text('dis_no').notNull().unique(),
-  disDate: date('dis_date').notNull(),
-  exchangeRate: rate('exchange_rate').notNull(),
-  customerNameEn: text('customer_name_en').notNull(),
-  customerNameKm: text('customer_name_km'),
-  customerAddress: text('customer_address'),
-  customerVattin: text('customer_vattin'),
-  reference: text('reference'),
-  pol: text('pol'),
-  pod: text('pod'),
-  containerNo: text('container_no'),
-  volumeCbm: qty('volume_cbm'),
-  grossWeightKg: qty('gross_weight_kg'),
-  shipper: text('shipper'),
-  consignee: text('consignee'),
-  hbl: text('hbl'),
-  pkgs: text('pkgs'),
-  total: money('total').notNull().default('0'),
-  totalKhr: khr('total_khr').notNull().default('0'),
-});
+/**
+ * Disbursement voucher — VAT 0%. DIS numbers run company-wide and restart at DIS001 each
+ * January, so a number is unique within its year (of the DIS date), not forever.
+ */
+export const disbursements = pgTable(
+  'disbursements',
+  {
+    ...docHeader(),
+    disNo: text('dis_no').notNull(),
+    disDate: date('dis_date').notNull(),
+    exchangeRate: rate('exchange_rate').notNull(),
+    customerNameEn: text('customer_name_en').notNull(),
+    customerNameKm: text('customer_name_km'),
+    customerAddress: text('customer_address'),
+    customerVattin: text('customer_vattin'),
+    reference: text('reference'),
+    pol: text('pol'),
+    pod: text('pod'),
+    containerNo: text('container_no'),
+    volumeCbm: qty('volume_cbm'),
+    grossWeightKg: qty('gross_weight_kg'),
+    shipper: text('shipper'),
+    consignee: text('consignee'),
+    hbl: text('hbl'),
+    pkgs: text('pkgs'),
+    total: money('total').notNull().default('0'),
+    totalKhr: khr('total_khr').notNull().default('0'),
+  },
+  (t) => [
+    uniqueIndex('disbursements_dis_no_year_unique').on(
+      t.disNo,
+      sql`(extract(year from ${t.disDate}))`,
+    ),
+  ],
+);
 
 export const disbursementLines = pgTable(
   'disbursement_lines',

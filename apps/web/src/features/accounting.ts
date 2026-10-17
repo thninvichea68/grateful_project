@@ -9,10 +9,13 @@ import type {
   CreditNoteReviewStatus,
   CreditNoteDeclaration,
   DeclarationOption,
+  EligibleRecord,
   LedgerEntryInput,
   LedgerRow,
   LedgerSummary,
+  NumberedShipment,
   Paginated,
+  ReleasedInvoiceSet,
 } from '@gs/shared';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
@@ -57,6 +60,14 @@ export function useDeclarationOptions(q: string, enabled: boolean) {
   });
 }
 
+/** Shipments ready for a tax invoice, DIS or debit note (the editor's Declare No. picker). */
+export function useEligible(type: 'tax-invoices' | 'disbursements' | 'debit-notes') {
+  return useQuery({
+    queryKey: [...KEY, 'eligible', type],
+    queryFn: () => api<EligibleRecord[]>(`/accounting/eligible/${type}`),
+  });
+}
+
 export function useSaveLedger() {
   const invalidate = useInvalidateAccounting();
   return useMutation({
@@ -64,6 +75,19 @@ export function useSaveLedger() {
       id
         ? api<LedgerRow>(`/accounting/ledger/${id}`, { method: 'PATCH', json: body })
         : api<LedgerRow>('/accounting/ledger', { method: 'POST', json: body }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Deletes a shipment's invoice set and releases its numbers to the next approved shipment. */
+export function useDeleteInvoice() {
+  const invalidate = useInvalidateAccounting();
+  return useMutation({
+    mutationFn: ({ recordId, reason }: { recordId: string; reason: string }) =>
+      api<ReleasedInvoiceSet>(`/accounting/ledger/${recordId}/delete-invoice`, {
+        method: 'POST',
+        json: { reason },
+      }),
     onSuccess: invalidate,
   });
 }
@@ -118,7 +142,6 @@ export function usePrefill(
   });
 }
 
-
 /** Declarations a new Credit Noted can start from (with or without a ledger row). */
 export function useCreditNoteDeclarations(q: string, enabled: boolean) {
   return useQuery({
@@ -167,11 +190,12 @@ export function useSetCreditNoteReview() {
       reviewStatus: CreditNoteReviewStatus;
       message?: string;
     }) =>
-      api<undefined>(`/accounting/docs/credit-notes/${id}/review`, {
+      // Checked: the shipments that got their INV / DIS / DN numbers.
+      api<{ numbered: NumberedShipment[] }>(`/accounting/docs/credit-notes/${id}/review`, {
         method: 'PATCH',
         json: { reviewStatus, message },
       }),
-    // Revising takes the fee out of the ledger, so refresh everything accounting shows.
+    // Checking adds to the ledger and revising takes the fee out: refresh all of accounting.
     onSuccess: invalidate,
   });
 }
@@ -221,7 +245,7 @@ export function useDocAction(type: BillingDocType) {
       body,
     }: {
       id?: string;
-      action: 'create' | 'update' | 'issue' | 'void' | 'delete';
+      action: 'create' | 'update' | 'issue' | 'void' | 'correct' | 'delete';
       body?: unknown;
     }) => {
       const base = `/accounting/docs/${type}`;
@@ -234,6 +258,9 @@ export function useDocAction(type: BillingDocType) {
           return api<BillingDoc>(`${base}/${id}/issue`, { method: 'POST' });
         case 'void':
           return api<BillingDoc>(`${base}/${id}/void`, { method: 'POST', json: body });
+        // An authorised correction of an issued document's number / date (with a reason).
+        case 'correct':
+          return api<BillingDoc>(`${base}/${id}/correct`, { method: 'POST', json: body });
         case 'delete':
           return api<undefined>(`${base}/${id}`, { method: 'DELETE' });
       }

@@ -21,7 +21,7 @@ import {
 } from '@gs/shared';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
-import { notFound } from '../../lib/errors';
+import { badRequest, notFound } from '../../lib/errors';
 import { attachmentName } from '../../lib/http';
 import * as ledger from './ledger';
 import * as docs from './docs';
@@ -95,6 +95,19 @@ accountingRouter.get('/ledger', async (req, res) =>
 accountingRouter.get('/declarations', async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
   res.json(await ledger.declarationOptions(q, scopeClients(req)));
+});
+
+/** Shipments ready for a document of a type: the editor's Declare No. picker. */
+accountingRouter.get('/eligible/:type', async (req, res) => {
+  const { type } = parse(
+    z.object({
+      type: z.enum(['tax-invoices', 'disbursements', 'debit-notes'], {
+        message: 'Unknown document type',
+      }),
+    }),
+    req.params,
+  );
+  res.json(await ledger.eligibleRecords(type, scopeClients(req)));
 });
 
 accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
@@ -181,6 +194,24 @@ accountingRouter.patch('/ledger/:id', requirePermission('accounting:write'), asy
   await ledger.updateLedger(id, parse(ledgerUpdateSchema, req.body), req);
   res.json(await ledger.getLedger(id));
 });
+/**
+ * Deletes a shipment's invoice set (tax invoice, DIS, debit note) and releases its numbers to
+ * the next approved shipment; the shipment is "not invoiced" again.
+ */
+accountingRouter.post(
+  '/ledger/:id/delete-invoice',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { id } = parse(idParam, req.params);
+    const { reason } = parse(
+      z.object({
+        reason: z.string().trim().min(3, 'Give a reason for deleting the invoice').max(300),
+      }),
+      req.body,
+    );
+    res.json(await docs.releaseInvoiceSet(id, reason, req));
+  },
+);
 accountingRouter.delete('/ledger/:id', requirePermission('accounting:write'), async (req, res) => {
   await ledger.deleteLedger(parse(idParam, req.params).id, req);
   res.status(204).end();
@@ -218,8 +249,8 @@ accountingRouter.patch(
     if (type !== 'credit-notes') throw notFound('Document');
     const { id } = parse(idParam, req.params);
     const { reviewStatus, message } = parse(creditNoteReviewInputSchema, req.body);
-    await docs.setCreditNoteReview(id, reviewStatus, message, req);
-    res.status(204).end();
+    // The shipments numbered by this approval (none unless it was checked).
+    res.json({ numbered: await docs.setCreditNoteReview(id, reviewStatus, message, req) });
   },
 );
 
@@ -393,6 +424,33 @@ accountingRouter.post(
       req.body,
     );
     await docs.voidDoc(type, id, reason, req);
+    res.json(await docs.getDoc(type, id));
+  },
+);
+/**
+ * Authorised correction of an issued tax invoice, DIS or debit note: its number and/or issue
+ * date, with a required reason kept in the audit history.
+ */
+accountingRouter.post(
+  '/docs/:type/:id/correct',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { type } = parse(typeParam, req.params);
+    const { id } = parse(idParam, req.params);
+    if (!docs.isIssueDated(type))
+      throw badRequest('Only tax invoices, disbursements and debit notes can be corrected');
+    const body = parse(
+      z.object({
+        number: z.string().trim().max(30).optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date')
+          .optional(),
+        reason: z.string().trim().min(3, 'Give a reason for the correction').max(300),
+      }),
+      req.body,
+    );
+    await docs.correctIssuedDoc(type, id, body, req);
     res.json(await docs.getDoc(type, id));
   },
 );

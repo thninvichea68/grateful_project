@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
+  DEFAULT_CHARGE_UNITS,
   computeLinesTotal,
   computeTaxDocument,
   computeTaxLine,
@@ -13,7 +14,7 @@ import {
   type BillingDocType,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useDoc, useDocAction, useDocs, usePrefill } from '../../features/accounting';
+import { useDoc, useDocAction, useDocs, useLedgerRow, usePrefill } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, ui } from '../../components/ui';
 import { Pill } from '../../components/StatusPill';
@@ -27,6 +28,34 @@ import { DOC_CONFIG } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { PrintLink } from '../../components/PrintLink';
 import dl from './DocLines.module.css';
+import { CorrectDocDialog } from './CorrectDocDialog';
+import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
+import { PickShipment } from './PickShipment';
+
+/** The three shipment documents: numbered from the Monthly Ledger, dated from clearance. */
+const SHIPMENT_DOCS = ['tax-invoices', 'disbursements', 'debit-notes'] as const;
+type ShipmentDoc = (typeof SHIPMENT_DOCS)[number];
+const isShipmentDoc = (t: BillingDocType): t is ShipmentDoc =>
+  (SHIPMENT_DOCS as readonly string[]).includes(t);
+
+/** The usual fee items on the Excel pack, offered with Settings → Charge descriptions. */
+const FEE_ITEMS: Record<ShipmentDoc, string[]> = {
+  'tax-invoices': [
+    'កំរៃសេវាបំពេញបែបបទនាំចេញ / EXPORT PROCESSING FEE',
+    'កំរៃសេវាបំពេញបែបបទនាំចូល / IMPORT PROCESSING FEE',
+  ],
+  disbursements: ['LOLO AT PORT', 'CUSTOM PROCESSING FEE', 'HBL FEE', 'THC', 'STORAGE FEE'],
+  'debit-notes': [
+    'TRUCKING FEE',
+    'HANDLING FEE',
+    'INCREASE TRUCKING FEE(65%)',
+    'DOCUMENT FEE',
+    'SERVICE TAXATION',
+    'PETROLL ALLOWANCE FEE',
+    'FUEL SURCHARGE',
+    'LOLO EMPTY CONTAINER',
+  ],
+};
 
 export type Values = Record<string, unknown> & {
   clientId: string;
@@ -78,9 +107,12 @@ function Loader({
   recordId: string | null;
   client: { clientId: string; date: string } | null;
 }) {
+  const pick = !id && !recordId && !client && isShipmentDoc(type);
   const doc = useDoc(type, id);
-  const pre = usePrefill(type, id ? null : recordId, null, id || recordId ? null : client);
+  const pre = usePrefill(type, id || pick ? null : recordId, null, id || recordId ? null : client);
   const lookups = useLookups();
+  // A new shipment document starts by choosing an approved shipment.
+  if (pick) return <PickShipment type={type} />;
   if (doc.isLoading || pre.isLoading || lookups.isLoading)
     return (
       <section className="view active">
@@ -234,6 +266,33 @@ function Editor({
     await action.mutateAsync({ action: 'issue', id: doc.id });
     toast(`${cfg.title} issued.`);
   };
+  const [correcting, setCorrecting] = useState(false);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
+  const linked = !!defaults.accountingRecordId && isShipmentDoc(type);
+  const ledger = useLedgerRow(
+    doc?.accountingRecordId && isShipmentDoc(type) ? doc.accountingRecordId : null,
+  );
+  // Fee items and units: dropdown suggestions (Settings → Dropdown lists), still editable.
+  const feeItems = [
+    ...new Set([
+      ...(isShipmentDoc(type) ? FEE_ITEMS[type] : []),
+      ...(lookups.data?.values.CHARGE ?? []).map((c) => c.label),
+    ]),
+  ];
+  const units = [
+    ...new Set([
+      ...DEFAULT_CHARGE_UNITS,
+      '45H',
+      '40H',
+      '20H',
+      'TRUCK',
+      'SET',
+      'TIME',
+      'INV',
+      'MONTH',
+      ...(lookups.data?.values.CHARGE_UNIT ?? []).map((u) => u.label),
+    ]),
+  ];
   const voidDoc = async () => {
     if (!doc) return;
     const reason = window.prompt(
@@ -303,6 +362,25 @@ function Editor({
                 Delete draft
               </button>
             )}
+            {can('accounting:write') &&
+              doc?.status === 'ISSUED' &&
+              (type === 'tax-invoices' || type === 'disbursements' || type === 'debit-notes') && (
+                <button type="button" className="filter-btn" onClick={() => setCorrecting(true)}>
+                  Correct number / date
+                </button>
+              )}
+            {can('accounting:write') &&
+              doc?.status === 'ISSUED' &&
+              isShipmentDoc(type) &&
+              doc.accountingRecordId && (
+                <button
+                  type="button"
+                  className="btn-delete-shipment"
+                  onClick={() => setDeletingInvoice(true)}
+                >
+                  Delete invoice
+                </button>
+              )}
             {can('accounting:write') && doc && doc.status !== 'VOID' && doc.status !== 'DRAFT' && (
               <button type="button" className="btn-delete-shipment" onClick={() => void voidDoc()}>
                 Cancel document
@@ -381,7 +459,17 @@ function Editor({
                         className="form-field-box"
                         type={f.type === 'date' ? 'date' : 'text'}
                         inputMode={f.type === 'number' ? 'decimal' : undefined}
-                        placeholder={f.placeholder ?? f.label}
+                        placeholder={
+                          f.name === cfg.numberField && isShipmentDoc(type)
+                            ? 'Given automatically'
+                            : (f.placeholder ?? f.label)
+                        }
+                        // Never typed: the number (and, for a shipment, its date and rate)
+                        // come from the Monthly Ledger.
+                        readOnly={
+                          (f.name === cfg.numberField && isShipmentDoc(type)) ||
+                          (linked && (f.name === cfg.dateField || f.name === 'exchangeRate'))
+                        }
                         {...register(f.name)}
                         aria-invalid={!!err(f.name)}
                       />
@@ -447,7 +535,8 @@ function Editor({
                           <td style={{ minWidth: 280 }}>
                             <input
                               className="form-field-box"
-                              placeholder="Description"
+                              placeholder="Choose or type a fee item"
+                              list="doc-fee-items"
                               {...register(`lines.${i}.description`)}
                               aria-invalid={!!lineErr(i, 'description')}
                             />
@@ -465,6 +554,7 @@ function Editor({
                             <input
                               className="form-field-box"
                               placeholder="SHIP"
+                              list="doc-units"
                               {...register(`lines.${i}.unit`)}
                             />
                           </td>
@@ -573,6 +663,16 @@ function Editor({
               </div>
             </div>
           </fieldset>
+          <datalist id="doc-fee-items">
+            {feeItems.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+          <datalist id="doc-units">
+            {units.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
         </form>
         {!editable && doc && (
           <p className={ui.dialogSub} style={{ marginTop: 12 }}>
@@ -582,6 +682,26 @@ function Editor({
           </p>
         )}
       </div>
+      {correcting && doc && (
+        <CorrectDocDialog doc={doc} title={cfg.title} onClose={() => setCorrecting(false)} />
+      )}
+      {deletingInvoice && doc?.accountingRecordId && (
+        <DeleteInvoiceDialog
+          recordId={doc.accountingRecordId}
+          declareNo={doc.declareNo ?? ''}
+          numbers={
+            ledger.data
+              ? [ledger.data.invNo, ledger.data.disNo, ledger.data.dnNo].filter(
+                  (x): x is string => !!x,
+                )
+              : doc.number
+                ? [doc.number]
+                : []
+          }
+          onClose={() => setDeletingInvoice(false)}
+          onDeleted={() => navigate(back.to)}
+        />
+      )}
     </section>
   );
 }

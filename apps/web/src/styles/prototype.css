@@ -5128,3 +5128,32 @@ table.an-detail-table td.center {
     grid-template-columns: 1fr;
   }
 }
+
+/* Import invoices: CDC No · Item · Material get the wide first column (import schedule layout). */
+.cx-line.cx-line-imp {
+  grid-template-columns: 2.6fr 1fr 1fr 1fr;
+}
+.cx-g-item {
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.7fr) minmax(0, 1fr);
+}
+/* Filled in from the chosen CDC item: read-only, so shown without an input box. */
+.cx-line .cx-f .cargo-cell.cargo-cell-auto {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  cursor: default;
+  padding-left: 2px;
+}
+@media (max-width: 1100px) {
+  .cx-line.cx-line-imp {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .cx-line.cx-line-imp {
+    grid-template-columns: 1fr;
+  }
+  .cx-g-item {
+    grid-template-columns: 1fr;
+  }
+}

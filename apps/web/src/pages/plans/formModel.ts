@@ -9,6 +9,9 @@ export const blankLine = (): LineValues => ({
   poNo: '',
   styleNo: '',
   htsCode: '',
+  material: '',
+  cdcNo: '',
+  unit: '',
   pcs: '',
   ctns: '',
   cbm: '',
@@ -21,7 +24,15 @@ export const blankInvoice = (invoiceDate = ''): InvoiceValues => ({
   invoiceNo: '',
   invoiceDate,
   description: '',
+  packages: '',
   lines: [blankLine()],
+});
+/** One container row ready to fill in; left blank, it is ignored on save. */
+export const blankContainer = () => ({
+  containerNo: '',
+  size: '40HQ' as const,
+  linerSeal: '',
+  customsSeal: '',
 });
 export const blankDeclaration = (portId = ''): DeclValues => ({
   id: '',
@@ -38,7 +49,6 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     direction,
     transportMode: 'SEA',
     loadType: 'FCL',
-    status: 'PENDING',
     clearanceStatus: 'PENDING',
     shipperName: '',
     consigneeId: '',
@@ -68,7 +78,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     coNumber: '',
     coStatus: '',
     remark: '',
-    containers: [],
+    containers: [blankContainer()],
     invoices: [blankInvoice()],
     // One row ready to fill in; it can stay blank and be filled in later.
     declarations: [blankDeclaration()],
@@ -83,7 +93,6 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     direction: d.direction,
     transportMode: d.transportMode,
     loadType: d.loadType,
-    status: d.status,
     clearanceStatus: d.clearanceStatus,
     shipperName: s(d.shipperName),
     consigneeId: s(d.consigneeId),
@@ -113,21 +122,27 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     coNumber: s(d.coNumber),
     coStatus: s(d.coStatus),
     remark: s(d.remark),
-    containers: d.containers.map((c) => ({
-      containerNo: c.containerNo,
-      size: c.size,
-      linerSeal: s(c.linerSeal),
-      customsSeal: s(c.customsSeal),
-    })),
+    containers: d.containers.length
+      ? d.containers.map((c) => ({
+          containerNo: c.containerNo,
+          size: c.size,
+          linerSeal: s(c.linerSeal),
+          customsSeal: s(c.customsSeal),
+        }))
+      : [blankContainer()],
     invoices: d.invoices.length
       ? d.invoices.map((i) => ({
           invoiceNo: i.invoiceNo,
           invoiceDate: s(i.invoiceDate),
           description: s(i.description),
+          packages: num(i.packages),
           lines: i.lines.map((l) => ({
             poNo: s(l.poNo),
             styleNo: s(l.styleNo),
             htsCode: s(l.htsCode),
+            material: s(l.material),
+            cdcNo: s(l.cdcNo),
+            unit: s(l.unit),
             pcs: num(l.pcs),
             ctns: num(l.ctns),
             cbm: num(l.cbm),

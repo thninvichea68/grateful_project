@@ -13,6 +13,7 @@ import { parse } from '../../lib/validate';
 import { attachmentName, excelUpload, requireFile } from '../../lib/http';
 import * as svc from './service';
 import { parseCargoWorkbook } from './excel';
+import { buildPlanTemplate, importPlan } from './planImport';
 import { buildInvoicePackingList } from './invoicePackingList';
 import { buildImportInvoicePackingList } from './importInvoicePackingList';
 import { assertClientAllowed, assertClientVisible, scopeClients } from '../../lib/clientScope';
@@ -119,6 +120,41 @@ shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (
   await wb.xlsx.write(res);
   res.end();
 });
+
+/** Shipping Plan → Import Excel: the blank template, dropdowns filled from the current lists. */
+shipmentsRouter.get(
+  '/import-template.xlsx',
+  requirePermission('shipments:write'),
+  async (_req, res) => {
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', attachmentName('Shipping Plan Import Template.xlsx'));
+    res.send(await buildPlanTemplate());
+  },
+);
+
+/**
+ * Shipping Plan → Import Excel. Without ?save=1 the file is only checked: what would be created
+ * and every problem by sheet and row. With ?save=1 it is saved in one go when nothing is wrong.
+ */
+shipmentsRouter.post(
+  '/import',
+  requirePermission('shipments:write'),
+  excelUpload,
+  async (req, res) => {
+    const file = requireFile(req.file);
+    const result = await importPlan(file.buffer, {
+      save: req.query.save === '1',
+      actor: { userId: req.auth!.userId, permissions: req.auth!.permissions },
+      req,
+      allowedClientIds: req.auth!.clientIds ?? undefined,
+    });
+    // Always 200: problems are part of the result ("saved" says whether it was saved).
+    res.json(result);
+  },
+);
 
 /** Reads an Export Template workbook and returns invoices for the wizard's Cargo section (nothing is saved). */
 shipmentsRouter.post(

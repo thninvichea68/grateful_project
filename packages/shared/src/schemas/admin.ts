@@ -417,6 +417,25 @@ export const fuelPriceInputSchema = z
   });
 export type FuelPriceInput = z.input<typeof fuelPriceInputSchema>;
 
+/** A Cambodian public holiday: document issue dates skip it, like a weekend. */
+export const publicHolidayInputSchema = z.object({
+  holidayDate: isoDate,
+  name: z.string().trim().min(2, 'Enter the holiday name').max(120),
+  note: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((v) => v || null),
+});
+export type PublicHolidayInput = z.input<typeof publicHolidayInputSchema>;
+export interface PublicHoliday {
+  id: string;
+  holidayDate: string;
+  name: string;
+  note: string | null;
+}
+
 export interface SettingsBundle {
   company: CompanyInput;
   baseExchangeRate: number;

@@ -1,10 +1,10 @@
 import { eq, sql } from 'drizzle-orm';
 import {
   computeLedger,
-  nextBusinessDay,
   toMoneyString,
   type CreditNoteDeclaration,
   type DeclarationOption,
+  type EligibleRecord,
   type LedgerRow,
   type LedgerSummary,
   type Paginated,
@@ -21,6 +21,7 @@ import {
   shipments,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
+import { issueDateFor } from '../../lib/issueDate';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import {
   likePattern,
@@ -229,7 +230,8 @@ export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request)
       .from(accountingRecords)
       .where(eq(accountingRecords.declarationId, input.declarationId));
     if (exists) throw conflict(`Declaration ${d.d.declareNo} already has a ledger entry`);
-    const invDate = input.invDate ?? nextBusinessDay(d.d.declareDate).date;
+    // Issue date: next working day after the declaration (clearance) date, past holidays.
+    const invDate = input.invDate ?? (await issueDateFor(tx, d.d.declareDate));
     const [row] = await tx
       .insert(accountingRecords)
       .values({
@@ -281,6 +283,12 @@ export async function updateLedger(
       .for('update');
     if (!before) throw notFound('Ledger entry');
     const values = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    // INV / DIS / DN numbers are given on approval and released by deleting the invoice.
+    for (const k of ['invNo', 'disNo', 'dnNo'] as const)
+      if (k in values && (values[k] ?? null) !== before[k])
+        throw businessRule(
+          'Invoice numbers are given automatically when the Chea payment is checked. Delete the invoice to release them.',
+        );
     // Clearing optional computed fields restores their defaults.
     if (values.commission === null) {
       const [c] = await tx
@@ -299,7 +307,7 @@ export async function updateLedger(
         .select({ dd: customsDeclarations.declareDate })
         .from(customsDeclarations)
         .where(eq(customsDeclarations.id, before.declarationId));
-      values.invDate = nextBusinessDay(d!.dd).date;
+      values.invDate = await issueDateFor(tx, d!.dd);
     }
     await tx
       .update(accountingRecords)
@@ -336,4 +344,38 @@ export async function deleteLedger(id: string, req: Request): Promise<void> {
     await tx.delete(accountingRecords).where(eq(accountingRecords.id, id));
     await audit(tx, { action: 'DELETE', entity: 'accounting_record', entityId: id, before }, req);
   });
+}
+
+const ELIGIBLE: Record<
+  'tax-invoices' | 'disbursements' | 'debit-notes',
+  { table: string; col: string }
+> = {
+  'tax-invoices': { table: 'tax_invoices', col: 'inv_no' },
+  disbursements: { table: 'disbursements', col: 'dis_no' },
+  'debit-notes': { table: 'debit_notes', col: 'dn_no' },
+};
+
+/**
+ * Shipments a tax invoice, DIS or debit note can be made for: approved (they have that
+ * number) and with no live document of the type yet, in clearance-date order.
+ */
+export async function eligibleRecords(
+  type: keyof typeof ELIGIBLE,
+  clientIds?: string[],
+): Promise<EligibleRecord[]> {
+  const t = ELIGIBLE[type];
+  const scoped = clientCondition(sql`a.client_id`, clientIds);
+  return queryRows<EligibleRecord>(
+    db,
+    sql`
+    SELECT a.id AS "recordId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+           to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.id AS "clientId", c.code AS "clientCode",
+           a.${sql.raw(t.col)} AS number, s.direction, s.hbl_no AS hbl
+    FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+    JOIN shipments s ON s.id = d.shipment_id JOIN clients c ON c.id = a.client_id
+    WHERE a.${sql.raw(t.col)} IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM ${sql.raw(t.table)} x WHERE x.accounting_record_id = a.id AND x.status <> 'VOID')
+      ${scoped ? sql`AND ${scoped}` : sql``}
+    ORDER BY d.declare_date, d.declare_no LIMIT 500`,
+  );
 }

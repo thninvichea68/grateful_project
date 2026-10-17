@@ -499,7 +499,8 @@ describe('shipments', () => {
       .set(h)
       .send(
         exportShipment({
-          status: 'COMPLETED',
+          // An export with its ATD is completed (the status is never sent).
+          atd: '2026-08-01',
           containers: [],
           loadType: 'LCL',
           invoices: [{ invoiceNo: 'JRA26046', lines: [{ pcs: 5, fobUnitPrice: 2 }] }],
