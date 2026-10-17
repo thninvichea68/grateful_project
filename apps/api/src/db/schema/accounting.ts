@@ -1,4 +1,14 @@
-import { pgTable, text, uuid, date, integer, index, check, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  uuid,
+  date,
+  integer,
+  index,
+  check,
+  uniqueIndex,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   id,
@@ -14,6 +24,9 @@ import {
   loadTypeEnum,
   containerSizeEnum,
   creditNoteRefTypeEnum,
+  creditNoteReviewEnum,
+  statementKindEnum,
+  paymentMethodEnum,
 } from './_common';
 import { users } from './auth';
 import { clients, ports, forwarders } from './reference';
@@ -62,6 +75,42 @@ export const accountingRecords = pgTable(
     uniqueIndex('accounting_records_inv_no_unique')
       .on(t.invNo)
       .where(sql`${t.invNo} IS NOT NULL`),
+    uniqueIndex('accounting_records_dn_no_unique')
+      .on(t.dnNo)
+      .where(sql`${t.dnNo} IS NOT NULL`),
+    // DIS restarts at DIS001 each January, so it is unique within its year.
+    uniqueIndex('accounting_records_dis_no_year_unique')
+      .on(t.disNo, sql`(extract(year from ${t.invDate}))`)
+      .where(sql`${t.disNo} IS NOT NULL`),
+  ],
+);
+
+/**
+ * INV / DIS / DN numbers given back when an issued invoice set is deleted. The next shipment
+ * to be numbered in the same period takes the lowest one before any new number, so the
+ * sequence has no gaps. A number above the highest one still in use is not kept: the running
+ * number simply comes back to it.
+ */
+export const releasedNumbers = pgTable(
+  'released_numbers',
+  {
+    id: id(),
+    /** INV, DIS or DN. */
+    kind: text('kind').notNull(),
+    /** '2026' for INV and DIS, 'JR:2610' for a debit note (client + YYMM). */
+    period: text('period').notNull(),
+    seq: integer('seq').notNull(),
+    number: text('number').notNull(),
+    fromDeclareNo: text('from_declare_no'),
+    releasedById: uuid('released_by_id').references(() => users.id, { onDelete: 'set null' }),
+    releasedAt: timestamp('released_at', { withTimezone: true }).notNull().defaultNow(),
+    reassignedToDeclareNo: text('reassigned_to_declare_no'),
+    reassignedAt: timestamp('reassigned_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('released_numbers_free_unique')
+      .on(t.kind, t.period, t.seq)
+      .where(sql`${t.reassignedAt} IS NULL`),
   ],
 );
 
@@ -130,29 +179,41 @@ export const taxInvoiceLines = pgTable(
   (t) => [index('tax_invoice_lines_doc_idx').on(t.taxInvoiceId)],
 );
 
-/** Disbursement voucher — VAT 0%. */
-export const disbursements = pgTable('disbursements', {
-  ...docHeader(),
-  disNo: text('dis_no').notNull().unique(),
-  disDate: date('dis_date').notNull(),
-  exchangeRate: rate('exchange_rate').notNull(),
-  customerNameEn: text('customer_name_en').notNull(),
-  customerNameKm: text('customer_name_km'),
-  customerAddress: text('customer_address'),
-  customerVattin: text('customer_vattin'),
-  reference: text('reference'),
-  pol: text('pol'),
-  pod: text('pod'),
-  containerNo: text('container_no'),
-  volumeCbm: qty('volume_cbm'),
-  grossWeightKg: qty('gross_weight_kg'),
-  shipper: text('shipper'),
-  consignee: text('consignee'),
-  hbl: text('hbl'),
-  pkgs: text('pkgs'),
-  total: money('total').notNull().default('0'),
-  totalKhr: khr('total_khr').notNull().default('0'),
-});
+/**
+ * Disbursement voucher — VAT 0%. DIS numbers run company-wide and restart at DIS001 each
+ * January, so a number is unique within its year (of the DIS date), not forever.
+ */
+export const disbursements = pgTable(
+  'disbursements',
+  {
+    ...docHeader(),
+    disNo: text('dis_no').notNull(),
+    disDate: date('dis_date').notNull(),
+    exchangeRate: rate('exchange_rate').notNull(),
+    customerNameEn: text('customer_name_en').notNull(),
+    customerNameKm: text('customer_name_km'),
+    customerAddress: text('customer_address'),
+    customerVattin: text('customer_vattin'),
+    reference: text('reference'),
+    pol: text('pol'),
+    pod: text('pod'),
+    containerNo: text('container_no'),
+    volumeCbm: qty('volume_cbm'),
+    grossWeightKg: qty('gross_weight_kg'),
+    shipper: text('shipper'),
+    consignee: text('consignee'),
+    hbl: text('hbl'),
+    pkgs: text('pkgs'),
+    total: money('total').notNull().default('0'),
+    totalKhr: khr('total_khr').notNull().default('0'),
+  },
+  (t) => [
+    uniqueIndex('disbursements_dis_no_year_unique').on(
+      t.disNo,
+      sql`(extract(year from ${t.disDate}))`,
+    ),
+  ],
+);
 
 export const disbursementLines = pgTable(
   'disbursement_lines',
@@ -212,6 +273,10 @@ export const creditNotes = pgTable('credit_notes', {
   cbm: qty('cbm'),
   declareNo: text('declare_no'),
   total: money('total').notNull().default('0'),
+  /** Accounting's check of the submitted note (Accounting → Credit Noted). */
+  reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
 });
 
 export const creditNoteLines = pgTable(
@@ -257,5 +322,63 @@ export const recordSummaryLines = pgTable(
   (t) => [
     index('record_summary_lines_doc_idx').on(t.recordSummaryId),
     check('record_summary_lines_qty', sql`qty >= 0`),
+  ],
+);
+
+/**
+ * Official receipt: a client's payment against one of its monthly account statements
+ * (tax invoices + disbursements, or debit notes). Issued when saved; void keeps the number.
+ * The statements themselves are not stored: they are read from the month's documents.
+ */
+export const officialReceipts = pgTable(
+  'official_receipts',
+  {
+    id: id(),
+    receiptNo: text('receipt_no').notNull().unique(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'restrict' }),
+    /** First day of the statement month the payment is for. */
+    periodMonth: date('period_month').notNull(),
+    kind: statementKindEnum('kind').notNull(),
+    receiptDate: date('receipt_date').notNull(),
+    amount: money('amount').notNull(),
+    paymentMethod: paymentMethodEnum('payment_method').notNull(),
+    paymentRef: text('payment_ref'),
+    note: text('note'),
+    status: billingDocStatusEnum('status').notNull().default('ISSUED'),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    index('official_receipts_client_period_idx').on(t.clientId, t.periodMonth),
+    index('official_receipts_date_idx').on(t.receiptDate),
+    check('official_receipts_amount_positive', sql`amount > 0`),
+  ],
+);
+
+/**
+ * Accounting → broker messages about a credit note ("Checked", or "Revised" with what to fix).
+ * Shown in the broker's Credit Noted inbox.
+ */
+export const creditNoteMessages = pgTable(
+  'credit_note_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    creditNoteId: uuid('credit_note_id')
+      .notNull()
+      .references(() => creditNotes.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    senderId: uuid('sender_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: creditNoteReviewEnum('kind').notNull(),
+    body: text('body').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('credit_note_messages_recipient_idx').on(t.recipientId, t.createdAt),
+    index('credit_note_messages_note_idx').on(t.creditNoteId),
   ],
 );

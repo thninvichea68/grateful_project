@@ -35,6 +35,8 @@ import {
   whereAll,
 } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
+import { applyClearanceDate } from '../accounting/docs';
+import { shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
 
 /* ============================== List ============================== */
 
@@ -68,8 +70,9 @@ export function shipmentWhere(f: ShipmentFilters) {
     );
   if (f.transportMode) conds.push(sql`s.transport_mode = ${f.transportMode}`);
   if (f.loadType) conds.push(sql`s.load_type = ${f.loadType}`);
-  if (f.from) conds.push(sql`s.eta >= ${f.from}::date`);
-  if (f.to) conds.push(sql`s.eta <= ${f.to}::date`);
+  // An import by its ETA, an export by its ETD.
+  if (f.from) conds.push(sql`${shipmentDate()} >= ${f.from}::date`);
+  if (f.to) conds.push(sql`${shipmentDate()} <= ${f.to}::date`);
   if (f.q) {
     const like = likePattern(f.q);
     conds.push(sql`(s.reference ILIKE ${like} OR s.hbl_no ILIKE ${like} OR s.booking_no ILIKE ${like} OR c.code ILIKE ${like}
@@ -119,6 +122,8 @@ const listSelect = (extra: SQL = sql``) => sql`
 
 const SORTS = {
   eta: sql`s.eta`,
+  // Customs clearance (declaration) date: the shipment's first declaration; none → last.
+  clearanceDate: sql`(SELECT min(x.declare_date) FROM customs_declarations x WHERE x.shipment_id = s.id)`,
   reference: sql`s.reference`,
   status: sql`s.status`,
   client: sql`c.code`,
@@ -136,7 +141,7 @@ export async function listShipments(
     SELECT s.id, count(*) OVER () AS total_count
     FROM shipments s JOIN clients c ON c.id = s.client_id
     ${shipmentWhere(f)}
-    ${orderBy(f.sort, SORTS, sql`s.eta DESC NULLS LAST, s.reference DESC`)}
+    ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
     ${paginate(f.page, f.pageSize)}`,
   );
   if (!page.length) return toPaginated([], f.page, f.pageSize);
@@ -161,11 +166,21 @@ export async function listShipmentsForExport(
 ): Promise<ShipmentListItem[]> {
   return queryRows<ShipmentListItem>(
     db,
-    sql`${listSelect()} ${shipmentWhere(f)} ${orderBy(f.sort, SORTS, sql`s.eta DESC NULLS LAST`)} LIMIT ${limit}`,
+    sql`${listSelect()} ${shipmentWhere(f)} ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
   );
 }
 
 /* ============================== Detail ============================== */
+
+/** The shipment's client (for access checks); 404 when it doesn't exist. */
+export async function shipmentClientId(id: string): Promise<string> {
+  const [row] = await db
+    .select({ clientId: shipments.clientId })
+    .from(shipments)
+    .where(and(eq(shipments.id, id), isNull(shipments.deletedAt)));
+  if (!row) throw notFound('Shipment');
+  return row.clientId;
+}
 
 export async function getShipment(id: string): Promise<ShipmentDetail> {
   const [s] = await db
@@ -277,6 +292,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
       invoiceNo: i.invoiceNo,
       invoiceDate: i.invoiceDate,
       description: i.description,
+      packages: i.packages,
       lines: lines
         .filter((l) => l.invoiceId === i.id)
         .map((l) => ({
@@ -284,6 +300,9 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
           poNo: l.poNo,
           styleNo: l.styleNo,
           htsCode: l.htsCode,
+          material: l.material,
+          cdcNo: l.cdcNo,
+          unit: l.unit,
           pcs: l.pcs,
           ctns: l.ctns,
           cbm: l.cbm,
@@ -322,7 +341,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
 
 /* ============================== Write ============================== */
 
-interface Actor {
+export interface Actor {
   userId: string;
   permissions: readonly Permission[];
 }
@@ -471,6 +490,7 @@ async function writeChildren(
         invoiceNo: inv.invoiceNo,
         invoiceDate: inv.invoiceDate,
         description: inv.description,
+        packages: inv.packages,
         sortOrder: i,
       })
       .returning({ id: cargoInvoices.id });
@@ -552,36 +572,54 @@ export async function createShipment(
   req: Request,
 ): Promise<string> {
   try {
-    return await db.transaction(async (tx) => {
-      await assertReferences(tx, input, true);
-      const year = (input.eta ?? new Date().toISOString()).slice(0, 4);
-      const n = await nextNumber(tx, `SHIPMENT:${year}`);
-      const [row] = await tx
-        .insert(shipments)
-        .values({
-          ...scalarValues(input),
-          reference: formatNumber.shipment(year.slice(2), n),
-          createdById: actor.userId,
-          updatedById: actor.userId,
-        })
-        .returning({ id: shipments.id, reference: shipments.reference });
-      await writeChildren(tx, row!.id, input, actor, new Set());
-      await audit(
-        tx,
-        {
-          action: 'CREATE',
-          entity: 'shipment',
-          entityId: row!.id,
-          after: { reference: row!.reference, ...input },
-        },
-        req,
-      );
-      return row!.id;
-    });
+    return await db.transaction(async (tx) => (await insertShipment(tx, input, actor, req)).id);
   } catch (err) {
     return mapUniqueViolation(err);
   }
 }
+
+/** Creates one shipment inside the caller's transaction (the Excel import creates many). */
+export async function insertShipment(
+  tx: Tx,
+  input: ShipmentInputParsed,
+  actor: Actor,
+  req: Request,
+): Promise<{ id: string; reference: string }> {
+  await assertReferences(tx, input, true);
+  const year = (shipmentDateOf(input) ?? new Date().toISOString()).slice(0, 4);
+  const n = await nextNumber(tx, `SHIPMENT:${year}`);
+  const [row] = await tx
+    .insert(shipments)
+    .values({
+      ...scalarValues(input),
+      reference: formatNumber.shipment(year.slice(2), n),
+      createdById: actor.userId,
+      updatedById: actor.userId,
+    })
+    .returning({ id: shipments.id, reference: shipments.reference });
+  await writeChildren(tx, row!.id, input, actor, new Set());
+  await audit(
+    tx,
+    {
+      action: 'CREATE',
+      entity: 'shipment',
+      entityId: row!.id,
+      after: { reference: row!.reference, ...input },
+    },
+    req,
+  );
+  return row!;
+}
+
+/** The friendly message for a duplicate invoice or declaration number (for the import). */
+export const shipmentUniqueMessage = (err: unknown): string | null => {
+  try {
+    mapUniqueViolation(err);
+  } catch (e) {
+    if (e instanceof AppError) return e.message;
+  }
+  return null;
+};
 
 export async function updateShipment(
   id: string,
@@ -665,6 +703,11 @@ export async function updateShipment(
         actor,
         new Set(oldDecls.filter((d) => keep.has(d.id)).map((d) => d.id)),
       );
+      // A changed declaration (clearance) date re-dates its ledger entry and draft documents.
+      for (const d of input.declarations) {
+        const old = oldDecls.find((o) => o.id === d.id);
+        if (old && old.declareDate !== d.declareDate) await applyClearanceDate(tx, old.id, req);
+      }
       await audit(
         tx,
         { action: 'UPDATE', entity: 'shipment', entityId: id, before, after: input },

@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     // Listen on all interfaces so other devices on the LAN can open the dev server.
     host: true,
-    port: 5173,
+    port: 5172,
     // Same-origin in development: the refresh cookie works without CORS.
     proxy: {
       '/api': {

@@ -14,6 +14,7 @@ import {
   toPaginated,
   whereAll,
 } from '../../lib/listing';
+import { clientCondition } from '../../lib/clientScope';
 
 interface ListParams {
   page: number;
@@ -21,6 +22,8 @@ interface ListParams {
   sort?: string | undefined;
   q?: string | undefined;
   status?: string | undefined;
+  /** Only these clients (per-user access); undefined = all. */
+  ids?: string[] | undefined;
   withProfit: boolean;
 }
 
@@ -45,6 +48,8 @@ const baseSelect = (withProfit: boolean, extra: SQL = sql``) => sql`
 export async function listClients(p: ListParams): Promise<Paginated<ClientListItem>> {
   const conds = [sql`c.deleted_at IS NULL`];
   if (p.status) conds.push(sql`c.status = ${p.status}`);
+  const scoped = clientCondition(sql`c.id`, p.ids);
+  if (scoped) conds.push(scoped);
   if (p.q) {
     const like = likePattern(p.q);
     conds.push(sql`(c.name ILIKE ${like} OR c.code ILIKE ${like} OR c.legal_name ILIKE ${like})`);
@@ -102,6 +107,8 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
     contactName: row!.contactName,
     contactEmail: row!.contactEmail,
     contactPhone: row!.contactPhone,
+    cdcNo: row!.cdcNo,
+    cdcIssueDate: row!.cdcIssueDate,
     createdAt: row!.createdAt.toISOString(),
     importCount: e.imports,
     exportCount: e.exports,

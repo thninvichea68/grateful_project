@@ -25,6 +25,8 @@ interface AuthContextValue {
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
   can: (p: Permission) => boolean;
+  /** Show my updated profile (name, picture) without signing in again. */
+  updateUser: (user: SessionUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -90,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       can: (p) => !!user && hasPermission(user.permissions, p),
+      updateUser: setUser,
     }),
     [status, user, login, logout],
   );

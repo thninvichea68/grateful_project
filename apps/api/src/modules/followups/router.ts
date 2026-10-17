@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -15,6 +15,16 @@ import { audit } from '../../lib/audit';
 import { badRequest, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll, isoTs } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
+import {
+  allowedClients,
+  assertClientAllowed,
+  assertClientVisible,
+  clientCondition,
+  scopeClients,
+} from '../../lib/clientScope';
+import { shipmentClientId } from '../shipments/service';
+
+const FU_CLIENT = sql`coalesce(f.client_id, s.client_id)`;
 
 const idParam = z.object({ id: z.string().uuid() });
 export const followUpsRouter = Router();
@@ -44,6 +54,8 @@ followUpsRouter.get('/', requirePermission('followups:read'), async (req, res) =
   if (q.priority) c.push(sql`f.priority = ${q.priority}`);
   if (q.assigneeId) c.push(sql`f.assignee_id = ${q.assigneeId}`);
   if (q.clientId) c.push(sql`f.client_id = ${q.clientId}`);
+  const scoped = clientCondition(FU_CLIENT, scopeClients(req));
+  if (scoped) c.push(scoped);
   if (q.overdue) c.push(sql`f.status <> 'DONE' AND f.due_at < now()`);
   if (q.q) {
     const like = likePattern(q.q);
@@ -71,6 +83,26 @@ followUpsRouter.get('/', requirePermission('followups:read'), async (req, res) =
   );
 });
 
+/** A follow-up belongs to its own client, or else to its shipment's client. */
+async function followUpClientId(id: string): Promise<string | null> {
+  const [r] = await queryRows<{ clientId: string | null }>(
+    db,
+    sql`SELECT ${FU_CLIENT} AS "clientId" FROM follow_ups f LEFT JOIN shipments s ON s.id = f.shipment_id WHERE f.id = ${id} AND f.deleted_at IS NULL`,
+  );
+  if (!r) throw notFound('Follow-up');
+  return r.clientId;
+}
+/** Restricted users may only file follow-ups under their own clients or shipments. */
+async function assertLinksAllowed(
+  req: Request,
+  v: { clientId?: string | null | undefined; shipmentId?: string | null | undefined },
+) {
+  if (!allowedClients(req)) return;
+  if (v.clientId) assertClientAllowed(req, v.clientId);
+  if (v.shipmentId) assertClientAllowed(req, await shipmentClientId(v.shipmentId));
+  if (!v.clientId && !v.shipmentId) assertClientAllowed(req, null);
+}
+
 async function getOne(id: string) {
   const [row] = await queryRows<FollowUpRow>(
     db,
@@ -82,6 +114,7 @@ async function getOne(id: string) {
 
 followUpsRouter.post('/', requirePermission('followups:write'), async (req, res) => {
   const v = parse(followUpInputSchema, req.body);
+  await assertLinksAllowed(req, v);
   const id = await db.transaction(async (tx) => {
     const reference = formatNumber.followUp(await nextNumber(tx, 'FOLLOW_UP'));
     const [row] = await tx
@@ -103,6 +136,8 @@ followUpsRouter.post('/', requirePermission('followups:write'), async (req, res)
 followUpsRouter.patch('/:id', requirePermission('followups:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
   const v = parse(followUpUpdateSchema, req.body);
+  assertClientVisible(req, await followUpClientId(id), 'Follow-up');
+  if ('clientId' in v || 'shipmentId' in v) await assertLinksAllowed(req, v);
   await db.transaction(async (tx) => {
     const [before] = await tx
       .select()
@@ -124,6 +159,7 @@ followUpsRouter.patch('/:id', requirePermission('followups:write'), async (req, 
 
 followUpsRouter.delete('/:id', requirePermission('followups:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
+  assertClientVisible(req, await followUpClientId(id), 'Follow-up');
   const [row] = await db
     .update(followUps)
     .set({ deletedAt: new Date() })

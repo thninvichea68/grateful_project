@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { LedgerRow } from '@gs/shared';
-import { useAuth } from '../../auth/AuthProvider';
 import { useLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
@@ -41,6 +40,10 @@ function periodLabel(month: string, year: string | null) {
 const thisMonth = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()).slice(0, 7);
 const m = (v: string) => fmtNum(v, 2);
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/** 2026-08-22 → Saturday (the date is a plain calendar day, so read it as UTC). */
+const weekday = (iso: string | null | undefined) =>
+  iso ? (WEEKDAYS[new Date(`${iso.slice(0, 10)}T00:00:00Z`).getUTCDay()] ?? '-') : '-';
 const docNo = (
   r: LedgerRow,
   type: 'tax-invoices' | 'disbursements' | 'debit-notes',
@@ -52,7 +55,7 @@ const docNo = (
     <Link
       to={`/accounting/${type}/${d.id}`}
       onClick={(e) => e.stopPropagation()}
-      style={{ color: 'var(--accent-primary)', fontWeight: 800 }}
+      style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
     >
       {value}
     </Link>
@@ -62,11 +65,10 @@ const docNo = (
 };
 
 export function LedgerPage() {
-  const { can } = useAuth();
   const toast = useToast();
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
-  const [open, setOpen] = useState<LedgerRow | 'new' | null>(null);
+  const [open, setOpen] = useState<LedgerRow | null>(null);
   // Period: a month (default) or a whole year (?year=2026, Jan–Dec).
   const year = params.get('year');
   const month = year ? '' : (params.get('month') ?? thisMonth());
@@ -115,7 +117,9 @@ export function LedgerPage() {
               {year ? 'Yearly Ledger' : 'Monthly Ledger'} ·{' '}
               <span className={l.period}>{periodLabel(month, year)}</span>
             </h3>
-            <div className={l.sub}>One row per customs declaration.</div>
+            <div className={l.sub}>
+              One row per declaration, added when its Chea payment is checked.
+            </div>
           </div>,
           tabsAside,
         )}
@@ -205,12 +209,6 @@ export function LedgerPage() {
               {icons.download({})}
               Export Excel
             </button>
-            {can('accounting:write') && (
-              <button type="button" className="new-shipment-btn" onClick={() => setOpen('new')}>
-                {icons.plus({})}
-                New Entry
-              </button>
-            )}
           </div>
         </div>
         {t && (
@@ -241,28 +239,34 @@ export function LedgerPage() {
           <table className="data-table-clean">
             <thead>
               <tr>
-                <th>Inv Date</th>
+                <th>Chea Payment</th>
+                <th>Port Number</th>
+                <th>Port Code</th>
+                <th>Port Name</th>
+                <th>Declare</th>
+                <th>Date</th>
                 <th>Client</th>
-                <th>Declare No</th>
-                <th>Port</th>
-                <th>INV No</th>
-                <th>DIS No</th>
-                <th>DN No</th>
+                <th>INV</th>
+                <th>Disbursement</th>
+                <th>DN</th>
+                <th>Date (INV)</th>
+                <th style={{ textAlign: 'right' }}>Exchange Rate</th>
+                <th>Weekday</th>
                 <th style={{ textAlign: 'right' }}>Clear Fee</th>
                 <th style={{ textAlign: 'right' }}>THC</th>
-                <th style={{ textAlign: 'right' }}>Other</th>
+                <th style={{ textAlign: 'right' }}>Other Pay</th>
                 <th style={{ textAlign: 'right' }}>CM</th>
-                <th style={{ textAlign: 'right' }}>INV</th>
-                <th style={{ textAlign: 'right' }}>DIS</th>
-                <th style={{ textAlign: 'right' }}>VAT</th>
+                <th style={{ textAlign: 'right' }}>INV (Revenue)</th>
+                <th style={{ textAlign: 'right' }}>DIS (Formula)</th>
+                <th style={{ textAlign: 'right' }}>VAT 10%</th>
                 <th style={{ textAlign: 'right' }}>DN Total</th>
                 <th style={{ textAlign: 'right' }}>Net Profit</th>
-                <th>Chea</th>
+                <th>Mark</th>
               </tr>
             </thead>
             <tbody>
               <TableState
-                cols={17}
+                cols={23}
                 loading={list.isLoading}
                 error={list.error}
                 empty={list.data?.data.length === 0}
@@ -276,13 +280,29 @@ export function LedgerPage() {
                   onClick={() => setOpen(r)}
                   onKeyDown={(e) => e.key === 'Enter' && setOpen(r)}
                 >
-                  <td>{fmtDate(r.invDate)}</td>
-                  <td>{r.clientCode}</td>
-                  <td className="val-bold">{r.declareNo}</td>
+                  <td>
+                    <Pill tone={r.cheaStatus === 'PAID' ? 'completed' : 'pending'}>
+                      {r.cheaStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+                    </Pill>
+                  </td>
+                  <td>{r.portNo ?? '-'}</td>
                   <td>{r.portCode ?? '-'}</td>
-                  <td>{docNo(r, 'tax-invoices', r.invNo)}</td>
+                  <td>{r.portName ?? '-'}</td>
+                  <td className="val-bold">{r.declareNo}</td>
+                  <td>{fmtDate(r.declareDate)}</td>
+                  <td>{r.clientCode}</td>
+                  <td>
+                    {r.invNo ? (
+                      docNo(r, 'tax-invoices', r.invNo)
+                    ) : (
+                      <Pill tone="pending">Not invoiced</Pill>
+                    )}
+                  </td>
                   <td>{docNo(r, 'disbursements', r.disNo)}</td>
                   <td>{docNo(r, 'debit-notes', r.dnNo)}</td>
+                  <td>{fmtDate(r.invDate)}</td>
+                  <td style={{ textAlign: 'right' }}>{fmtNum(r.exchangeRate, 0)}</td>
+                  <td>{weekday(r.invDate)}</td>
                   {[
                     r.clearFee,
                     r.thc,
@@ -300,7 +320,7 @@ export function LedgerPage() {
                   <td
                     style={{
                       textAlign: 'right',
-                      fontWeight: 800,
+                      fontWeight: 700,
                       color:
                         Number(r.netProfit) < 0
                           ? 'var(--status-exception-fg)'
@@ -309,16 +329,14 @@ export function LedgerPage() {
                   >
                     {m(r.netProfit)}
                   </td>
-                  <td>
-                    <Pill tone={r.cheaStatus === 'PAID' ? 'completed' : 'pending'}>
-                      {r.cheaStatus === 'PAID' ? 'Paid' : 'Unpaid'}
-                    </Pill>
+                  <td className={l.mark} title={r.mark ?? undefined}>
+                    {r.mark || '-'}
                   </td>
                 </tr>
               ))}
               {t && t.rows > 0 && (
-                <tr style={{ fontWeight: 800 }}>
-                  <td colSpan={7}>Total</td>
+                <tr style={{ fontWeight: 700 }}>
+                  <td colSpan={13}>Total</td>
                   {[
                     t.clearFee,
                     t.thc,
@@ -342,7 +360,7 @@ export function LedgerPage() {
         </div>
         {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
       </div>
-      {open && <LedgerModal row={open === 'new' ? null : open} onClose={() => setOpen(null)} />}
+      {open && <LedgerModal row={open} onClose={() => setOpen(null)} />}
     </section>
   );
 }

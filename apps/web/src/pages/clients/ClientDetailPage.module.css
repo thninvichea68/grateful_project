@@ -48,7 +48,7 @@
 }
 .statLabel {
   font-size: 11.5px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--text-tertiary);
 }
 .statValue {

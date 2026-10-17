@@ -15,10 +15,10 @@ export function NotFoundPage() {
             marginBottom: 16,
           }}
         >
-          The address doesn’t match any page. Use the sidebar, or go back to the overview.
+          The address doesn’t match any page. Use the sidebar, or go back to your start page.
         </p>
-        <Link to="/overview" className="new-shipment-btn" style={{ display: 'inline-flex' }}>
-          Go to overview
+        <Link to="/" className="new-shipment-btn" style={{ display: 'inline-flex' }}>
+          Go to start page
         </Link>
       </div>
     </section>

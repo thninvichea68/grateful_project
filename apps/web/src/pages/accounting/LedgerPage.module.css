@@ -1,7 +1,7 @@
 /* Ledger: title sits in the accounting tabs row; then filters + actions, tiles, table. */
 .title {
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -90,6 +90,12 @@
     min-height: 0;
     max-height: none;
   }
+}
+/* Long marks stay on one line (full text on hover). */
+.mark {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Keep the Total row in view while the rows scroll under it. */
 .tableScroll tbody tr:last-child td {

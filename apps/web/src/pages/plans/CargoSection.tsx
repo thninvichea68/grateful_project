@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFieldArray, useFormContext, useWatch, type Control } from 'react-hook-form';
-import { invoiceHtsCodes, type CargoExcelParseResult } from '@gs/shared';
+import {
+  CUT_STOCK_CATEGORIES,
+  CUT_STOCK_CATEGORY_LABEL,
+  invoiceHtsCodes,
+  type CargoExcelParseResult,
+  type CutStockRow,
+} from '@gs/shared';
+import { useCutStock } from '../../features/hooks';
 import { uploadFile } from '../../lib/files';
 import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
@@ -40,6 +47,11 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
   } = useFormContext<FormValues>();
   const invoices = useFieldArray({ control, name: 'invoices' });
   const watched = useWatch({ control, name: 'invoices' });
+  // Imports follow the import schedule: CDC items instead of PO / style / HTS.
+  const isImport = useWatch({ control, name: 'direction' }) === 'IMPORT';
+  const clientId = useWatch({ control, name: 'clientId' });
+  const cut = useCutStock({ clientId, pageSize: 500, sort: 'lineNo' }, isImport && !!clientId);
+  const cdcItems = cut.data?.data ?? [];
   const [openIdx, setOpenIdx] = useState<Set<number>>(() => new Set([0]));
   const [status, setStatus] = useState<{
     text: string;
@@ -107,6 +119,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
 
   const totals = (watched ?? []).reduce(
     (t, inv) => {
+      t.pkgs += toNum(inv.packages);
       inv.lines.forEach((l) => {
         t.ctns += toNum(l.ctns);
         t.pcs += toNum(l.pcs);
@@ -117,7 +130,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
       });
       return t;
     },
-    { ctns: 0, pcs: 0, nw: 0, gw: 0, cbm: 0, fob: 0 },
+    { pkgs: 0, ctns: 0, pcs: 0, nw: 0, gw: 0, cbm: 0, fob: 0 },
   );
   const invErr = errors.invoices;
 
@@ -127,20 +140,27 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
         <div className="cx-card-head">
           <div className="cx-title">
             <div>
-              <h3>Cargo, Pricing &amp; FOB</h3>
-              <p>Add invoices, then open each one to enter its line items</p>
+              <h3>{isImport ? 'Cargo Invoices & CDC Items' : 'Cargo, Pricing & FOB'}</h3>
+              <p>
+                {isImport
+                  ? 'Add invoices, then open each one to enter its items as on the import schedule'
+                  : 'Add invoices, then open each one to enter its line items'}
+              </p>
             </div>
           </div>
           <div className="cargo-actions">
             {status && <span className="cargo-status">{status.text}</span>}
-            <button
-              type="button"
-              className="cargo-btn"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? 'Reading…' : '⇪ Upload Excel Template'}
-            </button>
+            {/* The Excel template is the export one (PO / style / HTS). */}
+            {!isImport && (
+              <button
+                type="button"
+                className="cargo-btn"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? 'Reading…' : '⇪ Upload Excel Template'}
+              </button>
+            )}
             <button
               type="button"
               className="cargo-btn"
@@ -199,50 +219,95 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
               <div className="cargo-head-cell" />
             </div>
             <div className="cargo-invoices">
-              {invoices.fields.map((f, gi) => (
-                <InvoiceCard
-                  key={f.id}
-                  gi={gi}
-                  control={control}
-                  open={openIdx.has(gi)}
-                  onToggle={() => toggle(gi)}
-                  onRemove={invoices.fields.length > 1 ? () => invoices.remove(gi) : undefined}
-                  register={register}
-                  onDate={setSharedDate}
-                  errors={Array.isArray(invErr) ? invErr[gi] : undefined}
-                />
-              ))}
+              {invoices.fields.map((f, gi) =>
+                isImport ? (
+                  <ImportInvoiceCard
+                    key={f.id}
+                    gi={gi}
+                    control={control}
+                    open={openIdx.has(gi)}
+                    onToggle={() => toggle(gi)}
+                    onRemove={invoices.fields.length > 1 ? () => invoices.remove(gi) : undefined}
+                    register={register}
+                    onDate={setSharedDate}
+                    cdcItems={cdcItems}
+                    errors={Array.isArray(invErr) ? invErr[gi] : undefined}
+                  />
+                ) : (
+                  <InvoiceCard
+                    key={f.id}
+                    gi={gi}
+                    control={control}
+                    open={openIdx.has(gi)}
+                    onToggle={() => toggle(gi)}
+                    onRemove={invoices.fields.length > 1 ? () => invoices.remove(gi) : undefined}
+                    register={register}
+                    onDate={setSharedDate}
+                    errors={Array.isArray(invErr) ? invErr[gi] : undefined}
+                  />
+                ),
+              )}
             </div>
           </div>
         </div>
       </div>
-      <div className="cargo-totals">
-        <div className="cargo-totals-label">Shipment Total</div>
-        <div className="cargo-total-item">
-          <span>CTNS</span>
-          <span>{fmtNum(totals.ctns)}</span>
+      {isImport ? (
+        <div className="cargo-totals">
+          <div className="cargo-totals-label">Shipment Total</div>
+          <div className="cargo-total-item">
+            <span>Packages</span>
+            <span>{fmtNum(totals.pkgs)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Quantity</span>
+            <span>{fmtNum(totals.pcs, 2)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Net Wt (kg)</span>
+            <span>{fmtNum(totals.nw, 2)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Gross Wt (kg)</span>
+            <span>{fmtNum(totals.gw, 2)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Items</span>
+            <span>{fmtNum((watched ?? []).reduce((n, i) => n + i.lines.length, 0))}</span>
+          </div>
+          <div className="cargo-total-item cargo-total-fob">
+            <span>Amount</span>
+            <span>{money(totals.fob)} USD</span>
+          </div>
         </div>
-        <div className="cargo-total-item">
-          <span>PCS</span>
-          <span>{fmtNum(totals.pcs)}</span>
+      ) : (
+        <div className="cargo-totals">
+          <div className="cargo-totals-label">Shipment Total</div>
+          <div className="cargo-total-item">
+            <span>CTNS</span>
+            <span>{fmtNum(totals.ctns)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>PCS</span>
+            <span>{fmtNum(totals.pcs)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Net Wt (kg)</span>
+            <span>{fmtNum(totals.nw, 2)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>Gross Wt (kg)</span>
+            <span>{fmtNum(totals.gw, 2)}</span>
+          </div>
+          <div className="cargo-total-item">
+            <span>CBM</span>
+            <span>{fmtNum(totals.cbm)}</span>
+          </div>
+          <div className="cargo-total-item cargo-total-fob">
+            <span>Total FOB</span>
+            <span>{money(totals.fob)} USD</span>
+          </div>
         </div>
-        <div className="cargo-total-item">
-          <span>Net Wt (kg)</span>
-          <span>{fmtNum(totals.nw, 2)}</span>
-        </div>
-        <div className="cargo-total-item">
-          <span>Gross Wt (kg)</span>
-          <span>{fmtNum(totals.gw, 2)}</span>
-        </div>
-        <div className="cargo-total-item">
-          <span>CBM</span>
-          <span>{fmtNum(totals.cbm)}</span>
-        </div>
-        <div className="cargo-total-item cargo-total-fob">
-          <span>Total FOB</span>
-          <span>{money(totals.fob)} USD</span>
-        </div>
-      </div>
+      )}
     </>
   );
 }
@@ -622,6 +687,321 @@ function InvoiceCard({
                   onClick={addDescription}
                 >
                   + Add Description
+                </button>
+              </div>
+              {onRemove && (
+                <button
+                  type="button"
+                  className="cargo-link-btn cargo-inv-remove"
+                  onClick={onRemove}
+                >
+                  Remove invoice
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** "II. Raw Material" → "II. RAW MATERIAL", as the import schedule writes it. */
+const materialOf = (it: CutStockRow) => CUT_STOCK_CATEGORY_LABEL[it.category].toUpperCase();
+
+/**
+ * An import invoice, laid out like the import schedule: INV · DATE · QTY PKGS, then one line
+ * per item (CDC NO · ITEM · MATERIAL · QUANTITY · CDC UNIT · NW · GW · UNIT PRICE · AMOUNT).
+ * Choosing a CDC NO from the client's master list fills in its item, material, unit and price.
+ */
+function ImportInvoiceCard({
+  gi,
+  control,
+  open,
+  onToggle,
+  onRemove,
+  register,
+  onDate,
+  cdcItems,
+  errors,
+}: {
+  gi: number;
+  control: Control<FormValues>;
+  open: boolean;
+  onToggle: () => void;
+  onRemove: (() => void) | undefined;
+  register: ReturnType<typeof useFormContext<FormValues>>['register'];
+  onDate: (d: string) => void;
+  cdcItems: CutStockRow[];
+  errors: unknown;
+}) {
+  const { setValue, getValues } = useFormContext<FormValues>();
+  const lines = useFieldArray({ control, name: `invoices.${gi}.lines` });
+  const watchedLines = useWatch({ control, name: `invoices.${gi}.lines` });
+  const e = errors as InvErrors;
+  const sum = (watchedLines ?? []).reduce(
+    (t, l) => ({
+      qty: t.qty + toNum(l.pcs),
+      nw: t.nw + toNum(l.netWeightKg),
+      gw: t.gw + toNum(l.grossWeightKg),
+      amount: t.amount + toNum(l.pcs) * toNum(l.fobUnitPrice),
+    }),
+    { qty: 0, nw: 0, gw: 0, amount: 0 },
+  );
+  const lineErr = (li: number, f: string) =>
+    e?.lines && !('message' in e.lines)
+      ? (e.lines as Record<number, Record<string, { message?: string }>>)[li]?.[f]?.message
+      : undefined;
+  const emp = (v: number) => (v ? '' : ' is-empty');
+
+  // The item is chosen from the client's CDC master list; its CDC no., material and unit follow.
+  const key = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/[\s-]/g, '');
+  const itemOf = (cdcNo: string | null | undefined) =>
+    cdcNo ? cdcItems.find((x) => key(x.declareRef) === key(cdcNo)) : undefined;
+  const pickItem = (li: number, cdcNo: string) => {
+    const it = itemOf(cdcNo);
+    const path = `invoices.${gi}.lines.${li}` as const;
+    const opts = { shouldDirty: true };
+    setValue(`${path}.cdcNo`, it?.declareRef ?? '', opts);
+    setValue(`${path}.description`, it?.name ?? '', opts);
+    setValue(`${path}.material`, it ? materialOf(it) : '', opts);
+    setValue(`${path}.unit`, it?.unit ?? '', opts);
+    if (it && !toNum(getValues(`${path}.fobUnitPrice`)))
+      setValue(`${path}.fobUnitPrice`, String(Number(it.unitPrice)), opts);
+  };
+  /** CDC no., material and unit come from the chosen item: shown, not typed. */
+  const Auto = (li: number, field: 'cdcNo' | 'material' | 'unit', label: string) => (
+    <label className="cx-f">
+      <span className="cx-lbl">{label}</span>
+      <input
+        type="text"
+        className="cargo-cell cargo-cell-auto"
+        placeholder="—"
+        readOnly
+        tabIndex={-1}
+        {...register(`invoices.${gi}.lines.${li}.${field}`)}
+      />
+    </label>
+  );
+
+  const F = (
+    li: number,
+    field:
+      | 'material'
+      | 'description'
+      | 'unit'
+      | 'pcs'
+      | 'netWeightKg'
+      | 'grossWeightKg'
+      | 'fobUnitPrice',
+    label: string,
+    ph: string,
+    num = false,
+  ) => (
+    <label className="cx-f">
+      <span className="cx-lbl">{label}</span>
+      <input
+        type="text"
+        inputMode={num ? 'decimal' : undefined}
+        className={`cargo-cell${num ? ' cargo-cell-num' : ''}`}
+        placeholder={ph}
+        {...register(`invoices.${gi}.lines.${li}.${field}`)}
+        aria-invalid={!!lineErr(li, field)}
+        title={lineErr(li, field)}
+      />
+    </label>
+  );
+
+  return (
+    <div className={`cargo-inv${open ? ' open' : ''}`}>
+      <div className="cargo-inv-row">
+        <label className="cx-f">
+          <span className="cx-lbl">Invoice No.</span>
+          <input
+            type="text"
+            className="cargo-cell cargo-cell-strong"
+            placeholder="e.g. CNQ26044"
+            {...register(`invoices.${gi}.invoiceNo`)}
+            aria-invalid={!!e?.invoiceNo}
+            title={e?.invoiceNo?.message}
+          />
+        </label>
+        <label className="cx-f">
+          <span className="cx-lbl">Invoice Date</span>
+          <input
+            type="date"
+            className="cargo-cell"
+            {...register(`invoices.${gi}.invoiceDate`, {
+              onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
+            })}
+          />
+        </label>
+        <label className="cx-f">
+          <span className="cx-lbl">Qty Pkgs</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            className="cargo-cell cargo-cell-num"
+            placeholder="0"
+            {...register(`invoices.${gi}.packages`)}
+          />
+        </label>
+        <div className="cx-chips">
+          <div className="cx-chip">
+            <span className="cx-lbl">Quantity</span>
+            <div className={`cargo-sum${emp(sum.qty)}`}>{sum.qty ? fmtNum(sum.qty, 2) : '—'}</div>
+          </div>
+          <div className="cx-chip">
+            <span className="cx-lbl">NW (kg)</span>
+            <div className={`cargo-sum${emp(sum.nw)}`}>{sum.nw ? fmtNum(sum.nw, 2) : '—'}</div>
+          </div>
+          <div className="cx-chip">
+            <span className="cx-lbl">GW (kg)</span>
+            <div className={`cargo-sum${emp(sum.gw)}`}>{sum.gw ? fmtNum(sum.gw, 2) : '—'}</div>
+          </div>
+          <div className="cx-chip cx-chip-fob">
+            <span className="cx-lbl">Amount</span>
+            <div className={`cargo-sum cargo-sum-fob${emp(sum.amount)}`}>
+              {sum.amount ? `${money(sum.amount)} USD` : '—'}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="cargo-toggle"
+          aria-expanded={open}
+          aria-label="Show invoice items"
+          title="Show / hide items"
+          onClick={onToggle}
+        >
+          {CHEVRON}
+        </button>
+      </div>
+      {e?.invoiceNo?.message && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <FieldError message={e.invoiceNo.message} />
+        </div>
+      )}
+      <div className="cargo-inv-details">
+        <div className="cargo-inv-details-inner">
+          <div className="cargo-inv-panel">
+            <div className="cargo-panel-title">
+              Items{' '}
+              <small>
+                {lines.fields.length} {lines.fields.length === 1 ? 'item' : 'items'}
+              </small>
+            </div>
+            <div className="cargo-line-cards">
+              {lines.fields.map((f, li) => {
+                const l = watchedLines?.[li];
+                const amount =
+                  l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
+                return (
+                  <div className="cx-line cx-line-imp" key={f.id}>
+                    <div className="cx-line-group">
+                      <div className="cx-line-fields cx-g-item">
+                        <label className="cx-f">
+                          <span className="cx-lbl">Item</span>
+                          <select
+                            className="cargo-cell"
+                            value={itemOf(l?.cdcNo)?.declareRef ?? l?.cdcNo ?? ''}
+                            onChange={(ev) => pickItem(li, ev.target.value)}
+                            aria-invalid={!!lineErr(li, 'cdcNo')}
+                          >
+                            <option value="">
+                              {cdcItems.length ? 'Choose item…' : 'No CDC master list items'}
+                            </option>
+                            {/* A saved item no longer on the list stays shown as it was. */}
+                            {l?.cdcNo && !itemOf(l.cdcNo) && (
+                              <option value={l.cdcNo}>{l.description || l.cdcNo}</option>
+                            )}
+                            {CUT_STOCK_CATEGORIES.map((cat) => {
+                              const items = cdcItems.filter((it) => it.category === cat);
+                              return items.length ? (
+                                <optgroup key={cat} label={CUT_STOCK_CATEGORY_LABEL[cat]}>
+                                  {items.map((it) => (
+                                    <option key={it.id} value={it.declareRef}>
+                                      {it.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ) : null;
+                            })}
+                          </select>
+                        </label>
+                        {Auto(li, 'cdcNo', 'CDC No.')}
+                        {Auto(li, 'material', 'Material')}
+                      </div>
+                    </div>
+                    <div className="cx-line-group">
+                      <div className="cx-line-fields cx-g2">
+                        {F(li, 'pcs', 'Quantity', '0', true)}
+                        {Auto(li, 'unit', 'CDC Unit')}
+                      </div>
+                    </div>
+                    <div className="cx-line-group">
+                      <div className="cx-line-fields cx-g2">
+                        {F(li, 'netWeightKg', 'NW (kg)', '0.00', true)}
+                        {F(li, 'grossWeightKg', 'GW (kg)', '0.00', true)}
+                      </div>
+                    </div>
+                    <div className="cx-line-group">
+                      <div className="cx-line-fields cx-g2">
+                        {F(li, 'fobUnitPrice', 'Unit Price (USD)', '0.00', true)}
+                        <div className="cx-line-total-box">
+                          <span className="cx-lbl">Amount</span>
+                          <div className="cargo-line-total">
+                            {amount !== null ? `${money(amount)} USD` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {lines.fields.length > 1 && (
+                      <button
+                        type="button"
+                        className="cargo-row-del"
+                        title="Remove item"
+                        aria-label="Remove item"
+                        onClick={() => lines.remove(li)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="cx-line cx-line-imp cx-line-sum" aria-label="Invoice total">
+                <div className="cx-line-group">
+                  <div className="cx-sum-label">Invoice total</div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g2">
+                    <div className="cx-sum-cell">{fmtNum(sum.qty, 2)}</div>
+                    <div />
+                  </div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g2">
+                    <div className="cx-sum-cell">{fmtNum(sum.nw, 2)}</div>
+                    <div className="cx-sum-cell">{fmtNum(sum.gw, 2)}</div>
+                  </div>
+                </div>
+                <div className="cx-line-group">
+                  <div className="cx-line-fields cx-g2">
+                    <div />
+                    <div className="cx-sum-cell cx-sum-fob">{money(sum.amount)} USD</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="cargo-panel-foot">
+              <div className="cargo-foot-adds">
+                <button
+                  type="button"
+                  className="cargo-link-btn cargo-add-line"
+                  onClick={() => lines.append(blankLine())}
+                >
+                  + Add item
                 </button>
               </div>
               {onRemove && (

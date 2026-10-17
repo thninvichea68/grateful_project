@@ -110,18 +110,26 @@ export function computeLinesTotal(lines: { qty: Decimalish; unitPrice: Decimalis
 }
 
 /**
- * Invoice date = next business day after the declaration date
- * (Saturday → Monday, Sunday → Monday). Works on plain YYYY-MM-DD strings so the
- * result does not depend on the server's time zone.
+ * Issue date of a tax invoice, disbursement or debit note = the next working day after the
+ * customs declaration (clearance) date: Saturdays, Sundays and the given Cambodian public
+ * holidays (YYYY-MM-DD) are skipped, however many in a row (Friday → Monday; Friday before a
+ * holiday Monday → Tuesday). Always the next working day, even in the next month or year.
+ * Works on plain YYYY-MM-DD strings, so the result doesn't depend on the server's time zone.
  */
-export function nextBusinessDay(isoDate: string): { date: string; weekday: string } {
+export function nextBusinessDay(
+  isoDate: string,
+  holidays: ReadonlySet<string> = new Set(),
+): { date: string; weekday: string } {
   const [y, m, d] = isoDate.split('-').map(Number);
   if (!y || !m || !d) throw new Error(`Invalid ISO date: ${isoDate}`);
   const dt = new Date(Date.UTC(y, m - 1, d));
+  const off = () => {
+    const dow = dt.getUTCDay();
+    return dow === 0 || dow === 6 || holidays.has(dt.toISOString().slice(0, 10));
+  };
+  // At least one day on; then on past weekends and holidays (a year has well under 200).
   dt.setUTCDate(dt.getUTCDate() + 1);
-  const dow = dt.getUTCDay();
-  if (dow === 6) dt.setUTCDate(dt.getUTCDate() + 2);
-  else if (dow === 0) dt.setUTCDate(dt.getUTCDate() + 1);
+  for (let guard = 0; off() && guard < 200; guard++) dt.setUTCDate(dt.getUTCDate() + 1);
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return { date: dt.toISOString().slice(0, 10), weekday: weekdays[dt.getUTCDay()]! };
 }

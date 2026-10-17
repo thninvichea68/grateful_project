@@ -244,7 +244,7 @@ export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeR
         onOpen={() => toPlans('direction=EXPORT')}
       />
       <Card
-        tone="emerald"
+        tone="blue"
         icon={ICONS.shield}
         label="Customs Cleared"
         value={k.cleared}

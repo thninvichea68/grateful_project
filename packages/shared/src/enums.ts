@@ -14,7 +14,8 @@ export type TransportMode = (typeof TRANSPORT_MODES)[number];
 export const LOAD_TYPES = ['FCL', 'LCL', 'NONE'] as const;
 export type LoadType = (typeof LOAD_TYPES)[number];
 
-export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'EXCEPTION'] as const;
+/** Worked out from the shipment's dates and declarations (see shipmentStatusOf), never chosen. */
+export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 export const CLEARANCE_STATUSES = ['PENDING', 'IN_PROGRESS', 'CLEARED', 'EXCEPTION'] as const;
@@ -37,6 +38,16 @@ export type CheaStatus = (typeof CHEA_STATUSES)[number];
 
 export const BILLING_DOC_STATUSES = ['DRAFT', 'ISSUED', 'VOID'] as const;
 export type BillingDocStatus = (typeof BILLING_DOC_STATUSES)[number];
+
+/**
+ * A client's two monthly account statements, as in the Excel pack: ST-INV (tax invoices +
+ * disbursements) and STA-DN (debit notes). Each is paid with its own official receipt.
+ */
+export const STATEMENT_KINDS = ['INVOICE', 'DEBIT_NOTE'] as const;
+export type StatementKind = (typeof STATEMENT_KINDS)[number];
+
+export const PAYMENT_METHODS = ['CASH', 'BANK_TRANSFER', 'CHEQUE'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const QUOTATION_STATUSES = ['DRAFT', 'SENT', 'ACCEPTED', 'SUPERSEDED'] as const;
 export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
@@ -64,6 +75,9 @@ export type StaffStatus = (typeof STAFF_STATUSES)[number];
 
 export const CREDIT_NOTE_REF_TYPES = ['HOUSE_BILL', 'BILL_NO', 'HAWB_NO'] as const;
 export type CreditNoteRefType = (typeof CREDIT_NOTE_REF_TYPES)[number];
+/** Accounting's check of a submitted Credit Noted. */
+export const CREDIT_NOTE_REVIEW_STATUSES = ['UNCHECKED', 'CHECKED', 'REVISED'] as const;
+export type CreditNoteReviewStatus = (typeof CREDIT_NOTE_REVIEW_STATUSES)[number];
 
 export const AUDIT_ACTIONS = [
   'CREATE',
@@ -86,8 +100,25 @@ export const LOOKUP_TYPES = [
   'BROKER',
   'DEPARTMENT',
   'CHARGE',
+  'CHARGE_UNIT',
 ] as const;
 export type LookupType = (typeof LOOKUP_TYPES)[number];
+
+/** Units on credit note / charge lines; always offered, plus any added to "Charge units". */
+export const DEFAULT_CHARGE_UNITS = [
+  'SHIP',
+  'DAY',
+  'MIN',
+  'CBM',
+  'SET',
+  'TRUCK 1.5T',
+  'TRUCK 2.5T',
+  'TRUCK 5T',
+  '40FT',
+  '20FT',
+  'TIME',
+  'BALES',
+] as const;
 
 /* ---------- Display labels (prototype wording) ---------- */
 
@@ -95,18 +126,24 @@ export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   COMPLETED: 'Completed',
   IN_PROGRESS: 'In Progress',
   PENDING: 'Pending',
-  EXCEPTION: 'Exception',
 };
 
 /** CSS modifier used by the prototype's `.status-tag` / status pill classes. */
-export const SHIPMENT_STATUS_PILL: Record<
-  ShipmentStatus,
-  'completed' | 'progress' | 'pending' | 'exception'
-> = {
+export const SHIPMENT_STATUS_PILL: Record<ShipmentStatus, 'completed' | 'progress' | 'pending'> = {
   COMPLETED: 'completed',
   IN_PROGRESS: 'progress',
   PENDING: 'pending',
-  EXCEPTION: 'exception',
+};
+
+export const STATEMENT_KIND_LABEL: Record<StatementKind, string> = {
+  INVOICE: 'Tax invoices & disbursements',
+  DEBIT_NOTE: 'Debit notes',
+};
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  CASH: 'Cash',
+  BANK_TRANSFER: 'Bank transfer',
+  CHEQUE: 'Cheque',
 };
 
 export const CLEARANCE_STATUS_LABEL: Record<ClearanceStatus, string> = {

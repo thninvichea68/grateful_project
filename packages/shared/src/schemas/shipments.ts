@@ -39,6 +39,10 @@ export const cargoLineInputSchema = z.object({
   poNo: optText(60),
   styleNo: optText(60),
   htsCode: optText(20),
+  /** Imports: CDC group (e.g. RAW MATERIAL), item no. on the CDC master list and its unit. */
+  material: optText(60),
+  cdcNo: optText(20),
+  unit: optText(20),
   pcs: decimal(3, { min: 0 }).transform((v) => v ?? '0'),
   ctns: decimal(3, { min: 0 }).transform((v) => v ?? '0'),
   cbm: decimal(3, { min: 0 }).transform((v) => v ?? '0'),
@@ -59,6 +63,8 @@ export const cargoInvoiceInputSchema = z
     invoiceNo: z.string().trim().toUpperCase().min(1, 'Enter the invoice no.').max(40),
     invoiceDate: optDate,
     description: optText(300),
+    /** Imports: packages on the invoice (QTY PKGS). */
+    packages: decimal(3, { min: 0 }),
     lines: z.array(cargoLineInputSchema).min(1, 'Add at least one line'),
   })
   .superRefine((inv, ctx) => {
@@ -94,13 +100,64 @@ export const declarationInputSchema = z.object({
   cdcLines: z.array(cdcLineInputSchema).default([]),
 });
 
+/** A declaration row left completely blank: the form always offers one to fill in later. */
+function blankDeclarationRow(d: unknown): boolean {
+  if (!d || typeof d !== 'object') return false;
+  const x = d as Record<string, unknown>;
+  const text = (v: unknown) => String(v ?? '').trim();
+  return (
+    !text(x.id) &&
+    !text(x.declareNo) &&
+    !text(x.declareDate) &&
+    !text(x.notes) &&
+    !(Array.isArray(x.cdcLines) && x.cdcLines.length)
+  );
+}
+/** A container row with nothing typed in (the form always offers one; its size is preset). */
+function blankContainerRow(c: unknown): boolean {
+  if (!c || typeof c !== 'object') return false;
+  const x = c as Record<string, unknown>;
+  const text = (v: unknown) => String(v ?? '').trim();
+  return !text(x.containerNo) && !text(x.linerSeal) && !text(x.customsSeal);
+}
+const containerArray = z.array(containerInputSchema).default([]);
+/** Blank rows are dropped before validation, so the ready-made empty row never blocks saving. */
+const containerRows = z.preprocess(
+  (v) => (Array.isArray(v) ? v.filter((c) => !blankContainerRow(c)) : v),
+  containerArray,
+) as unknown as typeof containerArray;
+
+const declarationArray = z.array(declarationInputSchema).default([]);
+/** Blank rows are dropped before validation, so an untouched one never blocks saving. */
+const declarationRows = z.preprocess(
+  (v) => (Array.isArray(v) ? v.filter((d) => !blankDeclarationRow(d)) : v),
+  declarationArray,
+  // zod 3 types a preprocess input as `unknown`; keep the array's own input type for forms.
+) as unknown as typeof declarationArray;
+
+/**
+ * A shipment's status, worked out from its data:
+ * Completed — an import has its ETA Factory date, an export its ATD;
+ * In Progress — not completed, but a customs declaration is recorded;
+ * Pending — otherwise.
+ */
+export function shipmentStatusOf(s: {
+  direction: Direction;
+  atd?: string | null | undefined;
+  arriveFty?: string | null | undefined;
+  declarations?: { declareNo?: string | null | undefined }[] | undefined;
+}): ShipmentStatus {
+  if (s.direction === 'IMPORT' ? s.arriveFty : s.atd) return 'COMPLETED';
+  if (s.declarations?.some((d) => d.declareNo?.trim())) return 'IN_PROGRESS';
+  return 'PENDING';
+}
+
 export const shipmentInputSchema = z
   .object({
     clientId: z.string().uuid('Choose a client'),
     direction: z.enum(DIRECTIONS),
     transportMode: z.enum(TRANSPORT_MODES),
     loadType: z.enum(LOAD_TYPES),
-    status: z.enum(SHIPMENT_STATUSES).default('PENDING'),
     clearanceStatus: z.enum(CLEARANCE_STATUSES).default('PENDING'),
     shipperName: optText(200),
     consigneeId: optUuid,
@@ -130,9 +187,9 @@ export const shipmentInputSchema = z
     coNumber: optText(60),
     coStatus: optText(30),
     remark: optText(1000),
-    containers: z.array(containerInputSchema).default([]),
+    containers: containerRows,
     invoices: z.array(cargoInvoiceInputSchema).default([]),
-    declarations: z.array(declarationInputSchema).default([]),
+    declarations: declarationRows,
   })
   .superRefine((s, ctx) => {
     if (s.transportMode === 'AIR' && s.loadType !== 'NONE')
@@ -173,7 +230,9 @@ export const shipmentInputSchema = z
         path: ['declarations'],
         message: 'CDC lines are only used on import declarations',
       });
-  });
+  })
+  // The status is never entered: it follows from the dates and declarations.
+  .transform((s) => ({ ...s, status: shipmentStatusOf(s) }));
 export type ShipmentInput = z.input<typeof shipmentInputSchema>;
 export type ShipmentInputParsed = z.output<typeof shipmentInputSchema>;
 
@@ -316,11 +375,15 @@ export interface ShipmentDetail {
     invoiceNo: string;
     invoiceDate: string | null;
     description: string | null;
+    packages: string | null;
     lines: {
       id: string;
       poNo: string | null;
       styleNo: string | null;
       htsCode: string | null;
+      material: string | null;
+      cdcNo: string | null;
+      unit: string | null;
       pcs: string;
       ctns: string;
       cbm: string;
@@ -384,4 +447,31 @@ export interface OverImportViolation {
   declareRef: string;
   balance: string;
   requested: string;
+}
+
+/**
+ * Shipping Plan → Import from Excel: what an uploaded template would create (a check run) or
+ * did create. Problems are listed per sheet and row; nothing is saved while there are any.
+ */
+export interface PlanImportResult {
+  /** True when the file was saved (not a check run). */
+  saved: boolean;
+  shipments: {
+    ref: string;
+    clientCode: string;
+    direction: Direction;
+    transport: string;
+    hblNo: string | null;
+    date: string | null;
+    containers: number;
+    invoices: number;
+    declarations: number;
+    /** The new shipment reference, once saved (SHP-26-0001). */
+    reference?: string;
+    id?: string;
+  }[];
+  errors: { sheet: string; row: number | null; message: string }[];
+  /** Forwarders and consignees not in the system yet; created with the shipments. */
+  newForwarders: string[];
+  newConsignees: { name: string; clientCode: string }[];
 }

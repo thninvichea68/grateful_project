@@ -10,7 +10,7 @@ export interface NavItem {
   permission: Permission;
   /** Rendered with the prototype's indented sub-item style. */
   sub?: boolean;
-  badge?: 'openFollowUps';
+  badge?: 'openFollowUps' | 'creditNoteInbox';
   /** Exact match for NavLink active state. */
   end?: boolean;
 }
@@ -48,14 +48,14 @@ export const NAV: NavGroup[] = [
       {
         to: '/analytics',
         label: 'Analytics',
-        title: 'Analytics',
+        title: 'Analytics — Full Operations Breakdown',
         icon: 'analytics',
         permission: 'dashboard:read',
       },
       {
         to: '/cutstock',
-        label: 'Cut Stock',
-        title: 'Cut Stock Master List',
+        label: 'CDC Master List',
+        title: 'CDC Master List',
         icon: 'cutstock',
         permission: 'cutstock:read',
       },
@@ -85,6 +85,14 @@ export const NAV: NavGroup[] = [
         title: 'Accounting',
         icon: 'accounting',
         permission: 'accounting:read',
+      },
+      {
+        to: '/credit-noted',
+        label: 'Credit Noted',
+        title: 'Credit Noted (Chea Payment)',
+        icon: 'creditnote',
+        permission: 'creditnotes:read',
+        badge: 'creditNoteInbox',
       },
       {
         to: '/quotations',
@@ -125,7 +133,7 @@ export const NAV: NavGroup[] = [
 
 /** Titles for routes that are not sidebar items. Longest prefix wins. */
 const EXTRA_TITLES: [string, string][] = [
-  ['/accounting/credit-notes', 'Chea Payments / Credit Noted'],
+  ['/accounting/credit-notes', 'Chea Payments'],
   ['/accounting/tax-invoices', 'Tax Invoice'],
   ['/accounting/record-summaries', 'Record Summary'],
   ['/accounting/disbursements', 'Disbursement'],

@@ -75,7 +75,7 @@ export function CardDropdown<T extends string>({
   triggerClass = '',
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; disabled?: boolean }[];
   onChange: (v: T) => void;
   label: string;
   triggerClass?: string;
@@ -113,13 +113,16 @@ export function CardDropdown<T extends string>({
             key={o.value}
             role="menuitemradio"
             aria-checked={o.value === value}
-            tabIndex={0}
+            aria-disabled={o.disabled || undefined}
+            tabIndex={o.disabled ? -1 : 0}
             className={`card-dropdown-item${o.value === value ? ' active' : ''}`}
             onClick={() => {
+              if (o.disabled) return;
               onChange(o.value);
               setOpen(false);
             }}
             onKeyDown={(e) =>
+              !o.disabled &&
               (e.key === 'Enter' || e.key === ' ') &&
               (e.preventDefault(), onChange(o.value), setOpen(false))
             }

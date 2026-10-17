@@ -13,12 +13,27 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useDeclarationOptions, useDeleteLedger, useSaveLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 
 const n = (v: string | null | undefined) =>
   v === null || v === undefined ? '' : String(Number(v));
+
+const NUMBER_OF = {
+  'tax-invoices': 'invNo',
+  disbursements: 'disNo',
+  'debit-notes': 'dnNo',
+} as const;
+/**
+ * A tax invoice, DIS or debit note can be made once the shipment has that number (given when
+ * its Chea payment is checked) and none is made yet; credit notes and summaries any time.
+ */
+const canStart = (row: LedgerRow, t: (typeof BILLING_DOC_TYPES)[number]) =>
+  !(t in NUMBER_OF) ||
+  (!!row[NUMBER_OF[t as keyof typeof NUMBER_OF]] &&
+    !row.documents.some((d) => d.type === t && d.status !== 'VOID'));
 
 /** Create or edit one ledger row; VAT and net profit preview with the same formulas the server uses. */
 export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: () => void }) {
@@ -29,6 +44,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
   const del = useDeleteLedger();
   const editable = can('accounting:write');
   const [declQ, setDeclQ] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const options = useDeclarationOptions(declQ, !row);
 
   const {
@@ -84,7 +100,8 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
 
   const onSubmit = handleSubmit(async (values) => {
     if (row) {
-      const { declarationId: _d, ...patch } = values;
+      // Numbers are given on approval and released by deleting the invoice, never typed.
+      const { declarationId: _d, invNo: _i, disNo: _s, dnNo: _n, ...patch } = values;
       // Empty "auto" fields go back to their server defaults.
       for (const k of ['invDate', 'exchangeRate', 'commission'] as const)
         if (patch[k] === null || patch[k] === '') (patch as Record<string, unknown>)[k] = null;
@@ -119,7 +136,13 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
       <FieldError message={errors[name]?.message} />
     </div>
   );
-  const text = (name: keyof LedgerEntryInput, label: string, hint?: string, type = 'text') => (
+  const text = (
+    name: keyof LedgerEntryInput,
+    label: string,
+    hint?: string,
+    type = 'text',
+    locked = false,
+  ) => (
     <div className="form-field-group">
       <label htmlFor={`lg-${name}`}>{label}</label>
       <input
@@ -127,7 +150,8 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
         type={type}
         className="form-field-box"
         placeholder={hint ?? label}
-        readOnly={!editable}
+        readOnly={!editable || locked}
+        title={locked ? 'Set automatically' : undefined}
         {...register(name)}
         aria-invalid={!!errors[name]}
       />
@@ -229,11 +253,11 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           Numbers &amp; dates
         </div>
         <div className="form-fields-grid">
-          {text('invNo', 'INV No.', 'Set when the tax invoice is issued')}
-          {text('disNo', 'DIS No.', 'Set when issued')}
-          {text('dnNo', 'DN No.', 'Set when issued')}
-          {text('invDate', 'Invoice date', 'auto: next business day', 'date')}
-          {text('exchangeRate', 'USD → KHR rate', 'auto: rate on invoice date')}
+          {text('invNo', 'INV No.', 'Given when the Chea payment is checked', 'text', true)}
+          {text('disNo', 'DIS No.', 'Given when checked', 'text', true)}
+          {text('dnNo', 'DN No.', 'Given when checked', 'text', true)}
+          {text('invDate', 'Invoice date', 'auto: next working day', 'date', !!row)}
+          {text('exchangeRate', 'USD → KHR rate', 'auto: rate on invoice date', 'text', !!row)}
           {text('mark', 'Mark', 'e.g. Use 40H Truck')}
         </div>
         <div
@@ -276,7 +300,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
                 </Link>
               ))}
               {editable &&
-                BILLING_DOC_TYPES.map((t) => (
+                BILLING_DOC_TYPES.filter((t) => canStart(row, t)).map((t) => (
                   <Link
                     key={t}
                     to={`/accounting/${t}/new?recordId=${row.id}`}
@@ -291,7 +315,16 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
         )}
         {editable && (
           <div className={ui.actions}>
-            {row && !row.documents.some((d) => d.status === 'ISSUED') && (
+            {row && (row.invNo || row.disNo || row.dnNo) && (
+              <button
+                type="button"
+                className="btn-delete-shipment"
+                onClick={() => setDeleting(true)}
+              >
+                Delete invoice
+              </button>
+            )}
+            {row && !row.documents.some((d) => d.status === 'ISSUED') && !row.invNo && (
               <button type="button" className="btn-delete-shipment" onClick={() => void remove()}>
                 Delete entry
               </button>
@@ -305,6 +338,15 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           </div>
         )}
       </form>
+      {deleting && row && (
+        <DeleteInvoiceDialog
+          recordId={row.id}
+          declareNo={row.declareNo}
+          numbers={[row.invNo, row.disNo, row.dnNo].filter((x): x is string => !!x)}
+          onClose={() => setDeleting(false)}
+          onDeleted={onClose}
+        />
+      )}
     </Modal>
   );
 }

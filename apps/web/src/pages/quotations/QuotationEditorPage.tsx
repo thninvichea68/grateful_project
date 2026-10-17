@@ -9,6 +9,7 @@ import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { ApiError, api } from '../../lib/api';
 import { QUOTE_STATUS } from '../QuotationsPage';
+import { PrintLink } from '../../components/PrintLink';
 
 type Row = Record<string, string>;
 const rowsFrom = (t: QuotationTemplate): Row[] =>
@@ -166,14 +167,9 @@ function Editor({
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             {quote && (
-              <a
-                className="filter-btn"
-                href={`/print/quotation/${quote.id}`}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <PrintLink className="filter-btn" href={`/print/quotation/${quote.id}`}>
                 Print / PDF
-              </a>
+              </PrintLink>
             )}
             {can('quotations:write') && quote?.status === 'DRAFT' && (
               <button
@@ -269,7 +265,7 @@ function Editor({
                   <option value="">— prospect —</option>
                   {lookups.data?.clients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.code} · {c.name}
+                      {c.name}
                     </option>
                   ))}
                 </select>

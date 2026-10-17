@@ -16,6 +16,7 @@ import type {
 import { db } from '../../db/client';
 import { env } from '../../config/env';
 import { queryRows } from '../../lib/listing';
+import { shipmentDate } from '../../lib/shipmentDate';
 
 export interface Filters {
   from?: string | undefined;
@@ -40,13 +41,13 @@ export function yearRange(year: number): Period {
 }
 
 /**
- * WHERE for the shipments alias `s`. The period applies to ETA; shipments without an
- * ETA are excluded from period-bound figures (they have no month to belong to).
+ * WHERE for the shipments alias `s`. The period applies to the shipment's date (an import's
+ * ETA, an export's ETD); shipments with neither are left out of period-bound figures.
  */
 function shipWhere(f: Filters, opts: { ignoreDirection?: boolean } = {}): SQL {
   const c: SQL[] = [sql`s.deleted_at IS NULL`];
-  if (f.from) c.push(sql`s.eta >= ${f.from}::date`);
-  if (f.to) c.push(sql`s.eta <= ${f.to}::date`);
+  if (f.from) c.push(sql`${shipmentDate()} >= ${f.from}::date`);
+  if (f.to) c.push(sql`${shipmentDate()} <= ${f.to}::date`);
   if (f.clientId?.length)
     c.push(
       sql`s.client_id IN (${sql.join(
@@ -99,7 +100,7 @@ async function counts(f: Filters) {
            (count(*) FILTER (WHERE s.direction = 'EXPORT'))::int AS exports,
            (count(*) FILTER (WHERE s.clearance_status = 'CLEARED'))::int AS cleared,
            (count(*) FILTER (WHERE s.clearance_status IN ('PENDING', 'IN_PROGRESS')))::int AS pending,
-           (count(*) FILTER (WHERE s.status = 'EXCEPTION' OR s.clearance_status = 'EXCEPTION'))::int AS exceptions
+           (count(*) FILTER (WHERE s.clearance_status = 'EXCEPTION'))::int AS exceptions
     FROM shipments s ${shipWhere(f)}`,
   );
   return r!;
@@ -134,7 +135,7 @@ export async function monthlyVolume(f: Filters & Period): Promise<MonthlyVolumeR
     WITH months AS (
       SELECT generate_series(date_trunc('month', ${f.from}::date), date_trunc('month', ${f.to}::date), interval '1 month')::date AS m
     ), agg AS (
-      SELECT date_trunc('month', s.eta)::date AS m,
+      SELECT date_trunc('month', ${shipmentDate()})::date AS m,
              count(*) FILTER (WHERE s.direction = 'IMPORT') AS imports,
              count(*) FILTER (WHERE s.direction = 'EXPORT') AS exports
       FROM shipments s ${shipWhere(f)} GROUP BY 1
@@ -194,7 +195,7 @@ export async function forwarders(f: Filters): Promise<ForwarderRow[]> {
            (count(*) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL))::int AS arrived,
            round(100.0 * count(*) FILTER (WHERE s.ata <= s.eta) / nullif(count(*) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL), 0), 1)::float AS "onTimePct",
            round(avg(greatest(s.ata - s.eta, 0)) FILTER (WHERE s.ata IS NOT NULL AND s.eta IS NOT NULL), 1)::float AS "avgDelayDays",
-           round(100.0 * count(*) FILTER (WHERE s.status = 'EXCEPTION' OR s.clearance_status = 'EXCEPTION') / count(*), 1)::float AS "exceptionPct",
+           round(100.0 * count(*) FILTER (WHERE s.clearance_status = 'EXCEPTION') / count(*), 1)::float AS "exceptionPct",
            round(100.0 * count(*) FILTER (WHERE s.clearance_status = 'CLEARED') / count(*), 1)::float AS "clearedPct"
     FROM shipments s JOIN forwarders fw ON fw.id = s.forwarder_id
     ${shipWhere(f)}
@@ -268,7 +269,7 @@ function monthsBetween(from: string, to: string): string[] {
   let y = Number(from.slice(0, 4));
   let m = Number(from.slice(5, 7));
   const end = to.slice(0, 7);
-  for (let key = from.slice(0, 7); key <= end && out.length < 600; ) {
+  for (let key = from.slice(0, 7); key <= end && out.length < 600;) {
     out.push(key);
     m += 1;
     if (m > 12) [y, m] = [y + 1, 1];
@@ -370,6 +371,15 @@ export async function profit(
     WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) ${cf}
     GROUP BY c.id ORDER BY sum(a.net_profit) DESC`,
   );
+  const byClientMonthly = await queryRows<ProfitSummary['byClientMonthly'][number]>(
+    db,
+    sql`
+    SELECT to_char(date_trunc('month', a.inv_date), 'YYYY-MM') AS month, c.id AS "clientId", c.code, c.name,
+           sum(a.net_profit)::text AS "netProfit"
+    FROM accounting_records a JOIN clients c ON c.id = a.client_id
+    WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) ${cf}
+    GROUP BY 1, c.id ORDER BY 1, sum(a.net_profit) DESC`,
+  );
   const thisKey = today.slice(0, 7);
   const prevDate = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1))
     .toISOString()
@@ -390,6 +400,8 @@ export async function profit(
     lastMonth: lm?.netProfit ?? '0',
     monthly,
     byClient,
+    currentMonth: thisKey.startsWith(String(year)) ? thisKey : `${year}-12`,
+    byClientMonthly,
   };
 }
 
@@ -402,8 +414,8 @@ export async function liveConsignments(f: Filters, limit = 8): Promise<LiveConsi
            fw.name AS "forwarderName", p.name AS "clearancePortName", to_char(s.eta, 'YYYY-MM-DD') AS eta, s.status, s.clearance_status AS "clearanceStatus"
     FROM shipments s JOIN clients c ON c.id = s.client_id
     LEFT JOIN forwarders fw ON fw.id = s.forwarder_id LEFT JOIN ports p ON p.id = s.clearance_port_id
-    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'EXCEPTION', 'PENDING')
-    ORDER BY CASE s.status WHEN 'EXCEPTION' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END,
+    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'PENDING')
+    ORDER BY CASE WHEN s.clearance_status = 'EXCEPTION' THEN 0 WHEN s.status = 'IN_PROGRESS' THEN 1 ELSE 2 END,
              abs(s.eta - (now() AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date) NULLS LAST
     LIMIT ${limit}`,
   );

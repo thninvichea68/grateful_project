@@ -1,0 +1,166 @@
+/* Settings → Public holidays. */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.sub {
+  margin: 4px 0 0;
+  max-width: 620px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.year {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.year b {
+  min-width: 44px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.year button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.year button:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+}
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.grow {
+  flex: 1;
+  min-width: 180px;
+}
+.formButtons {
+  display: flex;
+  gap: 8px;
+}
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--status-exception-fg);
+}
+
+.table {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.row {
+  display: grid;
+  grid-template-columns: 170px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+}
+.row + .row {
+  border-top: 1px solid var(--border-subtle);
+}
+.date {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.name small {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+/* Days still to confirm against the year's sub-decree. */
+.row[data-provisional] .name small {
+  color: var(--status-pending-fg);
+  font-weight: 600;
+}
+.actions {
+  display: flex;
+  gap: 4px;
+}
+.actions button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--accent-primary);
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.actions button[data-danger] {
+  color: var(--status-exception-fg);
+}
+.actions button:hover {
+  background: var(--bg-surface-elevated);
+}
+.empty {
+  margin: 0;
+  padding: 18px 16px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.count {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

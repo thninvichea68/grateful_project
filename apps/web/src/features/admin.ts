@@ -9,7 +9,9 @@ import type {
   DeclarationRegisterRow,
   DocumentRow,
   FollowUpRow,
+  MarketPrices,
   Paginated,
+  PublicHoliday,
   QuotationDetail,
   QuotationRow,
   QuotationTemplate,
@@ -37,6 +39,20 @@ export const useRoles = () =>
   useQuery({ queryKey: ['staff', 'roles'], queryFn: () => api<RoleInfo[]>('/staff/roles') });
 export const useSettings = () =>
   useQuery({ queryKey: ['settings'], queryFn: () => api<SettingsBundle>('/settings') });
+/** Settings → Rates (fuel and metal boxes). Refetched every 5 minutes so the hourly metal prices show up. */
+export const useMarketPrices = () =>
+  useQuery({
+    queryKey: ['settings', 'market'],
+    queryFn: () => api<MarketPrices>('/settings/market-prices'),
+    refetchInterval: 5 * 60_000,
+  });
+
+/** Settings → Public holidays: one year's Cambodian public holidays, by date. */
+export const usePublicHolidays = (year: number) =>
+  useQuery({
+    queryKey: ['settings', 'holidays', year],
+    queryFn: () => api<PublicHoliday[]>('/settings/public-holidays', { query: { year } }),
+  });
 
 export const useFollowUps = (q: Query) =>
   useQuery({

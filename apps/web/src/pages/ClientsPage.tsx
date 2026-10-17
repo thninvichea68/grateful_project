@@ -117,7 +117,7 @@ export function ClientsPage() {
                     <td
                       style={{
                         textAlign: 'right',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         color:
                           Number(c.netProfitYtd) < 0
                             ? 'var(--status-exception-fg)'

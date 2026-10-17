@@ -149,7 +149,7 @@ export function DeclarationsSection({
                 </select>
               </div>
               <div className="form-field-group" style={{ justifyContent: 'flex-end' }}>
-                {ledger ? (
+                {di === 0 ? null : ledger ? (
                   <span className="create-header-desc">
                     Has a ledger entry in Accounting, so it can't be removed here.
                   </span>

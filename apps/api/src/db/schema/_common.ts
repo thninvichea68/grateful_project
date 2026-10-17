@@ -11,12 +11,15 @@ import {
   CUT_STOCK_CATEGORIES,
   CHEA_STATUSES,
   BILLING_DOC_STATUSES,
+  STATEMENT_KINDS,
+  PAYMENT_METHODS,
   QUOTATION_STATUSES,
   DOCUMENT_CATEGORIES,
   FOLLOW_UP_PRIORITIES,
   FOLLOW_UP_STATUSES,
   STAFF_STATUSES,
   CREDIT_NOTE_REF_TYPES,
+  CREDIT_NOTE_REVIEW_STATUSES,
   AUDIT_ACTIONS,
   LOOKUP_TYPES,
   ROLE_CODES,
@@ -35,12 +38,15 @@ export const clientStatusEnum = pgEnum('client_status', CLIENT_STATUSES);
 export const cutStockCategoryEnum = pgEnum('cut_stock_category', CUT_STOCK_CATEGORIES);
 export const cheaStatusEnum = pgEnum('chea_status', CHEA_STATUSES);
 export const billingDocStatusEnum = pgEnum('billing_doc_status', BILLING_DOC_STATUSES);
+export const statementKindEnum = pgEnum('statement_kind', STATEMENT_KINDS);
+export const paymentMethodEnum = pgEnum('payment_method', PAYMENT_METHODS);
 export const quotationStatusEnum = pgEnum('quotation_status', QUOTATION_STATUSES);
 export const documentCategoryEnum = pgEnum('document_category', DOCUMENT_CATEGORIES);
 export const followUpPriorityEnum = pgEnum('follow_up_priority', FOLLOW_UP_PRIORITIES);
 export const followUpStatusEnum = pgEnum('follow_up_status', FOLLOW_UP_STATUSES);
 export const staffStatusEnum = pgEnum('staff_status', STAFF_STATUSES);
 export const creditNoteRefTypeEnum = pgEnum('credit_note_ref_type', CREDIT_NOTE_REF_TYPES);
+export const creditNoteReviewEnum = pgEnum('credit_note_review', CREDIT_NOTE_REVIEW_STATUSES);
 export const auditActionEnum = pgEnum('audit_action', AUDIT_ACTIONS);
 export const lookupTypeEnum = pgEnum('lookup_type', LOOKUP_TYPES);
 

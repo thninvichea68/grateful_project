@@ -66,6 +66,13 @@ export const icons = {
       <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" />
     </svg>
   ),
+  /** Receipt: Credit Noted (the broker's payment voucher), as in the accounting engine. */
+  creditnote: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-3 2V2z" />
+      <path d="M8 7h8M8 11h8M8 15h5" />
+    </svg>
+  ),
   quotations: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -107,6 +114,13 @@ export const icons = {
       <line x1="21" y1="12" x2="9" y2="12" />
     </svg>
   ),
+  dots: (p: IconProps) => (
+    <svg {...base} strokeWidth={0} fill="currentColor" width={18} height={18} {...p}>
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+    </svg>
+  ),
   menu: (p: IconProps) => (
     <svg {...base} strokeWidth={2} width={20} height={20} {...p}>
       <path d="M4 6h16M4 12h16M4 18h16" />
@@ -135,11 +149,6 @@ export const icons = {
     <svg {...base} strokeWidth={2} width={18} height={18} {...p}>
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-    </svg>
-  ),
-  bolt: (p: IconProps) => (
-    <svg {...base} strokeWidth={2} strokeLinejoin="round" {...p}>
-      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="currentColor" fillOpacity={0.2} />
     </svg>
   ),
   close: (p: IconProps) => (

@@ -23,6 +23,12 @@ export const BASE_COLUMNS: PlanColumn[] = [
   },
   { key: 'qty', label: 'Quantity', render: qty },
   { key: 'eta', label: 'ETA Port', render: (r) => fmtDate(r.eta) },
+  // Customs clearance (declaration) date: the order the plan is listed in by default.
+  {
+    key: 'clearanceDate',
+    label: 'Clearance Date',
+    render: (r) => fmtDate(r.declarations[0]?.declareDate),
+  },
   { key: 'fwd', label: 'Forwarder', render: (r) => dash(r.forwarderName) },
   { key: 'clearance', label: 'Clearance Port', render: (r) => dash(r.clearancePortName) },
   { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },
@@ -43,7 +49,6 @@ export const BASE_COLUMNS: PlanColumn[] = [
 export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'reference', label: 'Reference', render: (r) => r.reference },
   { key: 'client', label: 'Client', render: (r) => r.clientCode },
-  { key: 'transport', label: 'Transport', render: (r) => r.direction },
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
   { key: 'invoiceDate', label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },
@@ -71,11 +76,11 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
       ),
   },
   { key: 'crd', label: 'CRD', render: (r) => fmtDate(r.crd) },
-  { key: 'thcHblNo', label: 'THC / HBL No.', render: (r) => dash(r.thcHblNo) },
-  { key: 'thcHblDate', label: 'THC / HBL Date', render: (r) => fmtDate(r.thcHblDate) },
+  { key: 'thcHblNo', label: 'INVOICE / THC No.', render: (r) => dash(r.thcHblNo) },
+  { key: 'thcHblDate', label: 'Invoice / THC Date', render: (r) => fmtDate(r.thcHblDate) },
   {
     key: 'thcHblAmount',
-    label: 'THC / HBL Amount',
+    label: 'Invoice / THC Amount',
     render: (r) => (r.thcHblAmount ? fmtMoney(r.thcHblAmount) : '-'),
   },
   {

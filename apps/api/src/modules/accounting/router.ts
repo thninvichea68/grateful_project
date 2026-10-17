@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import {
@@ -6,6 +6,14 @@ import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
   billingDocListQuerySchema,
+  billingDraftsInputSchema,
+  billingIssueInputSchema,
+  billingMonthQuerySchema,
+  receiptInputSchema,
+  receiptListQuerySchema,
+  creditNoteListQuerySchema,
+  creditNoteReviewInputSchema,
+  creditNoteReviewQuerySchema,
   ledgerInputSchema,
   ledgerListQuerySchema,
   ledgerUpdateSchema,
@@ -13,33 +21,105 @@ import {
 } from '@gs/shared';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
+import { badRequest, notFound } from '../../lib/errors';
 import { attachmentName } from '../../lib/http';
 import * as ledger from './ledger';
 import * as docs from './docs';
-import { prefill } from './prefill';
+import * as billing from './billing';
+import { clientPrefill, creditNotePrefill, prefill } from './prefill';
+import {
+  allowedClients,
+  assertClientAllowed,
+  assertClientVisible,
+  scopeClients,
+} from '../../lib/clientScope';
 
 const idParam = z.object({ id: z.string().uuid('Invalid id') });
+const clientParam = z.object({ clientId: z.string().uuid('Invalid client') });
+const receiptParam = z.object({ receiptId: z.string().uuid('Invalid receipt') });
 const typeParam = z.object({
   type: z.enum(BILLING_DOC_TYPES, { message: 'Unknown document type' }),
 });
 
 export const accountingRouter = Router();
-accountingRouter.use(requireAuth, requirePermission('accounting:read'));
+accountingRouter.use(requireAuth);
+
+/**
+ * Credit Noted (the customs broker's vouchers) has its own permissions so a broker can work
+ * on it without seeing the rest of accounting; everything else needs accounting access.
+ */
+const isCreditNotes = (path: string) =>
+  path.startsWith('/docs/credit-notes') || path.startsWith('/credit-notes/');
+accountingRouter.use((req, res, next) =>
+  requirePermission(isCreditNotes(req.path) ? 'creditnotes:read' : 'accounting:read')(
+    req,
+    res,
+    next,
+  ),
+);
+/** Writing a document: credit notes need creditnotes:write, the others accounting:write. */
+const docWrite: RequestHandler = (req, res, next) =>
+  requirePermission(req.params.type === 'credit-notes' ? 'creditnotes:write' : 'accounting:write')(
+    req,
+    res,
+    next,
+  );
+
+// Every /:id route (ledger entries and billing documents): a record of a client this user
+// can't see looks like it doesn't exist.
+accountingRouter.param('id', async (req, _res, next, id: string) => {
+  try {
+    if (allowedClients(req) && z.string().uuid().safeParse(id).success) {
+      const type = req.params.type as BillingDocType | undefined;
+      const clientId =
+        type && BILLING_DOC_TYPES.includes(type)
+          ? (await docs.getDoc(type, id)).clientId
+          : (await ledger.getLedger(id)).clientId;
+      assertClientVisible(req, clientId, type ? 'Document' : 'Ledger entry');
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* ---------- Monthly ledger ---------- */
 accountingRouter.get('/ledger', async (req, res) =>
-  res.json(await ledger.listLedger(parse(ledgerListQuerySchema, req.query))),
+  res.json(
+    await ledger.listLedger({
+      ...parse(ledgerListQuerySchema, req.query),
+      clientIds: scopeClients(req),
+    }),
+  ),
 );
 accountingRouter.get('/declarations', async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
-  res.json(await ledger.declarationOptions(q));
+  res.json(await ledger.declarationOptions(q, scopeClients(req)));
+});
+
+/** Shipments ready for a document of a type: the editor's Declare No. picker. */
+accountingRouter.get('/eligible/:type', async (req, res) => {
+  const { type } = parse(
+    z.object({
+      type: z.enum(['tax-invoices', 'disbursements', 'debit-notes'], {
+        message: 'Unknown document type',
+      }),
+    }),
+    req.params,
+  );
+  res.json(await ledger.eligibleRecords(type, scopeClients(req)));
 });
 
 accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
   const q = parse(ledgerListQuerySchema, { ...req.query, page: 1 });
   const period = q.month ?? q.year ?? 'all';
   // Every matching row (a full year can exceed one page), not just the first page.
-  const { data, totals } = await ledger.listLedger({ ...q, pageSize: 100_000, sort: 'invDate' });
+  const { data, totals } = await ledger.listLedger({
+    ...q,
+    clientIds: scopeClients(req),
+    pageSize: 100_000,
+    sort: 'invDate',
+  });
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`Ledger ${period}`, {
     views: [{ state: 'frozen', ySplit: 1 }],
@@ -103,7 +183,10 @@ accountingRouter.get('/ledger/:id', async (req, res) =>
   res.json(await ledger.getLedger(parse(idParam, req.params).id)),
 );
 accountingRouter.post('/ledger', requirePermission('accounting:write'), async (req, res) => {
-  const id = await ledger.createLedger(parse(ledgerInputSchema, req.body), req);
+  const input = parse(ledgerInputSchema, req.body);
+  if (allowedClients(req))
+    assertClientAllowed(req, await ledger.declarationClientId(input.declarationId));
+  const id = await ledger.createLedger(input, req);
   res.status(201).json(await ledger.getLedger(id));
 });
 accountingRouter.patch('/ledger/:id', requirePermission('accounting:write'), async (req, res) => {
@@ -111,57 +194,225 @@ accountingRouter.patch('/ledger/:id', requirePermission('accounting:write'), asy
   await ledger.updateLedger(id, parse(ledgerUpdateSchema, req.body), req);
   res.json(await ledger.getLedger(id));
 });
+/**
+ * Deletes a shipment's invoice set (tax invoice, DIS, debit note) and releases its numbers to
+ * the next approved shipment; the shipment is "not invoiced" again.
+ */
+accountingRouter.post(
+  '/ledger/:id/delete-invoice',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { id } = parse(idParam, req.params);
+    const { reason } = parse(
+      z.object({
+        reason: z.string().trim().min(3, 'Give a reason for deleting the invoice').max(300),
+      }),
+      req.body,
+    );
+    res.json(await docs.releaseInvoiceSet(id, reason, req));
+  },
+);
 accountingRouter.delete('/ledger/:id', requirePermission('accounting:write'), async (req, res) => {
   await ledger.deleteLedger(parse(idParam, req.params).id, req);
   res.status(204).end();
 });
 
+/** Declarations to start a Credit Noted from (any declaration, ledger row or not). */
+accountingRouter.get('/credit-notes/declarations', async (req, res) => {
+  const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
+  res.json(await ledger.creditNoteDeclarations(q, scopeClients(req)));
+});
+
+/** Accounting's check of submitted credit notes: an accounting page, not the broker's. */
+accountingRouter.get(
+  '/credit-notes/review',
+  requirePermission('accounting:read'),
+  async (req, res) => {
+    const q = parse(creditNoteReviewQuerySchema, req.query);
+    if (q.clientId) assertClientAllowed(req, q.clientId);
+    res.json(await docs.listCreditNoteReview({ ...q, clientIds: scopeClients(req) }));
+  },
+);
+/** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
+accountingRouter.get('/credit-notes/list', async (req, res) => {
+  const q = parse(creditNoteListQuerySchema, req.query);
+  if (q.clientId) assertClientAllowed(req, q.clientId);
+  res.json(
+    await docs.listCreditNoteReview({ ...q, allStatuses: true, clientIds: scopeClients(req) }),
+  );
+});
+accountingRouter.patch(
+  '/docs/:type/:id/review',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { type } = parse(typeParam, req.params);
+    if (type !== 'credit-notes') throw notFound('Document');
+    const { id } = parse(idParam, req.params);
+    const { reviewStatus, message } = parse(creditNoteReviewInputSchema, req.body);
+    // The shipments numbered by this approval (none unless it was checked).
+    res.json({ numbered: await docs.setCreditNoteReview(id, reviewStatus, message, req) });
+  },
+);
+
+/** Accounting's messages about one credit note (the editor shows the latest one). */
+accountingRouter.get('/docs/:type/:id/messages', async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  if (type !== 'credit-notes') throw notFound('Document');
+  const { id } = parse(idParam, req.params);
+  res.json(await docs.creditNoteMessagesFor(id));
+});
+
+/* The broker's Credit Noted inbox: messages from accounting addressed to me. */
+accountingRouter.get('/credit-notes/inbox', async (req, res) => {
+  res.json(await docs.creditNoteInbox(req.auth!.userId));
+});
+accountingRouter.post('/credit-notes/inbox/read', async (req, res) => {
+  const { messageId } = parse(z.object({ messageId: z.string().uuid().optional() }), req.body);
+  await docs.markCreditNoteMessagesRead(req.auth!.userId, messageId);
+  res.status(204).end();
+});
+
+/* ---------- Client Billing: a client's month (documents, statements, receipts) ---------- */
+accountingRouter.get('/billing', async (req, res) => {
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.overview(month, scopeClients(req)));
+});
+accountingRouter.get('/billing/:clientId', async (req, res) => {
+  const { clientId } = parse(clientParam, req.params);
+  assertClientVisible(req, clientId, 'Client');
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.clientMonth(clientId, month));
+});
+/** Everything to print the month's pack: issued documents in full, statements, receipts. */
+accountingRouter.get('/billing/:clientId/pack', async (req, res) => {
+  const { clientId } = parse(clientParam, req.params);
+  assertClientVisible(req, clientId, 'Client');
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await billing.pack(clientId, month));
+});
+accountingRouter.post(
+  '/billing/:clientId/drafts',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientParam, req.params);
+    assertClientAllowed(req, clientId);
+    const input = parse(billingDraftsInputSchema, req.body);
+    res.status(201).json(await billing.createDrafts(clientId, input, req));
+  },
+);
+accountingRouter.post(
+  '/billing/:clientId/issue',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientParam, req.params);
+    assertClientAllowed(req, clientId);
+    const { month } = parse(billingIssueInputSchema, req.body);
+    res.json(await billing.issueDrafts(clientId, month, req));
+  },
+);
+
+/* ---------- Official receipts (payments against the account statements) ---------- */
+accountingRouter.get('/receipts', async (req, res) => {
+  const q = parse(receiptListQuerySchema, req.query);
+  if (q.clientId) assertClientAllowed(req, q.clientId);
+  res.json(await billing.listReceipts({ ...q, clientIds: scopeClients(req) }));
+});
+accountingRouter.post('/receipts', requirePermission('accounting:write'), async (req, res) => {
+  const input = parse(receiptInputSchema, req.body);
+  assertClientAllowed(req, input.clientId);
+  const id = await billing.createReceipt(input, req);
+  res.status(201).json(await billing.getReceipt(id));
+});
+accountingRouter.get('/receipts/:receiptId', async (req, res) => {
+  const receipt = await billing.getReceipt(parse(receiptParam, req.params).receiptId);
+  assertClientVisible(req, receipt.clientId, 'Official receipt');
+  res.json(receipt);
+});
+accountingRouter.post(
+  '/receipts/:receiptId/void',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { receiptId } = parse(receiptParam, req.params);
+    const { reason } = parse(
+      z.object({ reason: z.string().trim().min(3, 'Give a reason for voiding').max(300) }),
+      req.body,
+    );
+    assertClientVisible(req, (await billing.getReceipt(receiptId)).clientId, 'Official receipt');
+    await billing.voidReceipt(receiptId, reason, req);
+    res.json(await billing.getReceipt(receiptId));
+  },
+);
+
 /* ---------- Billing documents (one set of routes for all five types) ---------- */
 accountingRouter.get('/docs/:type', async (req, res) => {
   const { type } = parse(typeParam, req.params);
-  res.json(await docs.listDocs(type, parse(billingDocListQuerySchema, req.query)));
+  res.json(
+    await docs.listDocs(type, {
+      ...parse(billingDocListQuerySchema, req.query),
+      clientIds: scopeClients(req),
+    }),
+  );
 });
 accountingRouter.get('/docs/:type/prefill', async (req, res) => {
   const { type } = parse(typeParam, req.params);
+  if (type === 'credit-notes' && typeof req.query.declarationId === 'string') {
+    const { declarationId } = parse(
+      z.object({ declarationId: z.string().uuid('Choose a declaration') }),
+      req.query,
+    );
+    const draft = await creditNotePrefill(declarationId);
+    assertClientVisible(req, draft.clientId as string, 'Declaration');
+    return void res.json(draft);
+  }
+  // A document of no shipment (e.g. a monthly service-fee debit note): from the client.
+  if (typeof req.query.clientId === 'string' && !req.query.recordId) {
+    const { clientId, date } = parse(
+      z.object({
+        clientId: z.string().uuid('Choose a client'),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD'),
+      }),
+      req.query,
+    );
+    assertClientVisible(req, clientId, 'Client');
+    return void res.json(await clientPrefill(type, clientId, date));
+  }
   const { recordId } = parse(
     z.object({ recordId: z.string().uuid('Choose a ledger entry') }),
     req.query,
   );
+  if (allowedClients(req))
+    assertClientVisible(req, (await ledger.getLedger(recordId)).clientId, 'Ledger entry');
   res.json(await prefill(type, recordId));
 });
 accountingRouter.get('/docs/:type/:id', async (req, res) => {
   const { type } = parse(typeParam, req.params);
   res.json(await docs.getDoc(type, parse(idParam, req.params).id));
 });
-accountingRouter.post('/docs/:type', requirePermission('accounting:write'), async (req, res) => {
+accountingRouter.post('/docs/:type', docWrite, async (req, res) => {
   const { type } = parse(typeParam, req.params);
   const input = parse(BILLING_DOC_SCHEMAS[type] as z.ZodType, req.body) as Parameters<
     typeof docs.createDoc
   >[1];
+  assertClientAllowed(req, input.clientId);
   const id = await docs.createDoc(type, input, req);
   res.status(201).json(await docs.getDoc(type, id));
 });
-accountingRouter.put('/docs/:type/:id', requirePermission('accounting:write'), async (req, res) => {
+accountingRouter.put('/docs/:type/:id', docWrite, async (req, res) => {
   const { type } = parse(typeParam, req.params);
   const { id } = parse(idParam, req.params);
-  await docs.updateDoc(
-    type,
-    id,
-    parse(BILLING_DOC_SCHEMAS[type] as z.ZodType, req.body) as Parameters<typeof docs.updateDoc>[2],
-    req,
-  );
+  const input = parse(BILLING_DOC_SCHEMAS[type] as z.ZodType, req.body) as Parameters<
+    typeof docs.updateDoc
+  >[2];
+  assertClientAllowed(req, input.clientId);
+  await docs.updateDoc(type, id, input, req);
   res.json(await docs.getDoc(type, id));
 });
-accountingRouter.post(
-  '/docs/:type/:id/issue',
-  requirePermission('accounting:write'),
-  async (req, res) => {
-    const { type } = parse(typeParam, req.params);
-    const { id } = parse(idParam, req.params);
-    await docs.issueDoc(type, id, req);
-    res.json(await docs.getDoc(type, id));
-  },
-);
+accountingRouter.post('/docs/:type/:id/issue', docWrite, async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  const { id } = parse(idParam, req.params);
+  await docs.issueDoc(type, id, req);
+  res.json(await docs.getDoc(type, id));
+});
 accountingRouter.post(
   '/docs/:type/:id/void',
   requirePermission('accounting:write'),
@@ -176,15 +427,38 @@ accountingRouter.post(
     res.json(await docs.getDoc(type, id));
   },
 );
-accountingRouter.delete(
-  '/docs/:type/:id',
+/**
+ * Authorised correction of an issued tax invoice, DIS or debit note: its number and/or issue
+ * date, with a required reason kept in the audit history.
+ */
+accountingRouter.post(
+  '/docs/:type/:id/correct',
   requirePermission('accounting:write'),
   async (req, res) => {
     const { type } = parse(typeParam, req.params);
-    await docs.deleteDoc(type, parse(idParam, req.params).id, req);
-    res.status(204).end();
+    const { id } = parse(idParam, req.params);
+    if (!docs.isIssueDated(type))
+      throw badRequest('Only tax invoices, disbursements and debit notes can be corrected');
+    const body = parse(
+      z.object({
+        number: z.string().trim().max(30).optional(),
+        date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the date')
+          .optional(),
+        reason: z.string().trim().min(3, 'Give a reason for the correction').max(300),
+      }),
+      req.body,
+    );
+    await docs.correctIssuedDoc(type, id, body, req);
+    res.json(await docs.getDoc(type, id));
   },
 );
+accountingRouter.delete('/docs/:type/:id', docWrite, async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  await docs.deleteDoc(type, parse(idParam, req.params).id, req);
+  res.status(204).end();
+});
 
 accountingRouter.get('/docs/:type/:id/export.xlsx', async (req, res) => {
   const { type } = parse(typeParam, req.params) as { type: BillingDocType };

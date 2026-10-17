@@ -1,9 +1,10 @@
 import { eq, sql } from 'drizzle-orm';
 import {
   computeLedger,
-  nextBusinessDay,
   toMoneyString,
+  type CreditNoteDeclaration,
   type DeclarationOption,
+  type EligibleRecord,
   type LedgerRow,
   type LedgerSummary,
   type Paginated,
@@ -20,6 +21,7 @@ import {
   shipments,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
+import { issueDateFor } from '../../lib/issueDate';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import {
   likePattern,
@@ -29,6 +31,7 @@ import {
   toPaginated,
   whereAll,
 } from '../../lib/listing';
+import { clientCondition } from '../../lib/clientScope';
 
 type LedgerInput = z.output<typeof ledgerInputSchema>;
 
@@ -47,7 +50,7 @@ export async function rateOn(tx: DbOrTx, date: string): Promise<string> {
 const SELECT = sql`
   SELECT a.id, a.declaration_id AS "declarationId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
          s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
-         c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", p.code AS "portCode",
+         c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", p.code AS "portCode", p.customs_port_no AS "portNo", p.short_name AS "portName",
          a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
          a.exchange_rate::text AS "exchangeRate", a.clear_fee::text AS "clearFee", a.thc::text AS thc, a.other_pay::text AS "otherPay",
          a.commission::text AS commission, a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.vat::text AS vat,
@@ -74,6 +77,8 @@ interface ListParams {
   month?: string | undefined;
   year?: string | undefined;
   clientId?: string | undefined;
+  /** Per-user client access; undefined = every client. */
+  clientIds?: string[] | undefined;
   cheaStatus?: string | undefined;
 }
 
@@ -88,6 +93,8 @@ function where(p: ListParams) {
       sql`a.inv_date >= ${`${p.year}-01-01`}::date AND a.inv_date < (${`${p.year}-01-01`}::date + interval '1 year')`,
     );
   if (p.clientId) c.push(sql`a.client_id = ${p.clientId}`);
+  const scoped = clientCondition(sql`a.client_id`, p.clientIds);
+  if (scoped) c.push(scoped);
   if (p.cheaStatus) c.push(sql`a.chea_status = ${p.cheaStatus}`);
   if (p.q) {
     const like = likePattern(p.q);
@@ -128,8 +135,12 @@ export async function getLedger(id: string): Promise<LedgerRow> {
 }
 
 /** Declarations that don't have a ledger row yet (for "New ledger entry"). */
-export async function declarationOptions(q: string | undefined): Promise<DeclarationOption[]> {
+export async function declarationOptions(
+  q: string | undefined,
+  clientIds?: string[],
+): Promise<DeclarationOption[]> {
   const like = q ? likePattern(q) : null;
+  const scoped = clientCondition(sql`s.client_id`, clientIds);
   return queryRows<DeclarationOption>(
     db,
     sql`
@@ -137,9 +148,48 @@ export async function declarationOptions(q: string | undefined): Promise<Declara
            c.id AS "clientId", c.code AS "clientCode", s.direction
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN accounting_records a ON a.declaration_id = d.id
-    WHERE a.id IS NULL ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
+    WHERE a.id IS NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 30`,
   );
+}
+
+/**
+ * Declarations a Credit Noted can start from: all of them (ledger row or not), newest first,
+ * flagged when a live (non-void) credit note already exists for the declare no.
+ */
+export async function creditNoteDeclarations(
+  q: string | undefined,
+  clientIds?: string[],
+): Promise<CreditNoteDeclaration[]> {
+  const like = q ? likePattern(q) : null;
+  const scoped = clientCondition(sql`s.client_id`, clientIds);
+  return queryRows(
+    db,
+    sql`
+    SELECT d.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", s.reference AS "shipmentReference",
+           c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", s.direction,
+           s.transport_mode AS "transportMode", s.load_type AS "loadType", p.short_name AS "portName", s.hbl_no AS "hblNo",
+           (SELECT container_no FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerNo",
+           (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
+           (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
+           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS "grossWeightKg",
+           coalesce((SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS cbm,
+           (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
+    LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id)
+    WHERE true ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like} OR c.name ILIKE ${like} OR s.hbl_no ILIKE ${like})` : sql``}
+    ORDER BY d.declare_date DESC, d.declare_no LIMIT 40`,
+  );
+}
+
+/** The client a declaration belongs to (through its shipment), for access checks. */
+export async function declarationClientId(declarationId: string): Promise<string | null> {
+  const [r] = await db
+    .select({ clientId: shipments.clientId })
+    .from(customsDeclarations)
+    .innerJoin(shipments, eq(shipments.id, customsDeclarations.shipmentId))
+    .where(eq(customsDeclarations.id, declarationId));
+  return r?.clientId ?? null;
 }
 
 /** Recalculate VAT and net profit from the row's stored amounts (used after any change). */
@@ -162,7 +212,12 @@ export async function recompute(tx: DbOrTx, id: string): Promise<void> {
 }
 
 export async function createLedger(input: LedgerInput, req: Request): Promise<string> {
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => insertLedger(tx, input, req));
+}
+
+/** Creates a ledger row for a declaration inside an existing transaction. */
+export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request): Promise<string> {
+  {
     const [d] = await tx
       .select({ d: customsDeclarations, s: shipments, c: clients })
       .from(customsDeclarations)
@@ -175,7 +230,8 @@ export async function createLedger(input: LedgerInput, req: Request): Promise<st
       .from(accountingRecords)
       .where(eq(accountingRecords.declarationId, input.declarationId));
     if (exists) throw conflict(`Declaration ${d.d.declareNo} already has a ledger entry`);
-    const invDate = input.invDate ?? nextBusinessDay(d.d.declareDate).date;
+    // Issue date: next working day after the declaration (clearance) date, past holidays.
+    const invDate = input.invDate ?? (await issueDateFor(tx, d.d.declareDate));
     const [row] = await tx
       .insert(accountingRecords)
       .values({
@@ -211,7 +267,7 @@ export async function createLedger(input: LedgerInput, req: Request): Promise<st
       req,
     );
     return row!.id;
-  });
+  }
 }
 
 export async function updateLedger(
@@ -227,6 +283,12 @@ export async function updateLedger(
       .for('update');
     if (!before) throw notFound('Ledger entry');
     const values = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+    // INV / DIS / DN numbers are given on approval and released by deleting the invoice.
+    for (const k of ['invNo', 'disNo', 'dnNo'] as const)
+      if (k in values && (values[k] ?? null) !== before[k])
+        throw businessRule(
+          'Invoice numbers are given automatically when the Chea payment is checked. Delete the invoice to release them.',
+        );
     // Clearing optional computed fields restores their defaults.
     if (values.commission === null) {
       const [c] = await tx
@@ -245,7 +307,7 @@ export async function updateLedger(
         .select({ dd: customsDeclarations.declareDate })
         .from(customsDeclarations)
         .where(eq(customsDeclarations.id, before.declarationId));
-      values.invDate = nextBusinessDay(d!.dd).date;
+      values.invDate = await issueDateFor(tx, d!.dd);
     }
     await tx
       .update(accountingRecords)
@@ -278,8 +340,42 @@ export async function deleteLedger(id: string, req: Request): Promise<void> {
             + (SELECT count(*) FROM credit_notes WHERE accounting_record_id = ${id} AND status = 'ISSUED')
             + (SELECT count(*) FROM record_summaries WHERE accounting_record_id = ${id} AND status = 'ISSUED'))::int AS n`,
     );
-    if (issued!.n) throw conflict('This ledger entry has issued documents. Void them first.');
+    if (issued!.n) throw conflict('This ledger entry has issued documents. Cancel them first.');
     await tx.delete(accountingRecords).where(eq(accountingRecords.id, id));
     await audit(tx, { action: 'DELETE', entity: 'accounting_record', entityId: id, before }, req);
   });
+}
+
+const ELIGIBLE: Record<
+  'tax-invoices' | 'disbursements' | 'debit-notes',
+  { table: string; col: string }
+> = {
+  'tax-invoices': { table: 'tax_invoices', col: 'inv_no' },
+  disbursements: { table: 'disbursements', col: 'dis_no' },
+  'debit-notes': { table: 'debit_notes', col: 'dn_no' },
+};
+
+/**
+ * Shipments a tax invoice, DIS or debit note can be made for: approved (they have that
+ * number) and with no live document of the type yet, in clearance-date order.
+ */
+export async function eligibleRecords(
+  type: keyof typeof ELIGIBLE,
+  clientIds?: string[],
+): Promise<EligibleRecord[]> {
+  const t = ELIGIBLE[type];
+  const scoped = clientCondition(sql`a.client_id`, clientIds);
+  return queryRows<EligibleRecord>(
+    db,
+    sql`
+    SELECT a.id AS "recordId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+           to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.id AS "clientId", c.code AS "clientCode",
+           a.${sql.raw(t.col)} AS number, s.direction, s.hbl_no AS hbl
+    FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+    JOIN shipments s ON s.id = d.shipment_id JOIN clients c ON c.id = a.client_id
+    WHERE a.${sql.raw(t.col)} IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM ${sql.raw(t.table)} x WHERE x.accounting_record_id = a.id AND x.status <> 'VOID')
+      ${scoped ? sql`AND ${scoped}` : sql``}
+    ORDER BY d.declare_date, d.declare_no LIMIT 500`,
+  );
 }

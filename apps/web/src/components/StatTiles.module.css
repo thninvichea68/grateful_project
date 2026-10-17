@@ -29,7 +29,7 @@
 }
 .value {
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.3px;
   color: var(--text-primary);
   white-space: nowrap;
@@ -45,6 +45,18 @@
 }
 .tile[data-tone='success'] .value {
   color: var(--status-completed-fg);
+}
+.tile[data-tone='info'] {
+  background: var(--status-progress-bg);
+}
+.tile[data-tone='info'] .value {
+  color: var(--status-progress-fg);
+}
+.tile[data-tone='paid'] {
+  background: var(--status-paid-bg);
+}
+.tile[data-tone='paid'] .value {
+  color: var(--status-paid-fg);
 }
 .tile[data-tone='warning'] {
   background: var(--status-pending-bg);

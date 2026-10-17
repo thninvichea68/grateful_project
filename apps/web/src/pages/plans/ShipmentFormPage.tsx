@@ -12,7 +12,7 @@ import {
   CLEARANCE_STATUSES,
   CLEARANCE_STATUS_LABEL,
   CONTAINER_SIZES,
-  SHIPMENT_STATUSES,
+  shipmentStatusOf,
   SHIPMENT_STATUS_LABEL,
   shipmentInputSchema,
   type LookupsResponse,
@@ -32,11 +32,18 @@ import { ErrorBanner, FieldError } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import { ApiError } from '../../lib/api';
+import { downloadFile } from '../../lib/files';
 import { formResolver } from '../../lib/zodForm';
 import { AddNewSelect } from './AddNewSelect';
 import { CargoSection } from './CargoSection';
 import { DeclarationsSection } from './DeclarationsSection';
-import { cleanForSubmit, emptyForm, fromDetail, type FormValues } from './formModel';
+import {
+  blankContainer,
+  cleanForSubmit,
+  emptyForm,
+  fromDetail,
+  type FormValues,
+} from './formModel';
 import f from './ShipmentForm.module.css';
 
 interface Step {
@@ -56,8 +63,8 @@ const TERMS = [
   { value: 'LCL', label: 'CFS / CFS (LCL)' },
 ];
 const DIRECTIONS = [
-  { value: 'EXPORT', label: 'Export' },
-  { value: 'IMPORT', label: 'Import' },
+  { value: 'EXPORT', label: 'Export', sub: 'Goods shipped out of Cambodia', icon: '↗' },
+  { value: 'IMPORT', label: 'Import', sub: 'Goods arriving into Cambodia', icon: '↙' },
 ];
 
 const TONE: Record<string, string> = {
@@ -115,10 +122,20 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const [direction, transportMode, loadType, clientId, status, clearanceStatus] = useWatch({
-    control,
-    name: ['direction', 'transportMode', 'loadType', 'clientId', 'status', 'clearanceStatus'],
-  });
+  const [direction, transportMode, loadType, clientId, clearanceStatus, atd, arriveFty, decls] =
+    useWatch({
+      control,
+      name: [
+        'direction',
+        'transportMode',
+        'loadType',
+        'clientId',
+        'clearanceStatus',
+        'atd',
+        'arriveFty',
+        'declarations',
+      ],
+    });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
   const readOnly = !can('shipments:write');
@@ -175,13 +192,41 @@ function ShipmentForm({
     }
   };
 
+  const [exporting, setExporting] = useState(false);
+  /** Why Export INV + PL can't run yet (shown as the button's tooltip), or null when it can. */
+  const exportBlocked = !detail
+    ? null
+    : isDirty
+      ? 'Save your changes first'
+      : detail.invoices.length === 0
+        ? detail.direction === 'EXPORT'
+          ? 'Add the cargo invoices first (Cargo, Pricing & FOB)'
+          : 'Add the cargo invoices first (Item, Costing & Forwarding)'
+        : null;
+  /**
+   * JR's "INV + PL" workbook: the commercial invoice and packing list side by side; for an
+   * import also the customs cover letter and the transfer of rights to the broker.
+   */
+  const exportInvPl = async () => {
+    if (!detail) return;
+    setExporting(true);
+    try {
+      await downloadFile(`/shipments/${detail.id}/invoice-packing-list.xlsx`);
+    } catch {
+      toast('Export failed. Check the cargo invoices and try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const cancel = () => {
     if (isDirty && !window.confirm('Discard your changes?')) return;
     if (detail) navigate('/plans');
     else navigate(-1);
   };
 
-  const shipStatus = status ?? 'PENDING';
+  // Worked out from the dates and declarations as they are typed (the server does the same).
+  const shipStatus = shipmentStatusOf({ direction, atd, arriveFty, declarations: decls });
   const clearStatus = clearanceStatus ?? 'PENDING';
   const clientName =
     lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
@@ -251,25 +296,46 @@ function ShipmentForm({
                   )}
                 </div>
               </div>
-              {detail && can('shipments:delete') && (
-                <button
-                  type="button"
-                  className={f.deleteBtn}
-                  onClick={() => void remove()}
-                  disabled={del.isPending}
-                >
-                  {icons.trash({})}
-                  Delete shipment
-                </button>
-              )}
+              <div className={f.headerActions}>
+                {detail && (
+                  <button
+                    type="button"
+                    className={f.exportBtn}
+                    onClick={() => void exportInvPl()}
+                    // Always shown on a saved shipment; greyed out (with the reason) until it can run.
+                    disabled={exporting || !!exportBlocked}
+                    title={
+                      exportBlocked ??
+                      (detail.direction === 'IMPORT'
+                        ? 'Invoice + packing list, customs cover letter and transfer of rights in Excel'
+                        : 'Invoice + packing list in Excel, one sheet per invoice')
+                    }
+                  >
+                    {icons.download({})}
+                    {exporting ? 'Exporting…' : 'Export INV + PL'}
+                  </button>
+                )}
+                {detail && can('shipments:delete') && (
+                  <button
+                    type="button"
+                    className={f.deleteBtn}
+                    onClick={() => void remove()}
+                    disabled={del.isPending}
+                  >
+                    {icons.trash({})}
+                    Delete shipment
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           <fieldset disabled={readOnly} style={{ border: 'none', minWidth: 0, padding: 0 }}>
             <div className={f.stack}>
               {/* ---------- Setup ---------- */}
+              {/* Client on its own row; the shipment choices below it, each in its own column. */}
               <div className="cx-card">
-                <div className={f.setup}>
+                <div className={f.setupClient}>
                   <div className={f.setupField}>
                     <label className={f.cap} htmlFor="f-clientId">
                       Client
@@ -294,12 +360,9 @@ function ShipmentForm({
                         ))}
                     </select>
                   </div>
-                  <Segmented
-                    name="direction"
-                    label="Shipment type"
-                    options={DIRECTIONS}
-                    onChange={() => setStep(0)}
-                  />
+                </div>
+                <div className={f.setupChoices}>
+                  <DirectionTiles onChange={() => setStep(0)} />
                   <Segmented
                     name="transportMode"
                     label="Freight"
@@ -432,6 +495,30 @@ type Span = number | 'full';
 const spanStyle = (span?: Span): CSSProperties | undefined =>
   span === 'full' ? { gridColumn: '1 / -1' } : span ? { gridColumn: `span ${span}` } : undefined;
 
+/** Export / Import as two large tiles, so the shipment type can't be mistaken for the client. */
+function DirectionTiles({ onChange }: { onChange: () => void }) {
+  const { register } = useFormContext<FormValues>();
+  return (
+    <fieldset className={f.setupField}>
+      <legend className={f.cap} style={{ marginBottom: 8 }}>
+        Shipment type
+      </legend>
+      <div className={f.typeTiles}>
+        {DIRECTIONS.map((o) => (
+          <label key={o.value} className={f.typeTile}>
+            <input type="radio" value={o.value} {...register('direction', { onChange })} />
+            <span>
+              <i aria-hidden="true">{o.icon}</i>
+              <b>{o.label}</b>
+              <small>{o.sub}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 function Segmented({
   name,
   label,
@@ -498,6 +585,22 @@ function Field({
   );
 }
 
+const CO_STATUSES = ['Pending', 'Draft', 'Submitted', 'Approved'];
+
+/** CO Status: one of the four stages; an older free-text value stays selectable until changed. */
+function CoStatusSelect() {
+  const current = useWatch<FormValues, 'coStatus'>({ name: 'coStatus' }) ?? '';
+  const options = [...CO_STATUSES, ...(current && !CO_STATUSES.includes(current) ? [current] : [])];
+  return (
+    <Select
+      name="coStatus"
+      label="CO Status"
+      options={options.map((v) => ({ value: v, label: v }))}
+      placeholder="Select status"
+    />
+  );
+}
+
 function Select({
   name,
   label,
@@ -528,6 +631,31 @@ function Select({
         ))}
       </select>
       <FieldError message={err?.message} />
+    </div>
+  );
+}
+
+/** The shipment status is not chosen: it is shown as it follows from the shipment's data. */
+function ShipmentStatusField() {
+  const { control } = useFormContext<FormValues>();
+  const [direction, atd, arriveFty, declarations] = useWatch({
+    control,
+    name: ['direction', 'atd', 'arriveFty', 'declarations'],
+  });
+  const status = shipmentStatusOf({ direction, atd, arriveFty, declarations });
+  const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
+  return (
+    <div className="form-field-group">
+      <label>Shipment Status</label>
+      <div>
+        <span className={f.badge} data-tone={TONE[status]}>
+          {SHIPMENT_STATUS_LABEL[status]}
+        </span>
+      </div>
+      <p className={f.note}>
+        Set automatically: Completed once {done} is filled in, In Progress once a customs
+        declaration is recorded, otherwise Pending.
+      </p>
     </div>
   );
 }
@@ -643,7 +771,7 @@ function ContainersCard() {
                 <tr>
                   <th>Container No.</th>
                   <th>Size</th>
-                  <th>Liner Seal</th>
+                  {direction === 'EXPORT' && <th>Liner Seal</th>}
                   {direction === 'EXPORT' && <th>Customs Seal</th>}
                   <th />
                 </tr>
@@ -670,13 +798,15 @@ function ContainersCard() {
                         ))}
                       </select>
                     </td>
-                    <td>
-                      <input
-                        className="form-field-box"
-                        placeholder="Liner Seal"
-                        {...register(`containers.${i}.linerSeal`)}
-                      />
-                    </td>
+                    {direction === 'EXPORT' && (
+                      <td>
+                        <input
+                          className="form-field-box"
+                          placeholder="Liner Seal"
+                          {...register(`containers.${i}.linerSeal`)}
+                        />
+                      </td>
+                    )}
                     {direction === 'EXPORT' && (
                       <td>
                         <input
@@ -706,9 +836,7 @@ function ContainersCard() {
         <button
           type="button"
           className="cdc-add-line-btn"
-          onClick={() =>
-            arr.append({ containerNo: '', size: '40HQ', linerSeal: '', customsSeal: '' })
-          }
+          onClick={() => arr.append(blankContainer())}
         >
           + Add Container
         </button>
@@ -729,19 +857,18 @@ function buildSteps(
   const units = lookups.values.QUANTITY_UNIT.map((v) => ({ value: v.value, label: v.label }));
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
   const coForms = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
-  const statuses = SHIPMENT_STATUSES.map((s) => ({ value: s, label: SHIPMENT_STATUS_LABEL[s] }));
   const clearance = CLEARANCE_STATUSES.map((s) => ({ value: s, label: CLEARANCE_STATUS_LABEL[s] }));
 
   const statusCard = (
     <Card title="Status" sub="Where the shipment and its customs clearance stand" cols={2}>
-      <Select name="status" label="Shipment Status" options={statuses} />
+      <ShipmentStatusField />
       <Select name="clearanceStatus" label="Clearance Status" options={clearance} />
     </Card>
   );
   const thcCard = (
-    <Card title="THC / HBL" sub="Terminal handling charge billed against the house bill">
-      <Field name="thcHblNo" label="THC / HBL No." span={2} />
-      <Field name="thcHblDate" label="THC / HBL Date" type="date" />
+    <Card title="Invoice / THC" sub="Terminal handling charge invoice for this shipment">
+      <Field name="thcHblNo" label="INVOICE / THC No." span={2} />
+      <Field name="thcHblDate" label="Invoice / THC Date" type="date" />
       <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" />
     </Card>
   );
@@ -797,11 +924,8 @@ function buildSteps(
           'crd',
           'hblNo',
           'clearancePortId',
-          'etdPort',
           'etd',
           'atd',
-          'eta',
-          'status',
           'clearanceStatus',
           'containers',
           'loadType',
@@ -819,12 +943,11 @@ function buildSteps(
                 placeholder="Select port"
                 span={2}
               />
-              <Field name="etdPort" label="ETD Port" span={2} placeholder="e.g. Sihanoukville" />
             </Card>
-            <Card title="Schedule" sub="Departure and arrival dates" cols={3}>
+            {/* An export is dated by its departure: no ETA or ETD port. */}
+            <Card title="Schedule" sub="Departure dates" cols={2}>
               <Field name="etd" label="ETD" type="date" />
               <Field name="atd" label="ATD (Actual Departure)" type="date" />
-              <Field name="eta" label="ETA Port" type="date" />
             </Card>
             <ContainersCard />
             {statusCard}
@@ -855,7 +978,7 @@ function buildSteps(
               <Field name="voyageNo" label="Voyage No." span={2} />
               <Select name="coForm" label="CO Form" options={coForms} placeholder="Select form" />
               <Field name="coNumber" label="CO Number" span={2} />
-              <Field name="coStatus" label="CO Status" placeholder="e.g. Active" />
+              <CoStatusSelect />
             </Card>
             {thcCard}
             <DeclarationsSection ports={lookups.ports} original={detail} />
@@ -922,14 +1045,11 @@ function buildSteps(
       fields: [
         'hblNo',
         'clearancePortId',
-        'etd',
         'eta',
-        'ata',
         'arriveFty',
         'vesselName',
         'voyageNo',
         'coNumber',
-        'status',
         'clearanceStatus',
         'containers',
         'loadType',
@@ -949,10 +1069,8 @@ function buildSteps(
             />
             <Field name="coNumber" label="CO Number" span={2} />
           </Card>
-          <Card title="Schedule" sub="Arrival at port and delivery to the factory">
-            <Field name="etd" label="ETD" type="date" />
+          <Card title="Schedule" sub="Arrival at port and delivery to the factory" cols={2}>
             <Field name="eta" label="ETA Port" type="date" />
-            <Field name="ata" label="Actual Arrival (ATA)" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>
           <ContainersCard />

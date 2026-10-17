@@ -18,8 +18,9 @@ import { queryRows, isoTs } from '../../lib/listing';
 import { hashToken } from '../auth/tokens';
 
 const SELECT = sql`
-  SELECT u.id, u.email, u.full_name AS "fullName", r.code AS role, p.job_title AS "jobTitle", p.department, p.phone,
-         coalesce(p.status, 'ACTIVE') AS status, u.is_active AS "isActive", ${isoTs('u.last_login_at')} AS "lastLoginAt", ${isoTs('u.created_at')} AS "createdAt"
+  SELECT u.id, u.email, u.full_name AS "fullName", u.avatar_url AS "avatarUrl", r.code AS role, p.job_title AS "jobTitle", p.department, p.phone,
+         coalesce(p.status, 'ACTIVE') AS status, u.is_active AS "isActive",
+         u.permissions_add AS "permissionsAdd", u.permissions_remove AS "permissionsRemove", u.client_ids AS "clientIds", ${isoTs('u.last_login_at')} AS "lastLoginAt", ${isoTs('u.created_at')} AS "createdAt"
   FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff_profiles p ON p.user_id = u.id`;
 
 export async function listStaff(): Promise<StaffMember[]> {
@@ -44,8 +45,21 @@ export async function listRoles(): Promise<RoleInfo[]> {
     sql`
     SELECT r.code, r.name, r.permissions,
            (SELECT count(*) FROM users u WHERE u.role_id = r.id AND u.deleted_at IS NULL AND u.is_active)::int AS members
-    FROM roles r ORDER BY array_position(ARRAY['ADMIN','MANAGER','ACCOUNTANT','OPERATOR','VIEWER']::role_code[], r.code)`,
+    FROM roles r ORDER BY array_position(ARRAY['ADMIN','MANAGER','ACCOUNTANT','OPERATOR','CUSTOMS_BROKER','VIEWER']::role_code[], r.code)`,
   );
+}
+
+/** Every chosen client must exist (and not be deleted). */
+async function assertClientsExist(tx: Tx, ids: string[] | null | undefined) {
+  if (!ids?.length) return;
+  const [r] = await queryRows<{ n: number }>(
+    tx,
+    sql`SELECT count(*)::int AS n FROM clients WHERE deleted_at IS NULL AND id IN (${sql.join(
+      ids.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )})`,
+  );
+  if (r!.n !== new Set(ids).size) throw businessRule('One of the chosen clients no longer exists');
 }
 
 async function roleId(tx: Tx, code: RoleCode): Promise<string> {
@@ -87,6 +101,7 @@ export async function createStaff(
       sql`SELECT id FROM users WHERE lower(email) = ${input.email} AND deleted_at IS NULL`,
     );
     if (dup) throw conflict(`${input.email} already has an account`);
+    await assertClientsExist(tx, input.clientIds);
     const [u] = await tx
       .insert(users)
       .values({
@@ -95,6 +110,9 @@ export async function createStaff(
         passwordHash: await bcrypt.hash(input.password, 12),
         roleId: await roleId(tx, input.role),
         isActive: input.status !== 'INACTIVE',
+        permissionsAdd: input.permissionsAdd,
+        permissionsRemove: input.permissionsRemove,
+        clientIds: input.clientIds,
       })
       .returning({ id: users.id });
     await tx.insert(staffProfiles).values({
@@ -136,6 +154,11 @@ export async function updateStaff(
       before.role === 'ADMIN' &&
       before.isActive &&
       ((input.role && input.role !== 'ADMIN') || input.status === 'INACTIVE');
+    if (self && input.permissionsRemove?.includes('staff:manage'))
+      throw businessRule("You can't remove your own staff management. Ask another Admin.");
+    if (self && input.clientIds !== undefined && input.clientIds !== null)
+      throw businessRule("You can't limit your own client access. Ask another Admin.");
+    await assertClientsExist(tx, input.clientIds);
     if (losingAdmin && (await activeAdmins(tx)) <= 1)
       throw businessRule('This is the last active Admin. Make someone else Admin first.');
 
@@ -143,6 +166,9 @@ export async function updateStaff(
     if (input.fullName) userPatch.fullName = input.fullName;
     if (input.role) userPatch.roleId = await roleId(tx, input.role);
     if (input.status) userPatch.isActive = input.status !== 'INACTIVE';
+    if (input.permissionsAdd) userPatch.permissionsAdd = input.permissionsAdd;
+    if (input.permissionsRemove) userPatch.permissionsRemove = input.permissionsRemove;
+    if (input.clientIds !== undefined) userPatch.clientIds = input.clientIds;
     if (Object.keys(userPatch).length)
       await tx.update(users).set(userPatch).where(eq(users.id, id));
     const profile = Object.fromEntries(
@@ -159,7 +185,20 @@ export async function updateStaff(
         .values({ userId: id, ...profile })
         .onConflictDoUpdate({ target: staffProfiles.userId, set: profile });
     }
-    if (input.status === 'INACTIVE' || (input.role && input.role !== before.role))
+    // Access changed: sign them out so the next sign-in carries the new access.
+    const same = (a: readonly string[] | null, b: readonly string[] | null | undefined) =>
+      b === undefined ||
+      (JSON.stringify([...(a ?? [])].sort()) === JSON.stringify([...(b ?? [])].sort()) &&
+        (a === null) === (b === null));
+    const accessChanged =
+      !same(before.permissionsAdd, input.permissionsAdd) ||
+      !same(before.permissionsRemove, input.permissionsRemove) ||
+      !same(before.clientIds, input.clientIds);
+    if (
+      input.status === 'INACTIVE' ||
+      (input.role && input.role !== before.role) ||
+      (accessChanged && !self)
+    )
       await revokeSessions(tx, id);
     await audit(tx, { action: 'UPDATE', entity: 'user', entityId: id, before, after: input }, req);
   });

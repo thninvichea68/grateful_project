@@ -69,7 +69,7 @@
 }
 .companyEn {
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.2px;
 }
 .companyMeta {
@@ -87,7 +87,7 @@
 }
 .titleEn {
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 1px;
 }
 .grid2 {
@@ -145,7 +145,7 @@
   padding: 5px 8px;
 }
 .totals .grand td {
-  font-weight: 800;
+  font-weight: 700;
   background: #f3f4f6;
 }
 .note {
@@ -171,14 +171,14 @@
   left: 50%;
   transform: translate(-50%, -50%) rotate(-24deg);
   font-size: 92px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 8px;
   color: rgba(220, 38, 38, 0.14);
   pointer-events: none;
   white-space: nowrap;
 }
 .checkbox {
-  font-weight: 800;
+  font-weight: 700;
   margin-right: 14px;
 }
 

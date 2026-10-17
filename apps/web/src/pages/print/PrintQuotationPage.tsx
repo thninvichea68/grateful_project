@@ -4,6 +4,7 @@ import { useQuotation } from '../../features/admin';
 import { useCompany } from '../../features/accounting';
 import { fmtDate } from '../../lib/format';
 import s from './print.module.css';
+import { useAutoPrint } from './useAutoPrint';
 
 export function PrintQuotationPage() {
   const { id = '' } = useParams();
@@ -12,6 +13,7 @@ export function PrintQuotationPage() {
   useEffect(() => {
     if (q.data) document.title = `${q.data.quoteNo} v${q.data.version} — Quotation`;
   }, [q.data]);
+  useAutoPrint(!!q.data && !company.isLoading);
   if (q.isLoading || company.isLoading) return <div className={s.page}>Loading…</div>;
   if (!q.data) return <div className={s.page}>Quotation not found.</div>;
   const d = q.data;

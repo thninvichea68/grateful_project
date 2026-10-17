@@ -20,7 +20,12 @@ vi.mock('../auth/AuthProvider', () => ({
   }),
 }));
 vi.mock('../lib/api', () => ({
-  api: vi.fn(async () => ({ openFollowUps: 8, overdueFollowUps: 4, unreadNotifications: 0 })),
+  api: vi.fn(async () => ({
+    openFollowUps: 8,
+    overdueFollowUps: 4,
+    unreadNotifications: 0,
+    creditNoteInbox: 0,
+  })),
 }));
 
 function renderAs(role: RoleCode, path = '/overview') {
@@ -32,6 +37,7 @@ function renderAs(role: RoleCode, path = '/overview') {
     avatarUrl: null,
     role,
     permissions: [...ROLE_DEFAULT_PERMISSIONS[role]],
+    clientIds: null,
   };
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -55,10 +61,11 @@ describe('Sidebar', () => {
       'Shipping Plans',
       'Clients',
       'Analytics',
-      'Cut Stock',
+      'CDC Master List',
       'Documents',
       'Follow Up',
       'Accounting',
+      'Credit Noted',
       'Quotations',
       'Operations',
       'Staff Management',
@@ -70,6 +77,11 @@ describe('Sidebar', () => {
     renderAs('OPERATOR');
     expect(links()).not.toContain('Accounting');
     expect(links()).toContain('Shipping Plans');
+  });
+
+  it('gives a Customs Broker only Shipping Plans, Credit Noted and Operations', () => {
+    renderAs('CUSTOMS_BROKER');
+    expect(links()).toEqual(['Shipping Plans', 'Credit Noted', 'Operations']);
   });
 
   it('hides staff management from Viewers', () => {

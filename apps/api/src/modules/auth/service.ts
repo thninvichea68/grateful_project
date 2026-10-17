@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { PERMISSIONS, type Permission, type RoleCode, type SessionUser } from '@gs/shared';
+import { effectivePermissions, type RoleCode, type SessionUser } from '@gs/shared';
 import type { Request } from 'express';
 import { db } from '../../db/client';
 import { refreshTokens, roles, staffProfiles, users } from '../../db/schema';
@@ -12,7 +12,6 @@ import { hashToken, newRefreshToken, signAccessToken } from './tokens';
 
 // Used to keep the timing of "unknown email" equal to "wrong password".
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', 10);
-const known = new Set<string>(PERMISSIONS);
 
 async function loadSessionUser(userId: string): Promise<SessionUser | null> {
   const [row] = await db
@@ -24,6 +23,9 @@ async function loadSessionUser(userId: string): Promise<SessionUser | null> {
       isActive: users.isActive,
       role: roles.code,
       permissions: roles.permissions,
+      permissionsAdd: users.permissionsAdd,
+      permissionsRemove: users.permissionsRemove,
+      clientIds: users.clientIds,
       jobTitle: staffProfiles.jobTitle,
     })
     .from(users)
@@ -39,7 +41,8 @@ async function loadSessionUser(userId: string): Promise<SessionUser | null> {
     avatarUrl: row.avatarUrl,
     jobTitle: row.jobTitle ?? null,
     role: row.role as RoleCode,
-    permissions: row.permissions.filter((p): p is Permission => known.has(p)),
+    permissions: effectivePermissions(row.permissions, row.permissionsAdd, row.permissionsRemove),
+    clientIds: row.clientIds ?? null,
   };
 }
 
@@ -70,7 +73,7 @@ async function issueSession(
     })
     .returning({ id: refreshTokens.id });
   return {
-    accessToken: signAccessToken(user.id, user.role, user.permissions),
+    accessToken: signAccessToken(user.id, user.role, user.permissions, user.clientIds),
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
     refreshToken: token,
     refreshExpiresAt,
@@ -187,4 +190,53 @@ export async function me(userId: string): Promise<SessionUser> {
   const user = await loadSessionUser(userId);
   if (!user) throw unauthenticated();
   return user;
+}
+
+/* ---------- My profile ---------- */
+
+export async function updateOwnName(
+  userId: string,
+  fullName: string,
+  req: Request,
+): Promise<SessionUser> {
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({ fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, userId));
+    await tx.update(users).set({ fullName, updatedAt: new Date() }).where(eq(users.id, userId));
+    await audit(
+      tx,
+      { action: 'UPDATE', entity: 'user', entityId: userId, before, after: { fullName } },
+      req,
+    );
+  });
+  return me(userId);
+}
+
+/** Sets (or, with null, removes) my profile picture. */
+export async function setOwnAvatar(
+  userId: string,
+  avatarUrl: string | null,
+  req: Request,
+): Promise<SessionUser> {
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ avatarUrl, updatedAt: new Date() }).where(eq(users.id, userId));
+    await audit(
+      tx,
+      { action: 'UPDATE', entity: 'user', entityId: userId, after: { avatarUrl } },
+      req,
+    );
+  });
+  return me(userId);
+}
+
+/** True when the URL is someone's current avatar (the public avatar route serves only those). */
+export async function isAvatar(url: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.avatarUrl, url), isNull(users.deletedAt)))
+    .limit(1);
+  return !!row;
 }

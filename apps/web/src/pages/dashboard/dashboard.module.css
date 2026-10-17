@@ -39,7 +39,7 @@
   border: none;
 }
 .tooltip b {
-  font-weight: 900;
+  font-weight: 700;
 }
 .tooltipPlain {
   background: var(--bg-surface-elevated);
@@ -73,17 +73,6 @@
   border-color: var(--accent-primary);
 }
 
-.ssMonthSelect {
-  font-family: var(--font-main);
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--text-secondary);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 4px 10px;
-  outline: none;
-}
 .chartBox {
   width: 100%;
 }

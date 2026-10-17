@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   PERMISSIONS,
   ROLE_CODES,
@@ -16,10 +16,13 @@ import { useApiMutation, useRoles, useStaff } from '../features/admin';
 import { useLookups } from '../features/hooks';
 import { ErrorBanner, FieldError, Modal, TableState, ui } from '../components/ui';
 import { Pill } from '../components/StatusPill';
+import { Avatar } from '../components/Avatar';
+import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import { formResolver } from '../lib/zodForm';
+import st from './StaffPage.module.css';
 
 const STATUS = {
   ACTIVE: { tone: 'completed', label: 'Active' },
@@ -27,6 +30,49 @@ const STATUS = {
   INACTIVE: { tone: 'exception', label: 'Inactive' },
 } as const;
 const PERM_GROUPS = [...new Set(PERMISSIONS.map((p) => p.split(':')[0]!))];
+/** Plain names for the permission areas and actions shown in the staff form. */
+const AREAS: Record<string, { label: string; desc: string }> = {
+  dashboard: { label: 'Dashboard', desc: 'Overview and Analytics' },
+  shipments: { label: 'Shipments', desc: 'Shipping Plans and shipment forms' },
+  clients: { label: 'Clients', desc: 'Client list and details' },
+  cutstock: { label: 'CDC Master List', desc: 'Licensed items and balances' },
+  accounting: { label: 'Accounting', desc: 'Ledger, invoices and notes' },
+  creditnotes: { label: 'Credit Noted', desc: 'Customs broker credit notes' },
+  quotations: { label: 'Quotations', desc: 'Quotation builder' },
+  documents: { label: 'Documents', desc: 'Uploaded files' },
+  followups: { label: 'Follow-ups', desc: 'Tasks and reminders' },
+  staff: { label: 'Staff', desc: 'Team members and roles' },
+  settings: { label: 'Settings', desc: 'Ports, rates and lists' },
+  audit: { label: 'Audit log', desc: 'History of every change' },
+};
+const ACTIONS: Record<string, string> = {
+  read: 'View',
+  write: 'Edit',
+  delete: 'Delete',
+  manage: 'Manage',
+  override: 'Override balance',
+};
+const svg = (d: string) => (
+  <svg
+    viewBox="0 0 24 24"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d={d} />
+  </svg>
+);
+const ICONS = {
+  user: svg('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'),
+  clients: svg('M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1M9 17h1M14 17h1'),
+  shield: svg('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4'),
+  check: svg('m5 12 5 5L20 7'),
+};
 
 export function StaffPage() {
   const { can, user } = useAuth();
@@ -34,6 +80,21 @@ export function StaffPage() {
   const [tab, setTab] = useState<'members' | 'roles'>('members');
   const [editing, setEditing] = useState<StaffMember | 'new' | null>(null);
   const manage = can('staff:manage');
+  const lookups = useLookups();
+  const clientCode = new Map(lookups.data?.clients.map((c) => [c.id, c.code]));
+  // Filters run on the loaded list (the whole team is one small request).
+  const [filter, setFilter] = useState({ q: '', role: '', client: '', status: '' });
+  const q = filter.q.trim().toLowerCase();
+  const shown = (staff.data ?? []).filter((m) => {
+    const status = m.isActive ? m.status : 'INACTIVE';
+    if (q && !`${m.fullName} ${m.email}`.toLowerCase().includes(q)) return false;
+    if (filter.role && m.role !== filter.role) return false;
+    if (filter.status && status !== filter.status) return false;
+    if (filter.client === 'ALL' && m.clientIds) return false;
+    if (filter.client && filter.client !== 'ALL' && !m.clientIds?.includes(filter.client))
+      return false;
+    return true;
+  });
   return (
     <section className="view active">
       <nav style={{ display: 'flex', gap: 8, marginBottom: 18 }} aria-label="Staff sections">
@@ -56,11 +117,63 @@ export function StaffPage() {
         <div className="card">
           <div className="card-header-row">
             <h3>Staff &amp; Role Management</h3>
-            {manage && (
-              <button type="button" className="new-shipment-btn" onClick={() => setEditing('new')}>
-                + Add Staff
-              </button>
-            )}
+            <div className={ui.toolbar}>
+              <SearchBox
+                placeholder="Search name or email…"
+                value={filter.q}
+                onChange={(e) => setFilter({ ...filter, q: e.target.value })}
+                aria-label="Search staff"
+              />
+              <select
+                className={ui.input}
+                value={filter.role}
+                onChange={(e) => setFilter({ ...filter, role: e.target.value })}
+                aria-label="Role"
+              >
+                <option value="">All roles</option>
+                {ROLE_CODES.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+              <select
+                className={ui.input}
+                value={filter.client}
+                onChange={(e) => setFilter({ ...filter, client: e.target.value })}
+                aria-label="Client access"
+              >
+                <option value="">Any client access</option>
+                <option value="ALL">All clients</option>
+                {lookups.data?.clients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} only
+                  </option>
+                ))}
+              </select>
+              <select
+                className={ui.input}
+                value={filter.status}
+                onChange={(e) => setFilter({ ...filter, status: e.target.value })}
+                aria-label="Status"
+              >
+                <option value="">All statuses</option>
+                {STAFF_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS[s].label}
+                  </option>
+                ))}
+              </select>
+              {manage && (
+                <button
+                  type="button"
+                  className="new-shipment-btn"
+                  onClick={() => setEditing('new')}
+                >
+                  + Add Staff
+                </button>
+              )}
+            </div>
           </div>
           <div className="plans-table-scroll">
             <table className="data-table-clean">
@@ -68,6 +181,7 @@ export function StaffPage() {
                 <tr>
                   <th>Member</th>
                   <th>Role</th>
+                  <th>Clients</th>
                   <th>Department</th>
                   <th>Last sign-in</th>
                   <th>Status</th>
@@ -75,13 +189,13 @@ export function StaffPage() {
               </thead>
               <tbody>
                 <TableState
-                  cols={5}
+                  cols={6}
                   loading={staff.isLoading}
                   error={staff.error}
-                  empty={staff.data?.length === 0}
-                  emptyText="No staff yet."
+                  empty={shown.length === 0}
+                  emptyText={staff.data?.length ? 'No staff match these filters.' : 'No staff yet.'}
                 />
-                {staff.data?.map((m) => (
+                {shown.map((m) => (
                   <tr
                     key={m.id}
                     className={manage ? 'plans-row-clickable' : undefined}
@@ -90,18 +204,42 @@ export function StaffPage() {
                     onKeyDown={(e) => manage && e.key === 'Enter' && setEditing(m)}
                   >
                     <td>
-                      <div className="val-bold">
-                        {m.fullName}
-                        {m.id === user?.id ? ' (you)' : ''}
-                      </div>
-                      <div
-                        style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 700 }}
-                      >
-                        {m.email}
-                        {m.jobTitle ? ` · ${m.jobTitle}` : ''}
+                      <div className={st.member}>
+                        <Avatar name={m.fullName} src={m.avatarUrl} muted={!m.isActive} />
+                        <div>
+                          <div className="val-bold">
+                            {m.fullName}
+                            {m.id === user?.id ? ' (you)' : ''}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              color: 'var(--text-tertiary)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {m.email}
+                            {m.jobTitle ? ` · ${m.jobTitle}` : ''}
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    <td>{ROLE_LABEL[m.role]}</td>
+                    <td>
+                      {ROLE_LABEL[m.role]}
+                      {(m.permissionsAdd.length > 0 || m.permissionsRemove.length > 0) && (
+                        <span className={st.custom} title="Permissions changed for this person">
+                          {' '}
+                          · custom
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {m.clientIds ? (
+                        m.clientIds.map((id) => clientCode.get(id) ?? '?').join(', ')
+                      ) : (
+                        <span className={st.muted}>All clients</span>
+                      )}
+                    </td>
                     <td>{m.department ?? '-'}</td>
                     <td>{m.lastLoginAt ? fmtDate(m.lastLoginAt) : 'Never'}</td>
                     <td>
@@ -145,10 +283,12 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
     () => api(`/staff/${member!.id}`, { method: 'DELETE' }),
     [['staff']],
   );
+  const roles = useRoles();
   const schema = member ? staffUpdateSchema : staffInputSchema;
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<Record<string, string>>({
     resolver: formResolver(schema) as never,
@@ -164,8 +304,41 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
       : { role: 'OPERATOR', status: 'ACTIVE' },
   });
   const self = member?.id === user?.id;
+
+  // Client access: null = every client, otherwise only the chosen ones.
+  const [clientIds, setClientIds] = useState<string[] | null>(member?.clientIds ?? null);
+  const toggleClient = (id: string) =>
+    setClientIds((cur) => (cur?.includes(id) ? cur.filter((x) => x !== id) : [...(cur ?? []), id]));
+  // Permissions: the role's set, plus extras, minus removals - for this person only.
+  const role = useWatch({ control, name: 'role' }) as RoleCode | undefined;
+  const rolePerms = useMemo(
+    () => new Set(roles.data?.find((r) => r.code === role)?.permissions ?? []),
+    [roles.data, role],
+  );
+  const [add, setAdd] = useState<Set<Permission>>(() => new Set(member?.permissionsAdd ?? []));
+  const [removed, setRemoved] = useState<Set<Permission>>(
+    () => new Set(member?.permissionsRemove ?? []),
+  );
+  const has = (p: Permission) => (rolePerms.has(p) || add.has(p)) && !removed.has(p);
+  const togglePerm = (p: Permission) => {
+    const flip = (set: Set<Permission>) => {
+      const n = new Set(set);
+      if (n.has(p)) n.delete(p);
+      else n.add(p);
+      return n;
+    };
+    if (rolePerms.has(p)) setRemoved(flip);
+    else setAdd(flip);
+  };
+  // Only keep tweaks that still differ from the (possibly changed) role.
+  const permissionsAdd = [...add].filter((p) => !rolePerms.has(p));
+  const permissionsRemove = [...removed].filter((p) => rolePerms.has(p));
+  const noClients = clientIds !== null && clientIds.length === 0;
+  const changes = permissionsAdd.length + permissionsRemove.length;
+
   const submit = handleSubmit(async (v) => {
-    await save.mutateAsync(v);
+    if (noClients) return;
+    await save.mutateAsync(self ? v : { ...v, permissionsAdd, permissionsRemove, clientIds });
     toast(
       member ? 'Staff member updated.' : 'Staff member added. Give them their temporary password.',
     );
@@ -211,59 +384,233 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
         member ? member.email : 'They sign in with this email and the temporary password you set.'
       }
       onClose={onClose}
-      width={720}
+      width={1800}
     >
       <ErrorBanner error={save.error ?? reset.error ?? remove.error} />
       <form onSubmit={(e) => void submit(e)} noValidate>
-        <div className="form-fields-grid">
-          {!member && f('email', 'Work email', 'email', 2)}
-          {f('fullName', 'Full name', 'text', 2)}
-          <div className="form-field-group">
-            <label htmlFor="st-role">Role</label>
-            <select id="st-role" className="form-select-box" {...register('role')} disabled={self}>
-              {ROLE_CODES.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-field-group">
-            <label htmlFor="st-status">Status</label>
-            <select
-              id="st-status"
-              className="form-select-box"
-              {...register('status')}
+        {/* Wide layout: profile and clients on the left, permissions on the right. */}
+        <div className={st.columns}>
+          <div className={st.col}>
+            <section className={st.panel} aria-labelledby="st-profile">
+              <header className={st.panelHead}>
+                <span className={st.panelIcon}>{ICONS.user}</span>
+                <div>
+                  <h4 id="st-profile">Profile</h4>
+                  <p>Name, role and contact details.</p>
+                </div>
+              </header>
+              <div className={st.profileGrid}>
+                {f('fullName', 'Full name')}
+                <div className="form-field-group">
+                  <label htmlFor="st-role">Role</label>
+                  <select
+                    id="st-role"
+                    className="form-select-box"
+                    {...register('role')}
+                    disabled={self}
+                  >
+                    {ROLE_CODES.map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABEL[r]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field-group">
+                  <label htmlFor="st-status">Status</label>
+                  <select
+                    id="st-status"
+                    className="form-select-box"
+                    {...register('status')}
+                    disabled={self}
+                  >
+                    {STAFF_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS[s].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {f('jobTitle', 'Job title')}
+                <div className="form-field-group">
+                  <label htmlFor="st-department">Department</label>
+                  <select
+                    id="st-department"
+                    className="form-select-box"
+                    {...register('department')}
+                  >
+                    <option value="">—</option>
+                    {lookups.data?.values.DEPARTMENT.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {f('phone', 'Phone')}
+                {member ? (
+                  <div className="form-field-group">
+                    <label htmlFor="st-email">Email address</label>
+                    <input
+                      id="st-email"
+                      type="email"
+                      className="form-field-box"
+                      value={member.email}
+                      readOnly
+                      title="The sign-in email can't be changed"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    {f('email', 'Email address', 'email')}
+                    {f('password', 'Temporary password')}
+                  </>
+                )}
+              </div>
+            </section>
+
+            <fieldset
+              className={`${st.panel} ${st.grow}`}
               disabled={self}
+              aria-labelledby="st-clients"
             >
-              {STAFF_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS[s].label}
-                </option>
-              ))}
-            </select>
+              <header className={st.panelHead}>
+                <span className={st.panelIcon}>{ICONS.clients}</span>
+                <div>
+                  <h4 id="st-clients">Client access</h4>
+                  <p>
+                    They only see shipments, CDC items, documents, accounting and reports of these
+                    clients.
+                  </p>
+                </div>
+                <div className={st.segment} role="radiogroup" aria-label="Client access">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={clientIds === null}
+                    onClick={() => setClientIds(null)}
+                  >
+                    All clients
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={clientIds !== null}
+                    onClick={() => setClientIds(clientIds ?? [])}
+                  >
+                    Only these
+                  </button>
+                </div>
+              </header>
+              {clientIds === null ? (
+                <p className={st.allNote}>
+                  Works with every client, including clients added later.
+                </p>
+              ) : (
+                <>
+                  <div className={st.clientGrid}>
+                    {lookups.data?.clients.map((c) => (
+                      <label key={c.id} className={st.clientCard}>
+                        <input
+                          type="checkbox"
+                          checked={clientIds.includes(c.id)}
+                          onChange={() => toggleClient(c.id)}
+                        />
+                        <span className={st.clientCode}>{c.code}</span>
+                        <span className={st.clientName}>{c.name}</span>
+                        <span className={st.tick} aria-hidden="true">
+                          {ICONS.check}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className={st.count}>
+                    {clientIds.length} of {lookups.data?.clients.length ?? 0} clients selected
+                  </div>
+                </>
+              )}
+              {noClients && (
+                <FieldError message="Choose at least one client, or allow all clients." />
+              )}
+            </fieldset>
           </div>
-          {f('jobTitle', 'Job title')}
-          <div className="form-field-group">
-            <label htmlFor="st-department">Department</label>
-            <select id="st-department" className="form-select-box" {...register('department')}>
-              <option value="">—</option>
-              {lookups.data?.values.DEPARTMENT.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
+
+          <div className={st.col}>
+            <fieldset
+              className={`${st.panel} ${st.grow}`}
+              disabled={self}
+              aria-labelledby="st-perms"
+            >
+              <header className={st.panelHead}>
+                <span className={st.panelIcon}>{ICONS.shield}</span>
+                <div>
+                  <h4 id="st-perms">Permissions</h4>
+                  <p>
+                    Based on the <b>{role ? ROLE_LABEL[role] : ''}</b> role. Changes apply to this
+                    person only.
+                  </p>
+                </div>
+                {changes > 0 && (
+                  <div className={st.changes}>
+                    <span>
+                      {changes} {changes === 1 ? 'change' : 'changes'}
+                    </span>
+                    <button
+                      type="button"
+                      className={st.resetLink}
+                      onClick={() => {
+                        setAdd(new Set());
+                        setRemoved(new Set());
+                      }}
+                    >
+                      Reset to role
+                    </button>
+                  </div>
+                )}
+              </header>
+              <div className={st.permList}>
+                {PERM_GROUPS.map((g) => (
+                  <div key={g} className={st.permRow}>
+                    <div className={st.area}>
+                      <b>{AREAS[g]?.label ?? g}</b>
+                      <span>{AREAS[g]?.desc}</span>
+                    </div>
+                    <div className={st.toggles}>
+                      {PERMISSIONS.filter((p) => p.startsWith(`${g}:`)).map((p) => {
+                        const custom = has(p) !== rolePerms.has(p);
+                        const action = p.split(':')[1]!;
+                        return (
+                          <label
+                            key={p}
+                            className={st.toggle}
+                            data-custom={custom || undefined}
+                            title={custom ? 'Changed for this person' : undefined}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={has(p)}
+                              onChange={() => togglePerm(p)}
+                            />
+                            <span className={st.toggleTick} aria-hidden="true">
+                              {ICONS.check}
+                            </span>
+                            {ACTIONS[action] ?? action}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </fieldset>
           </div>
-          {f('phone', 'Phone')}
-          {!member && f('password', 'Temporary password', 'text', 2)}
         </div>
         {self && (
-          <p className={ui.dialogSub} style={{ marginTop: 10 }}>
-            You can't change your own role or status. Ask another Admin.
+          <p className={st.selfNote}>
+            You can't change your own role, status, client access or permissions. Ask another Admin.
           </p>
         )}
-        <div className={ui.actions}>
+        <div className={`${ui.actions} ${st.footer}`}>
           {member && !self && (
             <button type="button" className="btn-delete-shipment" onClick={() => void doRemove()}>
               Remove
@@ -306,44 +653,65 @@ function RolesMatrix({ editable }: { editable: boolean }) {
     );
   };
   return (
-    <div className="card">
+    <div className={`card ${st.matrixCard}`}>
       <div className="card-header-row">
         <h3>Roles &amp; permissions</h3>
       </div>
       <ErrorBanner error={save.error} />
-      <div className="plans-table-scroll">
-        <table className="data-table-clean">
+      <div className={`plans-table-scroll ${st.matrixWrap}`}>
+        <table className={st.matrix}>
           <thead>
             <tr>
-              <th>Permission</th>
+              <th>Area &amp; action</th>
               {roles.data?.map((r) => (
-                <th key={r.code} style={{ textAlign: 'center' }}>
+                <th key={r.code}>
                   {r.name}
-                  <div style={{ fontWeight: 600, fontSize: 11 }}>{r.members} people</div>
+                  <span>
+                    {r.members} {r.members === 1 ? 'person' : 'people'}
+                  </span>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
-            {PERM_GROUPS.map((g) =>
-              PERMISSIONS.filter((p) => p.startsWith(`${g}:`)).map((p, i) => (
-                <tr key={p}>
-                  <td style={{ fontWeight: i === 0 ? 800 : 600 }}>{p.replace(':', ' · ')}</td>
-                  {roles.data?.map((r) => (
-                    <td key={r.code} style={{ textAlign: 'center' }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`${r.name}: ${p}`}
-                        checked={r.permissions.includes(p)}
-                        disabled={!editable || r.code === 'ADMIN' || save.isPending}
-                        onChange={(e) => void toggle(r.code, p, e.target.checked)}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              )),
-            )}
-          </tbody>
+          {PERM_GROUPS.map((g) => (
+            <tbody key={g}>
+              <tr className={st.groupRow}>
+                <th colSpan={(roles.data?.length ?? 0) + 1} scope="rowgroup">
+                  <b>{AREAS[g]?.label ?? g}</b>
+                  <span>{AREAS[g]?.desc}</span>
+                </th>
+              </tr>
+              {PERMISSIONS.filter((p) => p.startsWith(`${g}:`)).map((p) => {
+                const action = ACTIONS[p.split(':')[1]!] ?? p;
+                return (
+                  <tr key={p}>
+                    <th scope="row" className={st.actionCell}>
+                      {action}
+                    </th>
+                    {roles.data?.map((r) => {
+                      const locked = !editable || r.code === 'ADMIN';
+                      return (
+                        <td key={r.code}>
+                          <label className={st.cell} data-locked={locked || undefined}>
+                            <input
+                              type="checkbox"
+                              aria-label={`${r.name}: ${AREAS[g]?.label ?? g} · ${action}`}
+                              checked={r.permissions.includes(p)}
+                              disabled={locked || save.isPending}
+                              onChange={(e) => void toggle(r.code, p, e.target.checked)}
+                            />
+                            <span className={st.box} aria-hidden="true">
+                              {ICONS.check}
+                            </span>
+                          </label>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
         </table>
       </div>
       <p className={ui.dialogSub} style={{ marginTop: 10 }}>

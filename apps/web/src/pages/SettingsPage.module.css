@@ -3,6 +3,17 @@
 .tableScroll {
   overflow: auto;
 }
+/* A port row being edited: inputs fill their cells. */
+.editRow td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  vertical-align: middle;
+}
+.editRow input,
+.editRow select {
+  width: 100%;
+  min-width: 80px;
+}
 .tableScroll thead th {
   position: sticky;
   top: 0;

@@ -4,7 +4,8 @@ import type { PlanColumn } from './columns';
 
 export interface PlansFilterValue {
   clientIds: string[]; // empty = all
-  direction: '' | 'IMPORT' | 'EXPORT';
+  /** Always one of the two; Import is the default. */
+  direction: 'IMPORT' | 'EXPORT';
   status: '' | ShipmentStatus;
   expandAll: boolean;
   frozen: string[];
@@ -61,7 +62,7 @@ export function PlansFilter({
   };
   const count =
     (value.clientIds.length ? 1 : 0) +
-    (value.direction ? 1 : 0) +
+    (value.direction === 'EXPORT' ? 1 : 0) +
     (value.status ? 1 : 0) +
     (value.expandAll ? 1 : 0) +
     (value.frozen.length ? 1 : 0);
@@ -143,27 +144,22 @@ export function PlansFilter({
               <div className="filter-col-title">
                 <span>Transport</span>
               </div>
-              {/* Two toggles, both on by default (= every shipment). Turning one off shows
-                  only the other; the last one on can't be turned off. */}
+              {/* Exactly one of the two is always chosen (Import by default). */}
               <div className="filter-seg-group">
                 {(
                   [
-                    ['IMPORT', 'Import', 'EXPORT'],
-                    ['EXPORT', 'Export', 'IMPORT'],
+                    ['IMPORT', 'Import'],
+                    ['EXPORT', 'Export'],
                   ] as const
-                ).map(([v, l, other]) => {
-                  const on = draft.direction === '' || draft.direction === v;
+                ).map(([v, l]) => {
+                  const on = draft.direction === v;
                   return (
                     <label className="filter-seg-item" key={v}>
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="plansTransport"
                         checked={on}
-                        onChange={() =>
-                          setDraft({
-                            ...draft,
-                            direction: !on ? '' : draft.direction === '' ? other : v,
-                          })
-                        }
+                        onChange={() => setDraft({ ...draft, direction: v })}
                       />
                       <span className="seg-dot" />
                       <span>{l}</span>
@@ -185,7 +181,6 @@ export function PlansFilter({
                     ['COMPLETED', 'Completed'],
                     ['IN_PROGRESS', 'In Progress'],
                     ['PENDING', 'Pending'],
-                    ['EXCEPTION', 'Exception'],
                   ] as const
                 ).map(([v, l]) => (
                   <label className="filter-seg-item" key={v}>
@@ -257,7 +252,13 @@ export function PlansFilter({
               type="button"
               className="filter-reset-btn"
               onClick={() =>
-                setDraft({ clientIds: [], direction: '', status: '', expandAll: false, frozen: [] })
+                setDraft({
+                  clientIds: [],
+                  direction: 'IMPORT',
+                  status: '',
+                  expandAll: false,
+                  frozen: [],
+                })
               }
             >
               Reset

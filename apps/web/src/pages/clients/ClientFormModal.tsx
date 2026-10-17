@@ -42,6 +42,8 @@ export function ClientFormModal({
           contactName: client.contactName ?? '',
           contactEmail: client.contactEmail ?? '',
           contactPhone: client.contactPhone ?? '',
+          cdcNo: client.cdcNo ?? '',
+          cdcIssueDate: client.cdcIssueDate ?? '',
           commissionUsd: client.commissionUsd,
           status: client.status,
         }
@@ -126,6 +128,8 @@ export function ClientFormModal({
           {field('contactName', 'Contact person')}
           {field('contactEmail', 'Contact email', { type: 'email' })}
           {field('contactPhone', 'Contact phone')}
+          {field('cdcNo', 'CDC No. (QIP master list)')}
+          {field('cdcIssueDate', 'CDC issue date', { type: 'date' })}
         </div>
         <div className={ui.actions}>
           <button type="button" className="btn-cancel-shipment" onClick={onClose}>

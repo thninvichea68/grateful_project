@@ -67,11 +67,14 @@ export const useProfit = (f: AnalyticsFilters, year: number, enabled: boolean) =
   useAnalytics<ProfitSummary>('profit', { clientId: f.clientId }, { year: String(year) }, enabled);
 
 /** The Overview polls every minute so it stays a "live" board. */
-export function useOverviewSummary() {
+/** The Overview's figures for a month (YYYY-MM); the current month, refreshed, when absent. */
+export function useOverviewSummary(month?: string) {
   return useQuery({
-    queryKey: [...queryKeys.overview, 'summary'],
-    queryFn: () => api<OverviewSummary>('/overview/summary'),
-    refetchInterval: 60_000,
+    queryKey: [...queryKeys.overview, 'summary', month ?? 'live'],
+    queryFn: () =>
+      api<OverviewSummary>('/overview/summary', { query: month ? { month } : undefined }),
+    refetchInterval: month ? false : 60_000,
+    placeholderData: keepPreviousData,
   });
 }
 

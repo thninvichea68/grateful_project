@@ -11,8 +11,11 @@ import {
   type ExchangeRateImportResult,
   forwarderInputSchema,
   forwarderUpdateSchema,
+  fuelPriceInputSchema,
   lookupValueInputSchema,
   portInputSchema,
+  publicHolidayInputSchema,
+  type PublicHoliday,
   type SettingsBundle,
 } from '@gs/shared';
 import { db } from '../../db/client';
@@ -20,8 +23,10 @@ import {
   consignees,
   exchangeRates,
   forwarders,
+  fuelPrices,
   lookupValues,
   ports,
+  publicHolidays,
   settings,
 } from '../../db/schema';
 import { requireAuth, requirePermission } from '../../middleware/auth';
@@ -30,6 +35,7 @@ import { audit } from '../../lib/audit';
 import { AppError, badRequest, conflict, notFound } from '../../lib/errors';
 import { env } from '../../config/env';
 import { lastSync, syncExchangeRate } from './rateSync';
+import { marketPrices, syncFuelPrices, syncMetalPrices } from './marketSync';
 import { excelUpload, requireFile } from '../../lib/http';
 import { queryRows } from '../../lib/listing';
 import { parseRateWorkbook } from './rateImport';
@@ -242,6 +248,126 @@ settingsRouter.post('/exchange-rates/sync', manage, async (req, res) => {
   res.json(status);
 });
 
+/* ---------- Fuel & metal prices ---------- */
+
+settingsRouter.get('/market-prices', requirePermission('settings:read'), async (_req, res) => {
+  res.json(await marketPrices());
+});
+
+/** Add a fuel period by hand (e.g. the notice is out but MEF hasn't published it yet). */
+settingsRouter.post('/fuel-prices', manage, async (req, res) => {
+  const v = parse(fuelPriceInputSchema, req.body);
+  const values = {
+    startDate: v.startDate,
+    endDate: v.endDate,
+    gasoline92: v.gasoline92!,
+    gasoil: v.gasoil!,
+    source: 'manual',
+  };
+  const [row] = await db
+    .insert(fuelPrices)
+    .values({ ...values, createdById: req.auth!.userId })
+    .onConflictDoUpdate({ target: fuelPrices.startDate, set: values })
+    .returning();
+  await audit(db, { action: 'UPDATE', entity: 'fuel_price', entityId: row!.id, after: row }, req);
+  res.status(201).json(row);
+});
+
+/* ---------- Public holidays: document issue dates skip them ---------- */
+
+const holidayColumns = sql`id, to_char(holiday_date, 'YYYY-MM-DD') AS "holidayDate", name, note`;
+
+/** A year's Cambodian public holidays (?year=2026; this year when absent), by date. */
+settingsRouter.get('/public-holidays', requirePermission('settings:read'), async (req, res) => {
+  const { year } = parse(
+    z.object({ year: z.coerce.number().int().min(2000).max(2100).optional() }),
+    req.query,
+  );
+  const y = year ?? new Date().getFullYear();
+  res.json(
+    await queryRows<PublicHoliday>(
+      db,
+      sql`SELECT ${holidayColumns} FROM public_holidays
+          WHERE holiday_date BETWEEN make_date(${y}, 1, 1) AND make_date(${y}, 12, 31)
+          ORDER BY holiday_date`,
+    ),
+  );
+});
+
+/** Add a holiday (a date already in the calendar is updated instead). */
+settingsRouter.post('/public-holidays', manage, async (req, res) => {
+  const v = parse(publicHolidayInputSchema, req.body);
+  const [row] = await db
+    .insert(publicHolidays)
+    .values({ ...v, createdById: req.auth!.userId })
+    .onConflictDoUpdate({
+      target: publicHolidays.holidayDate,
+      set: { name: v.name, note: v.note },
+    })
+    .returning();
+  await audit(
+    db,
+    { action: 'UPDATE', entity: 'public_holiday', entityId: row!.id, after: row },
+    req,
+  );
+  res.status(201).json(row);
+});
+
+settingsRouter.patch('/public-holidays/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const v = parse(publicHolidayInputSchema, req.body);
+  const [before] = await db.select().from(publicHolidays).where(eq(publicHolidays.id, id));
+  if (!before) throw notFound('Public holiday');
+  try {
+    const [row] = await db
+      .update(publicHolidays)
+      .set(v)
+      .where(eq(publicHolidays.id, id))
+      .returning();
+    await audit(
+      db,
+      { action: 'UPDATE', entity: 'public_holiday', entityId: id, before, after: row },
+      req,
+    );
+    res.json(row);
+  } catch (err) {
+    const code =
+      (err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code;
+    if (code === '23505') throw conflict(`${v.holidayDate} is already a public holiday`);
+    throw err;
+  }
+});
+
+settingsRouter.delete('/public-holidays/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const [row] = await db.delete(publicHolidays).where(eq(publicHolidays.id, id)).returning();
+  if (!row) throw notFound('Public holiday');
+  await audit(db, { action: 'DELETE', entity: 'public_holiday', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
+settingsRouter.delete('/fuel-prices/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const [row] = await db.delete(fuelPrices).where(eq(fuelPrices.id, id)).returning();
+  if (!row) throw notFound('Fuel price');
+  await audit(db, { action: 'DELETE', entity: 'fuel_price', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
+settingsRouter.post('/fuel-prices/sync', manage, async (req, res) => {
+  const status = await syncFuelPrices('manual', req.auth!.userId);
+  if (!status.ok)
+    throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get fuel prices: ${status.error}`);
+  res.json(status);
+});
+
+settingsRouter.post('/metal-prices/sync', manage, async (req, res) => {
+  const status = await syncMetalPrices('manual', req.auth!.userId);
+  if (!status.ok)
+    throw new AppError(502, 'UPSTREAM_ERROR', `Couldn't get metal prices: ${status.error}`);
+  res.json(status);
+});
+
 settingsRouter.delete('/exchange-rates/:id', manage, async (req, res) => {
   const { id } = parse(idParam, req.params);
   const [row] = await db.delete(exchangeRates).where(eq(exchangeRates.id, id)).returning();
@@ -301,6 +427,30 @@ crud(
   lookupValueInputSchema.transform((v) => ({ ...v, label: v.label ?? v.value })),
   lookupValueInputSchema.partial(),
 );
+
+/**
+ * Delete a port nobody uses yet (e.g. one added by mistake). A port that shipments,
+ * declarations or accounting already point to can't go; untick Active to hide it instead.
+ */
+settingsRouter.delete('/ports/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  let row: Record<string, unknown> | undefined;
+  try {
+    [row] = await db.delete(ports).where(eq(ports.id, id)).returning();
+  } catch (err) {
+    const code =
+      (err as { code?: string; cause?: { code?: string } }).code ??
+      (err as { cause?: { code?: string } }).cause?.code;
+    if (code === '23503')
+      throw conflict(
+        'This port is already used by shipments or records. Untick Active to hide it instead.',
+      );
+    throw err;
+  }
+  if (!row) throw notFound('Port');
+  await audit(db, { action: 'DELETE', entity: 'port', entityId: id, before: row }, req);
+  res.status(204).end();
+});
 
 settingsRouter.delete('/lookups/:id', manage, async (req, res) => {
   const { id } = parse(idParam, req.params);

@@ -80,7 +80,7 @@ beforeEach(async () => {
     eta: '2026-03-20',
     ata: '2026-03-25',
     loadType: 'LCL',
-    status: 'EXCEPTION',
+    status: 'IN_PROGRESS',
     clearanceStatus: 'EXCEPTION',
   });
   await ship({
@@ -286,6 +286,22 @@ describe('overview and profit', () => {
     const acc = await get('/overview/summary', { year: '2026' }, 'ACCOUNTANT');
     expect(acc.body.profit.total).toBe('200.00');
     expect(acc.body.kpis.period.from).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(acc.body.live).toBe(true);
+
+    // The month picker: a past month is read as at its last day, with its own profit month.
+    const feb = await get('/overview/summary', { month: '2026-02' }, 'ACCOUNTANT');
+    expect(feb.body).toMatchObject({
+      month: '2026-02',
+      live: false,
+      today: '2026-02-28',
+      year: 2026,
+    });
+    expect(feb.body.kpis.period).toEqual({ from: '2026-02-01', to: '2026-02-28' });
+    expect(feb.body.profit.currentMonth).toBe('2026-02');
+    expect(feb.body.profit.thisMonth).toBe('200.00');
+    // A month still to come falls back to the current one.
+    const later = await get('/overview/summary', { month: '2999-01' }, 'ACCOUNTANT');
+    expect(later.body.live).toBe(true);
   });
 
   it('client revenue breaks the ledger down per client with a monthly trend', async () => {
@@ -345,7 +361,7 @@ describe('overview and profit', () => {
 
   it('live consignments put exceptions first', async () => {
     const res = await get('/overview/live-consignments');
-    expect(res.body[0]).toMatchObject({ status: 'EXCEPTION', clientCode: 'JR' });
+    expect(res.body[0]).toMatchObject({ clearanceStatus: 'EXCEPTION', clientCode: 'JR' });
     expect(res.body.every((r: { status: string }) => r.status !== 'COMPLETED')).toBe(true);
   });
 });

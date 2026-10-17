@@ -12,6 +12,7 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -27,6 +28,7 @@ import {
   useLiveConsignments,
   usePorts,
 } from '../../features/analytics';
+import { useAuth } from '../../auth/AuthProvider';
 import { ShipmentStatusPill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import {
@@ -42,6 +44,9 @@ import {
   niceMax,
 } from './parts';
 import { WorldMap } from './WorldMap';
+import { SingleClientVolume } from './SingleClientVolume';
+import { ProfitBars } from './ProfitBars';
+import acc from './AccountsCard.module.css';
 export { KpiRow } from './KpiRow';
 
 /* ------------------------------ Shipment Summary ------------------------------ */
@@ -57,18 +62,25 @@ function SummaryTooltip({
     total: number;
     imports: number;
     exports: number;
+    future: boolean;
   };
   return (
     <div className={dash.tooltip}>
       <div>
         {MONTHS_LONG[Number(p.month.slice(5, 7)) - 1]} {year}
       </div>
-      <div>
-        Shipments <b>{p.total}</b>
-      </div>
-      <div style={{ fontWeight: 600 }}>
-        Import {p.imports} · Export {p.exports}
-      </div>
+      {p.future ? (
+        <div style={{ fontWeight: 600 }}>Not available yet</div>
+      ) : (
+        <>
+          <div>
+            Shipments <b>{p.total}</b>
+          </div>
+          <div style={{ fontWeight: 600 }}>
+            Import {p.imports} · Export {p.exports}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -89,25 +101,29 @@ export function ShipmentSummaryCard({
   const [selected, setSelected] = useState(
     currentMonth.startsWith(String(year)) ? currentMonth : `${year}-01`,
   );
-  const data = monthly.map((m) => ({ ...m, label: monthLabel(m.month) }));
-  const sel = data.find((d) => d.month === selected);
+  // Months after the current one haven't happened yet: no line, a hatched "not available" band.
+  const data = monthly.map((m) => {
+    const future = !!currentMonth && m.month > currentMonth;
+    return { ...m, label: monthLabel(m.month), future, actual: future ? null : m.total };
+  });
+  const firstFuture = data.findIndex((d) => d.future);
+  const futureFrom = firstFuture > 0 ? data[firstFuture - 1]!.label : data[0]?.label;
+  const sel = data.find((d) => d.month === selected && !d.future);
   const empty = !loading && data.every((d) => d.total === 0);
   return (
     <div className="shipment-summary-card ga-chart">
       <div className="ss-header-row">
         <h3>Shipment Summary of {year}</h3>
-        <select
-          className={dash.ssMonthSelect}
+        <CardDropdown
+          label="Highlight month"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          aria-label="Highlight month"
-        >
-          {data.map((d) => (
-            <option key={d.month} value={d.month}>
-              {MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: {d.total}
-            </option>
-          ))}
-        </select>
+          onChange={setSelected}
+          options={data.map((d) => ({
+            value: d.month,
+            label: `${MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: ${d.future ? '—' : d.total}`,
+            disabled: d.future,
+          }))}
+        />
       </div>
       <div className="ss-chart-wrap">
         <ChartState loading={loading} error={error} empty={empty} height={250}>
@@ -116,16 +132,33 @@ export function ShipmentSummaryCard({
               <AreaChart
                 data={data}
                 margin={{ top: 16, right: 16, bottom: 0, left: -12 }}
-                onClick={(e) =>
-                  e?.activeLabel &&
-                  setSelected(data.find((d) => d.label === e.activeLabel)?.month ?? selected)
-                }
+                onClick={(e) => {
+                  const hit = data.find((d) => d.label === e?.activeLabel);
+                  if (hit && !hit.future) setSelected(hit.month);
+                }}
               >
                 <defs>
                   <linearGradient id="ssAreaGlow" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.25} />
                     <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
                   </linearGradient>
+                  <pattern
+                    id="ssFutureHatch"
+                    width="8"
+                    height="8"
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <line
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="8"
+                      stroke="var(--text-tertiary)"
+                      strokeOpacity={0.22}
+                      strokeWidth={2}
+                    />
+                  </pattern>
                 </defs>
                 <CartesianGrid
                   vertical={false}
@@ -136,18 +169,22 @@ export function ShipmentSummaryCard({
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  tick={(p: { x: number; y: number; payload: { value: string } }) => (
-                    <text
-                      x={p.x}
-                      y={p.y + 12}
-                      textAnchor="middle"
-                      fontSize={10}
-                      fontWeight={p.payload.value === sel?.label ? 800 : 700}
-                      fill={p.payload.value === sel?.label ? '#22D3EE' : 'var(--text-tertiary)'}
-                    >
-                      {p.payload.value}
-                    </text>
-                  )}
+                  tick={(p: { x: number; y: number; payload: { value: string } }) => {
+                    const future = data.find((d) => d.label === p.payload.value)?.future;
+                    return (
+                      <text
+                        x={p.x}
+                        y={p.y + 12}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fontWeight={p.payload.value === sel?.label ? 800 : 700}
+                        fill={p.payload.value === sel?.label ? '#22D3EE' : 'var(--text-tertiary)'}
+                        fillOpacity={future ? 0.45 : 1}
+                      >
+                        {p.payload.value}
+                      </text>
+                    );
+                  }}
                 />
                 <YAxis
                   allowDecimals={false}
@@ -160,6 +197,18 @@ export function ShipmentSummaryCard({
                   content={<SummaryTooltip year={year} />}
                   cursor={{ stroke: '#22D3EE', strokeDasharray: '2 3', strokeWidth: 1.5 }}
                 />
+                {firstFuture >= 0 && (
+                  <ReferenceArea
+                    x1={futureFrom}
+                    x2={data[data.length - 1]!.label}
+                    fill="url(#ssFutureHatch)"
+                    fillOpacity={1}
+                    stroke="var(--border-strong)"
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.6}
+                    ifOverflow="extendDomain"
+                  />
+                )}
                 {sel && (
                   <ReferenceLine
                     x={sel.label}
@@ -171,13 +220,13 @@ export function ShipmentSummaryCard({
                       position: 'top',
                       fill: '#22D3EE',
                       fontSize: 11,
-                      fontWeight: 900,
+                      fontWeight: 700,
                     }}
                   />
                 )}
                 <Area
                   type="monotone"
-                  dataKey="total"
+                  dataKey="actual"
                   stroke="#22D3EE"
                   strokeWidth={3}
                   fill="url(#ssAreaGlow)"
@@ -195,50 +244,87 @@ export function ShipmentSummaryCard({
 
 /* ------------------------------ Net profit (accounting roles) ------------------------------ */
 
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const monthName = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+
+/**
+ * Net profit for one month (this month to start; click a month on the line to change it):
+ * the figure, the change on the month before, and that month's split by client.
+ */
 export function ProfitCard({ profit }: { profit: ProfitSummary }) {
-  const ch = changePct(Number(profit.thisMonth), Number(profit.lastMonth));
-  const positive = profit.byClient.filter((c) => Number(c.netProfit) > 0);
-  const spark = profit.monthly.map((m) => ({ v: Number(m.netProfit) }));
+  const [picked, setPicked] = useState<{ year: number; month: string } | null>(null);
+  const month = picked?.year === profit.year ? picked.month : profit.currentMonth;
+  const idx = profit.monthly.findIndex((m) => m.month === month);
+  const value = Number(profit.monthly[idx]?.netProfit ?? 0);
+  const prevMonth = idx > 0 ? profit.monthly[idx - 1]! : null;
+  // January's "month before" is last December: only known for the current month.
+  const prevValue = prevMonth
+    ? Number(prevMonth.netProfit)
+    : month === profit.currentMonth
+      ? Number(profit.lastMonth)
+      : null;
+  const ch = prevValue === null ? null : changePct(value, prevValue);
+  const prevLabel = prevMonth ? MONTH_NAMES[Number(prevMonth.month.slice(5, 7)) - 1] : 'December';
+
+  const rows = profit.byClientMonthly.filter((c) => c.month === month);
+  const sum = rows.reduce((t, c) => t + Number(c.netProfit), 0);
+  const clients = rows.map((c) => ({
+    ...c,
+    pct: sum ? Math.round((Number(c.netProfit) / sum) * 1000) / 10 : 0,
+  }));
+  const positive = clients.filter((c) => Number(c.netProfit) > 0);
+
   return (
     <div className="rc-card ga-revenue">
       <div className="rc-header">
         <div className="rc-title">Total Net Profit</div>
-        <div className="rc-subtitle">Overview of profit across all clients, {profit.year}</div>
+        <div className="rc-subtitle">
+          {monthName(month)} · all clients · {profit.year} to date {fmtMoney(profit.total)}
+        </div>
       </div>
       <div className="rc-top-hero">
         <div className="rc-metric-left">
           <div
             className="rc-total-amount"
-            style={Number(profit.total) < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
+            style={value < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
           >
-            {fmtMoney(profit.total)}
+            {fmtMoney(value)}
           </div>
           <div className="rc-trend-pill">
-            <span className="rc-pill-badge">{ch?.text ?? '—'}</span>
-            <span className="rc-pill-text">this month vs last</span>
+            <span
+              className="rc-pill-badge"
+              style={
+                ch && !ch.up
+                  ? {
+                      background: 'var(--status-exception-bg)',
+                      color: 'var(--status-exception-fg)',
+                    }
+                  : undefined
+              }
+            >
+              {ch?.text ?? '—'}
+            </span>
+            <span className="rc-pill-text">vs {prevLabel}</span>
           </div>
         </div>
-        <div className="rc-sparkline-wrap" aria-hidden="true">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={spark} margin={{ top: 4, right: 4, bottom: 2, left: 2 }}>
-              <defs>
-                <linearGradient id="revenueSparkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00C2E8" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#00C2E8" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke="#00C2E8"
-                strokeWidth={2.5}
-                fill="url(#revenueSparkGrad)"
-                dot={false}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <ProfitBars
+          monthly={profit.monthly}
+          selected={month}
+          onSelect={(m) => setPicked({ year: profit.year, month: m })}
+        />
       </div>
       <div className="rc-main-body">
         <div className="rc-donut-wrapper">
@@ -267,7 +353,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
                   {positive.map((c) => (
                     <Cell
                       key={c.clientId}
-                      fill={CLIENT_COLORS[profit.byClient.indexOf(c) % CLIENT_COLORS.length]}
+                      fill={CLIENT_COLORS[clients.indexOf(c) % CLIENT_COLORS.length]}
                     />
                   ))}
                 </Pie>
@@ -275,12 +361,12 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
             </ResponsiveContainer>
           ) : null}
           <div className="rc-donut-center-text">
-            <span className="pct">{profit.byClient.length}</span>
+            <span className="pct">{clients.length}</span>
             <span className="tag">Clients</span>
           </div>
         </div>
         <div className="rc-client-list">
-          {profit.byClient.slice(0, 5).map((c, i) => (
+          {clients.slice(0, 5).map((c, i) => (
             <div className="rc-client-row" key={c.clientId}>
               <div className="rc-bar-group">
                 <div className="rc-client-name">
@@ -313,8 +399,8 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
               </div>
             </div>
           ))}
-          {!profit.byClient.length && (
-            <span className={dash.mutedNote}>No ledger entries this year yet.</span>
+          {!clients.length && (
+            <span className={dash.mutedNote}>No ledger entries in {monthName(month)} yet.</span>
           )}
         </div>
       </div>
@@ -323,8 +409,28 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
 }
 
 /** Shown instead of profit to roles without accounting access: shipment share per client. */
-export function ClientShareCard({ accounts, year }: { accounts: AccountRow[]; year: number }) {
+export function ClientShareCard({
+  accounts,
+  year,
+  monthly,
+  currentMonth,
+}: {
+  accounts: AccountRow[];
+  year: number;
+  monthly: MonthlyVolumeRow[];
+  currentMonth: string;
+}) {
   const total = accounts.reduce((s, a) => s + a.all.total, 0);
+  // One client: a share-of-total donut is always 100%, so show their year month by month.
+  if (accounts.length === 1)
+    return (
+      <SingleClientVolume
+        a={accounts[0]!}
+        year={year}
+        monthly={monthly}
+        currentMonth={currentMonth}
+      />
+    );
   return (
     <div className="rc-card ga-revenue">
       <div className="rc-header">
@@ -462,71 +568,225 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
 
 export function AccountsCard({ filters }: { filters: { from: string; to: string } }) {
   const [type, setType] = useState<'all' | 'import' | 'export'>('all');
-  const q = useAccounts(filters);
+  // A user limited to one client picks a year and month instead of All / Import / Export
+  // (their card already shows the import/export split).
+  const { user } = useAuth();
+  const single = user?.clientIds?.length === 1;
+  const thisYear = Number(filters.from.slice(0, 4));
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' })
+    .format(new Date())
+    .slice(0, 7);
+  const [year, setYear] = useState(String(thisYear));
+  const [month, setMonth] = useState(''); // '' = the whole year
+  // Months up to the current one in the current year; all twelve for a past year.
+  const lastMonth = year === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
+  const range = !single
+    ? filters
+    : month
+      ? {
+          from: `${year}-${month}-01`,
+          to: new Date(Date.UTC(Number(year), Number(month), 0)).toISOString().slice(0, 10),
+        }
+      : { from: `${year}-01-01`, to: `${year}-12-31` };
+  const q = useAccounts(range);
+  const period = month ? `${MONTHS_LONG[Number(month) - 1]} ${year}` : year;
   return (
     <div className="accounts-card ga-accounts">
       <div className="accounts-card-header">
         <h3>Key Logistics Accounts</h3>
-        <div className="accounts-seg-control" role="tablist">
-          {(['all', 'import', 'export'] as const).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={type === t}
-              className={`accounts-seg-btn${type === t ? ' active' : ''}`}
-              onClick={() => setType(t)}
-            >
-              {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
-            </button>
-          ))}
-        </div>
+        {single ? (
+          <div className={acc.controls}>
+            <CardDropdown
+              label="Year"
+              value={year}
+              onChange={(y) => {
+                setYear(y);
+                // Keep the month only if it exists in that year so far.
+                const last = y === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
+                if (Number(month) > last) setMonth('');
+              }}
+              options={[0, 1, 2].map((d) => ({
+                value: String(thisYear - d),
+                label: String(thisYear - d),
+              }))}
+            />
+            <CardDropdown
+              label="Month"
+              value={month}
+              onChange={setMonth}
+              options={[
+                { value: '', label: 'All months' },
+                ...Array.from({ length: lastMonth }, (_, i) => ({
+                  value: String(i + 1).padStart(2, '0'),
+                  label: MONTHS[i]!,
+                })),
+              ]}
+            />
+          </div>
+        ) : (
+          <div className="accounts-seg-control" role="tablist">
+            {(['all', 'import', 'export'] as const).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={type === t}
+                className={`accounts-seg-btn${type === t ? ' active' : ''}`}
+                onClick={() => setType(t)}
+              >
+                {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="accounts-table-wrap">
-        <ChartState loading={q.isLoading} error={q.error} empty={!q.data?.length} height={120}>
-          <table className="accounts-table">
-            <thead>
-              <tr>
-                <th>CLIENT NAME</th>
-                <th style={{ textAlign: 'center' }}>Total</th>
-                <th style={{ textAlign: 'center' }}>CY / CY</th>
-                <th style={{ textAlign: 'center' }}>LCL</th>
-                <th style={{ textAlign: 'center' }}>AIR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {q.data?.map((a) => {
-                const d = a[type];
-                return (
-                  <tr key={a.clientId}>
-                    <td>
-                      <Link to={`/clients/${a.clientId}`} className="accounts-name">
-                        {a.name}
-                      </Link>
-                    </td>
-                    <td className="accounts-val-bold" style={{ textAlign: 'center' }}>
-                      {d.total.toLocaleString()}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.cy}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.lcl}
-                    </td>
-                    <td
-                      style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text-primary)' }}
-                    >
-                      {d.air}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <ChartState
+          loading={q.isLoading}
+          error={q.error}
+          empty={!q.data?.length}
+          emptyText={single ? `No shipments in ${period}` : undefined}
+          height={120}
+        >
+          {q.data?.length === 1 ? (
+            <SingleAccount
+              a={q.data[0]!}
+              type={single ? 'all' : type}
+              period={single ? period : 'this year'}
+            />
+          ) : (
+            <table className="accounts-table">
+              <thead>
+                <tr>
+                  <th>CLIENT NAME</th>
+                  <th style={{ textAlign: 'center' }}>Total</th>
+                  <th style={{ textAlign: 'center' }}>CY / CY</th>
+                  <th style={{ textAlign: 'center' }}>LCL</th>
+                  <th style={{ textAlign: 'center' }}>AIR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {q.data?.map((a) => {
+                  const d = a[type];
+                  return (
+                    <tr key={a.clientId}>
+                      <td>
+                        <Link to={`/clients/${a.clientId}`} className="accounts-name">
+                          {a.name}
+                        </Link>
+                      </td>
+                      <td className="accounts-val-bold" style={{ textAlign: 'center' }}>
+                        {d.total.toLocaleString()}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.cy}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.lcl}
+                      </td>
+                      <td
+                        style={{
+                          textAlign: 'center',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {d.air}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </ChartState>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One client only (e.g. a user limited to one client): a summary instead of a one-row
+ * table: total, import/export split, then CY/CY, LCL and AIR with their share.
+ */
+function SingleAccount({
+  a,
+  type,
+  period,
+}: {
+  a: AccountRow;
+  type: 'all' | 'import' | 'export';
+  /** "this year", "2025" or "October 2026". */
+  period: string;
+}) {
+  const d = a[type];
+  const pct = (n: number) => (d.total ? Math.round((n / d.total) * 100) : 0);
+  const flows = a.all.total
+    ? { imp: (a.import.total / a.all.total) * 100, exp: (a.export.total / a.all.total) * 100 }
+    : { imp: 0, exp: 0 };
+  return (
+    <div className={acc.single}>
+      <div className={acc.head}>
+        <span className={acc.badge}>{a.code}</span>
+        <div className={acc.who}>
+          <Link to={`/clients/${a.clientId}`} className={acc.name}>
+            {a.name}
+          </Link>
+          <span className={acc.sub}>
+            {type === 'all' ? 'All shipments' : type === 'import' ? 'Imports' : 'Exports'}{' '}
+            {period === 'this year' ? period : `in ${period}`}
+          </span>
+        </div>
+        <div className={acc.total}>
+          <b>{d.total.toLocaleString()}</b>
+          <span>shipments</span>
+        </div>
+      </div>
+
+      <div className={acc.flow}>
+        <div className={acc.flowBar} role="img" aria-label="Import and export split">
+          <span style={{ width: `${flows.imp}%` }} data-on={type !== 'export' || undefined} />
+          <span style={{ width: `${flows.exp}%` }} data-on={type !== 'import' || undefined} />
+        </div>
+        <div className={acc.flowLegend}>
+          <span>
+            <i data-kind="imp" /> Import <b>{a.import.total}</b>
+          </span>
+          <span>
+            <i data-kind="exp" /> Export <b>{a.export.total}</b>
+          </span>
+        </div>
+      </div>
+
+      <div className={acc.modes}>
+        {(
+          [
+            ['CY / CY', d.cy],
+            ['LCL', d.lcl],
+            ['AIR', d.air],
+          ] as const
+        ).map(([label, n]) => (
+          <div key={label} className={acc.mode}>
+            <span className={acc.modeLabel}>{label}</span>
+            <span className={acc.modeVal}>
+              {n.toLocaleString()} <small>{pct(n)}%</small>
+            </span>
+            <span className={acc.modeBar}>
+              <span style={{ width: `${pct(n)}%` }} />
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -616,16 +876,15 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
 
 /* ------------------------------ Forwarder radar ------------------------------ */
 
-type ForwarderMetric = 'factory' | 'imports' | 'exports' | 'onTimePct';
+type ForwarderMetric = 'imports' | 'exports';
 
 export function ForwarderCard({ filters }: { filters: { from: string; to: string } }) {
-  const [metric, setMetric] = useState<ForwarderMetric>('factory');
+  const [metric, setMetric] = useState<ForwarderMetric>('imports');
   const q = useForwarders(filters);
   const data = (q.data ?? []).slice(0, 6).map((f) => ({
     name: f.name.replace(' Logistics', '').replace('Global Forwarding', ''),
     v: f[metric] ?? 0,
   }));
-  const unit = metric === 'onTimePct' ? '%' : '';
   return (
     <div className="forwarder-card ga-forwarder">
       <div className="forwarder-card-header">
@@ -639,10 +898,8 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
           onChange={setMetric}
           triggerClass="forwarder-filter-trigger"
           options={[
-            { value: 'factory', label: 'Factory' },
             { value: 'imports', label: 'Import' },
             { value: 'exports', label: 'Export' },
-            { value: 'onTimePct', label: 'On-time %' },
           ]}
         />
       </div>
@@ -663,20 +920,13 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
                 dataKey="name"
                 tick={{ fontSize: 10.5, fontWeight: 700, fill: 'var(--text-secondary)' }}
               />
-              <PolarRadiusAxis
-                tick={false}
-                axisLine={false}
-                domain={[0, metric === 'onTimePct' ? 100 : 'auto']}
-              />
+              <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 'auto']} />
               <Tooltip
                 content={({ active, payload }) =>
                   active && payload?.length ? (
                     <div className={dash.tooltipPlain}>
                       {(payload[0]!.payload as { name: string }).name}:{' '}
-                      <b>
-                        {payload[0]!.value}
-                        {unit}
-                      </b>
+                      <b>{payload[0]!.value} shipments</b>
                     </div>
                   ) : null
                 }

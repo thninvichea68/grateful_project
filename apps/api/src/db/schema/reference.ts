@@ -22,6 +22,7 @@ import {
   clientStatusEnum,
   lookupTypeEnum,
   rate,
+  khr,
 } from './_common';
 import { users } from './auth';
 
@@ -86,6 +87,9 @@ export const clients = pgTable(
     contactName: text('contact_name'),
     contactEmail: text('contact_email'),
     contactPhone: text('contact_phone'),
+    /** QIP master list (CDC) number and issue date, printed on export invoices / packing lists. */
+    cdcNo: text('cdc_no'),
+    cdcIssueDate: date('cdc_issue_date'),
     /** "CM" deducted in the monthly ledger. Prototype rule: JR = 0, others = 50. */
     commissionUsd: money('commission_usd').notNull().default('50.00'),
     status: clientStatusEnum('status').notNull().default('ACTIVE'),
@@ -134,6 +138,48 @@ export const exchangeRates = pgTable('exchange_rates', {
   createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
   ...timestamps,
 });
+
+/** Ministry of Commerce retail fuel price ceilings (riel per litre), one row per price period. */
+export const fuelPrices = pgTable('fuel_prices', {
+  id: id(),
+  startDate: date('start_date').notNull().unique(),
+  endDate: date('end_date'),
+  gasoline92: khr('gasoline_92').notNull(),
+  gasoil: khr('gasoil_50ppm').notNull(),
+  sourceLink: text('source_link'),
+  /** 'MEF' (open-data API) or 'manual'. */
+  source: text('source').notNull().default('MEF'),
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+  ...timestamps,
+});
+
+/**
+ * Cambodian public holidays (Settings → Public holidays). Document issue dates skip them, as
+ * they skip weekends: the issue date is the next working day after the declaration date.
+ */
+export const publicHolidays = pgTable('public_holidays', {
+  id: id(),
+  holidayDate: date('holiday_date').notNull().unique(),
+  name: text('name').notNull(),
+  /** e.g. "Provisional: check against the sub-decree". */
+  note: text('note'),
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+  ...timestamps,
+});
+
+/** International spot price per metal per day (USD per troy ounce); the day's last fetch wins. */
+export const metalPrices = pgTable(
+  'metal_prices',
+  {
+    id: id(),
+    symbol: text('symbol').notNull(),
+    priceDate: date('price_date').notNull(),
+    usdPerOz: rate('usd_per_oz').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('metal_prices_symbol_date_unique').on(t.symbol, t.priceDate)],
+);
 
 /** Workspace settings as key → JSON value (default clearing port, company details…). */
 export const settings = pgTable('settings', {

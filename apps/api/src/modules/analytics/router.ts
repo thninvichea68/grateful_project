@@ -9,6 +9,7 @@ import {
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import * as svc from './service';
+import { scopeClients } from '../../lib/clientScope';
 
 /** Parse filters; default period is the current business year. */
 async function filters(req: Request) {
@@ -16,7 +17,14 @@ async function filters(req: Request) {
   const today = await svc.businessToday();
   const year = Number(today.slice(0, 4));
   const range = svc.yearRange(year);
-  return { ...q, from: q.from ?? range.from, to: q.to ?? range.to, today };
+  return {
+    ...q,
+    // Users limited to some clients only ever see those clients' figures.
+    clientId: scopeClients(req, q.clientId),
+    from: q.from ?? range.from,
+    to: q.to ?? range.to,
+    today,
+  };
 }
 
 export const analyticsRouter = Router();
@@ -60,33 +68,53 @@ export const overviewRouter = Router();
 overviewRouter.use(requireAuth, requirePermission('dashboard:read'));
 
 /**
- * Everything the Overview's top half needs in one round trip: this month's KPIs vs last
- * month, the year's monthly volume, and (for accounting roles) net profit.
+ * Everything the Overview's top half needs in one round trip: a month's KPIs vs the month
+ * before, that year's monthly volume, and (for accounting roles) net profit. The month is
+ * ?month=YYYY-MM (the Overview's month picker), the current month when absent; never later.
  */
 overviewRouter.get('/summary', async (req, res) => {
-  const { year: y } = parse(
-    z.object({ year: z.coerce.number().int().min(2000).max(2100).optional() }),
-    { year: req.query.year },
+  const { year: y, month: asked } = parse(
+    z.object({
+      year: z.coerce.number().int().min(2000).max(2100).optional(),
+      month: z
+        .string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM')
+        .optional(),
+    }),
+    { year: req.query.year, month: req.query.month },
   );
   const today = await svc.businessToday();
-  const year = y ?? Number(today.slice(0, 4));
-  const monthStart = `${today.slice(0, 7)}-01`;
+  const current = today.slice(0, 7);
+  const month = asked && asked < current ? asked : current;
+  const live = month === current;
+  const monthStart = `${month}-01`;
   const d = new Date(`${monthStart}T00:00:00Z`);
   const monthEnd = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
     .toISOString()
     .slice(0, 10);
+  // A past month is read as at its last day: its own "this month" and "last month".
+  const asOf = live ? today : monthEnd;
+  const year = y ?? Number(month.slice(0, 4));
   const [kpis, monthly, profit] = await Promise.all([
-    svc.kpis({ from: monthStart, to: monthEnd }),
-    svc.monthlyVolume(svc.yearRange(year)),
+    svc.kpis({ from: monthStart, to: monthEnd, clientId: scopeClients(req) }),
+    svc.monthlyVolume({ ...svc.yearRange(year), clientId: scopeClients(req) }),
     hasPermission(req.auth!.permissions, 'accounting:read')
-      ? svc.profit(year, today)
+      ? svc.profit(year, asOf, scopeClients(req))
       : Promise.resolve(undefined),
   ]);
-  const body: OverviewSummary = { year, today, kpis, monthly, ...(profit ? { profit } : {}) };
+  const body: OverviewSummary = {
+    year,
+    today: asOf,
+    month,
+    live,
+    kpis,
+    monthly,
+    ...(profit ? { profit } : {}),
+  };
   res.json(body);
 });
 
 overviewRouter.get('/live-consignments', async (req, res) => {
   const f = parse(analyticsQuerySchema, req.query);
-  res.json(await svc.liveConsignments(f));
+  res.json(await svc.liveConsignments({ ...f, clientId: scopeClients(req, f.clientId) }));
 });

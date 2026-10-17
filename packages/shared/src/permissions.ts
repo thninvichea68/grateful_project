@@ -16,6 +16,9 @@ export const PERMISSIONS = [
   'cutstock:override',
   'accounting:read',
   'accounting:write',
+  /** Credit Noted (Chea / customs broker payment vouchers), separate from the rest of accounting. */
+  'creditnotes:read',
+  'creditnotes:write',
   'quotations:read',
   'quotations:write',
   'documents:read',
@@ -30,7 +33,14 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-export const ROLE_CODES = ['ADMIN', 'MANAGER', 'OPERATOR', 'ACCOUNTANT', 'VIEWER'] as const;
+export const ROLE_CODES = [
+  'ADMIN',
+  'MANAGER',
+  'OPERATOR',
+  'ACCOUNTANT',
+  'VIEWER',
+  'CUSTOMS_BROKER',
+] as const;
 export type RoleCode = (typeof ROLE_CODES)[number];
 
 const READ_ALL: Permission[] = PERMISSIONS.filter((p) => p.endsWith(':read'));
@@ -39,7 +49,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
   ADMIN: [...PERMISSIONS],
   MANAGER: PERMISSIONS.filter((p) => p !== 'settings:manage' && p !== 'staff:manage'),
   OPERATOR: [
-    ...READ_ALL.filter((p) => p !== 'audit:read' && p !== 'accounting:read'),
+    ...READ_ALL.filter(
+      (p) => p !== 'audit:read' && p !== 'accounting:read' && p !== 'creditnotes:read',
+    ),
     'shipments:write',
     'clients:write',
     'cutstock:write',
@@ -49,20 +61,34 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
   ACCOUNTANT: [
     ...READ_ALL.filter((p) => p !== 'audit:read'),
     'accounting:write',
+    'creditnotes:write',
     'quotations:write',
     'documents:write',
     'followups:write',
   ],
   VIEWER: READ_ALL.filter((p) => p !== 'audit:read' && p !== 'staff:read'),
+  /** The customs broker (Chea): writes Credit Noted vouchers and can look up shipments. */
+  CUSTOMS_BROKER: ['shipments:read', 'creditnotes:read', 'creditnotes:write'],
 };
 
 export const ROLE_LABEL: Record<RoleCode, string> = {
   ADMIN: 'Admin',
   MANAGER: 'Manager',
-  OPERATOR: 'Operator',
+  OPERATOR: 'Operations',
   ACCOUNTANT: 'Accountant',
   VIEWER: 'Viewer',
+  CUSTOMS_BROKER: 'Customs Broker',
 };
+
+/** A user's permissions: their role's, plus per-user extras, minus per-user removals. */
+export function effectivePermissions(
+  role: readonly string[],
+  add: readonly string[] = [],
+  remove: readonly string[] = [],
+): Permission[] {
+  const removed = new Set(remove);
+  return PERMISSIONS.filter((p) => (role.includes(p) || add.includes(p)) && !removed.has(p));
+}
 
 export function hasPermission(granted: readonly string[], needed: Permission): boolean {
   return granted.includes(needed);

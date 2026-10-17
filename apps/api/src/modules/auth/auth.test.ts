@@ -103,6 +103,61 @@ describe('GET /auth/me', () => {
   });
 });
 
+describe('my profile', () => {
+  // Smallest valid PNG (1×1).
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  it('any role can rename itself and set or remove a profile picture', async () => {
+    const u = await createUser('VIEWER');
+    const { body } = await login(u.email);
+    const h = { Authorization: `Bearer ${body.accessToken}` };
+
+    const renamed = await request(app)
+      .patch('/api/v1/auth/me')
+      .set(h)
+      .send({ fullName: ' Sea Sokchea ' });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.user.fullName).toBe('Sea Sokchea');
+    expect(
+      (await request(app).patch('/api/v1/auth/me').set(h).send({ fullName: 'x' })).status,
+    ).toBe(400);
+
+    const up = await request(app)
+      .post('/api/v1/auth/me/avatar')
+      .set(h)
+      .attach('file', PNG, 'me.png');
+    expect(up.status).toBe(200);
+    const url = up.body.user.avatarUrl as string;
+    expect(url).toMatch(/^\/api\/v1\/auth\/avatars\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.png$/);
+
+    // Served to <img> without a token, as an image.
+    const img = await request(app).get(url);
+    expect(img.status).toBe(200);
+    expect(img.headers['content-type']).toBe('image/png');
+
+    // A non-image renamed .png is refused.
+    const fake = await request(app)
+      .post('/api/v1/auth/me/avatar')
+      .set(h)
+      .attach('file', Buffer.from('MZ not a picture'), 'evil.png');
+    expect(fake.status).toBe(400);
+
+    const removed = await request(app).delete('/api/v1/auth/me/avatar').set(h);
+    expect(removed.body.user.avatarUrl).toBeNull();
+    // Once it's no longer anyone's avatar, the file isn't served.
+    expect((await request(app).get(url)).status).toBe(404);
+  });
+
+  it('needs a signed-in user', async () => {
+    expect((await request(app).patch('/api/v1/auth/me').send({ fullName: 'Nobody' })).status).toBe(
+      401,
+    );
+  });
+});
+
 describe('refresh token rotation', () => {
   it('rotates the cookie and detects reuse of an old token', async () => {
     const u = await createUser('OPERATOR');
@@ -206,6 +261,11 @@ describe('system', () => {
     const res = await request(app)
       .get('/api/v1/meta/nav-counts')
       .set('Authorization', `Bearer ${body.accessToken}`);
-    expect(res.body).toEqual({ openFollowUps: 0, overdueFollowUps: 0, unreadNotifications: 0 });
+    expect(res.body).toEqual({
+      openFollowUps: 0,
+      overdueFollowUps: 0,
+      unreadNotifications: 0,
+      creditNoteInbox: 0,
+    });
   });
 });

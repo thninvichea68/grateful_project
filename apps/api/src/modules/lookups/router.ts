@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asc, eq, isNull } from 'drizzle-orm';
 import {
   LOOKUP_TYPES,
@@ -12,12 +13,13 @@ import { clients, consignees, countries, forwarders, lookupValues, ports } from 
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
+import { allowedClients, assertClientAllowed } from '../../lib/clientScope';
 
 export const lookupsRouter = Router();
 lookupsRouter.use(requireAuth);
 
 /** Everything the forms' dropdowns need, in one request. */
-lookupsRouter.get('/', async (_req, res) => {
+lookupsRouter.get('/', async (req, res) => {
   const [c, cn, f, p, co, v] = await Promise.all([
     db
       .select({
@@ -71,9 +73,11 @@ lookupsRouter.get('/', async (_req, res) => {
     LOOKUP_TYPES.map((t) => [t, [] as { value: string; label: string }[]]),
   ) as LookupsResponse['values'];
   for (const row of v) values[row.type as LookupType].push({ value: row.value, label: row.label });
+  // Users limited to some clients only get those clients (and their consignees).
+  const allowed = allowedClients(req);
   const body: LookupsResponse = {
-    clients: c,
-    consignees: cn,
+    clients: allowed ? c.filter((x) => allowed.includes(x.id)) : c,
+    consignees: allowed ? cn.filter((x) => !x.clientId || allowed.includes(x.clientId)) : cn,
     forwarders: f,
     ports: p,
     countries: co,
@@ -84,6 +88,7 @@ lookupsRouter.get('/', async (_req, res) => {
 
 lookupsRouter.post('/consignees', requirePermission('shipments:write'), async (req, res) => {
   const input = parse(consigneeInputSchema, req.body);
+  if (input.clientId) assertClientAllowed(req, input.clientId);
   const row = await db.transaction(async (tx) => {
     const [created] = await tx.insert(consignees).values(input).returning();
     await audit(
@@ -117,3 +122,38 @@ lookupsRouter.post('/forwarders', requirePermission('shipments:write'), async (r
   });
   res.status(201).json({ id: row.id, code: row.code, name: row.name });
 });
+
+/**
+ * "+ Add New" in a credit note line's dropdowns: adds a charge description (Charge descriptions)
+ * or a unit (Charge units) to its list in Settings → Dropdown lists. Stored in capitals; one
+ * that already exists is returned as is.
+ */
+const quickAdd = (type: 'CHARGE' | 'CHARGE_UNIT', min: number, max: number) =>
+  lookupsRouter.post(
+    type === 'CHARGE' ? '/charges' : '/charge-units',
+    requirePermission('creditnotes:write'),
+    async (req, res) => {
+      const { label } = parse(
+        z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
+        req.body,
+      );
+      const value = label.toUpperCase();
+      const row = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(lookupValues)
+          .values({ type, value, label: value, sortOrder: 999 })
+          .onConflictDoNothing()
+          .returning();
+        if (!created) return null;
+        await audit(
+          tx,
+          { action: 'CREATE', entity: 'lookup_value', entityId: created.id, after: created },
+          req,
+        );
+        return created;
+      });
+      res.status(row ? 201 : 200).json({ value, label: value });
+    },
+  );
+quickAdd('CHARGE', 2, 200);
+quickAdd('CHARGE_UNIT', 1, 20);

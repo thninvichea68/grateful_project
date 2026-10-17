@@ -4,11 +4,15 @@ import {
   CHEA_STATUSES,
   CONTAINER_SIZES,
   CREDIT_NOTE_REF_TYPES,
+  CREDIT_NOTE_REVIEW_STATUSES,
   DIRECTIONS,
   LOAD_TYPES,
   TRANSPORT_MODES,
   type BillingDocStatus,
   type CheaStatus,
+  type CreditNoteReviewStatus,
+  type Direction,
+  type TransportMode,
 } from '../enums';
 import { paginationQuerySchema } from './common';
 import { decimal, optDate, optText, optUuid } from './fields';
@@ -72,6 +76,8 @@ export interface LedgerRow {
   clientCode: string;
   clientName: string;
   portCode: string | null;
+  portNo: string | null;
+  portName: string | null;
   invNo: string | null;
   disNo: string | null;
   dnNo: string | null;
@@ -110,6 +116,37 @@ export interface LedgerSummary {
   unpaid: number;
 }
 
+/** INV (GS26-394), DIS (DIS437) or DN (JR2610001): a shipment's three numbers. */
+export type InvoiceNumberKind = 'INV' | 'DIS' | 'DN';
+/** A shipment given its numbers (on approval, or a released number passed on to it). */
+export interface NumberedShipment {
+  recordId: string;
+  declareNo: string;
+  numbers: { kind: InvoiceNumberKind; number: string; reused: boolean }[];
+}
+/** The result of deleting a shipment's invoice set. */
+export interface ReleasedInvoiceSet {
+  declareNo: string;
+  /** `kept`: held for the next shipment (false when it was the latest of its run). */
+  released: { kind: InvoiceNumberKind; number: string; kept: boolean }[];
+  /** Approved shipments that were waiting and took numbers straight away. */
+  reassigned: NumberedShipment[];
+}
+
+/** A shipment ready for a tax invoice, DIS or debit note (numbered, none made yet). */
+export interface EligibleRecord {
+  recordId: string;
+  declareNo: string;
+  declareDate: string;
+  invDate: string;
+  clientId: string;
+  clientCode: string;
+  /** The number the document will take. */
+  number: string;
+  direction: 'IMPORT' | 'EXPORT';
+  hbl: string | null;
+}
+
 export interface DeclarationOption {
   id: string;
   declareNo: string;
@@ -118,6 +155,23 @@ export interface DeclarationOption {
   clientId: string;
   clientCode: string;
   direction: 'IMPORT' | 'EXPORT';
+}
+
+/** A declaration in the "New Credit Noted" picker, with the shipment details the form copies. */
+export interface CreditNoteDeclaration extends DeclarationOption {
+  clientName: string;
+  transportMode: 'SEA' | 'AIR' | 'ROAD' | 'RAIL';
+  loadType: 'FCL' | 'LCL' | 'NONE';
+  portName: string | null;
+  hblNo: string | null;
+  /** First container number, how many there are, and the first one's size (e.g. "40HC"). */
+  containerNo: string | null;
+  containerCount: number;
+  containerSize: string | null;
+  grossWeightKg: string;
+  cbm: string;
+  /** Live (non-void) credit note already made for this declare no. */
+  creditNoteNo: string | null;
 }
 
 /* ------------------------------ Billing documents ------------------------------ */
@@ -261,6 +315,81 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
 });
+
+/** Accounting → Credit Noted: submitted credit notes waiting for (or past) accounting's check. */
+export const creditNoteReviewQuerySchema = paginationQuerySchema.extend({
+  clientId: z.string().uuid().optional(),
+  direction: z.enum(DIRECTIONS).optional(),
+  q: z.string().trim().max(100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
+});
+/** Sidebar → Credit Noted: every credit note, by document status. */
+export const creditNoteListQuerySchema = creditNoteReviewQuerySchema.omit({ review: true }).extend({
+  status: z.enum(BILLING_DOC_STATUSES).optional(),
+});
+/**
+ * Accounting's check. "Revised" sends the note back to the broker to fix, so it needs a
+ * message saying what to change; "Checked" can carry an optional note.
+ */
+export const creditNoteReviewInputSchema = z
+  .object({
+    reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES),
+    message: z.string().trim().max(1000).optional(),
+  })
+  .refine((v) => v.reviewStatus !== 'REVISED' || (v.message ?? '').length >= 3, {
+    message: 'Tell the broker what to change',
+    path: ['message'],
+  });
+
+/** A message from accounting in the broker's Credit Noted inbox. */
+export interface CreditNoteMessage {
+  id: string;
+  creditNoteId: string;
+  number: string;
+  declareNo: string | null;
+  clientName: string;
+  /** CHECKED, or REVISED (returned to the broker to fix). */
+  kind: CreditNoteReviewStatus;
+  body: string;
+  senderName: string | null;
+  createdAt: string;
+  /** When I accepted (read) it; null = new. */
+  readAt: string | null;
+  // The credit note's details, for the inbox table.
+  clientCode: string;
+  date: string;
+  status: BillingDocStatus;
+  direction: Direction | null;
+  transportMode: TransportMode | null;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+}
+
+export interface CreditNoteReviewRow {
+  id: string;
+  number: string;
+  date: string;
+  clientId: string;
+  clientCode: string;
+  clientName: string;
+  direction: Direction | null;
+  transportMode: TransportMode | null;
+  declareNo: string | null;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+  status: BillingDocStatus;
+  reviewStatus: CreditNoteReviewStatus;
+}
+export interface CreditNoteReviewCounts {
+  total: number;
+  checked: number;
+  unchecked: number;
+  revised: number;
+}
 
 /** Header + lines as stored. Field names follow the document type's input schema. */
 export interface BillingDoc {

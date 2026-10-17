@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { ChangePasswordModal } from '../components/ChangePasswordModal';
+import { Link, NavLink } from 'react-router-dom';
 import { ROLE_LABEL } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { NAV } from './nav';
 import { icons } from './icons';
 import { useNavCounts } from './useNavCounts';
+import { initials } from '../components/Avatar';
 
 interface Props {
   open: boolean;
@@ -13,19 +12,9 @@ interface Props {
   onToggleCollapse: () => void;
 }
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
-
 export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
   const { user, can, logout } = useAuth();
   const counts = useNavCounts();
-  const [pwOpen, setPwOpen] = useState(false);
   if (!user) return null;
 
   return (
@@ -46,30 +35,25 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
           </div>
           <div className="brand-text">
             <div className="title">Grateful Solutions</div>
-            <div className="subtitle">(Cambodia) Co., ltd</div>
+            <div className="subtitle">(Cambodia) Co., Ltd.</div>
           </div>
           <button
             type="button"
             className="sidebar-collapse-btn"
             onClick={onToggleCollapse}
             aria-label="Collapse sidebar"
+            title="Collapse sidebar"
           >
             {icons.collapse({})}
           </button>
         </div>
 
-        <button
-          type="button"
+        <Link
+          to="/settings?tab=profile"
           className="user-card"
-          onClick={() => setPwOpen(true)}
-          title="Change password"
-          style={{
-            width: 'auto',
-            textAlign: 'left',
-            cursor: 'pointer',
-            font: 'inherit',
-            color: 'inherit',
-          }}
+          onClick={onNavigate}
+          title="My profile"
+          style={{ textDecoration: 'none', color: 'inherit' }}
         >
           <div className="avatar">
             {user.avatarUrl ? (
@@ -77,7 +61,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             ) : (
               <span
                 aria-hidden="true"
-                style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent-primary)' }}
+                style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-primary)' }}
               >
                 {initials(user.fullName)}
               </span>
@@ -87,7 +71,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             <div className="name">{user.fullName}</div>
             <div className="role">{user.jobTitle ?? ROLE_LABEL[user.role]}</div>
           </div>
-        </button>
+        </Link>
 
         <nav className="menu" id="menu">
           {NAV.map((group) => {
@@ -112,7 +96,10 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
                         {icons[item.icon]({})}
                         {item.label}
                         {badge > 0 && (
-                          <span className="item-badge" aria-label={`${badge} open`}>
+                          <span
+                            className="item-badge"
+                            aria-label={`${badge} ${item.badge === 'creditNoteInbox' ? 'unread' : 'open'}`}
+                          >
                             {badge}
                           </span>
                         )}
@@ -133,7 +120,6 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
         </div>
       </aside>
       <div className="sidebar-scrim" onClick={onNavigate} aria-hidden="true" />
-      {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </>
   );
 }

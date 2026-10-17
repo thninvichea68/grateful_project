@@ -1,4 +1,5 @@
 /** Reference data for the seed. Ports and charge names come from the prototype. */
+import { DEFAULT_CHARGE_UNITS } from '@gs/shared';
 
 export const COUNTRIES: { iso2: string; name: string; lat: number; lng: number }[] = [
   { iso2: 'KH', name: 'Cambodia', lat: 12.57, lng: 104.99 },
@@ -221,6 +222,7 @@ export const LOOKUPS: Record<string, string[]> = {
     'FUEL SURCHARGE',
     'RETURN EMPTY',
   ],
+  CHARGE_UNIT: [...DEFAULT_CHARGE_UNITS],
 };
 
 /** Company details printed on tax invoices (from accounting-engine.html). */
