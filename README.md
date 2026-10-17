@@ -1,4 +1,4 @@
-# Grateful Solutions — Logistics Command Center
+# Grateful Solutions — Logistics Management
 
 Production version of the "GS Dashboard" prototype: React + TypeScript web app, Node.js + TypeScript API, PostgreSQL.
 Every number, table row and chart is read from PostgreSQL through the API — nothing is hard-coded in the browser.
