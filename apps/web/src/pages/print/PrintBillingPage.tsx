@@ -38,9 +38,9 @@ const RECEIPT_METHOD: Record<PaymentMethod, string> = {
   CASH: 'CASH',
   CHEQUE: 'CHEQUE',
 };
-/** 2026-09-03 → 3-Sep-2026, the date style of the Excel account statements. */
+/** 2026-09-03 → 03-Sep-2026: the account statements' dates, always a two-digit day. */
 const shortDate = (iso: string) =>
-  `${Number(iso.slice(8, 10))}-${MON[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}`;
+  `${iso.slice(8, 10)}-${MON[Number(iso.slice(5, 7)) - 1]}-${iso.slice(0, 4)}`;
 /** 903.45 → 903.450: the statements show three decimals, as on the Excel sheets. */
 const money3 = (v: string | number) =>
   Number(v).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -66,13 +66,16 @@ function Toolbar({ children }: { children?: ReactNode }) {
 /**
  * A client's month as one printable pack, replacing the Excel workbook: each shipment's tax
  * invoice, disbursement and debit note, the two account statements, the official receipts
- * and the handover checklist. Only issued documents are included.
+ * and the handover checklist. Document sheets are the issued ones; the statements and receipts
+ * also count drafts, printed marked DRAFT.
  */
 export function PrintPackPage() {
   const { clientId = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '') ? params.get('month')! : '';
-  const pack = useBillingPack(clientId, month);
+  // ?record=: one shipment's row (its tax invoice, DIS and DN, drafts marked DRAFT).
+  const record = params.get('record') || undefined;
+  const pack = useBillingPack(clientId, month, record);
   const company = useCompany();
   const { user } = useAuth();
   const asked = params.get('parts')?.split(',') ?? PARTS.map(([k]) => k);
@@ -99,6 +102,32 @@ export function PrintPackPage() {
   const drafts = d.summary.drafts;
 
   const sheets: ReactNode[] = [];
+  if (record) {
+    const row = d.rows.find((r) => r.recordId === record);
+    return (
+      <div className={s.page}>
+        <Toolbar />
+        {d.docs.length ? (
+          <div className={p.pack}>
+            {d.docs.map((doc) => (
+              <div className={sheetClass(doc.type)} key={doc.id}>
+                {doc.status === 'DRAFT' && <div className={s.stamp}>DRAFT</div>}
+                {doc.type === 'debit-notes' ? (
+                  <DebitNote d={doc} c={c} />
+                ) : (
+                  <TaxOrDisbursement d={doc} c={c} tax={doc.type === 'tax-invoices'} />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={p.hint}>
+            {row ? `${row.declareNo} has no documents to print yet.` : 'Shipment not found.'}
+          </div>
+        )}
+      </div>
+    );
+  }
   if (on('docs'))
     for (const doc of d.docs)
       sheets.push(
@@ -146,8 +175,8 @@ export function PrintPackPage() {
       </Toolbar>
       {drafts > 0 && (
         <div className={p.hint}>
-          {drafts} draft{drafts === 1 ? ' is' : 's are'} not in this pack. Issue{' '}
-          {drafts === 1 ? 'it' : 'them'} in Client Billing first.
+          {drafts} draft{drafts === 1 ? ' is' : 's are'} on the statements and receipts marked
+          DRAFT; their own sheets print once issued in Client Billing.
         </div>
       )}
       {sheets.length ? (
@@ -209,6 +238,8 @@ export function StatementSheet({
   );
   return (
     <>
+      {/* Printed for checking before the documents are issued. */}
+      {st.drafts > 0 && <div className={s.stamp}>DRAFT</div>}
       {/* As in the Excel: ST-INV has the invoice's letterhead, STA-DN none at all. */}
       {inv && <Masthead c={c} />}
       <div className={p.stTitle}>Account Statement</div>
@@ -234,7 +265,8 @@ export function StatementSheet({
               <td className={p.c}>{shortDate(l.date)}</td>
               {inv ? (
                 <>
-                  <td className={p.c}>{l.invNo ?? ''}</td>
+                  {/* A shipment billed on its disbursement only has no tax invoice: "NON". */}
+                  <td className={p.c}>{l.invNo || 'NON'}</td>
                   <td className={p.c}>{l.disNo ?? ''}</td>
                 </>
               ) : (
@@ -266,6 +298,8 @@ type ReceiptView = Omit<OfficialReceipt, 'paymentMethod'> & {
   paymentMethod: OfficialReceipt['paymentMethod'] | null;
   /** True for the advance copy: no number, method or signer yet. */
   pending?: boolean;
+  /** Its statement still has drafts: printed marked DRAFT. */
+  draft?: boolean;
 };
 
 /** The month's last day (2026-09 → 2026-09-30), the date on the Excel's OR-INV sheet. */
@@ -280,9 +314,11 @@ const monthEnd = (month: string) => {
  */
 function statementReceipts(d: BillingPack, month: string, kind: StatementKind): ReceiptView[] {
   const st = d.statements[kind];
+  const draft = st.drafts > 0;
   const list: ReceiptView[] = st.receipts
     .filter((r) => r.status === 'ISSUED')
-    .sort((a, b) => a.receiptNo.localeCompare(b.receiptNo));
+    .sort((a, b) => a.receiptNo.localeCompare(b.receiptNo))
+    .map((r) => ({ ...r, draft }));
   if (Number(st.balance) > 0)
     list.push({
       id: `pending-${kind}`,
@@ -302,6 +338,7 @@ function statementReceipts(d: BillingPack, month: string, kind: StatementKind): 
       createdByName: null,
       createdAt: '',
       pending: true,
+      draft,
     });
   return list;
 }
@@ -315,7 +352,11 @@ export function ReceiptBlock({ r, c }: { r: ReceiptView; c: CompanyInfo }) {
   const letterhead = r.kind !== 'DEBIT_NOTE';
   return (
     <div className={p.receipt}>
-      {r.status === 'VOID' && <div className={p.void}>CANCELLED</div>}
+      {r.status === 'VOID' ? (
+        <div className={p.void}>CANCELLED</div>
+      ) : (
+        r.draft && <div className={p.void}>DRAFT</div>
+      )}
       {letterhead && <Masthead c={c} compact />}
       <div className={p.rcTitle}>OFFICIAL RECEIPT</div>
       <div className={p.rcGrid}>

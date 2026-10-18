@@ -76,9 +76,9 @@ describe('Record Summary', () => {
     expect(transportLabel('ROAD', 'FCL')).toBe('BY TRUCK: CY / CY');
   });
 
-  it('exports the sheet as on screen: letterhead, header box, cyan table with formulas', async () => {
+  it('exports the sheet as on screen: letterhead, header box, gray table with formulas', async () => {
     expect(recordSummaryFileName(doc)).toBe('RecordSummary_I_122050');
-    await exportRecordSummaryExcel(doc, company, 'SHV', 'Maersk');
+    await exportRecordSummaryExcel(doc, company, 'Sihanoukville Port', 'Maersk');
     expect(saved.name).toBe('RecordSummary_I_122050.xlsx');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(
@@ -103,13 +103,13 @@ describe('Record Summary', () => {
     expect(ws.getCell('D7').value).toBe('INVOICE NO:');
     expect(ws.getCell('G7').value).toBe('GS26-212');
     expect(ws.getCell('C8').value).toBe('JR APPAREL CO., LTD.');
-    expect(ws.getCell('C9').value).toBe('SHV');
+    expect(ws.getCell('C9').value).toBe('SIHANOUKVILLE PORT');
     expect(ws.getCell('G10').value).toBe("MRKU8974303 (20' GP)");
     expect(ws.getCell('G11').value).toBe('2,420 KGS');
     expect(ws.getCell('C13').value).toBe('21-Aug-2026');
     expect(ws.getCell('G13').value).toBe('MAERSK');
 
-    // Table: cyan header, lines with live formulas, TOTAL summing them.
+    // Table: gray header, lines with live formulas, TOTAL summing them.
     expect([1, 2, 4, 5, 6, 7, 8].map((c) => ws.getCell(15, c).value)).toEqual([
       'NO',
       'DESCRIPTION',
@@ -119,7 +119,7 @@ describe('Record Summary', () => {
       'SUBTOTAL',
       'MARK',
     ]);
-    expect(ws.getCell('A15').fill).toMatchObject({ fgColor: { argb: 'FF7FDBF5' } });
+    expect(ws.getCell('A15').fill).toMatchObject({ fgColor: { argb: 'FFBDBDBD' } });
     expect(ws.getCell('B16').value).toBe('THC FEE');
     expect(ws.getCell('G16').value).toMatchObject({ formula: 'ROUND(D16*F16,2)', result: 355 });
     expect(ws.getCell('H17').value).toBe('Receipt');

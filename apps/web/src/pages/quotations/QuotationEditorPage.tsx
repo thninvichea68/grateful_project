@@ -12,10 +12,17 @@ import { useToast } from '../../components/Toast';
 import { ApiError, api } from '../../lib/api';
 import { QUOTE_STATUS } from '../QuotationsPage';
 import { PrintLink } from '../../components/PrintLink';
+import { icons } from '../../layout/icons';
+import s from '../creditnoted/CreditNotedEditor.module.css';
+import q from './QuotationEditor.module.css';
 
 type Row = Record<string, string>;
 const rowsFrom = (t: QuotationTemplate): Row[] =>
   t.defaultRows.map((r) => Object.fromEntries(t.columns.map((c, i) => [c.key, r[i] ?? ''])));
+
+/** Rates-table column widths by type; the remark column takes what is left. */
+const COL_WIDTH: Record<QuotationTemplate['columns'][number]['type'], string | number | undefined> =
+  { wide: '26%', text: 96, num: 120, remark: undefined };
 
 export function QuotationEditorPage() {
   const { id = 'new' } = useParams();
@@ -129,6 +136,8 @@ function Editor({
   };
   const cols = useMemo(() => template?.columns ?? [], [template]);
   const err = save.error ?? status.error ?? revise.error ?? del.error;
+  const setCell = (i: number, key: string, value: string) =>
+    setRows(rows.map((x, j) => (j === i ? { ...x, [key]: value } : x)));
 
   return (
     <section className="view active">
@@ -136,52 +145,54 @@ function Editor({
         <div className="create-top-bar">
           <div className={backRow}>
             <BackLink to="/quotations" label="Quotations" />
-            <div className="create-header-title">
-              {quote
-                ? `${quote.quoteNo}${quote.version > 1 ? ` v${quote.version}` : ''}`
-                : 'New quotation'}{' '}
-              {quote && (
-                <Pill tone={QUOTE_STATUS[quote.status].tone}>
-                  {QUOTE_STATUS[quote.status].label}
-                </Pill>
+            <div>
+              <div className="create-header-title">
+                {quote
+                  ? `${quote.quoteNo}${quote.version > 1 ? ` v${quote.version}` : ''}`
+                  : 'New quotation'}{' '}
+                {quote && (
+                  <Pill tone={QUOTE_STATUS[quote.status].tone}>
+                    {QUOTE_STATUS[quote.status].label}
+                  </Pill>
+                )}
+              </div>
+              {quote && quote.versions.length > 1 && (
+                <div className={q.versions}>
+                  Versions
+                  {quote.versions.map((v) => (
+                    <Link
+                      key={v.id}
+                      to={`/quotations/${v.id}`}
+                      className={q.version}
+                      aria-current={v.id === quote.id ? 'page' : undefined}
+                    >
+                      v{v.version}
+                    </Link>
+                  ))}
+                </div>
               )}
             </div>
-            {quote && quote.versions.length > 1 && (
-              <div className="create-header-desc">
-                Versions:{' '}
-                {quote.versions.map((v) => (
-                  <Link
-                    key={v.id}
-                    to={`/quotations/${v.id}`}
-                    style={{
-                      marginRight: 8,
-                      fontWeight: v.id === quote.id ? 900 : 600,
-                      color: 'var(--accent-primary)',
-                    }}
-                  >
-                    v{v.version}
-                  </Link>
-                ))}
-              </div>
-            )}
           </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            {quote && (
-              <PrintLink className="filter-btn" href={`/print/quotation/${quote.id}`}>
-                Print / PDF
-              </PrintLink>
-            )}
+          <div className={q.headActions}>
             {can('quotations:write') && quote?.status === 'DRAFT' && (
               <button
                 type="button"
-                className="btn-delete-shipment"
+                className={s.headDelete}
+                disabled={del.isPending}
                 onClick={() =>
                   window.confirm('Delete this draft?') &&
                   void del.mutateAsync(undefined).then(() => navigate('/quotations'))
                 }
+                aria-label="Delete draft"
+                title="Delete draft"
               >
-                Delete draft
+                {icons.trash({})}
               </button>
+            )}
+            {quote && (
+              <PrintLink className="filter-btn" href={`/print/quotation/${quote.id}`}>
+                Print / PDF
+              </PrintLink>
             )}
             {can('quotations:write') &&
               quote &&
@@ -235,171 +246,208 @@ function Editor({
         </div>
         <ErrorBanner error={err instanceof ApiError ? err : null} />
         {fieldErrors.length > 0 && <div className={ui.alert}>{fieldErrors.join(' · ')}</div>}
-        <fieldset disabled={!editable} style={{ border: 'none', minWidth: 0 }}>
-          <div className="cx-card">
-            <div className="form-fields-grid">
-              <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="qt-template">Service</label>
-                <select
-                  id="qt-template"
-                  className="form-select-box"
-                  value={templateKey}
-                  onChange={(e) => changeTemplate(e.target.value)}
-                  disabled={!!quote}
-                >
-                  {templates.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
-                <label htmlFor="qt-client">Client (optional)</label>
-                <select
-                  id="qt-client"
-                  className="form-select-box"
-                  value={head.clientId}
-                  onChange={(e) => pickClient(e.target.value)}
-                >
-                  <option value="">— prospect —</option>
-                  {lookups.data?.clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {(
-                [
-                  ['toName', 'To', 2],
-                  ['attn', 'Attn', 1],
-                  ['quoteDate', 'Date', 1],
-                  ['paymentTermDays', 'Payment term (days)', 1],
-                  ['latePenaltyPctPerDay', 'Late penalty % / day', 1],
-                ] as const
-              ).map(([k, l, span]) => (
-                <div className="form-field-group" key={k} style={{ gridColumn: `span ${span}` }}>
-                  <label htmlFor={`qt-${k}`}>{l}</label>
-                  {k === 'paymentTermDays' || k === 'latePenaltyPctPerDay' ? (
-                    <NumberInput
-                      id={`qt-${k}`}
-                      decimals={k === 'paymentTermDays' ? 0 : 3}
-                      className="form-field-box"
-                      value={head[k]}
-                      onChange={(e) => setHead({ ...head, [k]: e.target.value })}
-                    />
-                  ) : (
-                    <input
-                      id={`qt-${k}`}
-                      type={k === 'quoteDate' ? 'date' : 'text'}
-                      className="form-field-box"
-                      value={head[k]}
-                      onChange={(e) => setHead({ ...head, [k]: e.target.value })}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="cx-card" style={{ marginTop: 16 }}>
-            <div className="cx-card-head">
-              <div className="cx-title">
+        <fieldset disabled={!editable} className={q.fieldset}>
+          <div className={q.card}>
+            <div className={q.section}>
+              <div className={q.sectionHead}>
                 <div>
-                  <h3>{template?.docTitle ?? 'Rates'}</h3>
+                  <h4>Quotation details</h4>
+                  <p>The service, who it is for, and its payment terms.</p>
+                </div>
+              </div>
+              <div className={q.fields}>
+                <div className={`${q.field} ${q.span2}`}>
+                  <label htmlFor="qt-template">Service</label>
+                  <select
+                    id="qt-template"
+                    className="form-select-box"
+                    value={templateKey}
+                    onChange={(e) => changeTemplate(e.target.value)}
+                    disabled={!!quote}
+                    title={template?.label}
+                  >
+                    {templates.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className={`${q.field} ${q.span2}`}>
+                  <label htmlFor="qt-client">Client (optional)</label>
+                  <select
+                    id="qt-client"
+                    className="form-select-box"
+                    value={head.clientId}
+                    onChange={(e) => pickClient(e.target.value)}
+                  >
+                    <option value="">— prospect —</option>
+                    {lookups.data?.clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className={`${q.field} ${q.span2}`}>
+                  <label htmlFor="qt-toName">To</label>
+                  <input
+                    id="qt-toName"
+                    className="form-field-box"
+                    value={head.toName}
+                    onChange={(e) => setHead({ ...head, toName: e.target.value })}
+                  />
+                </div>
+                <div className={`${q.field} ${q.span2}`}>
+                  <label htmlFor="qt-attn">Attn</label>
+                  <input
+                    id="qt-attn"
+                    className="form-field-box"
+                    value={head.attn}
+                    onChange={(e) => setHead({ ...head, attn: e.target.value })}
+                  />
+                </div>
+                <div className={q.field}>
+                  <label htmlFor="qt-quoteDate">Date</label>
+                  <input
+                    id="qt-quoteDate"
+                    type="date"
+                    className="form-field-box"
+                    value={head.quoteDate}
+                    onChange={(e) => setHead({ ...head, quoteDate: e.target.value })}
+                  />
+                </div>
+                <div className={q.field}>
+                  <label htmlFor="qt-paymentTermDays">Payment term</label>
+                  <div className={q.suffix}>
+                    <NumberInput
+                      id="qt-paymentTermDays"
+                      decimals={0}
+                      className="form-field-box"
+                      value={head.paymentTermDays}
+                      onChange={(e) => setHead({ ...head, paymentTermDays: e.target.value })}
+                    />
+                    <span>days</span>
+                  </div>
+                </div>
+                <div className={q.field}>
+                  <label htmlFor="qt-latePenaltyPctPerDay">Late penalty</label>
+                  <div className={q.suffix}>
+                    <NumberInput
+                      id="qt-latePenaltyPctPerDay"
+                      decimals={3}
+                      className="form-field-box"
+                      value={head.latePenaltyPctPerDay}
+                      onChange={(e) => setHead({ ...head, latePenaltyPctPerDay: e.target.value })}
+                    />
+                    <span>% / day</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={q.section}>
+              <div className={q.sectionHead}>
+                <div>
+                  <h4>{template?.docTitle ?? 'Rates'}</h4>
                   <p>Type numbers or text such as “As per receipt”.</p>
                 </div>
+                <span className={q.count}>
+                  {rows.length} {rows.length === 1 ? 'row' : 'rows'}
+                </span>
               </div>
-            </div>
-            <div className="cdc-lines-wrap">
-              <table className="cdc-lines-table">
-                <thead>
-                  <tr>
+              <div className={q.tableWrap}>
+                <table className={q.table}>
+                  <colgroup>
+                    <col className={q.no} />
                     {cols.map((c) => (
-                      <th key={c.key}>{c.label}</th>
+                      <col key={c.key} style={{ width: COL_WIDTH[c.type] }} />
                     ))}
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i}>
+                    <col className={q.actions} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className={q.no}>#</th>
                       {cols.map((c) => (
-                        <td
-                          key={c.key}
-                          style={{
-                            minWidth: c.type === 'wide' ? 280 : c.type === 'remark' ? 260 : 90,
-                          }}
-                        >
-                          {c.type === 'remark' || c.type === 'wide' ? (
-                            <textarea
-                              className="form-field-box"
-                              rows={c.type === 'remark' ? 2 : 1}
-                              value={r[c.key] ?? ''}
-                              onChange={(e) =>
-                                setRows(
-                                  rows.map((x, j) =>
-                                    j === i ? { ...x, [c.key]: e.target.value } : x,
-                                  ),
-                                )
-                              }
-                              aria-label={`${c.label} row ${i + 1}`}
-                            />
-                          ) : (
-                            <input
-                              className="form-field-box"
-                              value={r[c.key] ?? ''}
-                              onChange={(e) =>
-                                setRows(
-                                  rows.map((x, j) =>
-                                    j === i ? { ...x, [c.key]: e.target.value } : x,
-                                  ),
-                                )
-                              }
-                              aria-label={`${c.label} row ${i + 1}`}
-                            />
+                        <th key={c.key} className={c.type === 'num' ? q.num : undefined}>
+                          {c.label}
+                        </th>
+                      ))}
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        <td className={q.no}>{i + 1}</td>
+                        {cols.map((c) => (
+                          <td key={c.key} className={c.type === 'num' ? q.num : undefined}>
+                            {c.type === 'remark' || c.type === 'wide' ? (
+                              <textarea
+                                className="form-field-box"
+                                rows={1}
+                                value={r[c.key] ?? ''}
+                                onChange={(e) => setCell(i, c.key, e.target.value)}
+                                aria-label={`${c.label} row ${i + 1}`}
+                              />
+                            ) : (
+                              <input
+                                className="form-field-box"
+                                value={r[c.key] ?? ''}
+                                onChange={(e) => setCell(i, c.key, e.target.value)}
+                                aria-label={`${c.label} row ${i + 1}`}
+                                title={r[c.key] || undefined}
+                              />
+                            )}
+                          </td>
+                        ))}
+                        <td>
+                          {editable && (
+                            <button
+                              type="button"
+                              className={q.remove}
+                              onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                              aria-label={`Remove row ${i + 1}`}
+                              title="Remove row"
+                            >
+                              {icons.trash({})}
+                            </button>
                           )}
                         </td>
-                      ))}
-                      <td>
-                        {editable && (
-                          <button
-                            type="button"
-                            className="cdc-remove-line-btn"
-                            onClick={() => setRows(rows.filter((_, j) => j !== i))}
-                            title="Remove row"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {editable && (
+                <button
+                  type="button"
+                  className={q.addRow}
+                  onClick={() =>
+                    setRows([
+                      ...rows,
+                      Object.fromEntries(cols.map((c) => [c.key, c.key === 'ccy' ? 'USD' : ''])),
+                    ])
+                  }
+                >
+                  + Add row
+                </button>
+              )}
             </div>
-            {editable && (
-              <button
-                type="button"
-                className="cdc-add-line-btn"
-                onClick={() =>
-                  setRows([
-                    ...rows,
-                    Object.fromEntries(cols.map((c) => [c.key, c.key === 'ccy' ? 'USD' : ''])),
-                  ])
-                }
-              >
-                + Add row
-              </button>
-            )}
-          </div>
-          <div className="cx-card" style={{ marginTop: 16 }}>
-            <div className="form-field-group">
-              <label htmlFor="qt-notes">Notes &amp; conditions</label>
+
+            <div className={q.section}>
+              <div className={q.sectionHead}>
+                <div>
+                  <h4>
+                    <label htmlFor="qt-notes">Notes &amp; conditions</label>
+                  </h4>
+                  <p>Printed under the rates, one condition per line.</p>
+                </div>
+              </div>
               <textarea
                 id="qt-notes"
-                className="form-field-box"
-                rows={8}
+                className={`form-field-box ${q.notes}`}
+                rows={6}
                 value={head.notes}
                 onChange={(e) => setHead({ ...head, notes: e.target.value })}
               />

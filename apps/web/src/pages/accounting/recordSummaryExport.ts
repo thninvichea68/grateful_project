@@ -1,12 +1,12 @@
 import type { Borders, Cell, Font, Workbook, Worksheet } from 'exceljs';
-import type { BillingDoc } from '@gs/shared';
+import { isVatChargedLine, type BillingDoc } from '@gs/shared';
 import type { CompanyInfo } from '../../features/accounting';
 import { saveBlob } from '../../lib/files';
-import { SHIPMENT_SEPARATOR, recordSummaryHeader } from '../print/PrintDocPage';
+import { SHIPMENT_SEPARATOR, pricedLines, recordSummaryHeader } from '../print/PrintDocPage';
 
 /*
  * Excel for a Record Summary, built from what is on screen (the live preview) and laid out
- * like the sheet: letterhead with the logo, the boxed header, the cyan item table with live
+ * like the sheet: letterhead with the logo, the boxed header, the gray item table with live
  * formulas. Same approach as the Credit Noted export.
  */
 
@@ -19,13 +19,13 @@ export function recordSummaryFileName(d: BillingDoc): string {
 export async function exportRecordSummaryExcel(
   d: BillingDoc,
   c: CompanyInfo,
-  portCode: string | undefined,
+  port: string | undefined,
   forwarder: string | undefined,
 ) {
   const { default: ExcelJS } = await import('exceljs');
   const wb = new ExcelJS.Workbook();
   const logo = await logoDataUrl();
-  addRecordSummarySheet(wb, d, c, portCode, forwarder, logo);
+  addRecordSummarySheet(wb, d, c, port, forwarder, logo);
   const buffer = await wb.xlsx.writeBuffer();
   saveBlob(
     new Blob([buffer], {
@@ -53,7 +53,8 @@ async function logoDataUrl(): Promise<string | null> {
 }
 
 const FONT = 'Calibri';
-const CYAN = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7FDBF5' } } as const;
+// Table head and TOTAL row: the same gray as the credit note.
+const GRAY = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDBDBD' } } as const;
 const BLACK = { style: 'thin', color: { argb: 'FF000000' } } as const;
 const UNDERLINE = { style: 'hair', color: { argb: 'FFC0C0C0' } } as const;
 const BOX = { top: BLACK, left: BLACK, bottom: BLACK, right: BLACK };
@@ -65,7 +66,7 @@ export function addRecordSummarySheet(
   wb: Workbook,
   d: BillingDoc,
   c: CompanyInfo,
-  portCode: string | undefined,
+  port: string | undefined,
   forwarder: string | undefined,
   logo: string | null,
 ) {
@@ -122,7 +123,7 @@ export function addRecordSummarySheet(
   r += 2;
 
   // Header box: rows pair up left / right, each value underlined, the whole box outlined.
-  const header = recordSummaryHeader(d, portCode, forwarder);
+  const header = recordSummaryHeader(d, port, forwarder);
   const top = r;
   const bottom = r + Math.ceil(header.length / 2) - 1;
   for (let i = 0; i < header.length; i += 2) {
@@ -155,7 +156,7 @@ export function addRecordSummarySheet(
       const cell = ws.getCell(head, i + 1);
       if (t) cell.value = t;
       Object.assign(cell, {
-        fill: CYAN,
+        fill: GRAY,
         border: BOX,
         font: font({ bold: true }),
         alignment: { horizontal: 'center', vertical: 'middle' },
@@ -166,7 +167,8 @@ export function addRecordSummarySheet(
   r += 1;
 
   const first = r;
-  d.lines.forEach((l, i) => {
+  const lines = pricedLines(d);
+  lines.forEach((l, i) => {
     const row = r;
     ws.mergeCells(row, 2, row, 3);
     ws.getCell(row, 1).value = i + 1;
@@ -175,7 +177,10 @@ export function addRecordSummarySheet(
     ws.getCell(row, 5).value = l.unit;
     ws.getCell(row, 6).value = Number(l.unitPrice) || 0;
     ws.getCell(row, 7).value = {
-      formula: `ROUND(D${row}*F${row},2)`,
+      // The processing fee: 10% VAT on top, as in the system.
+      formula: isVatChargedLine(l.description)
+        ? `ROUND(ROUND(D${row}*F${row},2)*1.1,2)`
+        : `ROUND(D${row}*F${row},2)`,
       result: Number(l.subtotal) || 0,
     };
     ws.getCell(row, 8).value = l.mark ?? '';
@@ -195,11 +200,11 @@ export function addRecordSummarySheet(
   // TOTAL row
   ws.mergeCells(r, 1, r, 6);
   ws.getCell(r, 1).value = 'TOTAL:';
-  ws.getCell(r, 7).value = d.lines.length
+  ws.getCell(r, 7).value = lines.length
     ? { formula: `SUM(G${first}:G${last})`, result: Number(d.totals.total) || 0 }
     : 0;
   for (let col = 1; col <= 8; col++)
-    Object.assign(ws.getCell(r, col), { fill: CYAN, border: BOX, font: font({ bold: true }) });
+    Object.assign(ws.getCell(r, col), { fill: GRAY, border: BOX, font: font({ bold: true }) });
   ws.getCell(r, 1).alignment = { horizontal: 'right', vertical: 'middle' };
   ws.getCell(r, 7).alignment = { horizontal: 'right', vertical: 'middle' };
   ws.getCell(r, 7).numFmt = '#,##0.00';

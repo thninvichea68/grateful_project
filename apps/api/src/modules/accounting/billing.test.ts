@@ -185,6 +185,7 @@ describe('client billing: a client month', () => {
         ref: 'COSU6464276980',
         amount: '903.45',
         manual: true,
+        draft: false,
       },
     ]);
     expect(m.statements.DEBIT_NOTE).toMatchObject({ total: '707.50', balance: '707.50' });
@@ -273,8 +274,23 @@ describe('client billing: a client month', () => {
     expect(cell(exp, 'debit-notes').total).toBe('707.50');
     expect(cell(imp, 'tax-invoices').total).toBe('220.00'); // the ledger's $200 + VAT
     expect(m.summary).toMatchObject({ drafts: 6, stage: 'DRAFTS' });
-    // Drafts are not billed yet.
-    expect(m.statements.INVOICE.lines).toEqual([]);
+    // Drafts are on the statements already, marked DRAFT, so the month can be checked.
+    expect(m.statements.INVOICE.lines.map((l: { draft: boolean }) => l.draft)).toEqual([
+      true,
+      true,
+    ]);
+    expect(m.statements.INVOICE.drafts).toBe(2);
+    // One row's Print: that shipment's three documents, drafts included.
+    const rowPack = (
+      await acc('get', `/billing/${b.jr.id}/pack`, {
+        query: { month: '2026-09', recordId: exp },
+      })
+    ).body;
+    expect(rowPack.docs.map((d: { type: string; status: string }) => [d.type, d.status])).toEqual([
+      ['tax-invoices', 'DRAFT'],
+      ['disbursements', 'DRAFT'],
+      ['debit-notes', 'DRAFT'],
+    ]);
 
     // Nothing is created twice.
     const again = await acc('post', `/billing/${b.jr.id}/drafts`, {

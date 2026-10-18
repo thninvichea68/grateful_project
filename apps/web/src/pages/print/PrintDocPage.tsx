@@ -192,7 +192,7 @@ export const SHIPMENT_SEPARATOR = ' | ';
  */
 export function recordSummaryHeader(
   d: BillingDoc,
-  portCode: string | undefined,
+  port: string | undefined,
   forwarder: string | undefined,
 ): [string, string][] {
   const size = h(d, 'containerSize');
@@ -204,7 +204,7 @@ export function recordSummaryHeader(
     ['INVOICE NO:', h(d, 'invNo')],
     ['FACTORY:', d.clientName.toUpperCase()],
     ['DISBURSEMENT NO:', h(d, 'disNo')],
-    ['PORT:', portCode ?? ''],
+    ['PORT:', (port ?? '').toUpperCase()],
     ['DEBIT NOTE NO:', h(d, 'dnNo')],
     ['QUANTITY:', h(d, 'quantityText')],
     ['CTNR NO:', `${h(d, 'containerNo')}${size ? ` (${size.replace(/^(\d+)/, "$1' ")})` : ''}`],
@@ -222,7 +222,7 @@ export function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
   const lookups = useLookups();
   const port = lookups.data?.ports.find((p) => p.id === h(d, 'portId'));
   const fwd = lookups.data?.forwarders.find((f) => f.id === h(d, 'forwarderId'));
-  const rows: [string, ReactNode][] = recordSummaryHeader(d, port?.code, fwd?.name).map(
+  const rows: [string, ReactNode][] = recordSummaryHeader(d, port?.name, fwd?.name).map(
     ([k, v]) => {
       if (k !== 'SHIPMENT:') return [k, v];
       const [dir, by] = v.split(SHIPMENT_SEPARATOR);
@@ -267,9 +267,9 @@ export function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
           </tr>
         </thead>
         <tbody>
-          {d.lines.map((l) => (
+          {pricedLines(d).map((l, i) => (
             <tr key={l.id}>
-              <td className={rs.c}>{l.lineNo}</td>
+              <td className={rs.c}>{i + 1}</td>
               <td>{l.description}</td>
               <td className={rs.c}>{plain(l.qty)}</td>
               <td className={rs.c}>{l.unit}</td>
@@ -292,6 +292,9 @@ export function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
     </div>
   );
 }
+
+/** A record summary's lines that have a price: an unpriced item stays off the sheet. */
+export const pricedLines = (d: BillingDoc) => d.lines.filter((l) => Number(l.unitPrice) > 0);
 
 /** SEA + FCL → "BY SEA: CY / CY", ROAD + LCL → "BY TRUCK: LCL", AIR → "BY AIR". */
 export function transportLabel(mode: string, load: string): string {

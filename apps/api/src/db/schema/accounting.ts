@@ -309,6 +309,12 @@ export const recordSummaries = pgTable('record_summaries', {
   grossWeightKg: qty('gross_weight_kg'),
   cbm: qty('cbm'),
   total: money('total').notNull().default('0'),
+  /** Accounting's check of the submitted summary (Accounting → Expense to Clients). */
+  reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  /** "Revised": what accounting asked Operations to change. */
+  reviewNote: text('review_note'),
 });
 
 export const recordSummaryLines = pgTable(

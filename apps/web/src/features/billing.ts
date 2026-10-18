@@ -44,10 +44,11 @@ export function useClientMonth(clientId: string, month: string) {
   });
 }
 
-export function useBillingPack(clientId: string, month: string) {
+export function useBillingPack(clientId: string, month: string, recordId?: string) {
   return useQuery({
-    queryKey: [...KEY, 'billing-pack', clientId, month],
-    queryFn: () => api<BillingPack>(`/accounting/billing/${clientId}/pack`, { query: { month } }),
+    queryKey: [...KEY, 'billing-pack', clientId, month, recordId],
+    queryFn: () =>
+      api<BillingPack>(`/accounting/billing/${clientId}/pack`, { query: { month, recordId } }),
     enabled: !!month,
   });
 }

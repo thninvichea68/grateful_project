@@ -246,6 +246,16 @@ describe('settings', () => {
     expect(
       (await api('get', '/lookups').set(h)).body.forwarders.map((f: { name: string }) => f.name),
     ).not.toContain('Hippo Logistics');
+    // Edit a forwarder's name, then delete it (nothing uses it yet).
+    expect(
+      (
+        await api('patch', `/settings/forwarders/${fw.id}`)
+          .set(h)
+          .send({ name: 'Hippo Logistics Co', contactEmail: 'ops@hippo.test' })
+      ).body,
+    ).toMatchObject({ name: 'Hippo Logistics Co', contactEmail: 'ops@hippo.test' });
+    expect((await api('delete', `/settings/forwarders/${fw.id}`).set(h)).status).toBe(204);
+    expect((await api('delete', `/settings/forwarders/${fw.id}`).set(h)).status).toBe(404);
   });
 
   it('only admins manage settings', async () => {

@@ -5,6 +5,9 @@ import {
   computeTaxLine,
   nextBusinessDay,
   computeLinesTotal,
+  chargeLineAmount,
+  computeChargeLinesTotal,
+  isVatChargedLine,
 } from './accounting';
 import { computeCutStockBalance, wouldOverImport } from './cutstock';
 import { toMoneyString, sumMoney, round2 } from './money';
@@ -203,4 +206,28 @@ describe('money helpers', () => {
   });
   it('sums exactly', () => expect(sumMoney([0.1, 0.2, '0.3'])).toBe(0.6));
   it('rounds half away from zero', () => expect(round2(-1.005)).toBe(-1.01));
+});
+
+describe('credit note / record summary lines (processing fee + 10% VAT)', () => {
+  it('adds 10% to the import and export processing fee only', () => {
+    expect(isVatChargedLine('IMPORT PROCESSING FEE')).toBe(true);
+    expect(isVatChargedLine('export processing fee')).toBe(true);
+    expect(isVatChargedLine('CUSTOMS PROCESSING FEE')).toBe(false);
+    expect(chargeLineAmount({ description: 'IMPORT PROCESSING FEE', qty: 1, unitPrice: 200 })).toBe(
+      220,
+    );
+    expect(
+      chargeLineAmount({ description: 'EXPORT PROCESSING FEE', qty: 2, unitPrice: 33.33 }),
+    ).toBe(73.33);
+    expect(chargeLineAmount({ description: 'THC FEE', qty: 1, unitPrice: 200 })).toBe(200);
+  });
+  it('totals the lines with the fee VAT included', () => {
+    expect(
+      computeChargeLinesTotal([
+        { description: 'IMPORT PROCESSING FEE', qty: 1, unitPrice: 200 },
+        { description: 'DISBURSEMENT', qty: 1, unitPrice: 0 },
+        { description: 'LOLO AT PORT', qty: 1, unitPrice: 45 },
+      ]),
+    ).toBe(265);
+  });
 });

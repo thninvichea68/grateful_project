@@ -283,6 +283,16 @@ accountingRouter.get(
     res.json(await docs.listCreditNoteReview({ ...q, clientIds: scopeClients(req) }));
   },
 );
+/** Accounting → Expense to Clients: Operations' submitted record summaries to check. */
+accountingRouter.get(
+  '/record-summaries/review',
+  requirePermission('accounting:read'),
+  async (req, res) => {
+    const q = parse(creditNoteReviewQuerySchema, req.query);
+    if (q.clientId) assertClientAllowed(req, q.clientId);
+    res.json(await docs.listRecordSummaryReview({ ...q, clientIds: scopeClients(req) }));
+  },
+);
 /** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
 accountingRouter.get('/credit-notes/list', async (req, res) => {
   const q = parse(creditNoteListQuerySchema, req.query);
@@ -296,9 +306,18 @@ accountingRouter.patch(
   requirePermission('accounting:write'),
   async (req, res) => {
     const { type } = parse(typeParam, req.params);
-    if (type !== 'credit-notes') throw notFound('Document');
     const { id } = parse(idParam, req.params);
     const { reviewStatus, message } = parse(creditNoteReviewInputSchema, req.body);
+    if (type === 'record-summaries') {
+      await docs.setRecordSummaryReview(id, reviewStatus, message, req);
+      // Checked: the shipment's tax invoice, DIS and DN drafts are made automatically.
+      const recordId =
+        reviewStatus === 'CHECKED' ? (await docs.getDoc(type, id)).accountingRecordId : null;
+      const drafts = recordId ? await billing.autoDraftsFor(recordId, req) : [];
+      res.json({ numbered: [], drafts: drafts.length });
+      return;
+    }
+    if (type !== 'credit-notes') throw notFound('Document');
     // The shipments numbered by this approval (none unless it was checked).
     res.json({ numbered: await docs.setCreditNoteReview(id, reviewStatus, message, req) });
   },
@@ -338,7 +357,11 @@ accountingRouter.get('/billing/:clientId/pack', async (req, res) => {
   const { clientId } = parse(clientParam, req.params);
   assertClientVisible(req, clientId, 'Client');
   const { month } = parse(billingMonthQuerySchema, req.query);
-  res.json(await billing.pack(clientId, month));
+  const { recordId } = parse(
+    z.object({ recordId: z.string().uuid().optional() }).passthrough(),
+    req.query,
+  );
+  res.json(await billing.pack(clientId, month, recordId));
 });
 accountingRouter.post(
   '/billing/:clientId/drafts',

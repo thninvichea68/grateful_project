@@ -98,7 +98,7 @@ function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
           {tab === 'rates' && <RatesTab manage={manage} />}
           {tab === 'holidays' && <PublicHolidays manage={manage} />}
           {tab === 'ports' && <Ports manage={manage} />}
-          {tab === 'forwarders' && <SimpleList kind="forwarders" manage={manage} />}
+          {tab === 'forwarders' && <Forwarders manage={manage} />}
           {tab === 'consignees' && <SimpleList kind="consignees" manage={manage} />}
           {tab === 'lists' && <Lists manage={manage} />}
         </>
@@ -400,6 +400,205 @@ function PortRow({
                 void del
                   .mutateAsync(undefined)
                   .then(() => toast(`Port ${p.code} deleted.`))
+                  .catch((e: unknown) => toast(errorMessage(e)))
+              }
+            >
+              {icons.trash({})}
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
+  );
+}
+
+function Forwarders({ manage }: { manage: boolean }) {
+  const s = useSettings().data!;
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const add = useApiMutation(
+    () => api('/settings/forwarders', { method: 'POST', json: { name } }),
+    INVALIDATE,
+  );
+  const patch = useApiMutation(
+    ({ id, v }: { id: string; v: Record<string, unknown> }) =>
+      api(`/settings/forwarders/${id}`, { method: 'PATCH', json: v }),
+    INVALIDATE,
+  );
+  return (
+    <Card
+      title="Forwarders"
+      sub="Inactive entries disappear from dropdowns but stay on past shipments."
+    >
+      <ErrorBanner error={add.error ?? patch.error} />
+      {manage && (
+        <div className={ui.toolbar} style={{ marginBottom: 14 }}>
+          <input
+            className={ui.input}
+            placeholder="New forwarder name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Name"
+          />
+          <button
+            type="button"
+            className="new-shipment-btn"
+            disabled={name.trim().length < 2 || add.isPending}
+            onClick={() =>
+              void add.mutateAsync(undefined).then(() => {
+                setName('');
+                toast('Forwarder added.');
+              })
+            }
+          >
+            Add
+          </button>
+        </div>
+      )}
+      <div className={st.tableScroll}>
+        <table className="data-table-clean">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Contact email</th>
+              <th style={{ textAlign: 'center' }}>Shipments</th>
+              <th>Active</th>
+              {manage && <th style={{ textAlign: 'right' }}>Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {s.forwarders.map((f) => (
+              <ForwarderRow
+                key={f.id}
+                forwarder={f}
+                manage={manage}
+                onActive={(isActive) => void patch.mutateAsync({ id: f.id, v: { isActive } })}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+/** One forwarder: view, or edit it in place (pencil); delete it if nothing uses it (bin). */
+function ForwarderRow({
+  forwarder: f,
+  manage,
+  onActive,
+}: {
+  forwarder: SettingsBundle['forwarders'][number];
+  manage: boolean;
+  onActive: (isActive: boolean) => void;
+}) {
+  const toast = useToast();
+  const [draft, setDraft] = useState<null | { name: string; contactEmail: string }>(null);
+  const save = useApiMutation(
+    () =>
+      api(`/settings/forwarders/${f.id}`, {
+        method: 'PATCH',
+        json: { name: draft!.name, contactEmail: draft!.contactEmail.trim() || null },
+      }),
+    INVALIDATE,
+  );
+  const del = useApiMutation(
+    () => api(`/settings/forwarders/${f.id}`, { method: 'DELETE' }),
+    INVALIDATE,
+  );
+
+  if (draft)
+    return (
+      <tr className={st.editRow}>
+        <td className="val-bold">{f.code}</td>
+        <td>
+          <input
+            className={ui.input}
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            aria-label="Name"
+          />
+        </td>
+        <td>
+          <input
+            className={ui.input}
+            type="email"
+            value={draft.contactEmail}
+            onChange={(e) => setDraft({ ...draft, contactEmail: e.target.value })}
+            aria-label="Contact email"
+          />
+        </td>
+        <td style={{ textAlign: 'center' }}>{f.shipments}</td>
+        <td colSpan={2}>
+          <div className={r.actions}>
+            <button
+              type="button"
+              className="btn-cancel-shipment"
+              onClick={() => {
+                setDraft(null);
+                save.reset();
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-create-submit"
+              disabled={save.isPending || draft.name.trim().length < 2}
+              onClick={() =>
+                void save.mutateAsync(undefined).then(() => {
+                  setDraft(null);
+                  toast(`Forwarder ${draft.name.trim()} saved.`);
+                })
+              }
+            >
+              Save
+            </button>
+          </div>
+          <ErrorBanner error={save.error} />
+        </td>
+      </tr>
+    );
+
+  return (
+    <tr>
+      <td className="val-bold">{f.code}</td>
+      <td className="val-bold">{f.name}</td>
+      <td>{f.contactEmail ?? '-'}</td>
+      <td style={{ textAlign: 'center' }}>{f.shipments}</td>
+      <td>
+        <input
+          type="checkbox"
+          checked={f.isActive}
+          disabled={!manage}
+          aria-label={`${f.name} active`}
+          onChange={(e) => onActive(e.target.checked)}
+        />
+      </td>
+      {manage && (
+        <td>
+          <div className={r.actions}>
+            <button
+              type="button"
+              className={r.icon}
+              title="Edit"
+              aria-label={`Edit forwarder ${f.name}`}
+              onClick={() => setDraft({ name: f.name, contactEmail: f.contactEmail ?? '' })}
+            >
+              {icons.edit({})}
+            </button>
+            <button
+              type="button"
+              className={`${r.icon} ${r.danger}`}
+              title={f.shipments > 0 ? 'In use: untick Active to hide it instead' : 'Delete'}
+              aria-label={`Delete forwarder ${f.name}`}
+              disabled={del.isPending}
+              onClick={() =>
+                window.confirm(`Delete forwarder ${f.name}? This can't be undone.`) &&
+                void del
+                  .mutateAsync(undefined)
+                  .then(() => toast(`Forwarder ${f.name} deleted.`))
                   .catch((e: unknown) => toast(errorMessage(e)))
               }
             >

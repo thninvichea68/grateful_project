@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { BillingDocStatus } from '@gs/shared';
+import type { BillingDocListItem } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useDocs } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
@@ -12,21 +11,27 @@ import { icons } from '../../layout/icons';
 import s from './CreditNotesReview.module.css';
 
 const TYPE = 'record-summaries' as const;
-const STATUS: Record<BillingDocStatus, { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: s.unchecked! },
-  ISSUED: { label: 'Submitted', cls: s.checked! },
-  VOID: { label: 'Cancelled', cls: s.void! },
-};
+/** Draft / Submitted / Checked by accounting / Revised (sent back) / Cancelled. */
+const statusOf = (d: BillingDocListItem): { label: string; cls: string } =>
+  d.status === 'VOID'
+    ? { label: 'Cancelled', cls: s.void! }
+    : d.status === 'DRAFT'
+      ? d.reviewStatus === 'REVISED'
+        ? { label: 'Revised', cls: s.revised! }
+        : { label: 'Draft', cls: s.unchecked! }
+      : d.reviewStatus === 'CHECKED'
+        ? { label: 'Checked', cls: s.checked! }
+        : { label: 'Submitted', cls: s.neutral! };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Truck', RAIL: 'Rail' };
 const PAGE_SIZES = [10, 25, 50];
 
 /**
- * Record summaries, laid out like Credit Noted: one card with the filters, the table and the
- * pager; a row opens the editor at `base`/:id. Sidebar → Record Summary shows just that;
- * Accounting → Record Summary adds Chea Payments' status cards (which also filter) on top.
+ * Sidebar → Record Summary (Operations), laid out like Credit Noted: one card with the
+ * filters, the table and the pager; a row opens the editor at `base`/:id. Accounting checks
+ * the submitted ones in Accounting → Expense to Clients.
  */
-export function RecordSummariesList({ base, cards = false }: { base: string; cards?: boolean }) {
+export function RecordSummariesList({ base }: { base: string }) {
   const { can } = useAuth();
   const navigate = useNavigate();
   const lookups = useLookups();
@@ -46,11 +51,6 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
     status: get('status'),
   };
   const list = useDocs(TYPE, q);
-  // The cards' counts: the same filters, one status each (only the total is read).
-  const count = (status: BillingDocStatus) => ({ ...filters, status, page: 1, pageSize: 1 });
-  const drafts = useDocs(TYPE, count('DRAFT'), cards);
-  const issued = useDocs(TYPE, count('ISSUED'), cards);
-  const voided = useDocs(TYPE, count('VOID'), cards);
 
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
@@ -66,18 +66,6 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
 
   return (
     <section className={`view active ${s.page}`}>
-      {cards && (
-        <StatusCards
-          active={q.status ?? ''}
-          onPick={(v) => set('status', v)}
-          counts={{
-            DRAFT: drafts.data?.meta.total,
-            ISSUED: issued.data?.meta.total,
-            VOID: voided.data?.meta.total,
-          }}
-        />
-      )}
-
       <ErrorBanner error={list.error} />
       <div className={s.card}>
         <div className={s.toolbar}>
@@ -88,19 +76,17 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
             onChange={(e) => set('q', e.target.value.trim())}
             aria-label="Search by declare no."
           />
-          {!cards && (
-            <select
-              className={s.select}
-              value={q.status ?? ''}
-              onChange={(e) => set('status', e.target.value)}
-              aria-label="Status"
-            >
-              <option value="">All statuses</option>
-              <option value="DRAFT">Draft</option>
-              <option value="ISSUED">Submitted</option>
-              <option value="VOID">Cancelled</option>
-            </select>
-          )}
+          <select
+            className={s.select}
+            value={q.status ?? ''}
+            onChange={(e) => set('status', e.target.value)}
+            aria-label="Status"
+          >
+            <option value="">All statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="ISSUED">Submitted</option>
+            <option value="VOID">Cancelled</option>
+          </select>
           <select
             className={s.select}
             value={q.clientId ?? ''}
@@ -233,9 +219,9 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
                   <td>{d.transportMode ? (MODE[d.transportMode] ?? d.transportMode) : '-'}</td>
                   <td className={`${s.num} ${s.fee}`}>{fmtMoney(d.total)}</td>
                   <td>
-                    <span className={`${s.statusPill} ${STATUS[d.status].cls}`}>
+                    <span className={`${s.statusPill} ${statusOf(d).cls}`}>
                       <i className={s.pillDot} />
-                      {STATUS[d.status].label}
+                      {statusOf(d).label}
                     </span>
                   </td>
                 </tr>
@@ -265,71 +251,5 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
         )}
       </div>
     </section>
-  );
-}
-
-/** Chea Payments' four status cards; picking one filters the list. */
-function StatusCards({
-  active,
-  onPick,
-  counts,
-}: {
-  active: string;
-  onPick: (status: string) => void;
-  counts: Record<BillingDocStatus, number | undefined>;
-}) {
-  const known = Object.values(counts).every((n) => n !== undefined);
-  const all = known ? Object.values(counts).reduce((a, n) => a! + n!, 0) : undefined;
-  const cards: { status: string; label: string; value?: number; icon: ReactNode; cls: string }[] = [
-    {
-      status: '',
-      label: 'All records',
-      value: all,
-      icon: icons.recordsummary({ width: 17, height: 17 }),
-      cls: s.neutral!,
-    },
-    {
-      status: 'DRAFT',
-      label: 'Draft',
-      value: counts.DRAFT,
-      icon: icons.edit({ width: 17, height: 17 }),
-      cls: s.unchecked!,
-    },
-    {
-      status: 'ISSUED',
-      label: 'Submitted',
-      value: counts.ISSUED,
-      icon: icons.send({ width: 17, height: 17 }),
-      cls: s.checked!,
-    },
-    {
-      status: 'VOID',
-      label: 'Cancelled',
-      value: counts.VOID,
-      icon: icons.close({ width: 17, height: 17 }),
-      cls: s.void!,
-    },
-  ];
-  return (
-    <div className={s.stats} role="group" aria-label="Filter by status">
-      {cards.map((k) => {
-        const on = active === k.status;
-        return (
-          <button
-            key={k.label}
-            type="button"
-            className={`${s.stat} ${k.cls} ${on ? s.statOn : ''}`}
-            aria-pressed={on}
-            onClick={() => onPick(k.status)}
-          >
-            <span className={s.statIcon}>{k.icon}</span>
-            <span className={s.statText}>
-              <span className={s.statLabel}>{k.label}</span>
-              <span className={s.statValue}>{k.value ?? '–'}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
   );
 }

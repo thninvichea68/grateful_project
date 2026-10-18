@@ -110,6 +110,131 @@ export function computeLinesTotal(lines: { qty: Decimalish; unitPrice: Decimalis
 }
 
 /**
+ * Credit notes and record summaries: the import / export processing fee is GS's own service,
+ * charged with 10% VAT on top (its Mark reads "VAT 10%"). Every other line is a pass-through.
+ */
+export const isVatChargedLine = (description: string | null | undefined): boolean =>
+  /^\s*(IMPORT|EXPORT)\s+PROCESSING\s+FEE\b/i.test(description ?? '');
+
+/** A credit note / record summary line's subtotal: qty × price, plus 10% VAT on the processing fee. */
+export function chargeLineAmount(line: {
+  description?: string | null;
+  qty: Decimalish;
+  unitPrice: Decimalish;
+}): number {
+  const amount = lineAmount(line.qty, line.unitPrice);
+  return isVatChargedLine(line.description) ? lineAmount(amount, '1.1') : amount;
+}
+
+/**
+ * A record summary's standard breakdown ("Updated IM & EX -Record Summary-R.xlsx"), import and
+ * export; each with its usual Mark. Prices are filled in per shipment.
+ */
+export const RECORD_SUMMARY_ITEMS: Record<
+  'IMPORT' | 'EXPORT',
+  readonly (readonly [description: string, mark: string])[]
+> = {
+  IMPORT: [
+    ['IMPORT PROCESSING FEE', 'VAT 10%'],
+    ['THC FEE', 'Receipt'],
+    ['CUSTOMS PROCESSING FEE', 'Receipt'],
+    ['LOLO AT PORT', 'Receipt'],
+    ['LOLO EMPTY CONTAINER', 'Receipt'],
+    ['WAREHOUSE / STORAGE FEE', 'Receipt'],
+    ['TRUCKING FEE', ''],
+    ['INCREASE TRUCKING FEE', ''],
+    ['EXTRA TRUCKING FEE', ''],
+    ['HANDLING FEE', ''],
+    ['PERMIT FEE', ''],
+    ['SERVICE TAXATION', ''],
+    ['DOCUMENT FEE', ''],
+    ['MISSING INSURANCE', ''],
+    ['FUEL SURCHARGE', ''],
+    ['RETURN EMPTY CONTAINER', ''],
+    ['EXPRESS PERMIT FEE', ''],
+    ['RED SIGNAL', ''],
+    ['TRUCK STAND FEE', ''],
+    ['OVER WEIGHT', ''],
+    ['ADDITIONAL DECLARATION', ''],
+    ['OT DOCUMENT', ''],
+    ['SCAN FEE', ''],
+    ['TRUCKING TO SECOND PLACE', ''],
+  ],
+  EXPORT: [
+    ['EXPORT PROCESSING FEE', 'VAT 10%'],
+    ['HBL FEE', 'Receipt'],
+    ['CUSTOMS PROCESSING FEE', 'Receipt'],
+    ['LOLO AT PORT', 'Receipt'],
+    ['LOLO EMPTY CONTAINER', 'Receipt'],
+    ['WAREHOUSE / STORAGE FEE', ''],
+    ['TRUCKING FEE', ''],
+    ['HANDLING FEE', ''],
+    ['DOCUMENT FEE', ''],
+    ['FUEL SURCHARGE', ''],
+    ['SERVICE TAXATION', ''],
+    ['PETROL ALLOWANCE FEE', ''],
+    ['RED SIGNAL', ''],
+    ['TRUCKING STANDBY FEE', ''],
+    ['OVER WEIGHT', ''],
+    ['ADDITIONAL DECLARATION', ''],
+    ['OT DOCUMENT', ''],
+    ['OT INSPECTION', ''],
+    ['OT CHECK IN SUNDAY', ''],
+    ['INCREASE TRUCKING FEE', ''],
+    ['LOCK SEAL DRYPORT', ''],
+    ['APPLY CO FOR INV:', ''],
+    ['EQMC FOR INV:', ''],
+  ],
+};
+
+/**
+ * Where a record summary line goes ("Accountant (Monthly) data flow"):
+ * - INV: the Import / Export Processing Fee (GS's service, VAT 10% on top);
+ * - DIS: every line marked "Receipt" (paid on the client's behalf and re-billed at cost),
+ *   except LOLO Empty Container, which is billed on the debit note even with a receipt;
+ * - DN: everything else (trucking, handling, document, permit, LOLO empty container…).
+ */
+export type RecordSummaryLedgerGroup = 'INV' | 'DIS' | 'DN';
+export function recordSummaryLedgerGroup(
+  description: string,
+  mark?: string | null,
+): RecordSummaryLedgerGroup {
+  if (isVatChargedLine(description)) return 'INV';
+  if (/^\s*LOLO\s+EMPTY\s+CONTAINER\b/i.test(description)) return 'DN';
+  if (/^\s*receipts?\s*$/i.test(mark ?? '')) return 'DIS';
+  return 'DN';
+}
+
+/** The THC / HBL fee line: the THC the ledger pays out (also re-billed in DIS by its receipt). */
+export const isThcLine = (description: string): boolean => /^\s*(THC|HBL)\b/i.test(description);
+
+/**
+ * The Monthly Ledger amounts a checked record summary fills: INV (processing fee before VAT),
+ * DIS / REIM (receipt lines), DN (the rest) and THC (the THC / HBL fee).
+ */
+export function recordSummaryLedger(
+  lines: { description: string; mark?: string | null; qty: Decimalish; unitPrice: Decimalish }[],
+): { invRevenue: number; thc: number; disTotal: number; dnTotal: number } {
+  const sum = (keep: (l: (typeof lines)[number]) => boolean) =>
+    sumMoney(lines.filter(keep).map((l) => lineAmount(l.qty, l.unitPrice)));
+  const group = (g: RecordSummaryLedgerGroup) => (l: (typeof lines)[number]) =>
+    recordSummaryLedgerGroup(l.description, l.mark) === g;
+  return {
+    invRevenue: sum(group('INV')),
+    thc: sum((l) => isThcLine(l.description)),
+    disTotal: sum(group('DIS')),
+    dnTotal: sum(group('DN')),
+  };
+}
+
+/** Sum of credit note / record summary lines (see {@link chargeLineAmount}). */
+export function computeChargeLinesTotal(
+  lines: { description?: string | null; qty: Decimalish; unitPrice: Decimalish }[],
+): number {
+  return sumMoney(lines.map(chargeLineAmount));
+}
+
+/**
  * Issue date of a tax invoice, disbursement or debit note = the next working day after the
  * customs declaration (clearance) date: Saturdays, Sundays and the given Cambodian public
  * holidays (YYYY-MM-DD) are skipped, however many in a row (Friday → Monday; Friday before a

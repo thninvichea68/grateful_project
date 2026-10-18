@@ -141,7 +141,11 @@
   flex: 0 0 48px;
 }
 .unit {
-  flex: 0 0 64px;
+  flex: 0 0 96px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 24px 0 8px;
+  font-size: 12px;
 }
 .price {
   flex: 0 0 76px;

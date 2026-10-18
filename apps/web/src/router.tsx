@@ -80,6 +80,9 @@ const CreditNotedList = lazy(() =>
 const CreditNotedRoute = lazy(() =>
   import('./pages/creditnoted/CreditNotedEditor').then((m) => ({ default: m.CreditNotedRoute })),
 );
+const ExpenseToClients = lazy(() =>
+  import('./pages/accounting/ExpenseToClients').then((m) => ({ default: m.ExpenseToClients })),
+);
 const RecordSummariesList = lazy(() =>
   import('./pages/accounting/RecordSummariesList').then((m) => ({
     default: m.RecordSummariesList,
@@ -174,13 +177,8 @@ function DocsListRoute() {
   const { type = '' } = useParams();
   // Accounting's Credit Noted tab checks the broker's submitted notes.
   if (type === 'credit-notes') return <CreditNotesReview />;
-  // Record Summary: the same card layout as Chea Payments.
-  if (type === 'record-summaries')
-    return (
-      <RequirePermission permission="recordsummaries:read">
-        <RecordSummariesList base="/accounting/record-summaries" cards />
-      </RequirePermission>
-    );
+  // Expense to Clients: accounting's check of Operations' submitted record summaries.
+  if (type === 'record-summaries') return <ExpenseToClients />;
   return <DocsListPage type={type} key={type} />;
 }
 

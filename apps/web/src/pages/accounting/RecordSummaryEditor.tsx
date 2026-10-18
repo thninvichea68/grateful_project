@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
@@ -6,8 +7,9 @@ import {
   BILLING_DOC_SCHEMAS,
   CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
-  computeLinesTotal,
-  lineAmount,
+  RECORD_SUMMARY_ITEMS,
+  chargeLineAmount,
+  computeChargeLinesTotal,
   type BillingDoc,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -23,6 +25,8 @@ import { ErrorBanner, FieldError } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
+import { api } from '../../lib/api';
+import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
@@ -37,14 +41,31 @@ import r from './RecordSummaryEditor.module.css';
 
 const TYPE = 'record-summaries' as const;
 const BLANK_LINE = { description: '', qty: '1', unit: 'SHIP', unitPrice: '', mark: '' };
-/** A blank summary starts with the accounting engine's import breakdown; prices to fill. */
-const IMPORT_TEMPLATE = [
-  { description: 'IMPORT PROCESSING FEE', mark: 'VAT 10%' },
-  { description: 'THC FEE', mark: 'Receipt' },
-  { description: 'CUSTOMS PROCESSING FEE', mark: 'Receipt' },
-  { description: 'TRUCKING FEE', mark: '' },
-  { description: 'LOLO AT PORT', mark: 'Receipt' },
-].map((l) => ({ ...l, qty: '1', unit: '20GP', unitPrice: '' }));
+/** The Unit dropdown's "+ Add New" choice. */
+const NEW_ITEM = '__new__';
+/** A blank summary starts with the standard import / export breakdown; prices to fill. */
+const itemsFor = (direction: unknown) =>
+  RECORD_SUMMARY_ITEMS[direction === 'EXPORT' ? 'EXPORT' : 'IMPORT'].map(([description, mark]) => ({
+    description,
+    qty: '1',
+    unit: '20GP',
+    unitPrice: '',
+    mark,
+  }));
+/** An empty price is saved as 0: the line stays on the summary, off the sheet until priced. */
+const baseResolver = formResolver(BILLING_DOC_SCHEMAS[TYPE]);
+const priceOrZero: typeof baseResolver = (values, ctx, options) =>
+  baseResolver(
+    {
+      ...values,
+      lines: (values.lines ?? []).map((l) => ({
+        ...l,
+        unitPrice: String(l.unitPrice ?? '').trim() || '0',
+      })),
+    },
+    ctx,
+    options,
+  );
 /** The Transport Type dropdown: one choice sets both the mode and the load. */
 const TRANSPORTS = [
   ['SEA', 'FCL'],
@@ -105,6 +126,7 @@ function RecordSummaryEditor({
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const qc = useQueryClient();
   const lookups = useLookups();
   const company = useCompany();
   const action = useDocAction(TYPE);
@@ -113,7 +135,9 @@ function RecordSummaryEditor({
   const eligible = useEligible(TYPE);
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
-    if (!doc && !prefill) v.lines = IMPORT_TEMPLATE.map((l) => ({ ...l }));
+    if (!doc && !prefill) v.lines = itemsFor(v.direction);
+    // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
+    v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
     return v;
   }, [doc, prefill]);
   const {
@@ -123,7 +147,7 @@ function RecordSummaryEditor({
     setValue,
     formState: { errors },
   } = useForm<Values>({
-    resolver: formResolver(BILLING_DOC_SCHEMAS[TYPE]) as never,
+    resolver: priceOrZero as never,
     defaultValues: defaults,
   });
   const lines = useFieldArray({
@@ -131,17 +155,18 @@ function RecordSummaryEditor({
     name: 'lines',
   });
   const values = useWatch({ control }) as Values;
-  const total = computeLinesTotal(
-    (values.lines ?? []).map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
-  );
+  // The processing fee carries 10% VAT on top (see chargeLineAmount).
+  const total = computeChargeLinesTotal(values.lines ?? []);
   const client = lookups.data?.clients.find((c) => c.id === values.clientId);
   const declareNo = String(values.declareNo ?? '') || doc?.declareNo || '';
 
-  // Descriptions and units: suggestions from Settings → Dropdown lists, still free text.
+  // Descriptions: suggestions from Settings → Dropdown lists, still free text. Units: a
+  // dropdown of the standard ones and Settings → Dropdown lists → Charge units, as on Credit Noted.
   const charges = [
     ...new Set([
       ...defaults.lines.map((l) => l.description).filter(Boolean),
-      ...IMPORT_TEMPLATE.map((l) => l.description),
+      ...RECORD_SUMMARY_ITEMS.IMPORT.map(([d]) => d),
+      ...RECORD_SUMMARY_ITEMS.EXPORT.map(([d]) => d),
       ...(lookups.data?.values.CHARGE ?? []).map((c) => c.label),
     ]),
   ];
@@ -152,6 +177,21 @@ function RecordSummaryEditor({
       ...(lookups.data?.values.CHARGE_UNIT ?? []).map((u) => u.label),
     ]),
   ];
+  /** "+ Add New" in a line's Unit dropdown: ask, use it, and add it to the list. */
+  const chooseNewUnit = async (i: number, el: HTMLSelectElement, current: string) => {
+    if (el.value !== NEW_ITEM) return false;
+    el.value = current; // keep showing the old choice while asking
+    const label = window.prompt('New unit')?.trim().toUpperCase();
+    if (!label) return true;
+    setValue(`lines.${i}.unit`, label, { shouldDirty: true, shouldValidate: true });
+    try {
+      await api('/lookups/charge-units', { method: 'POST', json: { label } });
+      await qc.invalidateQueries({ queryKey: queryKeys.lookups });
+    } catch {
+      toast('Unit used on this line, but it could not be added to the list.');
+    }
+    return true;
+  };
 
   /** A Declare No. of an approved shipment: reopen as that shipment's summary, filled in. */
   const pickDeclareNo = (typed: string) => {
@@ -187,7 +227,7 @@ function RecordSummaryEditor({
       qty: l.qty || '0',
       unit: l.unit,
       unitPrice: l.unitPrice || '0',
-      subtotal: lineAmount(l.qty, l.unitPrice),
+      subtotal: chargeLineAmount(l),
       mark: l.mark,
     })),
     totals: { subtotal: total, vat: '0', total },
@@ -212,7 +252,9 @@ function RecordSummaryEditor({
       if (
         !window.confirm(
           `Submit the record summary for ${saved.declareNo ?? (declareNo || 'this shipment')}?\n\n` +
-            'It is issued and can no longer be edited.',
+            'It is issued and can no longer be edited. Accounting checks it in Expense to ' +
+            'Clients; once checked, its lines fill the Monthly Ledger: INV (the processing fee), ' +
+            'DIS (lines marked Receipt) and DN (the rest, LOLO empty container included).',
         )
       )
         return;
@@ -249,7 +291,7 @@ function RecordSummaryEditor({
       await exportRecordSummaryExcel(
         preview,
         company.data ?? {},
-        lookups.data?.ports.find((p) => p.id === values.portId)?.code,
+        lookups.data?.ports.find((p) => p.id === values.portId)?.name,
         lookups.data?.forwarders.find((f) => f.id === values.forwarderId)?.name,
       );
     } catch {
@@ -312,12 +354,20 @@ function RecordSummaryEditor({
       <div className={s.editor}>
         <header className={s.head}>
           <div className={`${s.headText} ${backRow}`}>
-            <BackLink to={base} label="Record Summary" />
+            <BackLink
+              to={base}
+              label={base.startsWith('/accounting') ? 'Expense to Clients' : 'Record Summary'}
+            />
             <h2>
               Record Summary Operations{' '}
               {doc && (
                 <Pill tone={DOC_STATUS_PILL[doc.status].tone}>
                   {DOC_STATUS_PILL[doc.status].label}
+                </Pill>
+              )}{' '}
+              {doc?.status === 'ISSUED' && (
+                <Pill tone={doc.header.reviewStatus === 'CHECKED' ? 'completed' : 'pending'}>
+                  {doc.header.reviewStatus === 'CHECKED' ? 'Checked' : 'Awaiting check'}
                 </Pill>
               )}
             </h2>
@@ -363,6 +413,15 @@ function RecordSummaryEditor({
             )}
           </div>
         </header>
+        {doc?.status === 'DRAFT' && doc.header.reviewStatus === 'REVISED' && (
+          <div className={`${s.banner} ${s.bannerRevise}`} role="status">
+            <div className={s.bannerHead}>
+              <b>Returned by accounting for revision</b>
+            </div>
+            {doc.header.reviewNote && <p className={s.bannerBody}>{doc.header.reviewNote}</p>}
+            <p className={s.bannerHint}>Make the changes, then press “Submit to Monthly” again.</p>
+          </div>
+        )}
         <ErrorBanner error={action.error} />
 
         <form
@@ -378,7 +437,16 @@ function RecordSummaryEditor({
               <div className={r.grid2}>
                 {item(
                   'Shipment mode',
-                  <select className="form-select-box" {...register('direction')}>
+                  <select
+                    className="form-select-box"
+                    {...register('direction', {
+                      // Still unpriced: switch to that direction's standard breakdown.
+                      onChange: (e: { target: { value: string } }) => {
+                        if (!(values.lines ?? []).some((l) => Number(l.unitPrice) > 0))
+                          lines.replace(itemsFor(e.target.value));
+                      },
+                    })}
+                  >
                     <option value="IMPORT">IMPORT</option>
                     <option value="EXPORT">EXPORT</option>
                   </select>,
@@ -541,16 +609,35 @@ function RecordSummaryEditor({
                     {...register(`lines.${i}.qty`)}
                     aria-label={`Line ${i + 1} quantity`}
                   />
-                  <input
-                    className={`form-field-box ${r.unit}`}
-                    list="rs-units"
-                    {...register(`lines.${i}.unit`)}
-                    aria-label={`Line ${i + 1} unit`}
-                  />
+                  {(() => {
+                    const current = String(values.lines?.[i]?.unit ?? '');
+                    const reg = register(`lines.${i}.unit`);
+                    return (
+                      <select
+                        className={`form-select-box ${r.unit}`}
+                        {...reg}
+                        onChange={async (e) => {
+                          if (!(await chooseNewUnit(i, e.target, current))) await reg.onChange(e);
+                        }}
+                        aria-label={`Line ${i + 1} unit`}
+                        title={current}
+                      >
+                        {current && !units.includes(current) && (
+                          <option value={current}>{current}</option>
+                        )}
+                        {units.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                        <option value={NEW_ITEM}>+ Add New</option>
+                      </select>
+                    );
+                  })()}
                   <NumberInput
                     className={`form-field-box ${r.price}`}
                     decimals={4}
-                    placeholder="Price"
+                    placeholder="0.00"
                     {...register(`lines.${i}.unitPrice`)}
                     aria-label={`Line ${i + 1} price`}
                     aria-invalid={!!lineErr(i, 'unitPrice')}
@@ -581,11 +668,6 @@ function RecordSummaryEditor({
               <datalist id="rs-charges">
                 {charges.map((c) => (
                   <option key={c} value={c} />
-                ))}
-              </datalist>
-              <datalist id="rs-units">
-                {units.map((u) => (
-                  <option key={u} value={u} />
                 ))}
               </datalist>
               {editable && (

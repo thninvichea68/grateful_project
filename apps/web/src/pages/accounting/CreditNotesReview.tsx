@@ -11,14 +11,27 @@ import { fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import s from './CreditNotesReview.module.css';
 
-const REVIEW: Record<CreditNoteReviewStatus, { label: string; cls: string }> = {
+export const REVIEW: Record<CreditNoteReviewStatus, { label: string; cls: string }> = {
   CHECKED: { label: 'Checked', cls: s.checked! },
   UNCHECKED: { label: 'Unchecked', cls: s.unchecked! },
   REVISED: { label: 'Revised', cls: s.revised! },
 };
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
-const PAGE_SIZES = [10, 25, 50];
+export const MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+export const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
+export const PAGE_SIZES = [10, 25, 50];
 
 const svg = (children: ReactNode) => (
   <svg
@@ -35,13 +48,13 @@ const svg = (children: ReactNode) => (
     {children}
   </svg>
 );
-const checkIcon = svg(
+export const checkIcon = svg(
   <>
     <circle cx="12" cy="12" r="9" />
     <path d="m8.5 12.5 2.5 2.5 4.5-5" />
   </>,
 );
-const alertIcon = svg(
+export const alertIcon = svg(
   <>
     <circle cx="12" cy="12" r="9" />
     <path d="M12 7.5v5.5M12 16.5h.01" />

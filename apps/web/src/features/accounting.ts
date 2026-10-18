@@ -17,6 +17,7 @@ import type {
   LedgerSummary,
   NumberedShipment,
   Paginated,
+  RecordSummaryReviewRow,
   ReleasedInvoiceSet,
 } from '@gs/shared';
 import { api } from '../lib/api';
@@ -233,6 +234,42 @@ export function useSetCreditNoteReview() {
         json: { reviewStatus, message },
       }),
     // Checking adds to the ledger and revising takes the fee out: refresh all of accounting.
+    onSuccess: invalidate,
+  });
+}
+
+/** Accounting → Expense to Clients: Operations' submitted record summaries to check. */
+export function useRecordSummaryReview(q: Query) {
+  return useQuery({
+    queryKey: [...KEY, 'rs-review', q],
+    queryFn: () =>
+      api<Paginated<RecordSummaryReviewRow> & { counts: CreditNoteReviewCounts }>(
+        '/accounting/record-summaries/review',
+        { query: q },
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Accounting's check; "Revised" sends the summary back to Operations with a note. */
+export function useSetRecordSummaryReview() {
+  const invalidate = useInvalidateAccounting();
+  return useMutation({
+    mutationFn: ({
+      id,
+      reviewStatus,
+      message,
+    }: {
+      id: string;
+      reviewStatus: CreditNoteReviewStatus;
+      message?: string;
+    }) =>
+      // Checked: how many tax invoice / DIS / DN drafts were made for the shipment.
+      api<{ drafts?: number }>(`/accounting/docs/record-summaries/${id}/review`, {
+        method: 'PATCH',
+        json: { reviewStatus, message },
+      }),
+    // Checking fills the ledger and revising takes the amounts out: refresh all of accounting.
     onSuccess: invalidate,
   });
 }

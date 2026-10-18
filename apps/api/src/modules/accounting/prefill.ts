@@ -1,5 +1,11 @@
 import { sql } from 'drizzle-orm';
-import type { BillingDocType, BillingLineInput, BillingPackType } from '@gs/shared';
+import {
+  RECORD_SUMMARY_ITEMS,
+  recordSummaryLedgerGroup,
+  type BillingDocType,
+  type BillingLineInput,
+  type BillingPackType,
+} from '@gs/shared';
 import { db } from '../../db/client';
 import { badRequest, notFound } from '../../lib/errors';
 import { queryRows } from '../../lib/listing';
@@ -146,7 +152,9 @@ export async function prefill(
         disDate: c.invDate,
         exchangeRate: c.exchangeRate,
         reference: c.declareNo,
-        lines: [line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal)],
+        lines: (await summaryLines('disbursements', recordId)) ?? [
+          line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal),
+        ],
       };
     case 'debit-notes':
       return {
@@ -157,7 +165,9 @@ export async function prefill(
         billTo: customer.customerNameEn,
         address: c.address,
         reference: c.declareNo,
-        lines: [line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal)],
+        lines: (await summaryLines('debit-notes', recordId)) ?? [
+          line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal),
+        ],
       };
     case 'record-summaries':
       return {
@@ -178,13 +188,44 @@ export async function prefill(
         containerSize: c.containerSize,
         grossWeightKg: n(c.gw),
         cbm: n(c.cbm),
-        lines: [
-          line('INVOICE (SERVICE FEE)', c.invRevenue),
-          line('DISBURSEMENT', c.disTotal),
-          line('DEBIT NOTE', c.dnTotal),
-        ],
+        // The standard import / export breakdown; the processing fee starts at the ledger's
+        // service fee (10% VAT goes on top), the rest are priced per shipment.
+        lines: RECORD_SUMMARY_ITEMS[c.direction].map(([description, mark], i) => ({
+          description,
+          qty: '1',
+          unit: c.containerSize ?? 'SHIP',
+          unitPrice: (i === 0 && n(c.invRevenue)) || '0',
+          mark,
+        })),
       };
   }
+}
+
+/**
+ * A shipment's Disbursement or Debit Note lines from its checked record summary: the priced
+ * receipt lines (DIS) or the other charges (DN), as on the summary. Null without one.
+ */
+export async function summaryLines(
+  type: 'disbursements' | 'debit-notes',
+  recordId: string | null,
+): Promise<BillingLineInput[] | null> {
+  if (!recordId) return null;
+  const rows = await queryRows<BillingLineInput & { description: string; mark: string }>(
+    db,
+    sql`SELECT l.description, l.qty::text AS qty, coalesce(l.unit, '') AS unit,
+               l.unit_price::text AS "unitPrice", coalesce(l.mark, '') AS mark
+        FROM record_summary_lines l JOIN record_summaries t ON t.id = l.record_summary_id
+        WHERE t.accounting_record_id = ${recordId} AND t.status = 'ISSUED'
+          AND t.review_status = 'CHECKED'
+        ORDER BY l.line_no`,
+  );
+  const want = type === 'disbursements' ? 'DIS' : 'DN';
+  const lines = rows
+    .filter(
+      (l) => Number(l.unitPrice) > 0 && recordSummaryLedgerGroup(l.description, l.mark) === want,
+    )
+    .map((l) => ({ ...l, qty: n(String(l.qty)), unitPrice: n(String(l.unitPrice)) }));
+  return lines.length ? lines : null;
 }
 
 /**

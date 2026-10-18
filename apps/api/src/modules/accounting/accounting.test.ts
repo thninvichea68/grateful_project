@@ -512,7 +512,15 @@ describe('billing documents', () => {
       .set(h)
       .send(rsPre);
     expect(rs.status).toBe(201);
-    expect(rs.body.totals.total).toBe('1540.25');
+    // The standard export breakdown; the processing fee is the ledger's service fee + 10% VAT.
+    expect(rs.body.lines[0]).toMatchObject({
+      description: 'EXPORT PROCESSING FEE',
+      unitPrice: '185.0000',
+      subtotal: '203.50',
+      mark: 'VAT 10%',
+    });
+    expect(rs.body.lines[1].description).toBe('HBL FEE');
+    expect(rs.body.totals.total).toBe('203.50');
     expect(rs.body.header).toMatchObject({
       direction: 'EXPORT',
       loadType: 'FCL',
@@ -558,6 +566,173 @@ describe('billing documents', () => {
     expect(await count({ direction: 'IMPORT' })).toBe(0);
     expect(await count({ year: y - 1 })).toBe(0);
     expect(await count({ monthOfYear: (m % 12) + 1 })).toBe(0);
+  });
+
+  it('a record summary checked in Expense to Clients fills INV, THC, DIS and DN and decides them', async () => {
+    const h = await as('ACCOUNTANT');
+    const rec = await ledgerRow();
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ recordId: rec.id })
+        .set(h)
+    ).body;
+    const line = (description: string, unitPrice: string, qty = '1', mark = '') => ({
+      description,
+      qty,
+      unit: 'SHIP',
+      unitPrice,
+      mark,
+    });
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send({
+        ...pre,
+        lines: [
+          line('EXPORT PROCESSING FEE', '100', '1', 'VAT 10%'),
+          line('CUSTOMS PROCESSING FEE', '20', '1', 'Receipt'),
+          line('WAREHOUSE / STORAGE FEE', '10', '1', 'Receipt'),
+          line('HBL FEE', '30', '1', 'Receipt'),
+          line('LOLO AT PORT', '15', '1', 'Receipt'),
+          line('TRUCKING FEE', '100', '2'),
+          // A receipt, but billed on the debit note.
+          line('LOLO EMPTY CONTAINER', '5', '1', 'Receipt'),
+          line('SCAN FEE', '0', '1', 'Receipt'),
+        ],
+      })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+      .set(h)
+      .expect(200);
+    const led = async () =>
+      (await request(app).get(`/api/v1/accounting/ledger/${rec.id}`).set(h)).body;
+    const review = (reviewStatus: string, message?: string) =>
+      request(app)
+        .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
+        .set(h)
+        .send({ reviewStatus, message });
+    const before = await led();
+    // Submitted: waiting in Expense to Clients, not in the ledger yet.
+    const queue = async (review?: string) =>
+      (
+        await request(app)
+          .get('/api/v1/accounting/record-summaries/review')
+          .query(review ? { review } : {})
+          .set(h)
+      ).body;
+    expect((await queue('UNCHECKED')).data.map((r: { id: string }) => r.id)).toContain(rs.body.id);
+    expect((await led()).dnTotal).toBe(before.dnTotal);
+    // Operations can't check their own summaries.
+    expect(
+      (
+        await request(app)
+          .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
+          .set(await as('OPERATOR'))
+          .send({ reviewStatus: 'CHECKED' })
+      ).status,
+    ).toBe(403);
+    await review('CHECKED').expect(200);
+    expect((await queue()).counts).toMatchObject({ checked: 1 });
+    const after = await led();
+    // INV = processing fee; DIS = the receipt lines; DN = the rest; THC = the HBL fee.
+    expect(after).toMatchObject({
+      invRevenue: '100.00',
+      vat: '10.00',
+      thc: '30.00',
+      disTotal: '75.00',
+      dnTotal: '205.00',
+    });
+    // Net profit = INV + REIM + DN − (Clear Fee + THC + CM + Other Pay).
+    expect(Number(after.netProfit)).toBeCloseTo(
+      100 +
+        75 +
+        205 -
+        (Number(after.clearFee) + 30 + Number(after.commission) + Number(after.otherPay)),
+      2,
+    );
+
+    // A new Disbursement / Debit Note for the shipment starts with the summary's lines.
+    const prefillOf = async (type: string) =>
+      (
+        await request(app)
+          .get(`/api/v1/accounting/docs/${type}/prefill`)
+          .query({ recordId: rec.id })
+          .set(h)
+      ).body.lines.map((l: { description: string; unitPrice: string }) => [
+        l.description,
+        l.unitPrice,
+      ]);
+    expect(await prefillOf('disbursements')).toEqual([
+      ['CUSTOMS PROCESSING FEE', '20'],
+      ['WAREHOUSE / STORAGE FEE', '10'],
+      ['HBL FEE', '30'],
+      ['LOLO AT PORT', '15'],
+    ]);
+    expect(await prefillOf('debit-notes')).toEqual([
+      ['TRUCKING FEE', '100'],
+      ['LOLO EMPTY CONTAINER', '5'],
+    ]);
+
+    // Checking also made the shipment's drafts: tax invoice (the processing fee), DIS and DN.
+    const drafts = async (table: string) =>
+      (
+        await pool.query(
+          `SELECT id, status FROM ${table} WHERE accounting_record_id = $1 AND status <> 'VOID'`,
+          [rec.id],
+        )
+      ).rows as { id: string; status: string }[];
+    const [taxDraft] = await drafts('tax_invoices');
+    expect(taxDraft).toMatchObject({ status: 'DRAFT' });
+    expect((await drafts('disbursements')).length).toBe(1);
+    expect((await drafts('debit_notes')).length).toBe(1);
+    const tax = (
+      await request(app).get(`/api/v1/accounting/docs/tax-invoices/${taxDraft!.id}`).set(h)
+    ).body;
+    expect(tax.lines.map((l: { unitPrice: string }) => Number(l.unitPrice))).toEqual([100]);
+    // Checking again doesn't make a second set.
+    await review('UNCHECKED').expect(200);
+    await review('CHECKED').expect(200);
+    expect((await drafts('tax_invoices')).length).toBe(1);
+
+    // Issuing the tax invoice now gives the ledger its number only; the amounts stay.
+    await request(app)
+      .post(`/api/v1/accounting/docs/tax-invoices/${tax.id}/issue`)
+      .set(h)
+      .expect(200);
+    expect(await led()).toMatchObject({ invNo: tax.number, invRevenue: '100.00' });
+
+    // Revised: back to Operations as a draft with the note; its amounts leave the ledger.
+    await review('REVISED', 'THC should be 35').expect(200);
+    const revised = (
+      await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h)
+    ).body;
+    expect(revised.status).toBe('DRAFT');
+    expect(revised.header).toMatchObject({
+      reviewStatus: 'REVISED',
+      reviewNote: 'THC should be 35',
+    });
+    expect(await led()).toMatchObject({ invRevenue: '100.00', thc: '0.00', dnTotal: '0.00' });
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+      .set(h)
+      .expect(200);
+    await review('CHECKED').expect(200);
+    expect((await led()).invRevenue).toBe('100.00');
+
+    // Cancelling the summary hands the amounts back to the issued documents.
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/void`)
+      .set(h)
+      .send({ reason: 'Wrong lines' })
+      .expect(200);
+    expect(await led()).toMatchObject({
+      invRevenue: '100.00',
+      thc: '0.00',
+      disTotal: '0.00',
+      dnTotal: '0.00',
+    });
   });
 
   it('record summaries have their own access: Operations work on them, not the rest of accounting', async () => {

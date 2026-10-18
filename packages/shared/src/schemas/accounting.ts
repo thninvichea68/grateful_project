@@ -426,6 +426,24 @@ export interface CreditNoteReviewRow {
   status: BillingDocStatus;
   reviewStatus: CreditNoteReviewStatus;
 }
+/** A row of Accounting → Expense to Clients (submitted record summaries to check). */
+export interface RecordSummaryReviewRow {
+  id: string;
+  date: string;
+  clientId: string;
+  clientCode: string;
+  clientName: string;
+  direction: Direction;
+  transportMode: TransportMode;
+  declareNo: string | null;
+  invNo: string | null;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+  status: BillingDocStatus;
+  reviewStatus: CreditNoteReviewStatus;
+}
+
 export interface CreditNoteReviewCounts {
   total: number;
   checked: number;
@@ -485,6 +503,8 @@ export interface BillingDocListItem {
   transportMode?: string;
   quantityText?: string | null;
   port?: string | null;
+  /** Record summaries: accounting's check (Expense to Clients). */
+  reviewStatus?: CreditNoteReviewStatus;
   invNo?: string | null;
   disNo?: string | null;
   dnNo?: string | null;

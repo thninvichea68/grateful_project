@@ -6,8 +6,8 @@ import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_DOC_SCHEMAS,
   DEFAULT_CHARGE_UNITS,
-  computeLinesTotal,
-  lineAmount,
+  chargeLineAmount,
+  computeChargeLinesTotal,
   type BillingDoc,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -168,9 +168,8 @@ function CreditNotedEditor({
     }
     return true;
   };
-  const total = computeLinesTotal(
-    (values.lines ?? []).map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
-  );
+  // The import / export processing fee carries 10% VAT on top (see chargeLineAmount).
+  const total = computeChargeLinesTotal(values.lines ?? []);
 
   // Live preview: the print layout fed with what's in the form right now.
   const preview: BillingDoc = {
@@ -196,7 +195,7 @@ function CreditNotedEditor({
       qty: l.qty || '0',
       unit: l.unit,
       unitPrice: l.unitPrice || '0',
-      subtotal: lineAmount(l.qty, l.unitPrice),
+      subtotal: chargeLineAmount(l),
       mark: l.mark,
     })),
     totals: { subtotal: total, vat: '0', total },

@@ -35,7 +35,7 @@ import { isoTs, likePattern, paginate, queryRows, toPaginated, whereAll } from '
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { parse } from '../../lib/validate';
 import { createDoc, getDoc, issueDoc, previewDoc } from './docs';
-import { prefill, previousLines } from './prefill';
+import { prefill, previousLines, summaryLines } from './prefill';
 
 /*
  * Client Billing: one client's month, the way the Excel pack (e.g. "09-JR-INV") had it.
@@ -197,8 +197,13 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   });
 
   /* ----- Statements ----- */
+  // Issued documents and drafts (marked DRAFT, so a month can be printed for checking first).
+  // A $0.00 draft has nothing to bill yet and stays off.
+  const billable = (d: DocPart) =>
+    d.status === 'ISSUED' || (d.status === 'DRAFT' && toCents(d.total) > 0);
   const issued = (list: DocPart[], type: BillingPackType) =>
-    list.filter((d) => d.type === type && d.status === 'ISSUED');
+    list.filter((d) => d.type === type && billable(d));
+  const isDraft = (list: DocPart[]) => list.some((d) => d.status === 'DRAFT');
   const invLines: (StatementLine & { cents: number })[] = [];
   const dnLines: (StatementLine & { cents: number })[] = [];
   for (const r of rows) {
@@ -229,6 +234,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         ref,
         amount: money(cents),
         manual: !!(invPart && 'manual' in invPart) || !!(disPart && 'manual' in disPart),
+        draft: isDraft(inv) || isDraft(dis),
         cents,
       });
     }
@@ -242,6 +248,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         ref: realRef(dn.hbl) ?? realRef(r.hbl) ?? r.declareNo,
         amount: dn.total,
         manual: false,
+        draft: dn.status === 'DRAFT',
         cents: toCents(dn.total),
       });
     if (!dns.length && r.manual['debit-notes'])
@@ -253,10 +260,11 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         ref: realRef(r.hbl) ?? r.declareNo,
         amount: r.manual['debit-notes'].total,
         manual: true,
+        draft: false,
         cents: toCents(r.manual['debit-notes'].total),
       });
   }
-  for (const d of others.filter((x) => x.status === 'ISSUED')) {
+  for (const d of others.filter(billable)) {
     const line = {
       date: d.date,
       invNo: d.type === 'tax-invoices' ? d.number : null,
@@ -265,6 +273,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       ref: realRef(d.hbl) ?? realRef(d.reference) ?? 'NON',
       amount: d.total,
       manual: false,
+      draft: d.status === 'DRAFT',
       cents: toCents(d.total),
     };
     (d.type === 'debit-notes' ? dnLines : invLines).push(line);
@@ -288,6 +297,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       received: money(receivedC),
       balance: money(totalC - receivedC),
       receipts: mine,
+      drafts: lines.filter((l) => l.draft).length,
     };
   };
   const statements = {
@@ -402,7 +412,11 @@ export async function createDrafts(
       if (!input.types.includes(type) || r.docs[type].length || r.manual[type]) continue;
       const draft = await prefill(type, r.recordId);
       let copiedFrom: string | null = null;
-      if (input.lines === 'previous') {
+      // A checked record summary's lines win over copying the last document.
+      const fromSummary =
+        (type === 'disbursements' || type === 'debit-notes') &&
+        !!(await summaryLines(type, r.recordId));
+      if (input.lines === 'previous' && !fromSummary) {
         const prev = await previousLines(type, clientId, r.recordId);
         if (prev) {
           draft.lines = prev.lines;
@@ -416,6 +430,38 @@ export async function createDrafts(
       created.push({ type, id, number: (await getDoc(type, id)).number, copiedFrom });
     }
   return { created };
+}
+
+const DOC_TABLE: Record<BillingPackType, string> = {
+  'tax-invoices': 'tax_invoices',
+  disbursements: 'disbursements',
+  'debit-notes': 'debit_notes',
+};
+
+/**
+ * A record summary checked in Expense to Clients: the shipment's Tax Invoice, Disbursement and
+ * Debit Note drafts are made for it, filled from the ledger and the summary's lines, so nobody
+ * has to press "Create draft". A type the shipment already has (draft or issued), or one with
+ * nothing to bill, is left alone.
+ */
+export async function autoDraftsFor(recordId: string, req: Request): Promise<string[]> {
+  const made: string[] = [];
+  for (const type of BILLING_PACK_TYPES) {
+    const [has] = await queryRows<{ n: number }>(
+      db,
+      sql`SELECT count(*)::int AS n FROM ${sql.raw(DOC_TABLE[type])}
+          WHERE accounting_record_id = ${recordId} AND status <> 'VOID'`,
+    );
+    if (has!.n) continue;
+    const draft = await prefill(type, recordId);
+    const lines = (draft.lines ?? []) as { qty: string; unitPrice: string }[];
+    if (!lines.some((l) => Number(l.qty) * Number(l.unitPrice) > 0)) continue;
+    const values = parse(BILLING_DOC_SCHEMAS[type] as z.ZodType, draft) as Parameters<
+      typeof createDoc
+    >[1];
+    made.push(await createDoc(type, values, req));
+  }
+  return made;
 }
 
 /** Issues every draft of the month; drafts with a $0.00 total are left for a look. */
@@ -467,11 +513,25 @@ export async function issueDrafts(
  * number was typed in the Monthly Ledger (made outside the system) prints from the ledger:
  * its number, date and amount, with the shipment's details, as the statement counts it.
  */
-export async function pack(clientId: string, month: string): Promise<BillingPack> {
+export async function pack(
+  clientId: string,
+  month: string,
+  /** One shipment's row only: its documents, drafts included (they print marked DRAFT). */
+  recordId?: string,
+): Promise<BillingPack> {
   const m = await clientMonth(clientId, month);
   const issued = (list: BillingDocSlot[]) =>
-    Promise.all(list.filter((d) => d.status === 'ISSUED').map((d) => getDoc(d.type, d.id)));
+    Promise.all(
+      list
+        .filter((d) => d.status === 'ISSUED' || (recordId && d.status === 'DRAFT'))
+        .map((d) => getDoc(d.type, d.id)),
+    );
   const docs: BillingDoc[] = [];
+  if (recordId) {
+    for (const r of m.rows.filter((x) => x.recordId === recordId))
+      for (const t of BILLING_PACK_TYPES) docs.push(...(await issued(r.docs[t])));
+    return { ...m, docs };
+  }
   for (const r of m.rows)
     for (const t of BILLING_PACK_TYPES) {
       const own = await issued(r.docs[t]);

@@ -139,6 +139,8 @@ export interface StatementLine {
   amount: string;
   /** Comes from numbers typed in the Monthly Ledger, not an issued document. */
   manual: boolean;
+  /** Its document (or one of them) is still a draft: shown, and printed, marked DRAFT. */
+  draft: boolean;
 }
 
 export interface BillingStatement {
@@ -149,6 +151,8 @@ export interface BillingStatement {
   received: string;
   balance: string;
   receipts: OfficialReceipt[];
+  /** Lines whose document is still a draft (the statement prints marked DRAFT). */
+  drafts: number;
 }
 
 /**

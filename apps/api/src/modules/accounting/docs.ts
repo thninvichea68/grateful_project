@@ -2,11 +2,14 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   BILLING_DOC_SCHEMAS,
+  chargeLineAmount,
+  computeChargeLinesTotal,
   computeLinesTotal,
   computeTaxDocument,
   computeTaxLine,
   ledgerInputSchema,
   lineAmount,
+  recordSummaryLedger,
   toMoneyString,
   usdToKhr,
   type BillingDoc,
@@ -17,6 +20,7 @@ import {
   type CreditNoteReviewCounts,
   type CreditNoteReviewRow,
   type CreditNoteReviewStatus,
+  type RecordSummaryReviewRow,
   type Paginated,
   type ReleasedInvoiceSet,
 } from '@gs/shared';
@@ -72,6 +76,8 @@ interface Config {
   /** Allocate the next number when the user didn't type one. */
   allocate: ((tx: Tx, date: string, clientCode: string) => Promise<string>) | null;
   kind: 'tax' | 'khr' | 'plain';
+  /** Credit notes and record summaries: the processing fee line carries 10% VAT on top. */
+  vatOnFee?: true;
   /** Issuing writes the number (when the ledger has a column for it) + total into the ledger. */
   ledger: {
     numberCol: 'invNo' | 'disNo' | 'dnNo' | null;
@@ -134,6 +140,7 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'cn_date',
     billToSql: 'bill_to',
     kind: 'plain',
+    vatOnFee: true,
     allocate: async (tx, date) =>
       `CN${date.slice(2, 4)}-${String(await nextNumber(tx, `CREDIT_NOTE:${date.slice(0, 4)}`)).padStart(3, '0')}`,
     // "Submit to Monthly": the broker's credit note total is that declaration's Clear Fee.
@@ -150,6 +157,7 @@ const CONFIG: Record<BillingDocType, Config> = {
     dateSql: 'summary_date',
     billToSql: 'declare_no',
     kind: 'plain',
+    vatOnFee: true,
     allocate: null,
     ledger: null,
   },
@@ -165,7 +173,12 @@ const numberPeriod = (type: BillingDocType, date: string) =>
   type === 'debit-notes' ? date.slice(0, 7) : date.slice(0, 4);
 
 /** Compute stored totals and line amounts with the shared formulas. */
-function totals(kind: Config['kind'], lines: Input['lines'], rate: string | null) {
+function totals(
+  kind: Config['kind'],
+  lines: Input['lines'],
+  rate: string | null,
+  vatOnFee = false,
+) {
   if (kind === 'tax') {
     const t = computeTaxDocument(
       lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
@@ -191,13 +204,17 @@ function totals(kind: Config['kind'], lines: Input['lines'], rate: string | null
       ledgerTotal: toMoneyString(t.subtotal),
     };
   }
-  const total = computeLinesTotal(lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
+  const amount = (l: Input['lines'][number]) =>
+    vatOnFee ? chargeLineAmount(l) : lineAmount(l.qty, l.unitPrice);
+  const total = vatOnFee
+    ? computeChargeLinesTotal(lines)
+    : computeLinesTotal(lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
   return {
     header:
       kind === 'khr'
         ? { total: toMoneyString(total), totalKhr: String(usdToKhr(total, rate)) }
         : { total: toMoneyString(total) },
-    lines: lines.map((l) => ({ subtotal: toMoneyString(lineAmount(l.qty, l.unitPrice)) })),
+    lines: lines.map((l) => ({ subtotal: toMoneyString(amount(l)) })),
     ledgerTotal: toMoneyString(total),
   };
 }
@@ -358,7 +375,12 @@ export async function createDoc(type: BillingDocType, input: Input, req: Request
       const date = values[cfg.dateCol] as string;
       if (cfg.numberCol && !values[cfg.numberCol] && cfg.allocate)
         values[cfg.numberCol] = await cfg.allocate(tx, date, client.code);
-      const t = totals(cfg.kind, input.lines, (values.exchangeRate as string | undefined) ?? null);
+      const t = totals(
+        cfg.kind,
+        input.lines,
+        (values.exchangeRate as string | undefined) ?? null,
+        cfg.vatOnFee,
+      );
       const [row] = (await tx
         .insert(cfg.table)
         .values({ ...values, ...t.header, status: 'DRAFT', createdById: req.auth!.userId } as never)
@@ -435,7 +457,12 @@ export async function updateDoc(
         )
           values[cfg.numberCol] = await cfg.allocate(tx, newDate, client.code);
       }
-      const t = totals(cfg.kind, input.lines, (values.exchangeRate as string | undefined) ?? null);
+      const t = totals(
+        cfg.kind,
+        input.lines,
+        (values.exchangeRate as string | undefined) ?? null,
+        cfg.vatOnFee,
+      );
       await tx
         .update(cfg.table)
         .set({ ...values, ...t.header } as never)
@@ -471,19 +498,24 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       .set(
         (type === 'credit-notes'
           ? { status: 'ISSUED', reviewStatus: 'UNCHECKED' }
-          : { status: 'ISSUED' }) as never,
+          : type === 'record-summaries'
+            ? // Submitted to accounting (Expense to Clients) to check.
+              { status: 'ISSUED', reviewStatus: 'UNCHECKED', reviewNote: null }
+            : { status: 'ISSUED' }) as never,
       )
       .where(eq(col(cfg.table, 'id'), id));
     // A credit note reaches the Monthly Ledger when accounting checks it, not on submission.
     if (cfg.ledger && doc.accountingRecordId && type !== 'credit-notes') {
       const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
+      // A submitted record summary decides the amounts; the document then only gives its number.
+      const summary = await liveSummaryId(tx, doc.accountingRecordId as string);
       await tx
         .update(accountingRecords)
         .set({
           ...(cfg.ledger.numberCol
             ? { [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null }
             : {}),
-          [cfg.ledger.totalCol]: total,
+          ...(summary ? {} : { [cfg.ledger.totalCol]: total }),
           updatedById: req.auth!.userId,
         } as never)
         .where(eq(accountingRecords.id, doc.accountingRecordId as string));
@@ -527,6 +559,75 @@ async function ledgerRowForCreditNote(tx: Tx, doc: Row, req: Request): Promise<s
 }
 
 /** Undo what issuing wrote into the Monthly Ledger row (if that row still shows this document). */
+/** The shipment's checked record summary, which decides its INV, THC, REIM and DN. */
+async function liveSummaryId(tx: Tx, recordId: string): Promise<string | null> {
+  const [r] = await tx
+    .select({ id: recordSummaries.id })
+    .from(recordSummaries)
+    .where(
+      and(
+        eq(recordSummaries.accountingRecordId, recordId),
+        eq(recordSummaries.status, 'ISSUED'),
+        eq(recordSummaries.reviewStatus, 'CHECKED'),
+      ),
+    )
+    .limit(1);
+  return r?.id ?? null;
+}
+
+/**
+ * Checked in Expense to Clients: the record summary's lines fill the ledger row ("Accountant (Monthly)
+ * data flow"): INV = the processing fee before VAT, DIS / REIM = the receipt lines, DN = the rest,
+ * THC = the THC / HBL fee.
+ */
+async function summaryToLedger(
+  tx: Tx,
+  summaryId: string,
+  recordId: string,
+  userId: string,
+): Promise<void> {
+  const lines = await tx
+    .select({
+      description: recordSummaryLines.description,
+      mark: recordSummaryLines.mark,
+      qty: recordSummaryLines.qty,
+      unitPrice: recordSummaryLines.unitPrice,
+    })
+    .from(recordSummaryLines)
+    .where(eq(recordSummaryLines.recordSummaryId, summaryId));
+  const t = recordSummaryLedger(lines);
+  await tx
+    .update(accountingRecords)
+    .set({
+      invRevenue: toMoneyString(t.invRevenue),
+      thc: toMoneyString(t.thc),
+      disTotal: toMoneyString(t.disTotal),
+      dnTotal: toMoneyString(t.dnTotal),
+      updatedById: userId,
+    })
+    .where(eq(accountingRecords.id, recordId));
+  await recompute(tx, recordId);
+}
+
+/** A checked record summary unchecked, revised or cancelled: the amounts go back to the issued documents'. */
+async function summaryOutOfLedger(tx: Tx, recordId: string): Promise<void> {
+  if (await liveSummaryId(tx, recordId)) return;
+  const issued = (table: string, total: string) =>
+    sql.raw(
+      `coalesce((SELECT sum(${total}) FROM ${table} WHERE accounting_record_id = accounting_records.id AND status = 'ISSUED'), 0)`,
+    );
+  await tx
+    .update(accountingRecords)
+    .set({
+      invRevenue: sql`${issued('tax_invoices', 'subtotal')}`,
+      disTotal: sql`${issued('disbursements', 'total')}`,
+      dnTotal: sql`${issued('debit_notes', 'total')}`,
+      thc: '0',
+    })
+    .where(eq(accountingRecords.id, recordId));
+  await recompute(tx, recordId);
+}
+
 async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
   if (!cfg.ledger || !doc.accountingRecordId) return;
   const [r] = await tx
@@ -538,9 +639,14 @@ async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
     ? !!cfg.numberCol && r?.[numberCol] === doc[cfg.numberCol]
     : Number(r?.[cfg.ledger.totalCol]) === Number(doc.total);
   if (!r || !stillOurs) return;
+  // With a submitted record summary, the amount is the summary's: only the number goes.
+  const keepTotal = !!(await liveSummaryId(tx, r.id));
   await tx
     .update(accountingRecords)
-    .set({ ...(numberCol ? { [numberCol]: null } : {}), [cfg.ledger.totalCol]: '0' } as never)
+    .set({
+      ...(numberCol ? { [numberCol]: null } : {}),
+      ...(keepTotal ? {} : { [cfg.ledger.totalCol]: '0' }),
+    } as never)
     .where(eq(accountingRecords.id, r.id));
   await recompute(tx, r.id);
 }
@@ -564,6 +670,8 @@ export async function voidDoc(
       .set({ status: 'VOID' } as never)
       .where(eq(col(cfg.table, 'id'), id));
     if (doc.status === 'ISSUED') await takeOutOfLedger(tx, cfg, doc);
+    if (type === 'record-summaries' && doc.reviewStatus === 'CHECKED' && doc.accountingRecordId)
+      await summaryOutOfLedger(tx, doc.accountingRecordId as string);
     // The cancelled document keeps its number, so the shipment takes the next one.
     if (isIssueDated(type) && doc.accountingRecordId) {
       const field = LEDGER_FIELD[KIND[type]];
@@ -919,7 +1027,7 @@ export function previewDoc(
     unitPrice: String(l.unitPrice || '0'),
   }));
   const rate = values.exchangeRate == null ? null : String(values.exchangeRate);
-  const t = totals(cfg.kind, lines as Input['lines'], rate);
+  const t = totals(cfg.kind, lines as Input['lines'], rate, cfg.vatOnFee);
   const header: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(values))
     if (k !== 'lines' && !/Id$/.test(k))
@@ -1013,7 +1121,8 @@ export async function listDocs(
            CASE WHEN a.id IS NULL THEN t.inv_no ELSE a.inv_no END AS "invNo",
            CASE WHEN a.id IS NULL THEN t.dis_no ELSE a.dis_no END AS "disNo",
            CASE WHEN a.id IS NULL THEN t.dn_no ELSE a.dn_no END AS "dnNo",
-           t.quantity_text AS "quantityText", (SELECT p.name FROM ports p WHERE p.id = t.port_id) AS port`
+           t.quantity_text AS "quantityText", (SELECT p.name FROM ports p WHERE p.id = t.port_id) AS port,
+           t.review_status AS "reviewStatus"`
       : sql``;
   const rows = await queryRows<BillingDocListItem & { total_count: string }>(
     db,
@@ -1310,6 +1419,114 @@ function creditNoteRecipients(creditNoteId: string, createdById: string | null) 
     UNION
     SELECT id FROM users WHERE id = ${createdById}::uuid AND deleted_at IS NULL
   )`;
+}
+
+/* ---------- Accounting's check of submitted record summaries ---------- */
+
+/**
+ * Accounting → Expense to Clients: Operations' submitted record summaries (and those sent back
+ * for revision), with Checked / Unchecked / Revised counts for the same filters.
+ */
+export async function listRecordSummaryReview(p: {
+  page: number;
+  pageSize: number;
+  q?: string | undefined;
+  clientId?: string | undefined;
+  clientIds?: string[] | undefined;
+  direction?: string | undefined;
+  month?: number | undefined;
+  year?: number | undefined;
+  review?: string | undefined;
+}): Promise<Paginated<RecordSummaryReviewRow> & { counts: CreditNoteReviewCounts }> {
+  const c = [sql`(t.status = 'ISSUED' OR (t.status = 'DRAFT' AND t.review_status = 'REVISED'))`];
+  if (p.clientId) c.push(sql`t.client_id = ${p.clientId}`);
+  const scoped = clientCondition(sql`t.client_id`, p.clientIds);
+  if (scoped) c.push(scoped);
+  if (p.direction) c.push(sql`t.direction = ${p.direction}`);
+  if (p.year) c.push(sql`extract(year FROM t.summary_date) = ${p.year}`);
+  if (p.month) c.push(sql`extract(month FROM t.summary_date) = ${p.month}`);
+  if (p.q)
+    c.push(sql`replace(t.declare_no, ' ', '') ILIKE ${likePattern(p.q.replace(/\s+/g, ''))}`);
+  const from = sql`
+    FROM record_summaries t JOIN clients cl ON cl.id = t.client_id
+    LEFT JOIN ports po ON po.id = t.port_id
+    LEFT JOIN accounting_records a ON a.id = t.accounting_record_id`;
+  const [counts] = await queryRows<CreditNoteReviewCounts>(
+    db,
+    sql`SELECT count(*)::int AS total,
+          (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
+          (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
+          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
+        ${from} ${whereAll(c)}`,
+  );
+  if (p.review) c.push(sql`t.review_status = ${p.review}`);
+  const rows = await queryRows<RecordSummaryReviewRow & { total_count: string }>(
+    db,
+    sql`SELECT t.id, to_char(t.summary_date, 'YYYY-MM-DD') AS date,
+          cl.id AS "clientId", cl.code AS "clientCode", cl.name AS "clientName",
+          t.direction, t.transport_mode AS "transportMode", t.declare_no AS "declareNo",
+          coalesce(a.inv_no, t.inv_no) AS "invNo", t.quantity_text AS "quantityText",
+          po.name AS port, t.total::text AS total,
+          t.status, t.review_status AS "reviewStatus", count(*) OVER () AS total_count
+        ${from} ${whereAll(c)}
+        ORDER BY t.summary_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
+  );
+  return { ...toPaginated(rows, p.page, p.pageSize), counts: counts! };
+}
+
+/**
+ * Accounting's check of a submitted record summary.
+ * - CHECKED: its lines fill the shipment's Monthly Ledger row (INV, THC, REIM, DN).
+ * - REVISED: back to Operations as an editable draft with the note saying what to change; its
+ *   amounts leave the ledger until it is submitted and checked again.
+ * - UNCHECKED: back to waiting; its amounts leave the ledger.
+ */
+export async function setRecordSummaryReview(
+  id: string,
+  reviewStatus: CreditNoteReviewStatus,
+  message: string | undefined,
+  req: Request,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const doc = await lockDoc(tx, 'record-summaries', id);
+    if (doc.status !== 'ISSUED')
+      throw businessRule(
+        doc.status === 'DRAFT' && doc.reviewStatus === 'REVISED'
+          ? 'This record summary is with Operations for revision; it comes back when they submit it again'
+          : 'Only a submitted record summary can be checked',
+      );
+    const recordId = doc.accountingRecordId as string | null;
+    if (reviewStatus === 'CHECKED' && !recordId)
+      throw businessRule('This record summary has no Monthly Ledger entry to fill');
+    await tx
+      .update(recordSummaries)
+      .set({
+        reviewStatus,
+        reviewedBy: req.auth?.userId ?? null,
+        reviewedAt: new Date(),
+        ...(reviewStatus === 'REVISED' ? { status: 'DRAFT', reviewNote: message ?? null } : {}),
+      })
+      .where(eq(recordSummaries.id, id));
+    if (recordId) {
+      if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req.auth!.userId);
+      else if (doc.reviewStatus === 'CHECKED') await summaryOutOfLedger(tx, recordId);
+    }
+    await audit(
+      tx,
+      {
+        action: 'UPDATE',
+        entity: 'record_summaries',
+        entityId: id,
+        before: { status: doc.status, reviewStatus: doc.reviewStatus },
+        after: {
+          status: reviewStatus === 'REVISED' ? 'DRAFT' : doc.status,
+          reviewStatus,
+          message,
+        },
+      },
+      req,
+    );
+  });
 }
 
 /* ---------- The broker's inbox ---------- */

@@ -13,11 +13,8 @@ const TABS: { to: string; label: string; end?: boolean; permission?: Permission 
   { to: '/accounting', label: 'Monthly Ledger', end: true },
   { to: '/accounting/billing', label: 'Client Billing' },
   { to: '/accounting/credit-notes', label: 'Chea Payments' },
-  {
-    to: '/accounting/record-summaries',
-    label: 'Record Summary',
-    permission: 'recordsummaries:read',
-  },
+  // Accounting's check of Operations' record summaries (made in the sidebar's Record Summary).
+  { to: '/accounting/record-summaries', label: 'Expense to Clients' },
 ];
 
 interface AccountingContext {

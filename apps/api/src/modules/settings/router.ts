@@ -452,6 +452,27 @@ settingsRouter.delete('/ports/:id', manage, async (req, res) => {
   res.status(204).end();
 });
 
+/**
+ * Delete a forwarder nobody uses yet. One that shipments or record summaries name can't go
+ * (deleting would blank it on them); untick Active to hide it instead.
+ */
+settingsRouter.delete('/forwarders/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const [use] = await queryRows<{ n: number }>(
+    db,
+    sql`SELECT ((SELECT count(*) FROM shipments WHERE forwarder_id = ${id})
+              + (SELECT count(*) FROM record_summaries WHERE forwarder_id = ${id}))::int AS n`,
+  );
+  if (use!.n > 0)
+    throw conflict(
+      'This forwarder is already used by shipments or record summaries. Untick Active to hide it instead.',
+    );
+  const [row] = await db.delete(forwarders).where(eq(forwarders.id, id)).returning();
+  if (!row) throw notFound('Forwarder');
+  await audit(db, { action: 'DELETE', entity: 'forwarder', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
 settingsRouter.delete('/lookups/:id', manage, async (req, res) => {
   const { id } = parse(idParam, req.params);
   const [row] = await db.delete(lookupValues).where(eq(lookupValues.id, id)).returning();

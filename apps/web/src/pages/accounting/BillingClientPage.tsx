@@ -254,6 +254,7 @@ function Workspace({
                 {BILLING_PACK_TYPES.map((t) => (
                   <th key={t}>{PACK_LABEL[t]}</th>
                 ))}
+                <th aria-label="Print" />
               </tr>
             </thead>
             <tbody>
@@ -280,11 +281,23 @@ function Workspace({
                       <DocCell row={r} type={t} back={back} canWrite={canWrite} />
                     </td>
                   ))}
+                  <td style={{ textAlign: 'right' }}>
+                    {/* The row's tax invoice, disbursement and debit note in one go. */}
+                    {BILLING_PACK_TYPES.some((t) => r.docs[t].some((d) => d.status !== 'VOID')) && (
+                      <PrintLink
+                        className="filter-btn"
+                        href={`/print/billing/${m.client.id}?month=${month}&record=${r.recordId}`}
+                        title={`Print ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
+                      >
+                        Print
+                      </PrintLink>
+                    )}
+                  </td>
                 </tr>
               ))}
               {m.rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className={ui.empty}>
+                  <td colSpan={7} className={ui.empty}>
                     No shipments in the Monthly Ledger for {monthName(month)}.
                   </td>
                 </tr>
@@ -324,15 +337,16 @@ function Workspace({
               <h3>Account statements &amp; payments</h3>
             </div>
             <div className={b.sectionDesc}>
-              Built from the issued documents above. Record each payment against its statement to
-              issue the official receipt.
+              Built from the documents above; drafts are included, marked DRAFT, so the month can be
+              printed and checked before issuing. Record each payment against its statement to issue
+              the official receipt.
             </div>
           </div>
         </div>
         {s.drafts > 0 && (
           <div className={ui.notice}>
-            {s.drafts} draft{s.drafts === 1 ? ' is' : 's are'} not on the statements yet. Issue{' '}
-            {s.drafts === 1 ? 'it' : 'them'} first.
+            {s.drafts} draft{s.drafts === 1 ? ' is' : 's are'} on the statements marked DRAFT. Issue{' '}
+            {s.drafts === 1 ? 'it' : 'them'} to make the statements and receipts final.
           </div>
         )}
         <div className={b.statements}>
@@ -536,6 +550,11 @@ function StatementPanel({
                         ledger
                       </span>
                     )}
+                    {l.draft && (
+                      <span className={b.draftTag} title="Not issued yet">
+                        draft
+                      </span>
+                    )}
                   </td>
                   <td className={b.num}>
                     <b>{fmtMoney(l.amount)}</b>
@@ -546,9 +565,7 @@ function StatementPanel({
           </table>
         </div>
       ) : (
-        <div className={b.stEmpty}>
-          No issued {inv ? 'invoices or disbursements' : 'debit notes'} yet.
-        </div>
+        <div className={b.stEmpty}>No {inv ? 'invoices or disbursements' : 'debit notes'} yet.</div>
       )}
       <div className={b.stTotal}>
         <span>BALANCE AS {periodCode(month)}</span>
