@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import { quotationInputSchema, type QuotationDetail, type QuotationTemplate } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useApiMutation, useQuotation, useQuotationTemplates } from '../../features/admin';
@@ -133,10 +134,8 @@ function Editor({
     <section className="view active">
       <div className="shipment-create-container">
         <div className="create-top-bar">
-          <div>
-            <Link to="/quotations" className="create-header-desc">
-              ← Quotations
-            </Link>
+          <div className={backRow}>
+            <BackLink to="/quotations" label="Quotations" />
             <div className="create-header-title">
               {quote
                 ? `${quote.quoteNo}${quote.version > 1 ? ` v${quote.version}` : ''}`

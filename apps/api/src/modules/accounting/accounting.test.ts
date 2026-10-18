@@ -245,15 +245,12 @@ describe('clear fee payments to Chea', () => {
     expect(empty.body.payments).toEqual([]);
 
     // Entered out of order: listed by pay date.
-    await request(app)
-      .post(URL)
-      .set(h)
-      .send({
-        month: '2026-09',
-        paidOn: '2026-10-08',
-        amount: '600',
-        remark: 'Paid for next month',
-      });
+    await request(app).post(URL).set(h).send({
+      month: '2026-09',
+      paidOn: '2026-10-08',
+      amount: '600',
+      remark: 'Paid for next month',
+    });
     const res = await request(app)
       .post(URL)
       .set(h)
@@ -498,6 +495,12 @@ describe('billing documents', () => {
       .expect(200);
     expect(await fee()).toBe('486.45');
 
+    // Checked, so numbered: the shipment waits in the Record Summary picker until it has one.
+    const waiting = async () =>
+      (await request(app).get('/api/v1/accounting/eligible/record-summaries').set(h)).body.map(
+        (r: { recordId: string }) => r.recordId,
+      );
+    expect(await waiting()).toContain(rec.id);
     const rsPre = (
       await request(app)
         .get('/api/v1/accounting/docs/record-summaries/prefill')
@@ -516,6 +519,45 @@ describe('billing documents', () => {
       declareNo: 'I 122050',
       containerSize: '40HQ',
     });
+    expect(await waiting()).not.toContain(rec.id);
+    const list = await request(app).get('/api/v1/accounting/docs/record-summaries').set(h);
+    expect(list.body.data[0]).toMatchObject({
+      direction: 'EXPORT',
+      invNo: rs.body.header.invNo,
+      dnNo: rs.body.header.dnNo,
+      quantityText: rs.body.header.quantityText,
+    });
+    // INV / DIS / DN are the ledger's: a typed one is ignored, and a correction there shows.
+    const ledgerInv = rs.body.header.invNo;
+    expect(ledgerInv).toBeTruthy();
+    await request(app)
+      .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
+      .set(h)
+      .send({ ...rsPre, invNo: 'TYPED-1', disNo: 'TYPED-2', dnNo: 'TYPED-3' })
+      .expect(200);
+    const rsDoc = async () =>
+      (await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h))
+        .body;
+    expect((await rsDoc()).header).toMatchObject({
+      invNo: ledgerInv,
+      disNo: rs.body.header.disNo,
+      dnNo: rs.body.header.dnNo,
+    });
+    await pool.query(`UPDATE accounting_records SET inv_no = 'GS26-999' WHERE id = $1`, [rec.id]);
+    expect((await rsDoc()).header.invNo).toBe('GS26-999');
+    expect(
+      (await request(app).get('/api/v1/accounting/docs/record-summaries').set(h)).body.data[0]
+        .invNo,
+    ).toBe('GS26-999');
+    // Credit-Noted-style filters: shipment, year, month of any year.
+    const count = async (query: Record<string, string | number>) =>
+      (await request(app).get('/api/v1/accounting/docs/record-summaries').query(query).set(h)).body
+        .meta.total;
+    const [y, m] = rs.body.date.split('-').map(Number);
+    expect(await count({ direction: 'EXPORT', year: y, monthOfYear: m })).toBe(1);
+    expect(await count({ direction: 'IMPORT' })).toBe(0);
+    expect(await count({ year: y - 1 })).toBe(0);
+    expect(await count({ monthOfYear: (m % 12) + 1 })).toBe(0);
   });
 
   it('ignores a typed number, refuses a second invoice and a ledger row from another client', async () => {

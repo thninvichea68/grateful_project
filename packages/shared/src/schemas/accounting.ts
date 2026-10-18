@@ -179,8 +179,8 @@ export interface EligibleRecord {
   invDate: string;
   clientId: string;
   clientCode: string;
-  /** The number the document will take. */
-  number: string;
+  /** The number the document will take (record summaries: the invoice no., null until approved). */
+  number: string | null;
   direction: 'IMPORT' | 'EXPORT';
   hbl: string | null;
 }
@@ -352,6 +352,10 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
+  /** Record Summary's filters (like Credit Noted's): a year, a month of any year, a shipment. */
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  monthOfYear: z.coerce.number().int().min(1).max(12).optional(),
+  direction: z.enum(DIRECTIONS).optional(),
 });
 
 /** Accounting → Credit Noted: submitted credit notes waiting for (or past) accounting's check. */
@@ -476,4 +480,12 @@ export interface BillingDocListItem {
   billTo: string | null;
   declareNo: string | null;
   total: string;
+  /** Record summaries only. */
+  direction?: 'IMPORT' | 'EXPORT';
+  transportMode?: string;
+  quantityText?: string | null;
+  port?: string | null;
+  invNo?: string | null;
+  disNo?: string | null;
+  dnNo?: string | null;
 }

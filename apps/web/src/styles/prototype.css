@@ -51,7 +51,7 @@ button {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 /* =========================================================
@@ -83,7 +83,7 @@ button {
 .brand-mark {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #fff;
   border: 1px solid var(--border-subtle);
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
@@ -305,7 +305,7 @@ nav.menu {
   font-weight: 700;
   background: var(--accent-rose);
   color: #fff;
-  border-radius: 20px;
+  border-radius: 8px;
   padding: 2px 7px;
 }
 .menu-item .submenu-toggle {
@@ -557,7 +557,7 @@ body.sidebar-collapsed .signout {
   gap: 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: 8px;
   height: 40px;
   padding: 0 16px;
   width: 400px;
@@ -590,7 +590,7 @@ body.sidebar-collapsed .signout {
   gap: 9px;
   height: 40px;
   padding: 0 20px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   font-size: 14px;
@@ -698,7 +698,7 @@ body.sidebar-collapsed .signout {
   width: 32px;
   height: 32px;
   padding: 7px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   flex-shrink: 0;
 }
@@ -794,7 +794,7 @@ body.sidebar-collapsed .signout {
 .ai-msg.user {
   align-self: flex-end;
   padding: 9px 14px;
-  border-radius: 16px 16px 4px 16px;
+  border-radius: 8px 8px 4px 8px;
   background: var(--accent-primary);
   color: #041b2d;
   font-weight: 400;
@@ -826,7 +826,7 @@ body.sidebar-collapsed .signout {
 .ai-msg.assistant code {
   font-size: 12.5px;
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: 8px;
   background: var(--bg-subtle);
 }
 .ai-typing {
@@ -874,7 +874,7 @@ body.sidebar-collapsed .signout {
   display: block;
   margin-top: 8px;
   padding: 5px 14px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid currentColor;
   background: transparent;
   color: inherit;
@@ -893,7 +893,7 @@ body.sidebar-collapsed .signout {
   margin: 0 14px;
   padding: 8px 8px 8px 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 18px;
+  border-radius: 8px;
   background: var(--bg-subtle);
 }
 .ai-input:focus-within {
@@ -980,7 +980,7 @@ body.sidebar-collapsed .signout {
   align-items: center;
   gap: 7px;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   font-size: 12px;
@@ -1010,7 +1010,7 @@ body.sidebar-collapsed .signout {
   min-width: 17px;
   height: 17px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--accent-primary);
   color: #041b2d;
   font-size: 10.5px;
@@ -1043,7 +1043,7 @@ body.sidebar-collapsed .signout {
   align-items: center;
   gap: 7px;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: var(--accent-primary);
   color: #041b2d;
@@ -1250,7 +1250,7 @@ body.sidebar-collapsed .signout {
 .modern-kpi-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 24px;
   box-shadow: none;
   display: flex;
@@ -1417,7 +1417,7 @@ body.sidebar-collapsed .signout {
   font-size: 12px;
   font-weight: 600;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .ss-chart-wrap {
   flex: 1;
@@ -1522,12 +1522,12 @@ body.sidebar-collapsed .signout {
   gap: 2px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: 8px;
 }
 
 .accounts-seg-btn {
   padding: 6px 14px;
-  border-radius: 7px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -1600,7 +1600,7 @@ body.sidebar-collapsed .signout {
 .rc-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 22px;
+  border-radius: 8px;
   padding: 24px 28px;
   box-shadow: none;
   display: flex;
@@ -1661,7 +1661,7 @@ body.sidebar-collapsed .signout {
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(16, 185, 129, 0.14);
   color: #34d399;
   font-size: 11px;
@@ -1785,7 +1785,7 @@ body.sidebar-collapsed .signout {
 .rc-bar-track {
   width: 100%;
   height: 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-inset);
   position: relative;
   overflow: hidden;
@@ -1793,7 +1793,7 @@ body.sidebar-collapsed .signout {
 
 .rc-bar-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: 8px;
 }
 
 .rc-val-group {
@@ -1874,7 +1874,7 @@ body.sidebar-collapsed .signout {
   font-weight: 700;
   letter-spacing: 0.2px;
   padding: 5px 12px;
-  border-radius: 20px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -2105,7 +2105,7 @@ body.sidebar-collapsed .signout {
   align-items: center;
   gap: 6px;
   padding: 7px 13px 7px 11px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
   font-size: 12.5px;
@@ -2295,7 +2295,7 @@ body.sidebar-collapsed .signout {
 }
 .filter-reset-btn,
 .filter-apply-btn {
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 7px 16px;
   font-size: 12px;
   font-weight: 700;
@@ -2438,7 +2438,7 @@ body.sidebar-collapsed .signout {
   height: 18px;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   font-size: 10.5px;
   font-weight: 700;
@@ -2787,7 +2787,7 @@ body.sidebar-collapsed .signout {
   min-width: 150px;
   height: 46px;
   padding: 0 38px 0 42px;
-  border-radius: 12px;
+  border-radius: 8px;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   font-size: 13px;
@@ -3427,7 +3427,7 @@ body.sidebar-collapsed .signout {
 .cx-title-icon {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--status-completed-bg);
   color: var(--accent-primary);
   display: flex;
@@ -3551,7 +3551,7 @@ body.sidebar-collapsed .signout {
   flex-direction: column;
   gap: 4px;
   padding: 6px 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   min-width: 76px;
@@ -3570,7 +3570,7 @@ body.sidebar-collapsed .signout {
   width: 38px;
   height: 38px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 8px;
   justify-self: end;
   align-self: end;
 }
@@ -3592,7 +3592,7 @@ body.sidebar-collapsed .signout {
   position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 14px 16px;
   display: grid;
   grid-template-columns: 1.4fr 1fr 1.2fr 1fr;
@@ -3704,7 +3704,7 @@ body.sidebar-collapsed .signout {
 }
 .cargo-total-fob {
   padding: 8px 16px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--status-completed-bg);
 }
 .cargo-total-fob span:last-child {
@@ -3820,7 +3820,7 @@ body.sidebar-collapsed .signout {
   margin-top: 20px;
   background: var(--bg-inset);
   border: 0 !important;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 .cargo-totals-label {
   font-size: 11px;
@@ -3857,7 +3857,7 @@ body.sidebar-collapsed .signout {
   margin: 0;
   text-align: right;
   padding: 12px 22px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--accent-primary);
   min-width: 190px;
 }
@@ -3892,7 +3892,7 @@ body.sidebar-collapsed .signout {
   padding: 18px 28px 20px !important;
   background: var(--bg-inset);
   border: 0 !important;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 .cargo-totals-label {
   grid-column: 1/-1;
@@ -3951,7 +3951,7 @@ body.sidebar-collapsed .signout {
   gap: 14px 12px !important;
   align-items: stretch !important;
   padding: 16px 18px 18px !important;
-  border-radius: 18px !important;
+  border-radius: 8px !important;
 }
 .cargo-totals-label {
   display: flex;
@@ -3970,7 +3970,7 @@ body.sidebar-collapsed .signout {
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--status-completed-bg);
   color: var(--accent-primary);
   font-size: 15px;
@@ -3980,7 +3980,7 @@ body.sidebar-collapsed .signout {
   justify-content: space-between;
   gap: 8px;
   padding: 12px 16px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-surface);
 }
 .cargo-totals .cargo-total-item span:first-child {
@@ -4423,7 +4423,7 @@ th.frozen-col.frozen-col-edge {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
 }
@@ -4453,7 +4453,7 @@ th.frozen-col.frozen-col-edge {
 .cutstock-pill {
   display: inline-block;
   padding: 3px 9px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--status-progress-bg);
   color: var(--status-progress-fg);
   font-size: 11px;
@@ -4571,7 +4571,7 @@ th.frozen-col.frozen-col-edge {
   color: var(--text-secondary);
   border: none;
   padding: 7px 14px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -4600,7 +4600,7 @@ th.frozen-col.frozen-col-edge {
 .tab-box {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 14px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -4658,7 +4658,7 @@ th.frozen-col.frozen-col-edge {
   font-size: 12px;
   font-weight: 700;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   width: 110px;
   text-align: center;
   outline: none;
@@ -4828,13 +4828,13 @@ th.frozen-col.frozen-col-edge {
 }
 .an-mini-bar-track {
   height: 6px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .an-mini-bar-fill {
   height: 100%;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .an-section-title-row {
@@ -4859,7 +4859,7 @@ th.frozen-col.frozen-col-edge {
   display: inline-flex;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 3px;
   gap: 2px;
 }
@@ -4870,7 +4870,7 @@ th.frozen-col.frozen-col-edge {
   font-size: 11.5px;
   font-weight: 700;
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: 8px;
   cursor: pointer;
   transition: 0.15s ease;
 }
@@ -5050,7 +5050,7 @@ th.frozen-col.frozen-col-edge {
 .an-hbar-rank {
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   color: var(--text-tertiary);
   font-size: 10px;
@@ -5067,13 +5067,13 @@ th.frozen-col.frozen-col-edge {
 }
 .an-hbar-track {
   height: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .an-hbar-fill {
   height: 100%;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 /* Detailed accounts table */

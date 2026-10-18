@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import type { BillingDocType } from '@gs/shared';
 import { useEligible } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
@@ -55,10 +56,8 @@ export function PickShipment({ type }: { type: 'tax-invoices' | 'disbursements' 
     <section className="view active">
       <div className="shipment-create-container">
         <div className="create-top-bar">
-          <div>
-            <Link to={params.get('back') ?? `/accounting/${type}`} className="create-header-desc">
-              ← Back
-            </Link>
+          <div className={backRow}>
+            <BackLink to={params.get('back') ?? `/accounting/${type}`} label="the previous page" />
             <div className="create-header-title">New {cfg.title.toLowerCase()}</div>
             <div className="create-header-desc">
               Choose the shipment. Its number, date, rate and details fill in automatically.

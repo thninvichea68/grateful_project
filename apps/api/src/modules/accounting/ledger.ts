@@ -347,17 +347,21 @@ export async function deleteLedger(id: string, req: Request): Promise<void> {
 }
 
 const ELIGIBLE: Record<
-  'tax-invoices' | 'disbursements' | 'debit-notes',
-  { table: string; col: string }
+  'tax-invoices' | 'disbursements' | 'debit-notes' | 'record-summaries',
+  { table: string; col: string; numbered: boolean }
 > = {
-  'tax-invoices': { table: 'tax_invoices', col: 'inv_no' },
-  disbursements: { table: 'disbursements', col: 'dis_no' },
-  'debit-notes': { table: 'debit_notes', col: 'dn_no' },
+  'tax-invoices': { table: 'tax_invoices', col: 'inv_no', numbered: true },
+  disbursements: { table: 'disbursements', col: 'dis_no', numbered: true },
+  'debit-notes': { table: 'debit_notes', col: 'dn_no', numbered: true },
+  // A record summary can start before approval: its INV / DIS / DN appear (live from the
+  // ledger) once the accountant checks the Chea payment.
+  'record-summaries': { table: 'record_summaries', col: 'inv_no', numbered: false },
 };
 
 /**
- * Shipments a tax invoice, DIS or debit note can be made for: approved (they have that
- * number) and with no live document of the type yet, in clearance-date order.
+ * Shipments a tax invoice, DIS or debit note can be made for (approved: they have that
+ * number) or a record summary (any ledger row), with no live document of the type yet, in
+ * clearance-date order.
  */
 export async function eligibleRecords(
   type: keyof typeof ELIGIBLE,
@@ -373,7 +377,7 @@ export async function eligibleRecords(
            a.${sql.raw(t.col)} AS number, s.direction, s.hbl_no AS hbl
     FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
     JOIN shipments s ON s.id = d.shipment_id JOIN clients c ON c.id = a.client_id
-    WHERE a.${sql.raw(t.col)} IS NOT NULL
+    WHERE ${t.numbered ? sql`a.${sql.raw(t.col)} IS NOT NULL` : sql`true`}
       AND NOT EXISTS (SELECT 1 FROM ${sql.raw(t.table)} x WHERE x.accounting_record_id = a.id AND x.status <> 'VOID')
       ${scoped ? sql`AND ${scoped}` : sql``}
     ORDER BY d.declare_date, d.declare_no LIMIT 500`,

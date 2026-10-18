@@ -3,7 +3,8 @@
   display: grid !important;
   grid-template-columns: minmax(420px, 1fr) minmax(0, 1.05fr);
   gap: 0;
-  height: calc(100vh - var(--topbar-h) - 48px);
+  /* --cn-offset: the panel's top + bottom gutter, measured in useFillWindow. */
+  height: calc(100vh - var(--cn-offset, calc(var(--topbar-h) + 48px)));
   min-height: 560px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
@@ -30,15 +31,6 @@
 .headText {
   min-width: 0;
 }
-.back {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  text-decoration: none;
-}
-.back:hover {
-  color: var(--accent-primary);
-}
 .head h2 {
   margin: 2px 0 0;
   font-size: 15px;
@@ -55,8 +47,38 @@
 }
 .headActions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+/* Delete draft: a square bin before "Save draft"; tints red on hover. */
+.headDelete {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--status-exception-fg);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.headDelete svg {
+  width: 16px;
+  height: 16px;
+}
+.headDelete:hover:not(:disabled) {
+  background: var(--status-exception-bg);
+  border-color: var(--status-exception-fg);
+}
+.headDelete:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 .submit {
   display: inline-flex;
@@ -87,7 +109,7 @@
   margin: 12px 16px 0;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--tone-bg);
 }
 .bannerRevise {
@@ -153,7 +175,7 @@
   margin-bottom: 14px;
   padding: 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-surface);
 }
 .card h3 {
@@ -336,19 +358,6 @@
   color: var(--status-completed-fg);
   border-color: var(--status-completed-bg);
 }
-.deleteLink {
-  grid-column: 1 / -1;
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--status-exception-fg);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 /* Preview pane: grey desk with the A4 sheet. */
 .preview {
   min-width: 0;

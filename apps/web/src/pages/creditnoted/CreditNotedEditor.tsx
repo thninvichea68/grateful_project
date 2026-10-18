@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_DOC_SCHEMAS,
   DEFAULT_CHARGE_UNITS,
@@ -299,14 +300,14 @@ function CreditNotedEditor({
     );
   };
 
+  const wrapRef = useFillWindow();
+
   return (
-    <section className={`view active ${s.wrap}`}>
+    <section ref={wrapRef} className={`view active ${s.wrap}`}>
       <div className={s.editor}>
         <header className={s.head}>
-          <div className={s.headText}>
-            <Link to={base} className={s.back}>
-              ← Credit Noted
-            </Link>
+          <div className={`${s.headText} ${backRow}`}>
+            <BackLink to={base} label="Credit Noted" />
             <h2>
               Credit Noted (Chea Payment){' '}
               {doc?.number && <span className={s.number}>No. {cnSeq(doc.number)}</span>}{' '}
@@ -317,6 +318,18 @@ function CreditNotedEditor({
             <p>Generate clean payment vouchers for operations &amp; finance</p>
           </div>
           <div className={s.headActions}>
+            {editable && doc?.status === 'DRAFT' && (
+              <button
+                type="button"
+                className={s.headDelete}
+                disabled={action.isPending}
+                onClick={() => void remove()}
+                aria-label="Delete draft"
+                title="Delete draft"
+              >
+                {icons.trash({})}
+              </button>
+            )}
             {editable && (
               <button
                 type="button"
@@ -589,11 +602,6 @@ function CreditNotedEditor({
           >
             {exporting ? 'Exporting…' : 'Excel Export'}
           </button>
-          {editable && doc?.status === 'DRAFT' && (
-            <button type="button" className={s.deleteLink} onClick={() => void remove()}>
-              Delete draft
-            </button>
-          )}
         </footer>
       </div>
 
@@ -604,6 +612,26 @@ function CreditNotedEditor({
       </Preview>
     </section>
   );
+}
+
+/**
+ * Ends the editor at the window's bottom wherever it starts: under the accounting tabs it
+ * sits lower than on /credit-noted, so a fixed height pushed the footer buttons off screen.
+ */
+export function useFillWindow() {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const top = el.getBoundingClientRect().top;
+      el.style.setProperty('--cn-offset', `${Math.round(top) + 24}px`);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  return ref;
 }
 
 /** Accounting's latest word on this note: what to fix (returned as a draft), or Checked. */
@@ -631,7 +659,13 @@ function ReviewBanner({ doc }: { doc?: BillingDoc | undefined }) {
 }
 
 /** The A4 sheet, scaled down to fit the pane width. */
-function Preview({ children }: { children: React.ReactNode }) {
+export function Preview({
+  children,
+  label = 'Credit Noted preview',
+}: {
+  children: React.ReactNode;
+  label?: string;
+}) {
   const pane = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -648,7 +682,7 @@ function Preview({ children }: { children: React.ReactNode }) {
     return () => ro.disconnect();
   }, []);
   return (
-    <div className={s.preview} ref={pane} aria-label="Credit Noted preview">
+    <div className={s.preview} ref={pane} aria-label={label}>
       <div style={{ height: height * scale, width: A4_WIDTH * scale }}>
         <div
           ref={sheet}

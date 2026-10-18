@@ -2,6 +2,7 @@ import type { Workbook } from 'exceljs';
 import type { BillingDoc } from '@gs/shared';
 import { saveBlob } from '../../lib/files';
 import { creditNoteHeader } from '../print/PrintDocPage';
+import { addPrintFonts } from '../print/printFonts';
 
 /*
  * Print, PDF and Excel for a Credit Noted, built from what is on screen (the live preview),
@@ -57,8 +58,14 @@ export function printCreditNote(sheet: HTMLElement, title: string): void {
     win.print();
     setTimeout(cleanup, 60_000); // in case "afterprint" never fires
   };
-  // Wait for the stylesheets and fonts inside the frame before printing.
-  const ready = () => void (doc.fonts?.ready ?? Promise.resolve()).then(() => setTimeout(go, 50));
+  // Wait for the stylesheets and fonts inside the frame before printing. The Khmer faces are
+  // added by script, so the frame gets its own copy and loads them first.
+  const ready = () => {
+    const faces = addPrintFonts(doc).map((f) => f.load().catch(() => undefined));
+    void Promise.all(faces)
+      .then(() => doc.fonts?.ready)
+      .then(() => setTimeout(go, 50));
+  };
   if (doc.readyState === 'complete') ready();
   else iframe.addEventListener('load', ready, { once: true });
 }

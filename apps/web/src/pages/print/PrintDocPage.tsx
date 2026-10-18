@@ -3,18 +3,17 @@ import { useParams } from 'react-router-dom';
 import { BILLING_DOC_TYPES, type BillingDoc, type BillingDocType } from '@gs/shared';
 import { useCompany, useDoc, type CompanyInfo } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
-import { fmtDate } from '../../lib/format';
 import s from './print.module.css';
 import cn from './creditNote.module.css';
+import rs from './recordSummary.module.css';
 import { DebitNote, sheetClass, TaxOrDisbursement } from './InvoicePrint';
 import { useAutoPrint } from './useAutoPrint';
+import './printFonts'; // Moul / Siemreap for the Record Summary letterhead
 
 export { DebitNote, sheetClass, TaxOrDisbursement };
 
 const money = (v: string | number | undefined | null) =>
   Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const qty = (v: string | number | undefined | null) =>
-  Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
 
 /** Printable A4 view of a billing document. Use the browser's "Save as PDF" for a PDF. */
@@ -74,68 +73,6 @@ export function CompanyHead({ c, khmer = true }: { c: CompanyInfo; khmer?: boole
         </div>
       </div>
     </div>
-  );
-}
-
-const KV = ({ rows }: { rows: [ReactNode, ReactNode][] }) => (
-  <dl className={s.kv}>
-    {rows.map(([k, v], i) => (
-      <div key={i} style={{ display: 'contents' }}>
-        <dt>{k}</dt>
-        <dd>{v || '-'}</dd>
-      </div>
-    ))}
-  </dl>
-);
-function SimpleLines({
-  d,
-  showMark,
-  unitHeader = 'U/M',
-  totalLabel = 'GRAND TOTAL:',
-}: {
-  d: BillingDoc;
-  showMark: boolean;
-  unitHeader?: string;
-  totalLabel?: string;
-}) {
-  return (
-    <>
-      <table className={s.table}>
-        <thead>
-          <tr>
-            <th>NO</th>
-            <th>DESCRIPTION</th>
-            <th>Q&apos;TY</th>
-            <th>{unitHeader}</th>
-            <th>PRICE</th>
-            <th>{showMark ? 'SHPT' : 'TOTAL'}</th>
-            {showMark && <th>MARK</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {d.lines.map((l) => (
-            <tr key={l.id}>
-              <td className={s.center}>{l.lineNo}</td>
-              <td>{l.description}</td>
-              <td className={s.num}>{qty(l.qty)}</td>
-              <td className={s.center}>{l.unit}</td>
-              <td className={s.num}>{money(l.unitPrice)}</td>
-              <td className={s.num}>{money(l.subtotal)}</td>
-              {showMark && <td>{l.mark}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <table className={s.totals}>
-        <tbody>
-          <tr className={s.grand}>
-            <td>{totalLabel}</td>
-            <td>USD</td>
-            <td className={s.num}>{money(d.totals.total)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </>
   );
 }
 
@@ -246,51 +183,119 @@ export function CreditNote({ d }: { d: BillingDoc }) {
   );
 }
 
-function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
+/** "IMPORT | BY SEA: CY / CY": the split the sheet and Excel draw the red bar at. */
+export const SHIPMENT_SEPARATOR = ' | ';
+
+/**
+ * A Record Summary's header box, in reading order (left, right, left, right…). Shared by the
+ * sheet and the Excel export so both always show the same thing.
+ */
+export function recordSummaryHeader(
+  d: BillingDoc,
+  portCode: string | undefined,
+  forwarder: string | undefined,
+): [string, string][] {
+  const size = h(d, 'containerSize');
+  return [
+    [
+      'SHIPMENT:',
+      `${h(d, 'direction')}${SHIPMENT_SEPARATOR}${transportLabel(h(d, 'transportMode'), h(d, 'loadType'))}`,
+    ],
+    ['INVOICE NO:', h(d, 'invNo')],
+    ['FACTORY:', d.clientName.toUpperCase()],
+    ['DISBURSEMENT NO:', h(d, 'disNo')],
+    ['PORT:', portCode ?? ''],
+    ['DEBIT NOTE NO:', h(d, 'dnNo')],
+    ['QUANTITY:', h(d, 'quantityText')],
+    ['CTNR NO:', `${h(d, 'containerNo')}${size ? ` (${size.replace(/^(\d+)/, "$1' ")})` : ''}`],
+    ['BL NO:', h(d, 'blNo')],
+    ['GROSS WEIGHT:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
+    ['DECLARE NO:', h(d, 'declareNo')],
+    ['CBM:', plain(h(d, 'cbm'))],
+    ['DATE:', d.date ? longDate(d.date) : ''],
+    ['FORWARDER:', forwarder?.toUpperCase() ?? ''],
+  ];
+}
+
+/** Record Summary sheet; also the Record Summary editor's live preview. */
+export function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
   const lookups = useLookups();
   const port = lookups.data?.ports.find((p) => p.id === h(d, 'portId'));
   const fwd = lookups.data?.forwarders.find((f) => f.id === h(d, 'forwarderId'));
-  const mode =
-    h(d, 'transportMode') === 'AIR'
-      ? 'AIR'
-      : `${h(d, 'transportMode')} ${h(d, 'loadType') === 'FCL' ? 'CY/CY' : h(d, 'loadType') === 'LCL' ? 'LCL/LCL' : ''}`.trim();
-  return (
-    <>
-      <CompanyHead c={c} />
-      <div className={s.title}>
-        <div className={s.titleEn}>RECORD SUMMARY</div>
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <b>SHIPMENT:</b> <span className={s.checkbox}>☑ {h(d, 'direction')}</span>
-        <span className={s.checkbox}>☑ {mode}</span>
-      </div>
-      <div className={s.grid2}>
-        <KV
-          rows={[
-            ['INVOICE NO:', h(d, 'invNo')],
-            ['DISBURSEMENT NO:', h(d, 'disNo')],
-            ['DEBIT NOTE NO:', h(d, 'dnNo')],
-            [
-              'CTNR NO:',
-              `${h(d, 'containerNo')}${h(d, 'containerSize') ? ` (${h(d, 'containerSize')})` : ''}`,
-            ],
-            ['GROSS WEIGHT:', h(d, 'grossWeightKg') && `${qty(h(d, 'grossWeightKg'))} KGS`],
-            ['CBM:', h(d, 'cbm') && qty(h(d, 'cbm'))],
-            ['FORWARDER:', fwd?.name ?? ''],
-          ]}
-        />
-        <KV
-          rows={[
-            ['FACTORY:', d.clientName],
-            ['PORT:', port ? `${port.code} · ${port.name}` : ''],
-            ['QUANTITY:', h(d, 'quantityText')],
-            ['BL NO:', h(d, 'blNo')],
-            ['DECLARE NO:', h(d, 'declareNo')],
-            ['DATE:', fmtDate(d.date)],
-          ]}
-        />
-      </div>
-      <SimpleLines d={d} showMark unitHeader="SHIP" totalLabel="TOTAL:" />
-    </>
+  const rows: [string, ReactNode][] = recordSummaryHeader(d, port?.code, fwd?.name).map(
+    ([k, v]) => {
+      if (k !== 'SHIPMENT:') return [k, v];
+      const [dir, by] = v.split(SHIPMENT_SEPARATOR);
+      return [
+        k,
+        <>
+          {dir} <span className={rs.sep}>|</span> {by}
+        </>,
+      ];
+    },
   );
+  const amount = (v: string | number) => (Number(v) > 0 ? money(v) : '-');
+  return (
+    <div className={rs.rs}>
+      <div className={rs.mast}>
+        <img src="/logo.png" alt="" className={rs.logo} />
+        <div className={rs.company}>
+          <div className={rs.km}>{c.nameKm}</div>
+          <div className={rs.en}>{c.nameEn}</div>
+          <div className={rs.vat}>លេខអត្តសញ្ញាណកម្ម អតប (VATTIN) : {c.vattin}</div>
+        </div>
+      </div>
+      <div className={rs.title}>RECORD SUMMARY</div>
+      <div className={rs.box}>
+        {rows.map(([k, v]) => (
+          <div key={k} className={rs.row}>
+            <div className={rs.lbl}>{k}</div>
+            <div className={rs.val}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <table className={rs.table}>
+        <thead>
+          <tr>
+            <th style={{ width: 28 }}>NO</th>
+            <th>DESCRIPTION</th>
+            <th style={{ width: 45 }}>Q&apos;TY</th>
+            <th style={{ width: 55 }}>UNIT</th>
+            <th style={{ width: 65 }}>PRICE</th>
+            <th style={{ width: 80 }}>SUBTOTAL</th>
+            <th style={{ width: 90 }}>MARK</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.lines.map((l) => (
+            <tr key={l.id}>
+              <td className={rs.c}>{l.lineNo}</td>
+              <td>{l.description}</td>
+              <td className={rs.c}>{plain(l.qty)}</td>
+              <td className={rs.c}>{l.unit}</td>
+              <td className={rs.r}>{amount(l.unitPrice)}</td>
+              <td className={rs.r}>{amount(l.subtotal)}</td>
+              <td className={rs.c}>{l.mark}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className={rs.sum}>
+            <td colSpan={5} className={rs.r}>
+              TOTAL:
+            </td>
+            <td className={rs.r}>{money(d.totals.total)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
+/** SEA + FCL → "BY SEA: CY / CY", ROAD + LCL → "BY TRUCK: LCL", AIR → "BY AIR". */
+export function transportLabel(mode: string, load: string): string {
+  const by = `BY ${mode === 'ROAD' ? 'TRUCK' : mode}`;
+  if (mode === 'AIR') return by;
+  return load === 'FCL' ? `${by}: CY / CY` : load === 'LCL' ? `${by}: LCL` : by;
 }

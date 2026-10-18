@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_PACK_TYPES,
   PAYMENT_METHOD_LABEL,
@@ -47,9 +48,7 @@ export function BillingClientPage() {
   if (data.error && !data.data)
     return (
       <section className="view active">
-        <Link to={`/accounting/billing?month=${month}`} className={b.back}>
-          ← Client Billing
-        </Link>
+        <BackLink to={`/accounting/billing?month=${month}`} label="Client Billing" />
         <div style={{ marginTop: 12 }}>
           <ErrorBanner error={data.error} />
         </div>
@@ -150,10 +149,11 @@ function Workspace({
   return (
     <section className={`view active ${b.page}`}>
       <div className={b.head}>
-        <div>
-          <Link to={`/accounting/billing?month=${month}`} className={b.back}>
-            ← Client Billing · {monthName(month)}
-          </Link>
+        <div className={backRow}>
+          <BackLink
+            to={`/accounting/billing?month=${month}`}
+            label={`Client Billing · ${monthName(month)}`}
+          />
           <div className={b.headTitle}>
             {m.client.legalName ?? m.client.name}
             <StagePill stage={s.stage} />

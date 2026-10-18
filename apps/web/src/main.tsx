@@ -12,6 +12,7 @@ import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/prototype.css';
 import './styles/app.css';
+import './styles/buttons.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

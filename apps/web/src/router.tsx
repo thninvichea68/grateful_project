@@ -80,6 +80,16 @@ const CreditNotedList = lazy(() =>
 const CreditNotedRoute = lazy(() =>
   import('./pages/creditnoted/CreditNotedEditor').then((m) => ({ default: m.CreditNotedRoute })),
 );
+const RecordSummariesList = lazy(() =>
+  import('./pages/accounting/RecordSummariesList').then((m) => ({
+    default: m.RecordSummariesList,
+  })),
+);
+const RecordSummaryRoute = lazy(() =>
+  import('./pages/accounting/RecordSummaryEditor').then((m) => ({
+    default: m.RecordSummaryRoute,
+  })),
+);
 const QuotationEditorPage = lazy(() =>
   import('./pages/quotations/QuotationEditorPage').then((m) => ({
     default: m.QuotationEditorPage,
@@ -114,9 +124,14 @@ function PageLoading() {
   );
 }
 
-/** Credit notes open in the two-pane Credit Noted editor; other types in the generic one. */
+/**
+ * Credit notes open in the two-pane Credit Noted editor, record summaries in the two-pane
+ * Record Summary editor; other types in the generic one.
+ */
 function DocEditorRoute() {
   const { type = '' } = useParams();
+  if (type === 'record-summaries')
+    return <RecordSummaryRoute base="/accounting/record-summaries" />;
   return type === 'credit-notes' ? (
     <CreditNotedRoute base="/accounting/credit-notes" />
   ) : (
@@ -149,6 +164,9 @@ function DocsListRoute() {
   const { type = '' } = useParams();
   // Accounting's Credit Noted tab checks the broker's submitted notes.
   if (type === 'credit-notes') return <CreditNotesReview />;
+  // Record Summary: the same card layout as Chea Payments.
+  if (type === 'record-summaries')
+    return <RecordSummariesList base="/accounting/record-summaries" cards />;
   return <DocsListPage type={type} key={type} />;
 }
 
@@ -293,6 +311,15 @@ export const router = createBrowserRouter([
       {
         path: 'credit-noted/:id',
         element: guard('creditnotes:read', <CreditNotedRoute base="/credit-noted" />),
+      },
+      {
+        // Sidebar → Record Summary: the list (like Credit Noted); a row opens the editor.
+        path: 'record-summary',
+        element: guard('accounting:read', <RecordSummariesList base="/record-summary" />),
+      },
+      {
+        path: 'record-summary/:id',
+        element: guard('accounting:read', <RecordSummaryRoute base="/record-summary" />),
       },
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },

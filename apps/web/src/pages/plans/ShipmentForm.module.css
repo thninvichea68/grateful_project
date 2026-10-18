@@ -9,18 +9,6 @@
 }
 
 /* ---------- Header ---------- */
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  text-decoration: none;
-}
-.back:hover {
-  color: var(--accent-primary);
-}
 .header {
   display: flex;
   align-items: flex-start;
@@ -46,7 +34,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
@@ -102,7 +90,7 @@
   gap: 7px;
   height: 38px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   font-family: var(--font-main);
@@ -129,7 +117,7 @@
   gap: 7px;
   height: 38px;
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   font-size: 12.5px;
@@ -191,7 +179,7 @@
   align-items: center;
   padding: 10px 14px;
   border: 1.5px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-surface);
   cursor: pointer;
   transition:
@@ -267,7 +255,7 @@ fieldset:disabled .typeTile span {
   gap: 2px;
   padding: 3px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
@@ -284,7 +272,7 @@ fieldset:disabled .typeTile span {
   display: flex;
   align-items: center;
   padding: 0 14px;
-  border-radius: 9px;
+  border-radius: 8px;
   font-size: 12.5px;
   font-weight: 700;
   color: var(--text-secondary);
@@ -462,7 +450,7 @@ fieldset:disabled .typeTile span {
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--status-pending-bg);
   color: var(--status-pending-fg);
   font-size: 11.5px;
@@ -486,7 +474,7 @@ fieldset:disabled .typeTile span {
   height: 40px;
   padding-top: 0;
   padding-bottom: 0;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 .secondaryNext {
   composes: btn-cancel-shipment from global;

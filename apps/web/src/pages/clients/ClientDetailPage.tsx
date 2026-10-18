@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import { useAuth } from '../../auth/AuthProvider';
 import { useClient, useDeleteClient, useLookups, useSaveClient } from '../../features/hooks';
 import { Pill, ShipmentStatusPill } from '../../components/StatusPill';
@@ -32,9 +33,7 @@ export function ClientDetailPage() {
     return (
       <section className="view active">
         <ErrorBanner error={client.error} />
-        <Link to="/clients" className="filter-btn" style={{ display: 'inline-flex' }}>
-          ← Back to clients
-        </Link>
+        <BackLink to="/clients" label="Back to clients" />
       </section>
     );
 
@@ -68,10 +67,8 @@ export function ClientDetailPage() {
   return (
     <section className="view active">
       <div className={s.head}>
-        <div>
-          <Link to="/clients" className={s.muted}>
-            ← Clients
-          </Link>
+        <div className={backRow}>
+          <BackLink to="/clients" label="Clients" />
           <div className={s.title}>{c.name}</div>
           <div className={s.sub}>
             {c.code} · {country} ·{' '}

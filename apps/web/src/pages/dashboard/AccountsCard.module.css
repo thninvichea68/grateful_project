@@ -18,7 +18,7 @@
   padding: 0 8px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -73,7 +73,7 @@
   display: flex;
   gap: 3px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--bg-subtle);
 }
@@ -128,7 +128,7 @@
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 .modeLabel {
   font-size: 10.5px;
@@ -153,7 +153,7 @@
 }
 .modeBar {
   height: 4px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   overflow: hidden;
 }

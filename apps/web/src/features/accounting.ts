@@ -62,8 +62,10 @@ export function useDeclarationOptions(q: string, enabled: boolean) {
   });
 }
 
-/** Shipments ready for a tax invoice, DIS or debit note (the editor's Declare No. picker). */
-export function useEligible(type: 'tax-invoices' | 'disbursements' | 'debit-notes') {
+/** Shipments ready for a tax invoice, DIS, debit note or record summary (the Declare No. picker). */
+export function useEligible(
+  type: 'tax-invoices' | 'disbursements' | 'debit-notes' | 'record-summaries',
+) {
   return useQuery({
     queryKey: [...KEY, 'eligible', type],
     queryFn: () => api<EligibleRecord[]>(`/accounting/eligible/${type}`),

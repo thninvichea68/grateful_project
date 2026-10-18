@@ -39,7 +39,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--accent-rose);
   color: #fff;
   font-size: 10.5px;
@@ -67,7 +67,7 @@
   display: inline-block;
   margin-bottom: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--tone-bg);
   color: var(--tone);
   font-size: 10.5px;
@@ -92,7 +92,7 @@
 .update {
   height: 30px;
   padding: 0 14px;
-  border-radius: 7px;
+  border-radius: 8px;
   font-family: var(--font-main);
   font-size: 12px;
   font-weight: 700;

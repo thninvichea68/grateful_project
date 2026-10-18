@@ -275,7 +275,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
             flexWrap: 'wrap',
             marginTop: 18,
             padding: '12px 14px',
-            borderRadius: 12,
+            borderRadius: 8,
             background: 'var(--bg-subtle)',
             fontSize: 13,
             fontWeight: 700,

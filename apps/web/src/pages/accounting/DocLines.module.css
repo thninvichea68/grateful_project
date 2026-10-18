@@ -3,7 +3,7 @@
 .wrap {
   margin-top: 4px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   overflow-x: auto;
 }
 .table {
@@ -107,7 +107,7 @@
   margin-left: auto;
   padding: 14px 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--bg-surface-elevated);
   font-variant-numeric: tabular-nums;
 }

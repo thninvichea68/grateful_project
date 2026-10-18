@@ -123,7 +123,7 @@
 }
 .skeleton {
   height: 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg-subtle);
   animation: pulse 1.2s ease-in-out infinite;
 }

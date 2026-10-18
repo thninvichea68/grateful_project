@@ -66,6 +66,7 @@ describe('Sidebar', () => {
       'Follow Up',
       'Accounting',
       'Credit Noted',
+      'Record Summary',
       'Quotations',
       'Operations',
       'Staff Management',

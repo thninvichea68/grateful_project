@@ -198,6 +198,17 @@ input:is(
   )::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
+/* No selected-text look on the month / day / year segment; the field's focus ring still shows. */
+input::-webkit-datetime-edit-day-field:focus,
+input::-webkit-datetime-edit-month-field:focus,
+input::-webkit-datetime-edit-year-field:focus,
+input::-webkit-datetime-edit-week-field:focus,
+input::-webkit-datetime-edit-hour-field:focus,
+input::-webkit-datetime-edit-minute-field:focus,
+input::-webkit-datetime-edit-ampm-field:focus {
+  background-color: transparent !important;
+  color: inherit !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

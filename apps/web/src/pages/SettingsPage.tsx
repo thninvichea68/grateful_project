@@ -1,19 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import {
-  LOOKUP_TYPES,
-  PORT_KINDS,
-  companySchema,
-  type CompanyInput,
-  type LookupType,
-  type SettingsBundle,
-} from '@gs/shared';
+import { LOOKUP_TYPES, PORT_KINDS, type LookupType, type SettingsBundle } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useSettings } from '../features/admin';
 import { useLookups } from '../features/hooks';
-import { ErrorBanner, FieldError, ui } from '../components/ui';
+import { ErrorBanner, ui } from '../components/ui';
 import { InlineName } from '../components/InlineName';
+import { CompanyForm } from './settings/CompanyForm';
 import { MyProfile } from './settings/MyProfile';
 import { RatesTab } from './settings/RatesTab';
 import st from './SettingsPage.module.css';
@@ -23,7 +16,6 @@ import { PublicHolidays } from './settings/PublicHolidays';
 import { useToast } from '../components/Toast';
 import { ApiError, api } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
-import { formResolver } from '../lib/zodForm';
 
 const TABS = [
   ['profile', 'My profile'],
@@ -58,11 +50,8 @@ export function SettingsPage() {
   const tabs = canRead ? TABS : TABS.filter(([k]) => k === 'profile');
   // "market" was the old Fuel & metals tab; it now lives under Rates.
   const asked = params.get('tab') === 'market' ? 'rates' : params.get('tab');
-  const tab: Tab = tabs.some(([k]) => k === asked)
-    ? (asked as Tab)
-    : canRead
-      ? 'company'
-      : 'profile';
+  // Opening Settings lands on the first tab, My profile.
+  const tab: Tab = tabs.some(([k]) => k === asked) ? (asked as Tab) : 'profile';
   const setTab = (k: Tab) => setParams({ tab: k }, { replace: true });
   return (
     // The list tabs fill the window so only their rows scroll.
@@ -103,7 +92,9 @@ function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
       )}
       {settings.data && (
         <>
-          {tab === 'company' && <CompanyForm initial={settings.data.company} manage={manage} />}
+          {tab === 'company' && (
+            <CompanyForm initial={settings.data.company} manage={manage} invalidate={INVALIDATE} />
+          )}
           {tab === 'rates' && <RatesTab manage={manage} />}
           {tab === 'holidays' && <PublicHolidays manage={manage} />}
           {tab === 'ports' && <Ports manage={manage} />}
@@ -142,68 +133,6 @@ function Card({
       </div>
       {children}
     </div>
-  );
-}
-
-function CompanyForm({ initial, manage }: { initial: CompanyInput; manage: boolean }) {
-  const toast = useToast();
-  const save = useApiMutation(
-    (v: CompanyInput) => api('/settings/company', { method: 'PUT', json: v }),
-    INVALIDATE,
-  );
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isDirty },
-  } = useForm<CompanyInput>({ resolver: formResolver(companySchema), defaultValues: initial });
-  const f = (name: keyof CompanyInput, label: string, span = 2) => (
-    <div className="form-field-group" style={{ gridColumn: `span ${span}` }}>
-      <label htmlFor={`co-${name}`}>{label}</label>
-      <input id={`co-${name}`} className="form-field-box" {...register(name)} />
-      <FieldError message={errors[name]?.message} />
-    </div>
-  );
-  return (
-    <Card
-      title="Workspace & company"
-      sub="Printed on tax invoices, disbursements and other documents."
-    >
-      <ErrorBanner error={save.error} />
-      <form
-        onSubmit={(e) =>
-          void handleSubmit(async (v) => {
-            await save.mutateAsync(v);
-            toast('Company details saved.');
-          })(e)
-        }
-        noValidate
-      >
-        <fieldset disabled={!manage} style={{ border: 'none' }}>
-          <div className="form-fields-grid">
-            {f('nameEn', 'Company name (English)')}
-            {f('nameKm', 'ឈ្មោះក្រុមហ៊ុន (Khmer)')}
-            {f('vattin', 'VATTIN', 1)}
-            {f('phone', 'Phone', 1)}
-            {f('addressEn', 'Address (English)')}
-            {f('addressKm', 'អាស័យដ្ឋាន (Khmer)')}
-            {f('bankName', 'Bank', 1)}
-            {f('bankAccountName', 'Account name')}
-            {f('bankAccountNo', 'Account no.', 1)}
-          </div>
-          {manage && (
-            <div className={ui.actions}>
-              <button
-                type="submit"
-                className="btn-create-submit"
-                disabled={!isDirty || save.isPending}
-              >
-                Save company details
-              </button>
-            </div>
-          )}
-        </fieldset>
-      </form>
-    </Card>
   );
 }
 

@@ -95,6 +95,14 @@ export const NAV: NavGroup[] = [
         badge: 'creditNoteInbox',
       },
       {
+        // Opens the Record Summary editor directly, like the prototype's sidebar item.
+        to: '/record-summary',
+        label: 'Record Summary',
+        title: 'Record Summary',
+        icon: 'recordsummary',
+        permission: 'accounting:read',
+      },
+      {
         to: '/quotations',
         label: 'Quotations',
         title: 'Quotations',

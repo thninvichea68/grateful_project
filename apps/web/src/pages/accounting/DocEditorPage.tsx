@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
@@ -321,10 +322,8 @@ function Editor({
     <section className="view active">
       <div className="shipment-create-container">
         <div className="create-top-bar">
-          <div>
-            <Link to={back.to} className="create-header-desc">
-              ← {back.label}
-            </Link>
+          <div className={backRow}>
+            <BackLink to={back.to} label={back.label} />
             <div className="create-header-title">
               {cfg.title} {doc?.number ?? (doc ? (doc.declareNo ?? '') : '(new)')}{' '}
               {doc && (

@@ -59,7 +59,7 @@
   gap: 10px 12px;
   margin-bottom: 14px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface-elevated);
 }
@@ -91,7 +91,7 @@
 
 .table {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
 }
 .row {
@@ -133,7 +133,7 @@
 .actions button {
   padding: 5px 9px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: none;
   color: var(--accent-primary);
   font-family: var(--font-main);

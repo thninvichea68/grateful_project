@@ -4,9 +4,12 @@
  */
 const PICKER_TYPES = new Set(['date', 'month', 'week', 'time', 'datetime-local']);
 
+const pickerInput = (el: EventTarget | null): el is HTMLInputElement =>
+  el instanceof HTMLInputElement && PICKER_TYPES.has(el.type);
+
 document.addEventListener('click', (e) => {
   const el = e.target;
-  if (!(el instanceof HTMLInputElement) || !PICKER_TYPES.has(el.type)) return;
+  if (!pickerInput(el)) return;
   if (el.disabled || el.readOnly) return;
   try {
     el.showPicker();

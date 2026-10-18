@@ -106,7 +106,7 @@ accountingRouter.get('/declarations', async (req, res) => {
 accountingRouter.get('/eligible/:type', async (req, res) => {
   const { type } = parse(
     z.object({
-      type: z.enum(['tax-invoices', 'disbursements', 'debit-notes'], {
+      type: z.enum(['tax-invoices', 'disbursements', 'debit-notes', 'record-summaries'], {
         message: 'Unknown document type',
       }),
     }),

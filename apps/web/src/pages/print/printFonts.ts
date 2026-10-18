@@ -6,12 +6,28 @@ import siemreap from '@fontsource/siemreap/files/siemreap-khmer-400-normal.woff2
 // Fonts) and registered for Khmer characters only; an installed "Khmer OS Muol Light" /
 // "Khmer OS Siemreap" (as on the Excel sheets) is used first when the computer has it.
 const KHMER = 'U+1780-17FF, U+19E0-19FF, U+200B-200D, U+25CC';
-if (typeof FontFace !== 'undefined' && typeof document !== 'undefined' && document.fonts) {
-  for (const [family, url] of [
-    ['GS Moul', moul],
-    ['GS Siemreap', siemreap],
-  ] as const)
-    document.fonts.add(
-      new FontFace(family, `url(${url}) format('woff2')`, { unicodeRange: KHMER, display: 'swap' }),
+
+/**
+ * Registers the faces in a document. Script-added fonts aren't in the page's stylesheets, so
+ * a print frame (Credit Noted / Record Summary "Print" and "PDF File") needs its own copy.
+ */
+export function addPrintFonts(doc: Document): FontFace[] {
+  const win = doc.defaultView as (Window & typeof globalThis) | null;
+  if (!win || typeof win.FontFace === 'undefined' || !doc.fonts) return [];
+  return (
+    [
+      ['GS Moul', moul],
+      ['GS Siemreap', siemreap],
+    ] as const
+  ).map(([family, url]) => {
+    const face = new win.FontFace(
+      family,
+      `url(${new URL(url, window.location.href).href}) format('woff2')`,
+      { unicodeRange: KHMER, display: 'swap' },
     );
+    doc.fonts.add(face);
+    return face;
+  });
 }
+
+if (typeof document !== 'undefined') addPrintFonts(document);

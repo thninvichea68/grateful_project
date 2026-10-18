@@ -15,7 +15,7 @@
 .segment {
   display: inline-flex;
   padding: 3px;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-subtle);
 }
 .segment button {
@@ -55,7 +55,7 @@
   min-height: 240px;
   overflow: auto;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 .grid {
   display: grid;
@@ -135,7 +135,7 @@
   flex-shrink: 0;
   min-width: 42px;
   padding: 4px 7px;
-  border-radius: 7px;
+  border-radius: 8px;
   text-align: center;
   font-size: 11px;
   font-weight: 700;
@@ -154,7 +154,7 @@
 .none {
   align-self: flex-start;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;

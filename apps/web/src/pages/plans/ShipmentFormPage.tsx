@@ -7,7 +7,8 @@ import {
   useWatch,
   type FieldErrors,
 } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { BackLink, backRow } from '../../components/BackLink';
 import {
   CLEARANCE_STATUSES,
   CLEARANCE_STATUS_LABEL,
@@ -90,9 +91,7 @@ export function ShipmentFormPage() {
     return (
       <section className="view active">
         <ErrorBanner error={existing.error ?? lookups.error} />
-        <Link to="/plans" className="filter-btn" style={{ display: 'inline-flex' }}>
-          ← Back to Shipping Plans
-        </Link>
+        <BackLink to="/plans" label="Back to Shipping Plans" />
       </section>
     );
   return <ShipmentForm key={id ?? 'new'} detail={existing.data} lookups={lookups.data!} />;
@@ -254,10 +253,8 @@ function ShipmentForm({
           noValidate
         >
           {/* ---------- Header ---------- */}
-          <div>
-            <Link to="/plans" className={f.back}>
-              ← Shipping Plans
-            </Link>
+          <div className={backRow}>
+            <BackLink to="/plans" label="Shipping Plans" />
             <div className={f.header}>
               <div style={{ minWidth: 0 }}>
                 <div className={f.titleRow}>
@@ -409,7 +406,7 @@ function ShipmentForm({
                 <div
                   role="alert"
                   style={{
-                    borderRadius: 10,
+                    borderRadius: 8,
                     padding: '10px 14px',
                     background: 'var(--status-exception-bg)',
                     color: 'var(--status-exception-fg)',

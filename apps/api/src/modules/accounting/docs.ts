@@ -288,6 +288,24 @@ async function fromLedger(
   };
 }
 
+/**
+ * A record summary's INV / DIS / DN: never typed, always its Monthly Ledger row's (given when
+ * the accountant checks the Chea payment, and following any later correction there). An
+ * unlinked summary has none.
+ */
+async function ledgerNumbers(
+  tx: Tx | typeof db,
+  recordId: string | null,
+): Promise<{ invNo: string | null; disNo: string | null; dnNo: string | null }> {
+  const [r] = recordId
+    ? await queryRows<{ invNo: string | null; disNo: string | null; dnNo: string | null }>(
+        tx,
+        sql`SELECT inv_no AS "invNo", dis_no AS "disNo", dn_no AS "dnNo" FROM accounting_records WHERE id = ${recordId}`,
+      )
+    : [];
+  return { invNo: r?.invNo ?? null, disNo: r?.disNo ?? null, dnNo: r?.dnNo ?? null };
+}
+
 function headerValues(type: BillingDocType, input: Input) {
   const { lines: _l, ...rest } = input;
   const numberCol = CONFIG[type].numberCol;
@@ -334,6 +352,8 @@ export async function createDoc(type: BillingDocType, input: Input, req: Request
         if (input.accountingRecordId)
           Object.assign(values, await fromLedger(tx, type, input.accountingRecordId, null));
       }
+      if (type === 'record-summaries')
+        Object.assign(values, await ledgerNumbers(tx, input.accountingRecordId ?? null));
       const date = values[cfg.dateCol] as string;
       if (cfg.numberCol && !values[cfg.numberCol] && cfg.allocate)
         values[cfg.numberCol] = await cfg.allocate(tx, date, client.code);
@@ -398,6 +418,8 @@ export async function updateDoc(
       const values = headerValues(type, input);
       const linked = isIssueDated(type) && !!input.accountingRecordId;
       if (isIssueDated(type)) values[cfg.numberCol!] = undefined; // never typed
+      if (type === 'record-summaries')
+        Object.assign(values, await ledgerNumbers(tx, input.accountingRecordId ?? null));
       if (linked) Object.assign(values, await fromLedger(tx, type, input.accountingRecordId!, id));
       else {
         if (cfg.numberCol && !values[cfg.numberCol]) values[cfg.numberCol] = before[cfg.numberCol]; // keep the allocated number
@@ -832,6 +854,9 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
       .filter(([k]) => !skip.has(k))
       .map(([k, v]) => [k, v === null || v === undefined ? null : String(v)]),
   );
+  // Live from the Monthly Ledger, so a number the accountant corrects there shows here too.
+  if (type === 'record-summaries' && doc.accountingRecordId)
+    Object.assign(header, await ledgerNumbers(db, doc.accountingRecordId as string));
   const s = (v: unknown) => (v === null || v === undefined ? undefined : String(v));
   return {
     id,
@@ -879,6 +904,10 @@ export async function listDocs(
     clientIds?: string[] | undefined;
     status?: string | undefined;
     month?: string | undefined;
+    year?: number | undefined;
+    monthOfYear?: number | undefined;
+    /** Record summaries only (the other tables have no direction). */
+    direction?: string | undefined;
   },
 ): Promise<Paginated<BillingDocListItem>> {
   const cfg = CONFIG[type];
@@ -894,17 +923,29 @@ export async function listDocs(
     c.push(
       sql`${dateCol} >= ${`${p.month}-01`}::date AND ${dateCol} < (${`${p.month}-01`}::date + interval '1 month')`,
     );
+  if (p.year) c.push(sql`extract(year from ${dateCol}) = ${p.year}`);
+  if (p.monthOfYear) c.push(sql`extract(month from ${dateCol}) = ${p.monthOfYear}`);
+  if (p.direction && type === 'record-summaries') c.push(sql`t.direction = ${p.direction}`);
   if (p.q) {
     const like = likePattern(p.q);
     c.push(
       sql`(${numCol} ILIKE ${like} OR ${sql.raw(`t.${cfg.billToSql}`)} ILIKE ${like} OR d.declare_no ILIKE ${like} OR cl.code ILIKE ${like})`,
     );
   }
+  // Record Summary's list also shows the shipment and its INV / DIS / DN numbers.
+  const extra =
+    type === 'record-summaries'
+      ? sql`, t.direction, t.transport_mode AS "transportMode",
+           CASE WHEN a.id IS NULL THEN t.inv_no ELSE a.inv_no END AS "invNo",
+           CASE WHEN a.id IS NULL THEN t.dis_no ELSE a.dis_no END AS "disNo",
+           CASE WHEN a.id IS NULL THEN t.dn_no ELSE a.dn_no END AS "dnNo",
+           t.quantity_text AS "quantityText", (SELECT p.name FROM ports p WHERE p.id = t.port_id) AS port`
+      : sql``;
   const rows = await queryRows<BillingDocListItem & { total_count: string }>(
     db,
     sql`
     SELECT t.id, ${numCol} AS number, to_char(${dateCol}, 'YYYY-MM-DD') AS date, t.status, cl.code AS "clientCode", cl.name AS "clientName",
-           ${sql.raw(`t.${cfg.billToSql}`)} AS "billTo", d.declare_no AS "declareNo", t.total::text AS total, count(*) OVER () AS total_count
+           ${sql.raw(`t.${cfg.billToSql}`)} AS "billTo", d.declare_no AS "declareNo", t.total::text AS total${extra}, count(*) OVER () AS total_count
     FROM ${t} t JOIN clients cl ON cl.id = t.client_id
     LEFT JOIN accounting_records a ON a.id = t.accounting_record_id LEFT JOIN customs_declarations d ON d.id = a.declaration_id
     ${whereAll(c)} ORDER BY ${dateCol} DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,

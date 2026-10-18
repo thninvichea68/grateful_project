@@ -14,7 +14,7 @@
   min-height: 36px;
   padding: 5px 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-surface);
   font-family: var(--font-main);
   font-size: 12.5px;
@@ -50,7 +50,7 @@
 }
 .balance {
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-weight: 700;
   background: var(--bg-subtle);
 }
@@ -81,7 +81,7 @@
   max-height: min(340px, 60vh);
   overflow: auto;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-surface);
   box-shadow:
     var(--shadow-card),

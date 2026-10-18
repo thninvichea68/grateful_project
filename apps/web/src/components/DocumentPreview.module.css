@@ -199,7 +199,7 @@
   align-items: center;
   gap: 4px;
   padding: 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   box-shadow: 0 6px 24px rgba(15, 23, 42, 0.2);
@@ -208,7 +208,7 @@
   min-width: 34px;
   height: 34px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: none;
   background: transparent;
   font-size: 17px;
