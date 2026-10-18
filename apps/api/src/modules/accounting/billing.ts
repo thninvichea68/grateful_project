@@ -8,6 +8,7 @@ import {
   toMoneyString,
   type BillingClient,
   type BillingClientMonth,
+  type BillingDoc,
   type BillingDocSlot,
   type BillingDraftsResult,
   type BillingIssueResult,
@@ -33,7 +34,7 @@ import { businessRule, conflict, notFound } from '../../lib/errors';
 import { isoTs, likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { parse } from '../../lib/validate';
-import { createDoc, getDoc, issueDoc } from './docs';
+import { createDoc, getDoc, issueDoc, previewDoc } from './docs';
 import { prefill, previousLines } from './prefill';
 
 /*
@@ -460,15 +461,37 @@ export async function issueDrafts(
   return result;
 }
 
-/** The month plus every issued document in full, in the order the pack is printed. */
+/**
+ * The month plus every document in full, in the order the pack is printed: each shipment's
+ * tax invoice, disbursement and debit note together, as the sheets were. A document whose
+ * number was typed in the Monthly Ledger (made outside the system) prints from the ledger:
+ * its number, date and amount, with the shipment's details, as the statement counts it.
+ */
 export async function pack(clientId: string, month: string): Promise<BillingPack> {
   const m = await clientMonth(clientId, month);
-  const order: BillingDocSlot[] = [];
-  const add = (list: BillingDocSlot[]) => order.push(...list.filter((d) => d.status === 'ISSUED'));
-  // Each shipment's tax invoice, disbursement and debit note together, as the sheets were.
-  for (const r of m.rows) for (const t of BILLING_PACK_TYPES) add(r.docs[t]);
-  for (const t of BILLING_PACK_TYPES) add(m.others.filter((d) => d.type === t));
-  const docs = await Promise.all(order.map((d) => getDoc(d.type, d.id)));
+  const issued = (list: BillingDocSlot[]) =>
+    Promise.all(list.filter((d) => d.status === 'ISSUED').map((d) => getDoc(d.type, d.id)));
+  const docs: BillingDoc[] = [];
+  for (const r of m.rows)
+    for (const t of BILLING_PACK_TYPES) {
+      const own = await issued(r.docs[t]);
+      if (own.length) docs.push(...own);
+      else if (r.manual[t]) {
+        const draft = (await prefill(t, r.recordId)) as Parameters<typeof previewDoc>[1];
+        docs.push(
+          previewDoc(t, draft, {
+            number: r.manual[t]!.number,
+            date: r.invDate,
+            clientCode: m.client.code,
+            clientName: m.client.name,
+            declareNo: r.declareNo,
+            recordId: r.recordId,
+          }),
+        );
+      }
+    }
+  for (const t of BILLING_PACK_TYPES)
+    docs.push(...(await issued(m.others.filter((d) => d.type === t))));
   return { ...m, docs };
 }
 

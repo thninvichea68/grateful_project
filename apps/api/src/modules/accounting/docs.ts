@@ -12,6 +12,7 @@ import {
   type BillingDoc,
   type BillingDocListItem,
   type BillingDocType,
+  type BillingLineInput,
   type CreditNoteMessage,
   type CreditNoteReviewCounts,
   type CreditNoteReviewRow,
@@ -890,6 +891,79 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
     },
     createdAt: (doc.createdAt as Date).toISOString(),
     updatedAt: (doc.updatedAt as Date).toISOString(),
+  };
+}
+
+/**
+ * A document as it would print from these values, without saving anything: the month pack's
+ * sheet for a number typed in the Monthly Ledger (a document made outside the system), so the
+ * pack still has every shipment's tax invoice, DIS and debit note. Totals use the same
+ * formulas as a saved document.
+ */
+export function previewDoc(
+  type: BillingDocType,
+  values: Row & { lines: BillingLineInput[] },
+  meta: {
+    number: string;
+    date: string;
+    clientCode: string;
+    clientName: string;
+    declareNo: string | null;
+    recordId: string;
+  },
+): BillingDoc {
+  const cfg = CONFIG[type];
+  const lines = values.lines.map((l) => ({
+    ...l,
+    qty: String(l.qty || '0'),
+    unitPrice: String(l.unitPrice || '0'),
+  }));
+  const rate = values.exchangeRate == null ? null : String(values.exchangeRate);
+  const t = totals(cfg.kind, lines as Input['lines'], rate);
+  const header: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(values))
+    if (k !== 'lines' && !/Id$/.test(k))
+      header[k] = v === null || v === undefined ? null : String(v);
+  if (cfg.numberCol) header[cfg.numberCol] = meta.number;
+  header[cfg.dateCol] = meta.date;
+  const h = t.header as Record<string, string | undefined>;
+  return {
+    id: `ledger-${type}-${meta.recordId}`,
+    type,
+    number: meta.number,
+    date: meta.date,
+    status: 'ISSUED',
+    clientId: String(values.clientId ?? ''),
+    clientCode: meta.clientCode,
+    clientName: meta.clientName,
+    accountingRecordId: meta.recordId,
+    declareNo: meta.declareNo,
+    header,
+    lines: lines.map((l, i) => ({
+      id: String(i + 1),
+      lineNo: i + 1,
+      description: l.description,
+      qty: l.qty,
+      unit: l.unit ?? null,
+      unitPrice: l.unitPrice,
+      subtotal: t.lines[i]!.subtotal,
+      ...(cfg.kind === 'tax'
+        ? {
+            vat: (t.lines[i] as { vat: string }).vat,
+            amount: (t.lines[i] as { amount: string }).amount,
+          }
+        : {}),
+      mark: l.mark || null,
+    })),
+    totals: {
+      subtotal: h.subtotal ?? h.total ?? '0',
+      vat: h.vat ?? '0.00',
+      total: h.total ?? '0',
+      ...(cfg.kind !== 'plain' ? { totalKhr: h.totalKhr } : {}),
+      ...(cfg.kind === 'tax' ? { subtotalKhr: h.subtotalKhr, vatKhr: h.vatKhr } : {}),
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 

@@ -288,7 +288,8 @@
   text-transform: uppercase;
   text-decoration: underline;
   text-underline-offset: 4px;
-  margin-bottom: 16px;
+  /* Breathing space between the title and the customer / DN details below it. */
+  margin-bottom: 30px;
 }
 .dnTable {
   width: 100%;

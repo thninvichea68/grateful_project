@@ -200,6 +200,28 @@ describe('client billing: a client month', () => {
       stage: 'NOT_INVOICED',
     });
 
+    // The month pack prints those three from the ledger (numbers, date, amounts), as the
+    // statements count them; the shipment with nothing yet has no sheets.
+    const pack = (await acc('get', `/billing/${b.jr.id}/pack`, { query: { month: '2026-09' } }))
+      .body;
+    expect(
+      pack.docs.map((d: { type: string; number: string; date: string }) => [
+        d.type,
+        d.number,
+        d.date,
+      ]),
+    ).toEqual([
+      ['tax-invoices', 'GS26-360', '2026-09-03'],
+      ['disbursements', 'DIS403', '2026-09-03'],
+      ['debit-notes', 'JR2609001', '2026-09-03'],
+    ]);
+    expect(pack.docs.map((d: { totals: { total: string } }) => d.totals.total)).toEqual([
+      '266.20',
+      '637.25',
+      '707.50',
+    ]);
+    expect(pack.docs[0].header).toMatchObject({ invoiceNo: 'GS26-360', hbl: 'COSU6464276980' });
+
     const all = (await acc('get', '/billing', { query: { month: '2026-09' } })).body;
     expect(all.rows.map((r: { clientCode: string }) => r.clientCode)).toEqual(['JR', 'JYX']);
     expect(all.totals).toMatchObject({ clients: 2, shipments: 3, notInvoiced: 2 });

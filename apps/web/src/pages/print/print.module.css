@@ -191,6 +191,14 @@
     background: #fff;
     padding: 0;
   }
+  /* A sheet shorter than the page (statements, receipts, checklist) ends where its content
+     does; below it the paper must stay white, not the app's tinted page background, which
+     prints when "Background graphics" is on. */
+  :global(html),
+  :global(body),
+  :global(#root) {
+    background: #fff !important;
+  }
   .toolbar {
     display: none;
   }
