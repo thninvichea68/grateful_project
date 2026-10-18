@@ -3,28 +3,32 @@ import type { BillingDocType, LookupsResponse } from '@gs/shared';
 export interface FieldDef {
   name: string;
   label: string;
-  type?: 'text' | 'date' | 'select' | 'number';
+  /** 'textarea': a two-line box, for long values such as an address. */
+  type?: 'text' | 'date' | 'select' | 'number' | 'textarea';
+  /** Columns taken in the section's four-column grid. */
   span?: number;
+  /** The editor section the field sits in (default: the document's own details). */
+  group?: 'customer' | 'ship';
   options?: (l: LookupsResponse) => { value: string; label: string }[];
   placeholder?: string;
 }
 
 const customer: FieldDef[] = [
-  { name: 'customerNameEn', label: 'Customer (English)', span: 2 },
-  { name: 'customerNameKm', label: 'ឈ្មោះអតិថិជន (Khmer)', span: 2 },
-  { name: 'customerAddress', label: 'Address', span: 3 },
-  { name: 'customerVattin', label: 'VATTIN' },
+  { name: 'customerNameEn', label: 'Customer (English)', span: 2, group: 'customer' },
+  { name: 'customerNameKm', label: 'ឈ្មោះអតិថិជន (Khmer)', span: 2, group: 'customer' },
+  { name: 'customerAddress', label: 'Address', span: 3, type: 'textarea', group: 'customer' },
+  { name: 'customerVattin', label: 'VATTIN', group: 'customer' },
 ];
 const ship: FieldDef[] = [
-  { name: 'shipper', label: 'Shipper', span: 2 },
-  { name: 'consignee', label: 'Consignee', span: 2 },
-  { name: 'hbl', label: 'HBL' },
-  { name: 'pkgs', label: 'PKGS', placeholder: 'e.g. 978 CTNS' },
-  { name: 'grossWeightKg', label: 'Gross weight (kg)', type: 'number' },
-  { name: 'volumeCbm', label: 'Volume (CBM)', type: 'number' },
-  { name: 'containerNo', label: 'Container No.', span: 2 },
-  { name: 'pol', label: 'POL' },
-  { name: 'pod', label: 'POD' },
+  { name: 'shipper', label: 'Shipper', span: 2, group: 'ship' },
+  { name: 'consignee', label: 'Consignee', span: 2, group: 'ship' },
+  { name: 'hbl', label: 'HBL', group: 'ship' },
+  { name: 'pkgs', label: 'PKGS', placeholder: 'e.g. 978 CTNS', group: 'ship' },
+  { name: 'grossWeightKg', label: 'Gross weight (kg)', type: 'number', group: 'ship' },
+  { name: 'volumeCbm', label: 'Volume (CBM)', type: 'number', group: 'ship' },
+  { name: 'containerNo', label: 'Container No.', span: 2, group: 'ship' },
+  { name: 'pol', label: 'POL', group: 'ship' },
+  { name: 'pod', label: 'POD', group: 'ship' },
 ];
 const ports = (l: LookupsResponse) =>
   l.ports.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }));
@@ -78,9 +82,9 @@ export const DOC_CONFIG: Record<
     fields: [
       { name: 'dnNo', label: 'DN No.', placeholder: 'auto: JR2608###' },
       { name: 'dnDate', label: 'Date', type: 'date' },
-      { name: 'billTo', label: 'Customer', span: 2 },
-      { name: 'address', label: 'Address', span: 3 },
       { name: 'reference', label: 'Reference' },
+      { name: 'billTo', label: 'Customer', span: 2, group: 'customer' },
+      { name: 'address', label: 'Address', span: 2, type: 'textarea', group: 'customer' },
       ...ship,
     ],
   },

@@ -103,6 +103,7 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
     ...head,
     legalNameKm: row!.legalNameKm,
     address: row!.address,
+    addressKm: row!.addressKm,
     vattin: row!.vattin,
     contactName: row!.contactName,
     contactEmail: row!.contactEmail,

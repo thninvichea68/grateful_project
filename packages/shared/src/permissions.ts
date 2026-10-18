@@ -19,6 +19,9 @@ export const PERMISSIONS = [
   /** Credit Noted (Chea / customs broker payment vouchers), separate from the rest of accounting. */
   'creditnotes:read',
   'creditnotes:write',
+  /** Record Summary (each shipment's summary sheet), separate so Operations can work on it. */
+  'recordsummaries:read',
+  'recordsummaries:write',
   'quotations:read',
   'quotations:write',
   'documents:read',
@@ -55,6 +58,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
     'shipments:write',
     'clients:write',
     'cutstock:write',
+    'recordsummaries:write',
     'documents:write',
     'followups:write',
   ],
@@ -62,6 +66,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
     ...READ_ALL.filter((p) => p !== 'audit:read'),
     'accounting:write',
     'creditnotes:write',
+    'recordsummaries:write',
     'quotations:write',
     'documents:write',
     'followups:write',

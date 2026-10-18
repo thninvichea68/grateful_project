@@ -38,6 +38,7 @@ const AREAS: Record<string, { label: string; desc: string }> = {
   cutstock: { label: 'CDC Master List', desc: 'Licensed items and balances' },
   accounting: { label: 'Accounting', desc: 'Ledger, invoices and notes' },
   creditnotes: { label: 'Credit Noted', desc: 'Customs broker credit notes' },
+  recordsummaries: { label: 'Record Summary', desc: 'Shipment record summaries' },
   quotations: { label: 'Quotations', desc: 'Quotation builder' },
   documents: { label: 'Documents', desc: 'Uploaded files' },
   followups: { label: 'Follow-ups', desc: 'Tasks and reminders' },

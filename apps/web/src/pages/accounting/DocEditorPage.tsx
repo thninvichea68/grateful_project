@@ -26,10 +26,11 @@ import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { NotFoundPage } from '../NotFoundPage';
-import { DOC_CONFIG } from './docConfig';
+import { DOC_CONFIG, type FieldDef } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { PrintLink } from '../../components/PrintLink';
 import dl from './DocLines.module.css';
+import dh from './DocHeader.module.css';
 import { CorrectDocDialog } from './CorrectDocDialog';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { PickShipment } from './PickShipment';
@@ -318,6 +319,65 @@ function Editor({
       i
     ]?.[f]?.message;
 
+  /** One header field in its section's grid; long values wrap instead of being cut off. */
+  const renderField = (f: FieldDef) => {
+    // Never typed: the number (and, for a shipment, its date and rate) come from the ledger.
+    const locked =
+      (f.name === cfg.numberField && isShipmentDoc(type)) ||
+      (linked && (f.name === cfg.dateField || f.name === 'exchangeRate'));
+    const placeholder =
+      f.name === cfg.numberField && isShipmentDoc(type) ? 'Given automatically' : f.placeholder;
+    return (
+      <div className={dh.field} data-span={f.span ?? 1} key={f.name}>
+        <label htmlFor={`d-${f.name}`} title={f.label}>
+          {f.label}
+        </label>
+        {f.type === 'select' ? (
+          <select id={`d-${f.name}`} className="form-select-box" {...register(f.name)}>
+            <option value="">—</option>
+            {lookups.data &&
+              f.options?.(lookups.data).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+          </select>
+        ) : f.type === 'number' ? (
+          <NumberInput
+            id={`d-${f.name}`}
+            className="form-field-box"
+            decimals={f.name === 'exchangeRate' ? 4 : 3}
+            placeholder={placeholder}
+            readOnly={locked}
+            {...register(f.name)}
+            aria-invalid={!!err(f.name)}
+          />
+        ) : f.type === 'textarea' ? (
+          <textarea
+            id={`d-${f.name}`}
+            rows={2}
+            className={`form-field-box ${dh.textarea}`}
+            placeholder={placeholder}
+            {...register(f.name)}
+            aria-invalid={!!err(f.name)}
+          />
+        ) : (
+          <input
+            id={`d-${f.name}`}
+            className={`form-field-box${/Km$/.test(f.name) ? ` ${dh.khmer}` : ''}`}
+            type={f.type === 'date' ? 'date' : 'text'}
+            placeholder={placeholder}
+            readOnly={locked}
+            title={locked ? 'From the Monthly Ledger' : undefined}
+            {...register(f.name)}
+            aria-invalid={!!err(f.name)}
+          />
+        )}
+        <FieldError message={err(f.name)} />
+      </div>
+    );
+  };
+
   return (
     <section className="view active">
       <div className="shipment-create-container">
@@ -417,77 +477,61 @@ function Editor({
           noValidate
         >
           <fieldset disabled={!editable} style={{ border: 'none', minWidth: 0 }}>
-            <div className="cx-card">
-              <div className="form-fields-grid">
-                <div className="form-field-group">
-                  <label htmlFor="d-clientId">Client</label>
-                  <select
-                    id="d-clientId"
-                    className="form-select-box"
-                    {...register('clientId')}
-                    disabled={!!defaults.accountingRecordId || !editable}
-                  >
-                    <option value="">Choose…</option>
-                    {lookups.data?.clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <FieldError message={err('clientId')} />
-                </div>
-                {cfg.fields.map((f) => (
-                  <div
-                    className="form-field-group"
-                    key={f.name}
-                    style={f.span ? { gridColumn: `span ${f.span}` } : undefined}
-                  >
-                    <label htmlFor={`d-${f.name}`}>{f.label}</label>
-                    {f.type === 'select' ? (
-                      <select id={`d-${f.name}`} className="form-select-box" {...register(f.name)}>
-                        <option value="">—</option>
-                        {lookups.data &&
-                          f.options?.(lookups.data).map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                      </select>
-                    ) : f.type === 'number' ? (
-                      <NumberInput
-                        id={`d-${f.name}`}
-                        className="form-field-box"
-                        decimals={f.name === 'exchangeRate' ? 4 : 3}
-                        placeholder={f.placeholder ?? f.label}
-                        // Never typed for a shipment: its rate comes from the Monthly Ledger.
-                        readOnly={linked && f.name === 'exchangeRate'}
-                        {...register(f.name)}
-                        aria-invalid={!!err(f.name)}
-                      />
-                    ) : (
-                      <input
-                        id={`d-${f.name}`}
-                        className="form-field-box"
-                        type={f.type === 'date' ? 'date' : 'text'}
-                        placeholder={
-                          f.name === cfg.numberField && isShipmentDoc(type)
-                            ? 'Given automatically'
-                            : (f.placeholder ?? f.label)
-                        }
-                        // Never typed: the number (and, for a shipment, its date and rate)
-                        // come from the Monthly Ledger.
-                        readOnly={
-                          (f.name === cfg.numberField && isShipmentDoc(type)) ||
-                          (linked && f.name === cfg.dateField)
-                        }
-                        {...register(f.name)}
-                        aria-invalid={!!err(f.name)}
-                      />
-                    )}
-                    <FieldError message={err(f.name)} />
-                  </div>
+            <div className={`cx-card ${dh.card}`}>
+              {(
+                [
+                  [
+                    'doc',
+                    `${cfg.title} details`,
+                    isShipmentDoc(type)
+                      ? 'Number, date and rate come from the Monthly Ledger.'
+                      : 'The client, number and date of this document.',
+                  ],
+                  [
+                    'customer',
+                    type === 'debit-notes' ? 'Bill to' : 'Customer',
+                    'Who is billed, as printed on the document.',
+                  ],
+                  ['ship', 'Shipment', 'The cargo this document is for.'],
+                ] as const
+              )
+                .map(([group, title, hint]) => ({
+                  group,
+                  title,
+                  hint,
+                  fields: cfg.fields.filter((f) => (f.group ?? 'doc') === group),
+                }))
+                .filter((sec) => sec.group === 'doc' || sec.fields.length > 0)
+                .map((sec) => (
+                  <section key={sec.group} className={dh.section}>
+                    <div className={dh.sectionHead}>
+                      <h4>{sec.title}</h4>
+                      <p>{sec.hint}</p>
+                    </div>
+                    <div className={dh.fields}>
+                      {sec.group === 'doc' && (
+                        <div className={dh.field}>
+                          <label htmlFor="d-clientId">Client</label>
+                          <select
+                            id="d-clientId"
+                            className="form-select-box"
+                            {...register('clientId')}
+                            disabled={!!defaults.accountingRecordId || !editable}
+                          >
+                            <option value="">Choose…</option>
+                            {lookups.data?.clients.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                          <FieldError message={err('clientId')} />
+                        </div>
+                      )}
+                      {sec.fields.map(renderField)}
+                    </div>
+                  </section>
                 ))}
-              </div>
             </div>
 
             <div className="cx-card" style={{ marginTop: 16 }}>

@@ -159,7 +159,7 @@ export function RecordSummariesList({ base, cards = false }: { base: string; car
               Clear
             </button>
           )}
-          {can('accounting:write') && (
+          {can('recordsummaries:write') && (
             <button type="button" className={s.newBtn} onClick={() => navigate(`${base}/new`)}>
               {icons.plus({ width: 15, height: 15 })} New Record Summary
             </button>

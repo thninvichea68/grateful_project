@@ -50,25 +50,35 @@ export const accountingRouter = Router();
 accountingRouter.use(requireAuth);
 
 /**
- * Credit Noted (the customs broker's vouchers) has its own permissions so a broker can work
- * on it without seeing the rest of accounting; everything else needs accounting access.
+ * Credit Noted (the customs broker's vouchers) and Record Summary (worked on by Operations)
+ * have their own permissions, so those users don't see the rest of accounting; everything
+ * else needs accounting access.
  */
 const isCreditNotes = (path: string) =>
   path.startsWith('/docs/credit-notes') || path.startsWith('/credit-notes/');
+const isRecordSummaries = (path: string) =>
+  path.startsWith('/docs/record-summaries') || path === '/eligible/record-summaries';
 accountingRouter.use((req, res, next) =>
-  requirePermission(isCreditNotes(req.path) ? 'creditnotes:read' : 'accounting:read')(
-    req,
-    res,
-    next,
-  ),
+  requirePermission(
+    isCreditNotes(req.path)
+      ? 'creditnotes:read'
+      : isRecordSummaries(req.path)
+        ? 'recordsummaries:read'
+        : 'accounting:read',
+  )(req, res, next),
 );
-/** Writing a document: credit notes need creditnotes:write, the others accounting:write. */
+/**
+ * Writing a document: credit notes need creditnotes:write, record summaries
+ * recordsummaries:write, the others accounting:write.
+ */
 const docWrite: RequestHandler = (req, res, next) =>
-  requirePermission(req.params.type === 'credit-notes' ? 'creditnotes:write' : 'accounting:write')(
-    req,
-    res,
-    next,
-  );
+  requirePermission(
+    req.params.type === 'credit-notes'
+      ? 'creditnotes:write'
+      : req.params.type === 'record-summaries'
+        ? 'recordsummaries:write'
+        : 'accounting:write',
+  )(req, res, next);
 
 // Every /:id route (ledger entries and billing documents): a record of a client this user
 // can't see looks like it doesn't exist.
@@ -455,7 +465,11 @@ accountingRouter.post('/docs/:type/:id/issue', docWrite, async (req, res) => {
 });
 accountingRouter.post(
   '/docs/:type/:id/void',
-  requirePermission('accounting:write'),
+  // Cancelling: accounting's call, except a record summary (its own editors may cancel it).
+  (req, res, next) =>
+    requirePermission(
+      req.params.type === 'record-summaries' ? 'recordsummaries:write' : 'accounting:write',
+    )(req, res, next),
   async (req, res) => {
     const { type } = parse(typeParam, req.params);
     const { id } = parse(idParam, req.params);

@@ -131,7 +131,11 @@ function PageLoading() {
 function DocEditorRoute() {
   const { type = '' } = useParams();
   if (type === 'record-summaries')
-    return <RecordSummaryRoute base="/accounting/record-summaries" />;
+    return (
+      <RequirePermission permission="recordsummaries:read">
+        <RecordSummaryRoute base="/accounting/record-summaries" />
+      </RequirePermission>
+    );
   return type === 'credit-notes' ? (
     <CreditNotedRoute base="/accounting/credit-notes" />
   ) : (
@@ -144,7 +148,13 @@ function PrintDocRoute() {
   const { type } = useParams();
   return (
     <RequirePermission
-      permission={type === 'credit-notes' ? 'creditnotes:read' : 'accounting:read'}
+      permission={
+        type === 'credit-notes'
+          ? 'creditnotes:read'
+          : type === 'record-summaries'
+            ? 'recordsummaries:read'
+            : 'accounting:read'
+      }
     >
       <Suspense fallback={null}>
         <PrintDocPage />
@@ -166,7 +176,11 @@ function DocsListRoute() {
   if (type === 'credit-notes') return <CreditNotesReview />;
   // Record Summary: the same card layout as Chea Payments.
   if (type === 'record-summaries')
-    return <RecordSummariesList base="/accounting/record-summaries" cards />;
+    return (
+      <RequirePermission permission="recordsummaries:read">
+        <RecordSummariesList base="/accounting/record-summaries" cards />
+      </RequirePermission>
+    );
   return <DocsListPage type={type} key={type} />;
 }
 
@@ -315,11 +329,11 @@ export const router = createBrowserRouter([
       {
         // Sidebar → Record Summary: the list (like Credit Noted); a row opens the editor.
         path: 'record-summary',
-        element: guard('accounting:read', <RecordSummariesList base="/record-summary" />),
+        element: guard('recordsummaries:read', <RecordSummariesList base="/record-summary" />),
       },
       {
         path: 'record-summary/:id',
-        element: guard('accounting:read', <RecordSummaryRoute base="/record-summary" />),
+        element: guard('recordsummaries:read', <RecordSummaryRoute base="/record-summary" />),
       },
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },

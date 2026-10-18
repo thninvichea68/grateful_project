@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import type { Permission } from '@gs/shared';
+import { useAuth } from '../../auth/AuthProvider';
 import { BILLING_SECTION_PATHS } from './billingParts';
 
 /**
@@ -7,11 +9,15 @@ import { BILLING_SECTION_PATHS } from './billingParts';
  * month: documents → statements → receipts) holds the tax invoice, disbursement, debit note
  * and receipt registers as its own sections, so its tab stays lit on those pages.
  */
-const TABS = [
+const TABS: { to: string; label: string; end?: boolean; permission?: Permission }[] = [
   { to: '/accounting', label: 'Monthly Ledger', end: true },
   { to: '/accounting/billing', label: 'Client Billing' },
   { to: '/accounting/credit-notes', label: 'Chea Payments' },
-  { to: '/accounting/record-summaries', label: 'Record Summary' },
+  {
+    to: '/accounting/record-summaries',
+    label: 'Record Summary',
+    permission: 'recordsummaries:read',
+  },
 ];
 
 interface AccountingContext {
@@ -23,6 +29,7 @@ export const useAccountingLayout = (): AccountingContext =>
   useOutletContext<AccountingContext | undefined>() ?? { tabsAside: null };
 
 export function AccountingLayout() {
+  const { can } = useAuth();
   const [tabsAside, setTabsAside] = useState<HTMLElement | null>(null);
   const { pathname } = useLocation();
   const inBilling = BILLING_SECTION_PATHS.some((p) => pathname.startsWith(p));
@@ -39,7 +46,7 @@ export function AccountingLayout() {
         }}
       >
         <nav aria-label="Accounting sections" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {TABS.map((t) => (
+          {TABS.filter((t) => !t.permission || can(t.permission)).map((t) => (
             <NavLink
               key={t.to}
               to={t.to}

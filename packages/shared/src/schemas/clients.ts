@@ -14,6 +14,7 @@ export const clientInputSchema = z.object({
   legalNameKm: optText(200),
   countryIso2: z.string().trim().toUpperCase().length(2, 'Choose a country'),
   address: optText(400),
+  addressKm: optText(400),
   vattin: optText(40),
   contactName: optText(120),
   contactEmail: z
@@ -55,6 +56,7 @@ export interface ClientListItem {
 export interface ClientDetail extends ClientListItem {
   legalNameKm: string | null;
   address: string | null;
+  addressKm: string | null;
   vattin: string | null;
   contactName: string | null;
   contactEmail: string | null;

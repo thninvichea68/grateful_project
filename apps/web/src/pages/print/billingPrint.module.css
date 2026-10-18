@@ -179,23 +179,27 @@
   content: ':';
   margin-right: 4px;
 }
-/* "Date:" right beside its value, which ends where the full-width lines below end. */
+/* "Date:" right beside its value, which ends where the full-width lines below end. The line
+   runs under both, from the start of "Date:" to the end of the date. */
 .rcSide .rcField {
   width: 24mm;
   justify-content: flex-end;
+  border-bottom: 0;
 }
 .rcSide .rcField::before {
   content: none;
 }
 .rcSide {
   grid-column: 3;
+  justify-self: end;
   display: flex;
   justify-content: flex-end;
   align-items: flex-end;
   gap: 6px;
+  border-bottom: 1px solid #000;
 }
 .rcSide > span:first-child {
-  padding-bottom: 2px;
+  padding: 0 0 2px 2px;
 }
 /* As long as the "Received from" line above it; the figure ends under the title's end. */
 .rcAmount {

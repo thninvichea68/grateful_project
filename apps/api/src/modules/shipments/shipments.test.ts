@@ -889,11 +889,19 @@ describe('cut stock and CDC lines', () => {
 describe('clients', () => {
   it('creates, lists, updates and refuses deleting a client with shipments', async () => {
     const h = await as('OPERATOR');
-    const created = await request(app)
-      .post('/api/v1/clients')
-      .set(h)
-      .send({ code: 'sak', name: 'Sportline Garments', countryIso2: 'kh', commissionUsd: '50' });
+    const created = await request(app).post('/api/v1/clients').set(h).send({
+      code: 'sak',
+      name: 'Sportline Garments',
+      countryIso2: 'kh',
+      commissionUsd: '50',
+      address: 'Phnom Penh, Cambodia',
+      addressKm: 'រាជធានីភ្នំពេញ',
+    });
     expect(created.status).toBe(201);
+    // The address in both languages comes back on the client's details.
+    expect(
+      (await request(app).get(`/api/v1/clients/${created.body.id}`).set(h)).body,
+    ).toMatchObject({ address: 'Phnom Penh, Cambodia', addressKm: 'រាជធានីភ្នំពេញ' });
     const list = await request(app).get('/api/v1/clients').query({ q: 'sport' }).set(h);
     expect(list.body.data[0]).toMatchObject({
       code: 'SAK',

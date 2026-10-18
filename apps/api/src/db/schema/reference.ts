@@ -83,6 +83,7 @@ export const clients = pgTable(
       .notNull()
       .references(() => countries.iso2),
     address: text('address'),
+    addressKm: text('address_km'),
     vattin: text('vattin'),
     contactName: text('contact_name'),
     contactEmail: text('contact_email'),

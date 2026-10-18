@@ -560,6 +560,55 @@ describe('billing documents', () => {
     expect(await count({ monthOfYear: (m % 12) + 1 })).toBe(0);
   });
 
+  it('record summaries have their own access: Operations work on them, not the rest of accounting', async () => {
+    const rec = await ledgerRow();
+    const op = await as('OPERATOR');
+    // Operations: the picker, prefill, create, list, edit, submit; never the ledger or invoices.
+    const picker = await request(app).get('/api/v1/accounting/eligible/record-summaries').set(op);
+    expect(picker.status).toBe(200);
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ recordId: rec.id })
+        .set(op)
+    ).body;
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(op)
+      .send(pre);
+    expect(rs.status).toBe(201);
+    expect(
+      (await request(app).get('/api/v1/accounting/docs/record-summaries').set(op)).body.meta.total,
+    ).toBe(1);
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+      .set(op)
+      .expect(200);
+    expect((await request(app).get('/api/v1/accounting/ledger').set(op)).status).toBe(403);
+    expect((await request(app).get('/api/v1/accounting/docs/tax-invoices').set(op)).status).toBe(
+      403,
+    );
+    expect(
+      (await request(app).get('/api/v1/accounting/eligible/tax-invoices').set(op)).status,
+    ).toBe(403);
+    // Viewers can look but not write; a customs broker can't see them at all.
+    const viewer = await as('VIEWER');
+    expect(
+      (await request(app).get('/api/v1/accounting/docs/record-summaries').set(viewer)).status,
+    ).toBe(200);
+    expect(
+      (await request(app).post('/api/v1/accounting/docs/record-summaries').set(viewer).send(pre))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await request(app)
+          .get('/api/v1/accounting/docs/record-summaries')
+          .set(await as('CUSTOMS_BROKER'))
+      ).status,
+    ).toBe(403);
+  });
+
   it('ignores a typed number, refuses a second invoice and a ledger row from another client', async () => {
     const h = await as('ACCOUNTANT');
     const rec = await ledgerRow();

@@ -108,7 +108,7 @@ function RecordSummaryEditor({
   const lookups = useLookups();
   const company = useCompany();
   const action = useDocAction(TYPE);
-  const editable = can('accounting:write') && (!doc || doc.status === 'DRAFT');
+  const editable = can('recordsummaries:write') && (!doc || doc.status === 'DRAFT');
   const fresh = !doc && !prefill;
   const eligible = useEligible(TYPE);
   const defaults = useMemo(() => {
@@ -356,7 +356,7 @@ function RecordSummaryEditor({
                 {icons.send({ width: 15, height: 15 })} Submit to Monthly
               </button>
             )}
-            {can('accounting:write') && doc?.status === 'ISSUED' && (
+            {can('recordsummaries:write') && doc?.status === 'ISSUED' && (
               <button type="button" className="btn-delete-shipment" onClick={() => void voidDoc()}>
                 Cancel document
               </button>

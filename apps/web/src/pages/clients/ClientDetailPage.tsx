@@ -196,6 +196,12 @@ export function ClientDetailPage() {
               <dd>{c.vattin ?? '-'}</dd>
               <dt>Address</dt>
               <dd>{c.address ?? '-'}</dd>
+              {c.addressKm && (
+                <>
+                  <dt>Khmer address</dt>
+                  <dd>{c.addressKm}</dd>
+                </>
+              )}
               <dt>Contact</dt>
               <dd>
                 {[c.contactName, c.contactEmail, c.contactPhone].filter(Boolean).join(' · ') || '-'}
