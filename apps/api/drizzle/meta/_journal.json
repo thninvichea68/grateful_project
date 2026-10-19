@@ -134,6 +134,13 @@
       "when": 1792334281696,
       "tag": "0018_record_summary_review",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792377128575,
+      "tag": "0019_invoice_items_cut_stock",
+      "breakpoints": true
     }
   ]
 }

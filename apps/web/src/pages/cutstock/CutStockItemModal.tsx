@@ -15,7 +15,7 @@ import { useToast } from '../../components/Toast';
 import { fmtDate, fmtNum, fmtPct } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 
-/** View an item's balance and declaration history; edit or create it (cutstock:write). */
+/** View an item's balance and import history; edit or create it (cutstock:write). */
 export function CutStockItemModal({
   itemId,
   clientId,
@@ -190,13 +190,13 @@ export function CutStockItemModal({
       {d && (
         <>
           <div className="form-section-title" style={{ marginTop: 22 }}>
-            Declarations that drew on this item
+            Import invoice items that drew on this item
           </div>
           <div className="plans-table-scroll">
             <table className="data-table-clean">
               <thead>
                 <tr>
-                  <th>Declare No.</th>
+                  <th>Invoice No.</th>
                   <th>Date</th>
                   <th>Shipment</th>
                   <th style={{ textAlign: 'right' }}>Qty</th>
@@ -210,7 +210,7 @@ export function CutStockItemModal({
                       colSpan={5}
                       style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 18 }}
                     >
-                      No declarations in this system yet.{' '}
+                      No imports in this system yet.{' '}
                       {Number(d.openingImportedQty) > 0 &&
                         `${fmtNum(d.openingImportedQty)} ${d.unit} were imported before (from the spreadsheet).`}
                     </td>
@@ -218,8 +218,8 @@ export function CutStockItemModal({
                 )}
                 {d.movements.map((m) => (
                   <tr key={m.id}>
-                    <td className="val-bold">{m.declareNo}</td>
-                    <td>{fmtDate(m.declareDate)}</td>
+                    <td className="val-bold">{m.invoiceNo}</td>
+                    <td>{m.invoiceDate ? fmtDate(m.invoiceDate) : '-'}</td>
                     <td>
                       <Link
                         to={`/plans/${m.shipmentId}`}

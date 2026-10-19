@@ -418,29 +418,59 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
   );
 }
 
+/**
+ * Operators see one client at a time on the Overview, as a user with one client does.
+ * With several clients, `value` is the one picked (the first when empty).
+ */
+export interface ClientPick {
+  value: string;
+  onChange: (clientId: string) => void;
+}
+
+/** The client dropdown for an Operator with several clients. */
+function ClientDropdown({ accounts, pick }: { accounts: AccountRow[]; pick: ClientPick }) {
+  if (accounts.length < 2) return null;
+  return (
+    <CardDropdown
+      label="Client"
+      value={pick.value || accounts[0]!.clientId}
+      onChange={pick.onChange}
+      options={accounts.map((a) => ({ value: a.clientId, label: a.code }))}
+    />
+  );
+}
+
 /** Shown instead of profit to roles without accounting access: shipment share per client. */
 export function ClientShareCard({
   accounts,
   year,
   monthly,
   currentMonth,
+  pick,
 }: {
   accounts: AccountRow[];
   year: number;
   monthly: MonthlyVolumeRow[];
   currentMonth: string;
+  /** Operators: one client at a time, month by month. */
+  pick?: ClientPick | undefined;
 }) {
   const total = accounts.reduce((s, a) => s + a.all.total, 0);
   // One client: a share-of-total donut is always 100%, so show their year month by month.
-  if (accounts.length === 1)
+  if (accounts.length === 1 || (pick && accounts.length)) {
+    const a = accounts.find((x) => x.clientId === pick?.value) ?? accounts[0]!;
     return (
       <SingleClientVolume
-        a={accounts[0]!}
+        key={a.clientId}
+        a={a}
         year={year}
         monthly={monthly}
         currentMonth={currentMonth}
+        clientId={accounts.length > 1 ? a.clientId : undefined}
+        picker={pick && <ClientDropdown accounts={accounts} pick={pick} />}
       />
     );
+  }
   return (
     <div className="rc-card ga-revenue">
       <div className="rc-header">
@@ -576,12 +606,23 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
 
 /* ------------------------------ Key accounts ------------------------------ */
 
-export function AccountsCard({ filters }: { filters: { from: string; to: string } }) {
+export function AccountsCard({
+  filters,
+  pick,
+  clients = [],
+}: {
+  filters: { from: string; to: string };
+  /** Operators: one client at a time, picked here or on the Shipments card. */
+  pick?: ClientPick | undefined;
+  /** The clients to pick from (this year's accounts). */
+  clients?: AccountRow[];
+}) {
   const [type, setType] = useState<'all' | 'import' | 'export'>('all');
-  // A user limited to one client picks a year and month instead of All / Import / Export
-  // (their card already shows the import/export split).
+  // A user limited to one client (and every Operator) picks a year and month instead of
+  // All / Import / Export (their card already shows the import/export split).
   const { user } = useAuth();
-  const single = user?.clientIds?.length === 1;
+  const single = user?.clientIds?.length === 1 || !!pick;
+  const picked = pick && clients.length > 1 ? pick.value || clients[0]!.clientId : '';
   const thisYear = Number(filters.from.slice(0, 4));
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' })
     .format(new Date())
@@ -599,6 +640,8 @@ export function AccountsCard({ filters }: { filters: { from: string; to: string 
         }
       : { from: `${year}-01-01`, to: `${year}-12-31` };
   const q = useAccounts(range);
+  const rows = picked ? q.data?.filter((a) => a.clientId === picked) : q.data;
+  const pickedName = clients.find((c) => c.clientId === picked)?.code;
   const period = month ? `${MONTHS_LONG[Number(month) - 1]} ${year}` : year;
   return (
     <div className="accounts-card ga-accounts">
@@ -606,6 +649,7 @@ export function AccountsCard({ filters }: { filters: { from: string; to: string 
         <h3>Key Logistics Accounts</h3>
         {single ? (
           <div className={acc.controls}>
+            {pick && <ClientDropdown accounts={clients} pick={pick} />}
             <CardDropdown
               label="Year"
               value={year}
@@ -653,13 +697,17 @@ export function AccountsCard({ filters }: { filters: { from: string; to: string 
         <ChartState
           loading={q.isLoading}
           error={q.error}
-          empty={!q.data?.length}
-          emptyText={single ? `No shipments in ${period}` : undefined}
+          empty={!rows?.length}
+          emptyText={
+            single
+              ? `No shipments${pickedName ? ` for ${pickedName}` : ''} in ${period}`
+              : undefined
+          }
           height={120}
         >
-          {q.data?.length === 1 ? (
+          {rows?.length === 1 ? (
             <SingleAccount
-              a={q.data[0]!}
+              a={rows[0]!}
               type={single ? 'all' : type}
               period={single ? period : 'this year'}
             />

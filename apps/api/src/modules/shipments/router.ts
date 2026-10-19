@@ -12,7 +12,8 @@ import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { attachmentName, excelUpload, requireFile } from '../../lib/http';
 import * as svc from './service';
-import { parseCargoWorkbook } from './excel';
+import { buildCargoTemplate, parseCargoWorkbook } from './excel';
+import { buildImportCargoTemplate, parseImportCargoWorkbook } from './importCargoExcel';
 import { buildPlanTemplate, importPlan } from './planImport';
 import { buildInvoicePackingList } from './invoicePackingList';
 import { buildImportInvoicePackingList } from './importInvoicePackingList';
@@ -171,6 +172,65 @@ shipmentsRouter.post(
     const used = await svc.existingInvoiceNumbers(
       result.invoices.map((i) => i.invoiceNo),
       exceptId,
+    );
+    for (const [no, ref] of used)
+      result.warnings.push({
+        row: null,
+        message: `Invoice ${no} is already on shipment ${ref}; saving will be refused unless you change it.`,
+      });
+    res.json(result);
+  },
+);
+
+const clientQuery = z.object({
+  clientId: z.string().uuid('Choose a client first'),
+  shipmentId: z.string().uuid().optional(),
+});
+
+/** The blank Export Template for the wizard's Cargo section. */
+shipmentsRouter.get(
+  '/cargo-template.xlsx',
+  requirePermission('shipments:write'),
+  async (_req, res) => {
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', attachmentName('Export Invoice Template.xlsx'));
+    res.send(await buildCargoTemplate());
+  },
+);
+
+/** The import invoice template, with the client's CDC master list to pick from. */
+shipmentsRouter.get(
+  '/import-cargo-template.xlsx',
+  requirePermission('shipments:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientQuery, req.query);
+    assertClientVisible(req, clientId, 'Client');
+    const { buffer, fileName } = await buildImportCargoTemplate(clientId);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', attachmentName(fileName));
+    res.send(buffer);
+  },
+);
+
+/** Reads an import invoice workbook into invoices for the wizard (nothing is saved). */
+shipmentsRouter.post(
+  '/parse-import-cargo-excel',
+  requirePermission('shipments:write'),
+  excelUpload,
+  async (req, res) => {
+    const file = requireFile(req.file);
+    const { clientId, shipmentId } = parse(clientQuery, req.query);
+    assertClientVisible(req, clientId, 'Client');
+    const result = await parseImportCargoWorkbook(file.buffer, file.originalname, clientId);
+    const used = await svc.existingInvoiceNumbers(
+      result.invoices.map((i) => i.invoiceNo),
+      shipmentId,
     );
     for (const [no, ref] of used)
       result.warnings.push({

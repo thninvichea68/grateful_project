@@ -89,37 +89,145 @@
   color: var(--status-exception-fg);
 }
 
-.table {
+/* Summary line above the list. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.summary > span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  overflow: hidden;
+}
+.summary b {
+  color: var(--text-primary);
+}
+.summary .nextChip {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+/* The list scrolls inside the card; month headings stay in view. */
+.table {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.month + .month {
+  border-top: 1px solid var(--border-subtle);
+}
+.monthHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--bg-surface-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.monthHead small {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-tertiary);
 }
 .row {
   display: grid;
-  grid-template-columns: 170px 1fr auto;
+  grid-template-columns: 48px 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   padding: 10px 16px;
 }
 .row + .row {
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px dashed var(--border-subtle);
 }
-.date {
-  font-size: 13px;
+/* A small calendar page: weekday over the day number. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  line-height: 1.1;
+}
+.tile small {
+  font-size: 10px;
   font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+.tile b {
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 .name {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text-primary);
+}
+.nameLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 .name small {
   font-size: 11.5px;
+  font-weight: 500;
   color: var(--text-tertiary);
+}
+.tag,
+.tagNext {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  background: var(--bg-surface-elevated);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+.tagNext {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+.row[data-state='next'] {
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
+}
+.row[data-state='next'] .tile {
+  border-color: var(--accent-primary);
+}
+.row[data-state='past'] .tile,
+.row[data-state='past'] .name {
+  opacity: 0.55;
 }
 /* Days still to confirm against the year's sub-decree. */
 .row[data-provisional] .name small {
@@ -153,14 +261,11 @@
   font-size: 13px;
   color: var(--text-tertiary);
 }
-.count {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
 @media (max-width: 640px) {
   .row {
-    grid-template-columns: 1fr;
-    gap: 4px;
+    grid-template-columns: 48px 1fr;
+  }
+  .actions {
+    grid-column: 2;
   }
 }

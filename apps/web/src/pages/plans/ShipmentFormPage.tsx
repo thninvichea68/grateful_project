@@ -10,8 +10,8 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
-  CLEARANCE_STATUSES,
   CLEARANCE_STATUS_LABEL,
+  clearanceStatusOf,
   CONTAINER_SIZES,
   shipmentStatusOf,
   SHIPMENT_STATUS_LABEL,
@@ -122,20 +122,18 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const [direction, transportMode, loadType, clientId, clearanceStatus, atd, arriveFty, decls] =
-    useWatch({
-      control,
-      name: [
-        'direction',
-        'transportMode',
-        'loadType',
-        'clientId',
-        'clearanceStatus',
-        'atd',
-        'arriveFty',
-        'declarations',
-      ],
-    });
+  const [direction, transportMode, loadType, clientId, atd, arriveFty, decls] = useWatch({
+    control,
+    name: [
+      'direction',
+      'transportMode',
+      'loadType',
+      'clientId',
+      'atd',
+      'arriveFty',
+      'declarations',
+    ],
+  });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
   const readOnly = !can('shipments:write');
@@ -169,7 +167,9 @@ function ShipmentForm({
         (e.details as { rule?: string } | undefined)?.rule === 'CUT_STOCK_OVER_IMPORT'
       ) {
         setViolations((e.details as { violations: OverImportViolation[] }).violations);
-        setStep(steps.length - 1);
+        // The invoice items step, where the quantities and override reasons are entered.
+        const itemsStep = steps.findIndex((s) => s.fields.includes('invoices'));
+        if (itemsStep >= 0) setStep(itemsStep);
       }
     }
   };
@@ -227,7 +227,7 @@ function ShipmentForm({
 
   // Worked out from the dates and declarations as they are typed (the server does the same).
   const shipStatus = shipmentStatusOf({ direction, atd, arriveFty, declarations: decls });
-  const clearStatus = clearanceStatus ?? 'PENDING';
+  const clearStatus = clearanceStatusOf({ declarations: decls });
   const clientName =
     lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
   const metaParts = [
@@ -414,16 +414,16 @@ function ShipmentForm({
                     fontWeight: 700,
                   }}
                 >
-                  These CDC lines exceed the remaining cut-stock balance:
+                  These invoice items exceed the remaining CDC balance:
                   <ul style={{ margin: '6px 0 0 18px', fontWeight: 600 }}>
                     {violations.map((v) => (
                       <li key={v.cutStockItemId}>
-                        {v.declareRef} {v.itemName}: balance {v.balance}, declaring {v.requested}
+                        {v.declareRef} {v.itemName}: balance {v.balance}, importing {v.requested}
                       </li>
                     ))}
                   </ul>
                   {can('cutstock:override')
-                    ? 'Lower the quantity, or enter a reason on the line to approve it.'
+                    ? 'Lower the quantity, or enter a reason on the item to approve it.'
                     : 'Lower the quantity, or ask a Manager to approve the extra quantity.'}
                 </div>
               )}
@@ -672,6 +672,27 @@ function ShipmentStatusField() {
   );
 }
 
+/** The clearance status is not chosen either: it follows from the customs declarations. */
+function ClearanceStatusField() {
+  const { control } = useFormContext<FormValues>();
+  const declarations = useWatch({ control, name: 'declarations' });
+  const status = clearanceStatusOf({ declarations });
+  return (
+    <div className="form-field-group">
+      <label>Clearance Status</label>
+      <div>
+        <span className={f.badge} data-tone={TONE[status]}>
+          {CLEARANCE_STATUS_LABEL[status]}
+        </span>
+      </div>
+      <p className={f.note}>
+        Set automatically: Customs Cleared once a declaration has its Declare No. and Declare Date,
+        In Progress once a Declare No. is entered, otherwise Pending Review.
+      </p>
+    </div>
+  );
+}
+
 /** A titled section card; `cols` sets the grid (fields span 1 unless told otherwise). */
 function Card({
   title,
@@ -869,12 +890,11 @@ function buildSteps(
   const units = lookups.values.QUANTITY_UNIT.map((v) => ({ value: v.value, label: v.label }));
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
   const coForms = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
-  const clearance = CLEARANCE_STATUSES.map((s) => ({ value: s, label: CLEARANCE_STATUS_LABEL[s] }));
 
   const statusCard = (
     <Card title="Status" sub="Where the shipment and its customs clearance stand" cols={2}>
       <ShipmentStatusField />
-      <Select name="clearanceStatus" label="Clearance Status" options={clearance} />
+      <ClearanceStatusField />
     </Card>
   );
   const thcCard = (
@@ -938,7 +958,6 @@ function buildSteps(
           'clearancePortId',
           'etd',
           'atd',
-          'clearanceStatus',
           'containers',
           'loadType',
         ],
@@ -1010,7 +1029,6 @@ function buildSteps(
         'consigneeId',
         'quantity',
         'quantityUnit',
-        'material',
         'forwarderId',
         'broker',
         'originCountryIso2',
@@ -1026,12 +1044,6 @@ function buildSteps(
           <Card title="Cargo" sub="What is being imported and where it comes from">
             <Field name="quantity" label="Quantity" placeholder="0" decimals={3} />
             <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
-            <Select
-              name="material"
-              label="Material"
-              options={materials}
-              placeholder="Select material"
-            />
             <Select
               name="originCountryIso2"
               label="Origin Country"
@@ -1062,7 +1074,6 @@ function buildSteps(
         'vesselName',
         'voyageNo',
         'coNumber',
-        'clearanceStatus',
         'containers',
         'loadType',
       ],

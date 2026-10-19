@@ -14,7 +14,6 @@ import {
   accountingRecords,
   cargoInvoiceLines,
   cargoInvoices,
-  cdcLines,
   clients,
   consignees,
   containers,
@@ -220,25 +219,12 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
         .orderBy(asc(cargoInvoiceLines.lineNo))
     : [];
   const declIds = decls.map((d) => d.id);
-  const [cdc, ledger] = declIds.length
-    ? await Promise.all([
-        db
-          .select({
-            l: cdcLines,
-            itemName: cutStockItems.name,
-            declareRef: cutStockItems.declareRef,
-            unit: cutStockItems.unit,
-          })
-          .from(cdcLines)
-          .innerJoin(cutStockItems, eq(cutStockItems.id, cdcLines.cutStockItemId))
-          .where(inArray(cdcLines.declarationId, declIds))
-          .orderBy(asc(cdcLines.createdAt)),
-        db
-          .select({ declarationId: accountingRecords.declarationId })
-          .from(accountingRecords)
-          .where(inArray(accountingRecords.declarationId, declIds)),
-      ])
-    : [[], []];
+  const ledger = declIds.length
+    ? await db
+        .select({ declarationId: accountingRecords.declarationId })
+        .from(accountingRecords)
+        .where(inArray(accountingRecords.declarationId, declIds))
+    : [];
   const withLedger = new Set(ledger.map((l) => l.declarationId));
   const r = s.s;
   return {
@@ -311,6 +297,8 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
           fobUnitPrice: l.fobUnitPrice,
           fobAmount: l.fobAmount ?? '0',
           description: l.description,
+          cutStockItemId: l.cutStockItemId,
+          overrideReason: l.overrideReason,
         })),
     })),
     declarations: decls.map((d) => ({
@@ -320,19 +308,6 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
       portId: d.portId,
       notes: d.notes,
       hasLedgerEntry: withLedger.has(d.id),
-      cdcLines: cdc
-        .filter((c) => c.l.declarationId === d.id)
-        .map((c) => ({
-          id: c.l.id,
-          cutStockItemId: c.l.cutStockItemId,
-          itemName: c.itemName,
-          declareRef: c.declareRef,
-          unit: c.unit,
-          qty: c.l.qty,
-          unitPrice: c.l.unitPrice,
-          netWeightKg: c.l.netWeightKg,
-          overrideReason: c.l.overrideReason,
-        })),
     })),
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
@@ -387,79 +362,75 @@ async function assertReferences(tx: Tx, input: ShipmentInputParsed, isNew: boole
   }
 }
 
+/** CDC numbers compare without case, spaces or dashes ("II-125" = "ii 125"). */
+const cdcKey = (v: string) => v.toUpperCase().replace(/[\s\-–—_]+/g, '');
+
+type LineStock = { cutStockItemId: string; overrideReason: string | null };
+
 /**
- * Enforce "declaring an import may not push a cut-stock balance below zero". Lines that
- * would, need an override reason AND the cutstock:override permission. Must run after the
- * shipment's previous CDC lines were removed (on update), inside the same transaction.
+ * Links each import invoice item to the client's CDC master-list item its CDC No. names, and
+ * enforces "an import may not push a cut-stock balance below zero": items that would need an
+ * override reason AND the cutstock:override permission. Must run after the shipment's previous
+ * invoices were removed (on update) and before the new ones are written, in the same transaction.
+ * Returns each line's item and approved override, keyed "invoiceIndex:lineIndex".
  */
 async function checkCutStock(tx: Tx, clientId: string, input: ShipmentInputParsed, actor: Actor) {
-  const all = input.declarations.flatMap((d) => d.cdcLines);
-  if (!all.length) return new Map<string, { overrideReason: string | null }>();
-  const ids = [...new Set(all.map((l) => l.cutStockItemId))];
-  // Lock the items so concurrent declarations are serialised.
+  const out = new Map<string, LineStock>();
+  if (input.direction !== 'IMPORT' || !input.invoices.some((inv) => inv.lines.some((l) => l.cdcNo)))
+    return out;
+  // Lock the client's items so concurrent imports are serialised.
   const items = await tx
     .select({
       id: cutStockItems.id,
-      clientId: cutStockItems.clientId,
       name: cutStockItems.name,
       declareRef: cutStockItems.declareRef,
-      deletedAt: cutStockItems.deletedAt,
     })
     .from(cutStockItems)
-    .where(inArray(cutStockItems.id, ids))
+    .where(and(eq(cutStockItems.clientId, clientId), isNull(cutStockItems.deletedAt)))
     .for('update');
-  const byId = new Map(items.map((i) => [i.id, i]));
-  for (const id of ids) {
-    const it = byId.get(id);
-    if (!it || it.deletedAt)
-      throw businessRule('A CDC line refers to a cut-stock item that does not exist');
-    if (it.clientId !== clientId)
-      throw businessRule(`"${it.name}" belongs to another client's master list`);
-  }
+  const byKey = new Map(items.map((i) => [cdcKey(i.declareRef), i]));
   const balances = await queryRows<{ item_id: string; balance: string }>(
     tx,
     sql`
-    SELECT item_id, balance::text FROM cut_stock_balances WHERE item_id IN (${sql.join(
-      ids.map((i) => sql`${i}::uuid`),
-      sql`, `,
-    )})`,
+    SELECT item_id, balance::text FROM cut_stock_balances WHERE client_id = ${clientId}`,
   );
   const remaining = new Map(balances.map((b) => [b.item_id, milli(b.balance)]));
 
-  const violations: OverImportViolation[] = [];
-  const decisions = new Map<string, { overrideReason: string | null }>(); // key: declIndex:lineIndex
+  const violations = new Map<string, OverImportViolation>();
   let needsOverridePermission = false;
-  input.declarations.forEach((d, di) =>
-    d.cdcLines.forEach((l, li) => {
-      const before = remaining.get(l.cutStockItemId) ?? 0;
-      const after = before - milli(l.qty);
-      remaining.set(l.cutStockItemId, after);
-      const key = `${di}:${li}`;
-      if (after < 0) {
-        if (!l.overrideReason) {
-          const it = byId.get(l.cutStockItemId)!;
-          violations.push({
+  input.invoices.forEach((inv, gi) =>
+    inv.lines.forEach((l, li) => {
+      // A CDC No. no longer on the master list stays on the invoice but draws nothing down.
+      const it = l.cdcNo ? byKey.get(cdcKey(l.cdcNo)) : undefined;
+      if (!it) return;
+      const before = remaining.get(it.id) ?? 0;
+      const after = before - milli(l.pcs);
+      remaining.set(it.id, after);
+      let overrideReason: string | null = null; // an override that isn't needed is dropped
+      if (after < 0 && milli(l.pcs) > 0) {
+        if (l.overrideReason) {
+          needsOverridePermission = true;
+          overrideReason = l.overrideReason;
+        } else {
+          const seen = violations.get(it.id);
+          violations.set(it.id, {
             cutStockItemId: it.id,
             itemName: it.name,
             declareRef: it.declareRef,
-            balance: fromMilli(before),
-            requested: l.qty!,
+            balance: seen?.balance ?? fromMilli(before),
+            requested: fromMilli(milli(seen?.requested) + milli(l.pcs)),
           });
-        } else {
-          needsOverridePermission = true;
-          decisions.set(key, { overrideReason: l.overrideReason });
         }
-      } else {
-        decisions.set(key, { overrideReason: null }); // an override that isn't needed is dropped
       }
+      out.set(`${gi}:${li}`, { cutStockItemId: it.id, overrideReason });
     }),
   );
-  if (violations.length) {
+  if (violations.size) {
     throw new AppError(
       422,
       'BUSINESS_RULE',
-      'Some CDC lines exceed the remaining cut-stock balance',
-      { rule: 'CUT_STOCK_OVER_IMPORT', violations },
+      'Some invoice items exceed the remaining cut-stock balance',
+      { rule: 'CUT_STOCK_OVER_IMPORT', violations: [...violations.values()] },
     );
   }
   if (needsOverridePermission && !hasPermission(actor.permissions, 'cutstock:override')) {
@@ -467,7 +438,7 @@ async function checkCutStock(tx: Tx, clientId: string, input: ShipmentInputParse
       'Only a Manager or Admin can approve importing more than the remaining cut-stock balance',
     );
   }
-  return decisions;
+  return out;
 }
 
 async function writeChildren(
@@ -482,6 +453,14 @@ async function writeChildren(
       .insert(containers)
       .values(input.containers.map((c, i) => ({ ...c, shipmentId, sortOrder: i })));
   }
+  const stock = await checkCutStock(
+    tx,
+    (
+      await tx.select({ c: shipments.clientId }).from(shipments).where(eq(shipments.id, shipmentId))
+    )[0]!.c,
+    input,
+    actor,
+  );
   for (const [i, inv] of input.invoices.entries()) {
     const [row] = await tx
       .insert(cargoInvoices)
@@ -494,20 +473,21 @@ async function writeChildren(
         sortOrder: i,
       })
       .returning({ id: cargoInvoices.id });
-    await tx
-      .insert(cargoInvoiceLines)
-      .values(inv.lines.map((l, li) => ({ ...l, invoiceId: row!.id, lineNo: li + 1 })));
+    await tx.insert(cargoInvoiceLines).values(
+      inv.lines.map(({ overrideReason: _o, ...l }, li) => {
+        const st = stock.get(`${i}:${li}`);
+        return {
+          ...l,
+          invoiceId: row!.id,
+          lineNo: li + 1,
+          cutStockItemId: st?.cutStockItemId ?? null,
+          overrideReason: st?.overrideReason ?? null,
+          overrideById: st?.overrideReason ? actor.userId : null,
+        };
+      }),
+    );
   }
-  const decisions = await checkCutStock(
-    tx,
-    (
-      await tx.select({ c: shipments.clientId }).from(shipments).where(eq(shipments.id, shipmentId))
-    )[0]!.c,
-    input,
-    actor,
-  );
-  for (const [di, d] of input.declarations.entries()) {
-    let declId: string;
+  for (const d of input.declarations) {
     const values = {
       declareNo: d.declareNo,
       declareDate: d.declareDate,
@@ -516,30 +496,10 @@ async function writeChildren(
     };
     if (d.id && existingDeclIds.has(d.id)) {
       await tx.update(customsDeclarations).set(values).where(eq(customsDeclarations.id, d.id));
-      declId = d.id;
     } else {
-      const [row] = await tx
+      await tx
         .insert(customsDeclarations)
-        .values({ ...values, shipmentId, createdById: actor.userId })
-        .returning({ id: customsDeclarations.id });
-      declId = row!.id;
-    }
-    if (d.cdcLines.length) {
-      await tx.insert(cdcLines).values(
-        d.cdcLines.map((l, li) => {
-          const reason = decisions.get(`${di}:${li}`)?.overrideReason ?? null;
-          return {
-            declarationId: declId,
-            cutStockItemId: l.cutStockItemId,
-            qty: l.qty!,
-            unitPrice: l.unitPrice,
-            netWeightKg: l.netWeightKg,
-            overrideReason: reason,
-            overrideById: reason ? actor.userId : null,
-            createdById: actor.userId,
-          };
-        }),
-      );
+        .values({ ...values, shipmentId, createdById: actor.userId });
     }
   }
 }
@@ -674,14 +634,8 @@ export async function updateShipment(
           );
         }
       }
-      // Replace children. CDC lines go first so their quantities return to the balance before re-checking.
-      if (oldDecls.length)
-        await tx.delete(cdcLines).where(
-          inArray(
-            cdcLines.declarationId,
-            oldDecls.map((d) => d.id),
-          ),
-        );
+      // Replace children. The old invoices are removed (below) before the new ones are checked,
+      // so their items' quantities return to the balance first.
       if (removed.length)
         await tx.delete(customsDeclarations).where(
           inArray(
@@ -720,7 +674,7 @@ export async function updateShipment(
 }
 
 /**
- * Soft-deletes the shipment. Its CDC lines are removed so the cut-stock balance is restored.
+ * Soft-deletes the shipment; its invoice items stop counting against the cut-stock balance.
  * Blocked when any declaration already has a ledger entry (accounting is the financial record).
  */
 export async function deleteShipment(id: string, req: Request): Promise<void> {
@@ -749,28 +703,8 @@ export async function deleteShipment(id: string, req: Request): Promise<void> {
         throw conflict(
           `${before.reference} has ledger entries in Accounting. Remove those first, or set the shipment to Exception instead.`,
         );
-      const removedLines = await tx
-        .delete(cdcLines)
-        .where(
-          inArray(
-            cdcLines.declarationId,
-            decls.map((d) => d.id),
-          ),
-        )
-        .returning();
-      await audit(
-        tx,
-        {
-          action: 'DELETE',
-          entity: 'shipment',
-          entityId: id,
-          before: { ...before, cdcLines: removedLines },
-        },
-        req,
-      );
-    } else {
-      await audit(tx, { action: 'DELETE', entity: 'shipment', entityId: id, before }, req);
     }
+    await audit(tx, { action: 'DELETE', entity: 'shipment', entityId: id, before }, req);
     await tx.update(shipments).set({ deletedAt: new Date() }).where(eq(shipments.id, id));
   });
 }

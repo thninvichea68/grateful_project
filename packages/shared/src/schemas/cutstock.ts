@@ -66,10 +66,11 @@ export interface CutStockSummary {
   importedValue: string;
 }
 
+/** An import invoice item that drew this item down. */
 export interface CutStockMovement {
   id: string;
-  declareNo: string;
-  declareDate: string;
+  invoiceNo: string;
+  invoiceDate: string | null;
   shipmentId: string;
   shipmentReference: string;
   qty: string;

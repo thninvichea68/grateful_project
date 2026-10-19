@@ -12,6 +12,27 @@ const fmt = (iso: string) => {
   return `${WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}`;
 };
 
+const MONTH_LONG = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+const isWeekend = (iso: string) => [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay());
+/** Today in Cambodia, as YYYY-MM-DD. */
+const todayIso = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
+const daysUntil = (iso: string) =>
+  Math.round((Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${todayIso()}T00:00:00Z`)) / 86_400_000);
+
 type Draft = { id?: string; holidayDate: string; name: string; note: string };
 const INVALIDATE = [['settings', 'holidays']];
 
@@ -57,6 +78,11 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
     void del.mutateAsync(r.id).then(() => toast('Holiday removed.'));
   };
   const rows = list.data ?? [];
+  const today = todayIso();
+  const next = rows.find((r) => r.holidayDate >= today);
+  // Grouped by month ("01" … "12"), in date order.
+  const months = [...new Map(rows.map((r) => [r.holidayDate.slice(5, 7), [] as PublicHoliday[]]))];
+  for (const r of rows) months.find(([m]) => m === r.holidayDate.slice(5, 7))![1].push(r);
 
   return (
     <div className="card">
@@ -141,40 +167,85 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
         </div>
       )}
 
-      <div className={h.table}>
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className={h.row}
-            data-provisional={/provisional/i.test(r.note ?? '') || undefined}
-          >
-            <span className={h.date}>{fmt(r.holidayDate)}</span>
-            <span className={h.name}>
-              {r.name}
-              {r.note && <small>{r.note}</small>}
+      {rows.length > 0 && (
+        <div className={h.summary}>
+          <span>
+            <b>{rows.length}</b> day{rows.length === 1 ? '' : 's'} in {year}
+          </span>
+          <span>
+            <b>{rows.filter((r) => !isWeekend(r.holidayDate)).length}</b> on weekdays
+          </span>
+          {next && (
+            <span className={h.nextChip}>
+              Next: <b>{next.name}</b> · {fmt(next.holidayDate)} ·{' '}
+              {daysUntil(next.holidayDate) === 0
+                ? 'today'
+                : `in ${daysUntil(next.holidayDate)} day${daysUntil(next.holidayDate) === 1 ? '' : 's'}`}
             </span>
-            {manage && (
-              <span className={h.actions}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setEdit({
-                      id: r.id,
-                      holidayDate: r.holidayDate,
-                      name: r.name,
-                      note: r.note ?? '',
-                    });
-                  }}
+          )}
+        </div>
+      )}
+
+      <div className={h.table}>
+        {months.map(([m, items]) => (
+          <section key={m} className={h.month}>
+            <h4 className={h.monthHead}>
+              {MONTH_LONG[Number(m) - 1]}
+              <small>
+                {items.length} day{items.length === 1 ? '' : 's'}
+              </small>
+            </h4>
+            {items.map((r) => {
+              const d = new Date(`${r.holidayDate}T00:00:00Z`);
+              const state =
+                r.holidayDate < today ? 'past' : r.id === next?.id ? 'next' : 'upcoming';
+              return (
+                <div
+                  key={r.id}
+                  className={h.row}
+                  data-state={state}
+                  data-provisional={/provisional/i.test(r.note ?? '') || undefined}
                 >
-                  Edit
-                </button>
-                <button type="button" data-danger onClick={() => remove(r)}>
-                  Remove
-                </button>
-              </span>
-            )}
-          </div>
+                  <span className={h.tile} aria-hidden>
+                    <small>{WEEKDAY[d.getUTCDay()]}</small>
+                    <b>{d.getUTCDate()}</b>
+                  </span>
+                  <span className={h.name}>
+                    <span className={h.nameLine}>
+                      {r.name}
+                      {state === 'next' && <i className={h.tagNext}>Next</i>}
+                      {isWeekend(r.holidayDate) && <i className={h.tag}>Weekend</i>}
+                    </span>
+                    <small>
+                      {fmt(r.holidayDate)}
+                      {r.note ? ` · ${r.note}` : ''}
+                    </small>
+                  </span>
+                  {manage && (
+                    <span className={h.actions}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError(null);
+                          setEdit({
+                            id: r.id,
+                            holidayDate: r.holidayDate,
+                            name: r.name,
+                            note: r.note ?? '',
+                          });
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button type="button" data-danger onClick={() => remove(r)}>
+                        Remove
+                      </button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </section>
         ))}
         {!list.isLoading && !rows.length && (
           <p className={h.empty}>
@@ -182,11 +253,6 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
           </p>
         )}
       </div>
-      {rows.length > 0 && (
-        <p className={h.count}>
-          {rows.length} day{rows.length === 1 ? '' : 's'} in {year}
-        </p>
-      )}
     </div>
   );
 }

@@ -112,12 +112,13 @@ export async function getCutStockItem(
   const movements = await queryRows<CutStockMovement>(
     db,
     sql`
-    SELECT l.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", s.id AS "shipmentId",
-           s.reference AS "shipmentReference", l.qty::text AS qty, l.unit_price::text AS "unitPrice", l.net_weight_kg::text AS "netWeightKg",
+    SELECT l.id, ci.invoice_no AS "invoiceNo", to_char(ci.invoice_date, 'YYYY-MM-DD') AS "invoiceDate", s.id AS "shipmentId",
+           s.reference AS "shipmentReference", l.pcs::text AS qty, l.fob_unit_price::text AS "unitPrice", l.net_weight_kg::text AS "netWeightKg",
            l.override_reason AS "overrideReason", u.full_name AS "overrideBy", ${isoTs('l.created_at')} AS "createdAt"
-    FROM cdc_lines l JOIN customs_declarations d ON d.id = l.declaration_id JOIN shipments s ON s.id = d.shipment_id
+    FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id
+    JOIN shipments s ON s.id = ci.shipment_id AND s.deleted_at IS NULL
     LEFT JOIN users u ON u.id = l.override_by_id
-    WHERE l.cut_stock_item_id = ${id} ORDER BY d.declare_date DESC, l.created_at DESC`,
+    WHERE l.cut_stock_item_id = ${id} ORDER BY ci.invoice_date DESC NULLS LAST, l.created_at DESC`,
   );
   return { ...row, movements };
 }
@@ -192,10 +193,10 @@ export async function deleteCutStockItem(id: string, req: Request): Promise<void
     if (!before) throw notFound('Cut-stock item');
     const [used] = await queryRows<{ n: number }>(
       tx,
-      sql`SELECT count(*)::int AS n FROM cdc_lines WHERE cut_stock_item_id = ${id}`,
+      sql`SELECT count(*)::int AS n FROM cargo_invoice_lines WHERE cut_stock_item_id = ${id}`,
     );
     if (used!.n)
-      throw conflict(`${before.name} has ${used!.n} declaration line(s) and cannot be deleted`);
+      throw conflict(`${before.name} is on ${used!.n} invoice item(s) and cannot be deleted`);
     await tx.update(cutStockItems).set({ deletedAt: new Date() }).where(eq(cutStockItems.id, id));
     await audit(tx, { action: 'DELETE', entity: 'cut_stock_item', entityId: id, before }, req);
   });

@@ -181,14 +181,26 @@ export const cargoInvoiceLines = pgTable(
       sql`round(pcs * fob_unit_price, 2)`,
     ),
     description: text('description'),
+    /** Imports: the CDC master-list item `cdc_no` names. Its PCS reduce the item's balance. */
+    cutStockItemId: uuid('cut_stock_item_id').references(() => cutStockItems.id, {
+      onDelete: 'restrict',
+    }),
+    /** Set when a Manager/Admin allowed this line to push the balance below zero. */
+    overrideReason: text('override_reason'),
+    overrideById: uuid('override_by_id').references(() => users.id, { onDelete: 'set null' }),
     ...timestamps,
   },
   (t) => [
     index('cargo_invoice_lines_invoice_idx').on(t.invoiceId),
+    index('cargo_invoice_lines_item_idx').on(t.cutStockItemId),
     uniqueIndex('cargo_invoice_lines_invoice_line_unique').on(t.invoiceId, t.lineNo),
     check(
       'cargo_invoice_lines_non_negative',
       sql`pcs >= 0 AND ctns >= 0 AND cbm >= 0 AND fob_unit_price >= 0`,
+    ),
+    check(
+      'cargo_invoice_lines_override_complete',
+      sql`(override_reason IS NULL) = (override_by_id IS NULL)`,
     ),
   ],
 );
@@ -247,7 +259,10 @@ export const cutStockItems = pgTable(
   ],
 );
 
-/** Declares a quantity of a cut-stock item on a customs declaration. Reduces the balance. */
+/**
+ * Legacy: a cut-stock quantity entered on a customs declaration. No longer written or counted;
+ * the balance now comes from import invoice items (cargo_invoice_lines.cut_stock_item_id).
+ */
 export const cdcLines = pgTable(
   'cdc_lines',
   {
@@ -277,7 +292,7 @@ export const cdcLines = pgTable(
 
 /**
  * Live balance per item (created by a hand-written migration):
- *   imported = opening + Σ cdc_lines.qty ; balance = qty − imported ;
+ *   imported = opening + Σ PCS of import invoice items on live shipments ; balance = qty − imported ;
  *   condition = CHECK when balance / qty < 50% (or qty = 0).
  */
 export const cutStockBalances = pgView('cut_stock_balances', {

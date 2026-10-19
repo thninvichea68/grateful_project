@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shipmentInputSchema, shipmentStatusOf } from './schemas/shipments';
+import { clearanceStatusOf, shipmentInputSchema, shipmentStatusOf } from './schemas/shipments';
 
 describe('shipment status', () => {
   it('an import is completed by its ETA Factory date, an export by its ATD', () => {
@@ -17,6 +17,15 @@ describe('shipment status', () => {
     );
   });
 
+  it('clearance is cleared by a declaration no. and date, in progress by the no. alone', () => {
+    expect(clearanceStatusOf({ declarations: [] })).toBe('PENDING');
+    expect(clearanceStatusOf({ declarations: [{ declareNo: 'I 142652' }] })).toBe('IN_PROGRESS');
+    expect(
+      clearanceStatusOf({ declarations: [{ declareNo: 'I 142652', declareDate: '2026-10-02' }] }),
+    ).toBe('CLEARED');
+    expect(clearanceStatusOf({ declarations: [{ declareDate: '2026-10-02' }] })).toBe('PENDING');
+  });
+
   it('is worked out on save; a status sent in is ignored', () => {
     const parsed = shipmentInputSchema.parse({
       clientId: '00000000-0000-4000-8000-000000000000',
@@ -24,8 +33,10 @@ describe('shipment status', () => {
       transportMode: 'SEA',
       loadType: 'LCL',
       status: 'EXCEPTION',
+      clearanceStatus: 'EXCEPTION',
       atd: '2026-09-04',
     });
     expect(parsed.status).toBe('COMPLETED');
+    expect(parsed.clearanceStatus).toBe('PENDING');
   });
 });

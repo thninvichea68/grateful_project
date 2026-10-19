@@ -80,7 +80,7 @@ const IM: Field[] = [
     key: 'cdcNo',
     header: 'CDC NO',
     width: 9,
-    note: 'Item no. on the client’s CDC master list, e.g. II-125. With a DECLARE, the quantity is taken off its balance.',
+    note: 'Item no. on the client’s CDC master list, e.g. II-125. The quantity is taken off its balance.',
   },
   { key: 'qty', header: 'QUANTITY', width: 11, note: 'Item quantity, in the CDC unit.' },
   { key: 'unit', header: 'CDC UNIT', width: 8, note: 'MTR, KGS, PCS, SET…' },
@@ -830,7 +830,7 @@ export async function importPlan(
         );
     }
 
-    // Cargo invoices (one line per row) and declarations with their CDC lines.
+    // Cargo invoices (one line per row; a CDC NO draws down the master list) and declarations.
     const invoices: {
       invoiceNo: string;
       invoiceDate?: string;
@@ -842,7 +842,6 @@ export async function importPlan(
       declareDate: string;
       portId: string;
       notes: string;
-      cdcLines: Record<string, unknown>[];
     }[] = [];
     let quantity = 0;
     let lastDecl: (typeof declarations)[number] | undefined;
@@ -890,7 +889,6 @@ export async function importPlan(
             declareDate: '',
             portId: port?.id ?? '',
             notes: '',
-            cdcLines: [],
           };
           declarations.push(lastDecl);
         }
@@ -913,17 +911,7 @@ export async function importPlan(
         err(S, r, `CDC NO ${cdc} is not on ${client.code}'s CDC master list.`);
         continue;
       }
-      if (!item || !lastDecl) continue; // not declared yet: the item stays on the invoice only
-      if (qty === undefined) {
-        err(S, r, `CDC NO ${cdc}: QUANTITY is empty.`);
-        continue;
-      }
-      lastDecl.cdcLines.push({
-        cutStockItemId: item.id,
-        qty,
-        unitPrice: price,
-        netWeightKg: nw,
-      });
+      if (item && qty === undefined) err(S, r, `CDC NO ${cdc}: QUANTITY is empty.`);
     }
     for (const d of declarations)
       if (!d.declareDate) err(S, row, `DECLARE DATE is empty for ${d.declareNo}.`);
@@ -1097,7 +1085,6 @@ export async function importPlan(
         declareDate: date(EXP_DECLARATIONS, r, 'Declare Date', d.declareDate) ?? '',
         portId: p?.id ?? '',
         notes: text(d.notes),
-        cdcLines: [],
       };
     });
 

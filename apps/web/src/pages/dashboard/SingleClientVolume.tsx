@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import type { AccountRow, MonthlyVolumeRow } from '@gs/shared';
 import { useMonthlyVolume } from '../../features/analytics';
@@ -28,18 +28,31 @@ export function SingleClientVolume({
   year,
   monthly,
   currentMonth,
+  clientId,
+  picker,
 }: {
   a: AccountRow;
   year: number;
   monthly: MonthlyVolumeRow[];
   currentMonth: string;
+  /** Set when the user has several clients: every year is fetched for this one client. */
+  clientId?: string | undefined;
+  /** The client dropdown, shown first in the controls. */
+  picker?: ReactNode;
 }) {
   const [view, setView] = useState<View>('month');
   const [shown, setShown] = useState(String(year));
   const isCurrent = shown === String(year);
-  // This year comes with the Overview; another year is fetched (scoped to the user's clients).
-  const other = useMonthlyVolume({ from: `${shown}-01-01`, to: `${shown}-12-31` });
-  const rows = isCurrent ? monthly : (other.data ?? []);
+  // This year comes with the Overview; another year, or one of several clients, is fetched.
+  const other = useMonthlyVolume({
+    from: `${shown}-01-01`,
+    to: `${shown}-12-31`,
+    clientId: clientId ? [clientId] : undefined,
+  });
+  const rows = useMemo(
+    () => (isCurrent && !clientId ? monthly : (other.data ?? [])),
+    [isCurrent, clientId, monthly, other.data],
+  );
 
   const points = useMemo<Point[]>(() => {
     if (view === 'month')
@@ -103,6 +116,7 @@ export function SingleClientVolume({
           </div>
         </div>
         <div className={s.controls}>
+          {picker}
           <CardDropdown
             label="View"
             value={view}

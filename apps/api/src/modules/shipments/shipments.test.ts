@@ -690,12 +690,8 @@ describe('cut stock and CDC lines', () => {
       .returning();
     return row!;
   }
-  const importWith = (
-    itemId: string,
-    qty: string,
-    extra: Record<string, unknown> = {},
-    declareNo = 'I 95001',
-  ) =>
+  // The invoice item names the master-list item by its CDC No. (I-4, see item()).
+  const importWith = (qty: string, extra: Record<string, unknown> = {}, declareNo = 'I 95001') =>
     exportShipment({
       direction: 'IMPORT',
       destinationCountryIso2: 'KH',
@@ -703,15 +699,12 @@ describe('cut stock and CDC lines', () => {
       containers: [],
       loadType: 'LCL',
       invoices: [
-        { invoiceNo: `CNG-${declareNo.replace(/\D/g, '')}`, lines: [{ pcs: 1, fobUnitPrice: 1 }] },
-      ],
-      declarations: [
         {
-          declareNo,
-          declareDate: '2026-08-20',
-          cdcLines: [{ cutStockItemId: itemId, qty, unitPrice: '50', ...extra }],
+          invoiceNo: `CNG-${declareNo.replace(/\D/g, '')}`,
+          lines: [{ cdcNo: 'I 4', pcs: qty, fobUnitPrice: '50', ...extra }],
         },
       ],
+      declarations: [{ declareNo, declareDate: '2026-08-20' }],
     });
   const balance = async (id: string) =>
     (
@@ -720,13 +713,14 @@ describe('cut stock and CDC lines', () => {
         .set(await as('VIEWER'))
     ).body as { balance: string; condition: string; movements: unknown[] };
 
-  it('declaring an import reduces the balance', async () => {
+  it("an import invoice item reduces its CDC item's balance", async () => {
     const it1 = await item('10');
     const res = await request(app)
       .post('/api/v1/shipments')
       .set(await as('OPERATOR'))
-      .send(importWith(it1.id, '6'));
+      .send(importWith('6'));
     expect(res.status).toBe(201);
+    expect(res.body.invoices[0].lines[0].cutStockItemId).toBe(it1.id);
     expect(await balance(it1.id)).toMatchObject({ balance: '4.000', condition: 'CHECK' }); // 40 % < 50 %
     expect((await balance(it1.id)).movements).toHaveLength(1);
   });
@@ -734,11 +728,11 @@ describe('cut stock and CDC lines', () => {
   it('blocks over-imports and lists the violations', async () => {
     const it1 = await item('10');
     const h = await as('OPERATOR');
-    await request(app).post('/api/v1/shipments').set(h).send(importWith(it1.id, '6'));
+    await request(app).post('/api/v1/shipments').set(h).send(importWith('6'));
     const res = await request(app)
       .post('/api/v1/shipments')
       .set(h)
-      .send(importWith(it1.id, '5', {}, 'I 95002'));
+      .send(importWith('5', {}, 'I 95002'));
     expect(res.status).toBe(422);
     expect(res.body.error.details).toEqual({
       rule: 'CUT_STOCK_OVER_IMPORT',
@@ -756,7 +750,7 @@ describe('cut stock and CDC lines', () => {
 
   it('an override needs a Manager or Admin, and is recorded with who approved it', async () => {
     const it1 = await item('4');
-    const body = importWith(it1.id, '5', {
+    const body = importWith('5', {
       overrideReason: 'Customs approved extra unit (letter 12/08)',
     });
     expect(
@@ -772,42 +766,54 @@ describe('cut stock and CDC lines', () => {
       .set(await as('MANAGER'))
       .send(body);
     expect(ok.status).toBe(201);
-    expect(ok.body.declarations[0].cdcLines[0].overrideReason).toMatch(/Customs approved/);
+    expect(ok.body.invoices[0].lines[0].overrideReason).toMatch(/Customs approved/);
     const b = await balance(it1.id);
     expect(b.balance).toBe('-1.000');
     expect(b.movements[0]).toMatchObject({ overrideBy: 'Test MANAGER' });
   });
 
-  it("rejects items from another client's master list", async () => {
+  it("does not draw down another client's master list", async () => {
     const it1 = await item('10');
     const res = await request(app)
       .post('/api/v1/shipments')
       .set(await as('OPERATOR'))
-      .send({ ...importWith(it1.id, '1'), clientId: basics.jyx.id });
-    expect(res.status).toBe(422);
-    expect(res.body.error.message).toMatch(/another client/);
+      .send({ ...importWith('1'), clientId: basics.jyx.id });
+    expect(res.status).toBe(201);
+    expect(res.body.invoices[0].lines[0].cutStockItemId).not.toBe(it1.id);
+    expect((await balance(it1.id)).balance).toBe('10.000');
+  });
+
+  it('declaration CDC lines no longer count', async () => {
+    const it1 = await item('10');
+    const res = await request(app)
+      .post('/api/v1/shipments')
+      .set(await as('OPERATOR'))
+      .send({
+        ...importWith('2'),
+        declarations: [
+          {
+            declareNo: 'I 95009',
+            declareDate: '2026-08-20',
+            cdcLines: [{ cutStockItemId: it1.id, qty: '5' }],
+          },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect((await balance(it1.id)).balance).toBe('8.000');
   });
 
   it('editing re-checks against the balance without double counting', async () => {
     const it1 = await item('10');
     const h = await as('OPERATOR');
-    const created = (
-      await request(app).post('/api/v1/shipments').set(h).send(importWith(it1.id, '6'))
-    ).body;
+    const created = (await request(app).post('/api/v1/shipments').set(h).send(importWith('6')))
+      .body;
     const decl = created.declarations[0];
     const upd = await request(app)
       .put(`/api/v1/shipments/${created.id}`)
       .set(h)
       .send({
-        ...importWith(it1.id, '10'),
-        declarations: [
-          {
-            id: decl.id,
-            declareNo: decl.declareNo,
-            declareDate: decl.declareDate,
-            cdcLines: [{ cutStockItemId: it1.id, qty: '10' }],
-          },
-        ],
+        ...importWith('10'),
+        declarations: [{ id: decl.id, declareNo: decl.declareNo, declareDate: decl.declareDate }],
       });
     expect(upd.status).toBe(200);
     expect((await balance(it1.id)).balance).toBe('0.000');
@@ -819,7 +825,7 @@ describe('cut stock and CDC lines', () => {
       await request(app)
         .post('/api/v1/shipments')
         .set(await as('MANAGER'))
-        .send(importWith(it1.id, '6'))
+        .send(importWith('6'))
     ).body;
     await request(app)
       .delete(`/api/v1/shipments/${created.id}`)

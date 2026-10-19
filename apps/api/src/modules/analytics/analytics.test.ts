@@ -2,8 +2,9 @@ import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
+import { eq } from 'drizzle-orm';
 import { db, pool } from '../../db/client';
-import { accountingRecords, ports } from '../../db/schema';
+import { accountingRecords, ports, shipments } from '../../db/schema';
 import { createUser, resetDb, seedBasics, TEST_PASSWORD } from '../../test/helpers';
 import { previousPeriod } from './service';
 
@@ -45,6 +46,11 @@ async function ship(o: Record<string, unknown>) {
     .set(await as('ADMIN'))
     .send(body);
   if (res.status !== 201) throw new Error(JSON.stringify(res.body));
+  // The API works the clearance status out from the declarations; these fixtures set it as given.
+  await db
+    .update(shipments)
+    .set({ clearanceStatus: body.clearanceStatus as 'CLEARED' })
+    .where(eq(shipments.id, res.body.id as string));
   return res.body as { id: string; declarations: { id: string }[] };
 }
 

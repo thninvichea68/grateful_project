@@ -232,3 +232,43 @@ export async function parseCargoWorkbook(
   }
   return { invoices: [...invoices.values()], warnings, rowsRead };
 }
+
+/** The Export Template columns, in order, with the help shown on each header. */
+const TEMPLATE_COLUMNS: { header: string; width: number; note: string }[] = [
+  {
+    header: 'INVOICE NO',
+    width: 14,
+    note: 'Cargo invoice no. Leave it empty on the next lines of the same invoice.',
+  },
+  { header: 'INV DATE', width: 12, note: 'Invoice date, e.g. 2026-09-10.' },
+  { header: 'PO#', width: 12, note: '' },
+  { header: 'STYLE', width: 14, note: '' },
+  { header: 'HTS CODE', width: 11, note: 'One HTS code per invoice, e.g. 6204.69.' },
+  { header: 'PCS', width: 9, note: 'Pieces.' },
+  { header: 'CTNS', width: 8, note: 'Cartons.' },
+  { header: 'CBM', width: 8, note: '' },
+  { header: 'N.W KGS', width: 10, note: 'Net weight, kg.' },
+  { header: 'G.W KGS', width: 10, note: 'Gross weight, kg.' },
+  { header: 'FOB PRICE', width: 10, note: 'USD per piece.' },
+  { header: 'DESCRIPTION', width: 40, note: 'e.g. LADIES WOVEN PANT 100% RAYON' },
+];
+
+/** The blank Export Template: the columns parseCargoWorkbook reads, with a note on each. */
+export async function buildCargoTemplate(): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Grateful Solutions Logistics Command Center';
+  const ws = wb.addWorksheet('Export Invoices', { views: [{ state: 'frozen', ySplit: 1 }] });
+  ws.columns = TEMPLATE_COLUMNS.map((c) => ({ header: c.header, width: c.width }));
+  const head = ws.getRow(1);
+  head.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  head.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7490' } };
+  head.alignment = { vertical: 'middle' };
+  head.height = 20;
+  TEMPLATE_COLUMNS.forEach((c, i) => {
+    if (c.note) head.getCell(i + 1).note = c.note;
+  });
+  // Codes and dates stay as typed (HTS 6206.40 keeps its 0).
+  for (const col of [1, 3, 4, 5]) ws.getColumn(col).numFmt = '@';
+  ws.getColumn(2).numFmt = 'yyyy-mm-dd';
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}

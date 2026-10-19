@@ -19,6 +19,7 @@ export const blankLine = (): LineValues => ({
   grossWeightKg: '',
   fobUnitPrice: '',
   description: '',
+  overrideReason: '',
 });
 export const blankInvoice = (invoiceDate = ''): InvoiceValues => ({
   invoiceNo: '',
@@ -40,7 +41,6 @@ export const blankDeclaration = (portId = ''): DeclValues => ({
   declareDate: '',
   portId,
   notes: '',
-  cdcLines: [],
 });
 
 export function emptyForm(direction: Direction, clientId = ''): FormValues {
@@ -150,6 +150,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
             grossWeightKg: num(l.grossWeightKg),
             fobUnitPrice: num(l.fobUnitPrice),
             description: s(l.description),
+            overrideReason: s(l.overrideReason),
           })),
         }))
       : [blankInvoice()],
@@ -160,13 +161,6 @@ export function fromDetail(d: ShipmentDetail): FormValues {
           declareDate: x.declareDate,
           portId: s(x.portId),
           notes: s(x.notes),
-          cdcLines: x.cdcLines.map((c) => ({
-            cutStockItemId: c.cutStockItemId,
-            qty: num(c.qty),
-            unitPrice: num(c.unitPrice),
-            netWeightKg: num(c.netWeightKg),
-            overrideReason: s(c.overrideReason),
-          })),
         }))
       : [blankDeclaration(s(d.clearancePortId))],
   };
@@ -189,15 +183,9 @@ export function cleanForSubmit(v: FormValues): FormValues {
     invoices: (v.invoices ?? [])
       .filter((i) => i.invoiceNo || i.lines.some(lineFilled))
       .map((i) => ({ ...i, lines: i.lines.filter(lineFilled) })),
-    declarations: (v.declarations ?? [])
-      .filter(
-        (d) =>
-          d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim() || d.cdcLines?.length,
-      )
-      .map((d) => ({
-        ...d,
-        cdcLines: v.direction === 'IMPORT' ? d.cdcLines : [],
-      })),
+    declarations: (v.declarations ?? []).filter(
+      (d) => d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim(),
+    ),
   };
 }
 

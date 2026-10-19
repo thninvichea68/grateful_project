@@ -50,6 +50,8 @@ export const cargoLineInputSchema = z.object({
   grossWeightKg: decimal(3, { min: 0 }).transform((v) => v ?? '0'),
   fobUnitPrice: decimal(4, { min: 0 }).transform((v) => v ?? '0'),
   description: optText(300),
+  /** Imports: required (with cutstock:override) when this item would push the balance below zero. */
+  overrideReason: optText(300),
 });
 
 /** The distinct, non-empty HTS codes used on an invoice's lines. */
@@ -81,15 +83,6 @@ export const cargoInvoiceInputSchema = z
     return { ...inv, lines: inv.lines.map((l) => ({ ...l, htsCode: code })) };
   });
 
-export const cdcLineInputSchema = z.object({
-  cutStockItemId: z.string().uuid('Choose an item from the master list'),
-  qty: decimal(3, { min: 0.001, allowEmpty: false }),
-  unitPrice: decimal(4, { min: 0 }).transform((v) => v ?? '0'),
-  netWeightKg: decimal(3, { min: 0 }).transform((v) => v ?? '0'),
-  /** Required (with cutstock:override) when this line would push the balance below zero. */
-  overrideReason: optText(300),
-});
-
 export const declarationInputSchema = z.object({
   /** Present when editing an existing declaration (keeps its ledger link). */
   id: optUuid,
@@ -97,7 +90,6 @@ export const declarationInputSchema = z.object({
   declareDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the declaration date'),
   portId: optUuid,
   notes: optText(300),
-  cdcLines: z.array(cdcLineInputSchema).default([]),
 });
 
 /** A declaration row left completely blank: the form always offers one to fill in later. */
@@ -105,13 +97,7 @@ function blankDeclarationRow(d: unknown): boolean {
   if (!d || typeof d !== 'object') return false;
   const x = d as Record<string, unknown>;
   const text = (v: unknown) => String(v ?? '').trim();
-  return (
-    !text(x.id) &&
-    !text(x.declareNo) &&
-    !text(x.declareDate) &&
-    !text(x.notes) &&
-    !(Array.isArray(x.cdcLines) && x.cdcLines.length)
-  );
+  return !text(x.id) && !text(x.declareNo) && !text(x.declareDate) && !text(x.notes);
 }
 /** A container row with nothing typed in (the form always offers one; its size is preset). */
 function blankContainerRow(c: unknown): boolean {
@@ -149,6 +135,23 @@ export function shipmentStatusOf(s: {
 }): ShipmentStatus {
   if (s.direction === 'IMPORT' ? s.arriveFty : s.atd) return 'COMPLETED';
   if (s.declarations?.some((d) => d.declareNo?.trim())) return 'IN_PROGRESS';
+  return 'PENDING';
+}
+
+/**
+ * A shipment's clearance status, worked out from its declarations:
+ * Customs Cleared — a declaration has both its number and date;
+ * In Progress — a declaration number is in, its date not yet;
+ * Pending Review — otherwise.
+ */
+export function clearanceStatusOf(s: {
+  declarations?:
+    | { declareNo?: string | null | undefined; declareDate?: string | null | undefined }[]
+    | undefined;
+}): ClearanceStatus {
+  const numbered = s.declarations?.filter((d) => d.declareNo?.trim()) ?? [];
+  if (numbered.some((d) => d.declareDate?.trim())) return 'CLEARED';
+  if (numbered.length) return 'IN_PROGRESS';
   return 'PENDING';
 }
 
@@ -224,15 +227,9 @@ export const shipmentInputSchema = z
     dup(s.containers, (c) => c.containerNo, 'containers', 'Container');
     dup(s.invoices, (i) => i.invoiceNo, 'invoices', 'Invoice');
     dup(s.declarations, (d) => d.declareNo, 'declarations', 'Declaration');
-    if (s.direction === 'EXPORT' && s.declarations.some((d) => d.cdcLines.length))
-      ctx.addIssue({
-        code: 'custom',
-        path: ['declarations'],
-        message: 'CDC lines are only used on import declarations',
-      });
   })
-  // The status is never entered: it follows from the dates and declarations.
-  .transform((s) => ({ ...s, status: shipmentStatusOf(s) }));
+  // The statuses are never entered: they follow from the dates and declarations.
+  .transform((s) => ({ ...s, status: shipmentStatusOf(s), clearanceStatus: clearanceStatusOf(s) }));
 export type ShipmentInput = z.input<typeof shipmentInputSchema>;
 export type ShipmentInputParsed = z.output<typeof shipmentInputSchema>;
 
@@ -392,6 +389,9 @@ export interface ShipmentDetail {
       fobUnitPrice: string;
       fobAmount: string;
       description: string | null;
+      /** Imports: the master-list item this line draws down, and any approved overdraw. */
+      cutStockItemId: string | null;
+      overrideReason: string | null;
     }[];
   }[];
   declarations: {
@@ -401,17 +401,6 @@ export interface ShipmentDetail {
     portId: string | null;
     notes: string | null;
     hasLedgerEntry: boolean;
-    cdcLines: {
-      id: string;
-      cutStockItemId: string;
-      itemName: string;
-      declareRef: string;
-      unit: string;
-      qty: string;
-      unitPrice: string;
-      netWeightKg: string;
-      overrideReason: string | null;
-    }[];
   }[];
   createdAt: string;
   updatedAt: string;
@@ -437,6 +426,29 @@ export interface CargoExcelParseResult {
     }[];
   }[];
   warnings: { row: number | null; message: string }[];
+  rowsRead: number;
+}
+
+/** Result of parsing an import cargo workbook (import schedule layout) into invoices. */
+export interface ImportCargoExcelParseResult {
+  invoices: {
+    invoiceNo: string;
+    invoiceDate: string | null;
+    lines: {
+      /** CDC no., material and unit come from the client's CDC master list (found by ITEM). */
+      cdcNo: string | null;
+      description: string | null;
+      material: string | null;
+      unit: string | null;
+      pcs: string;
+      netWeightKg: string;
+      grossWeightKg: string;
+      fobUnitPrice: string;
+    }[];
+  }[];
+  warnings: { row: number | null; message: string }[];
+  /** Rows that do not match the CDC master list (or the template). With any, `invoices` is empty. */
+  errors: { row: number | null; message: string }[];
   rowsRead: number;
 }
 

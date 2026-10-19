@@ -249,7 +249,12 @@ describe('shipping plan Excel import', () => {
       declareNo: 'I 138735',
       declareDate: '2026-09-25',
     });
-    expect(detail.body.declarations[0].cdcLines).toHaveLength(2);
+    // Each CDC NO draws down the client's master list.
+    expect(
+      detail.body.invoices[0].lines.map(
+        (l: { cutStockItemId: string | null }) => !!l.cutStockItemId,
+      ),
+    ).toEqual([true, true]);
 
     const second = await request(app)
       .get(`/api/v1/shipments/${saved.body.shipments[1].id}`)
@@ -257,7 +262,11 @@ describe('shipping plan Excel import', () => {
     expect(Number(second.body.quantity)).toBe(1485);
     // Declared but no ETA Factory yet.
     expect(second.body.status).toBe('IN_PROGRESS');
-    expect(second.body.declarations[0].cdcLines).toHaveLength(2);
+    expect(
+      second.body.invoices.flatMap((i: { lines: { cutStockItemId: string | null }[] }) =>
+        i.lines.map((l) => !!l.cutStockItemId),
+      ),
+    ).toEqual([true, true]);
   });
 
   it('points at the import rows that are wrong', async () => {

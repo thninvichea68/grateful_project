@@ -6,9 +6,11 @@ import {
   invoiceHtsCodes,
   type CargoExcelParseResult,
   type CutStockRow,
+  type ImportCargoExcelParseResult,
 } from '@gs/shared';
+import { useAuth } from '../../auth/AuthProvider';
 import { useCutStock } from '../../features/hooks';
-import { uploadFile } from '../../lib/files';
+import { downloadFile, uploadFile } from '../../lib/files';
 import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
 import { FieldError } from '../../components/ui';
@@ -34,6 +36,9 @@ const CHEVRON = (
 /** The invoice's HTS codes (one invoice = one code; more than one is flagged). */
 const htsCodesOf = (lines: InvoiceValues['lines'] | undefined) => invoiceHtsCodes(lines ?? []);
 
+/** CDC numbers compare without case, spaces or dashes ("II-125" = "ii 125"), as on the server. */
+const cdcKey = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/[\s\-–—_]+/g, '');
+
 const money = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -44,7 +49,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
     register,
     setValue,
     getValues,
-    formState: { errors },
+    formState: { errors, defaultValues },
   } = useFormContext<FormValues>();
   const invoices = useFieldArray({ control, name: 'invoices' });
   const watched = useWatch({ control, name: 'invoices' });
@@ -53,10 +58,26 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
   const clientId = useWatch({ control, name: 'clientId' });
   const cut = useCutStock({ clientId, pageSize: 500, sort: 'lineNo' }, isImport && !!clientId);
   const cdcItems = cut.data?.data ?? [];
+  // Each import item's PCS come off its master-list balance. The balance already excludes this
+  // shipment's saved items (saving replaces them), so those are added back before the form's.
+  const remainingAfter = new Map<string, number>();
+  if (isImport) {
+    const byKey = new Map(cdcItems.map((it) => [cdcKey(it.declareRef), it]));
+    const add = (cdcNo: string | null | undefined, qty: number) => {
+      const it = cdcNo ? byKey.get(cdcKey(cdcNo)) : undefined;
+      if (it) remainingAfter.set(it.id, (remainingAfter.get(it.id) ?? Number(it.balance)) + qty);
+    };
+    defaultValues?.invoices?.forEach((inv) =>
+      inv?.lines?.forEach((l) => add(l?.cdcNo, toNum(l?.pcs))),
+    );
+    watched?.forEach((inv) => inv.lines?.forEach((l) => add(l.cdcNo, -toNum(l.pcs))));
+  }
   const [openIdx, setOpenIdx] = useState<Set<number>>(() => new Set([0]));
   const [status, setStatus] = useState<{
     text: string;
     warnings: CargoExcelParseResult['warnings'];
+    /** The upload was refused: the list shows why. */
+    error?: boolean;
   } | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,37 +101,72 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
     setUploading(true);
     setStatus(null);
     try {
-      const res = await uploadFile<CargoExcelParseResult>('/shipments/parse-cargo-excel', file, {
-        shipmentId,
-      });
+      // Imports use the import schedule layout; each ITEM is matched to the client's master list.
+      const res = isImport
+        ? await uploadFile<ImportCargoExcelParseResult>(
+            '/shipments/parse-import-cargo-excel',
+            file,
+            { clientId, shipmentId },
+          )
+        : await uploadFile<CargoExcelParseResult>('/shipments/parse-cargo-excel', file, {
+            shipmentId,
+          });
+      const errs = 'errors' in res ? res.errors : [];
+      if (errs.length) {
+        // Nothing is filled in until every row matches the CDC master list.
+        setStatus({
+          text: `Nothing imported from ${file.name}: fix ${errs.length === 1 ? 'this row' : `these ${errs.length} rows`} and upload it again.`,
+          warnings: errs,
+          error: true,
+        });
+        return;
+      }
       const current = getValues('invoices') ?? [];
       const blank = current.every(
-        (i) => !i.invoiceNo && i.lines.every((l) => !l.pcs && !l.poNo && !l.styleNo),
+        (i) => !i.invoiceNo && i.lines.every((l) => !l.pcs && !l.poNo && !l.styleNo && !l.cdcNo),
       );
-      const imported: InvoiceValues[] = res.invoices.map((i) => ({
-        invoiceNo: i.invoiceNo,
-        invoiceDate: i.invoiceDate ?? '',
-        description: i.description ?? '',
-        lines: i.lines.map((l) => ({
-          ...l,
-          poNo: l.poNo ?? '',
-          styleNo: l.styleNo ?? '',
-          htsCode: l.htsCode ?? '',
-          description: l.description ?? '',
-        })),
-      }));
+      const imported: InvoiceValues[] = isImport
+        ? (res as ImportCargoExcelParseResult).invoices.map((i) => ({
+            ...blankInvoice(i.invoiceDate ?? ''),
+            invoiceNo: i.invoiceNo,
+            lines: i.lines.map((l) => ({
+              ...blankLine(),
+              cdcNo: l.cdcNo ?? '',
+              description: l.description ?? '',
+              material: l.material ?? '',
+              unit: l.unit ?? '',
+              pcs: l.pcs,
+              netWeightKg: l.netWeightKg,
+              grossWeightKg: l.grossWeightKg,
+              fobUnitPrice: l.fobUnitPrice,
+            })),
+          }))
+        : (res as CargoExcelParseResult).invoices.map((i) => ({
+            invoiceNo: i.invoiceNo,
+            invoiceDate: i.invoiceDate ?? '',
+            description: i.description ?? '',
+            lines: i.lines.map((l) => ({
+              ...l,
+              poNo: l.poNo ?? '',
+              styleNo: l.styleNo ?? '',
+              htsCode: l.htsCode ?? '',
+              description: l.description ?? '',
+            })),
+          }));
       if (blank) invoices.replace(imported);
       else invoices.append(imported);
       setOpenIdx(new Set());
       const lines = res.invoices.reduce((n, i) => n + i.lines.length, 0);
+      const noun = isImport ? 'item' : 'line';
       setStatus({
-        text: `Imported ${res.invoices.length} invoice${res.invoices.length === 1 ? '' : 's'}, ${lines} line${lines === 1 ? '' : 's'} from ${file.name}`,
+        text: `Imported ${res.invoices.length} invoice${res.invoices.length === 1 ? '' : 's'}, ${lines} ${noun}${lines === 1 ? '' : 's'} from ${file.name}`,
         warnings: res.warnings,
       });
     } catch (e) {
       setStatus({
         text: e instanceof ApiError ? e.message : 'The file could not be read.',
         warnings: [],
+        error: true,
       });
     } finally {
       setUploading(false);
@@ -120,7 +176,6 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
 
   const totals = (watched ?? []).reduce(
     (t, inv) => {
-      t.pkgs += toNum(inv.packages);
       inv.lines.forEach((l) => {
         t.ctns += toNum(l.ctns);
         t.pcs += toNum(l.pcs);
@@ -131,7 +186,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
       });
       return t;
     },
-    { pkgs: 0, ctns: 0, pcs: 0, nw: 0, gw: 0, cbm: 0, fob: 0 },
+    { ctns: 0, pcs: 0, nw: 0, gw: 0, cbm: 0, fob: 0 },
   );
   const invErr = errors.invoices;
 
@@ -150,18 +205,41 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
             </div>
           </div>
           <div className="cargo-actions">
-            {status && <span className="cargo-status">{status.text}</span>}
-            {/* The Excel template is the export one (PO / style / HTS). */}
-            {!isImport && (
-              <button
-                type="button"
-                className="cargo-btn"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
+            {status && (
+              <span
+                className="cargo-status"
+                style={status.error ? { color: 'var(--status-exception-fg)' } : undefined}
               >
-                {uploading ? 'Reading…' : '⇪ Upload Excel Template'}
-              </button>
+                {status.text}
+              </span>
             )}
+            {/* Imports have their own template, listing the client's CDC master list. */}
+            <button
+              type="button"
+              className="cargo-btn"
+              disabled={isImport && !clientId}
+              title={isImport && !clientId ? 'Choose the client first' : undefined}
+              onClick={() =>
+                void (
+                  isImport
+                    ? downloadFile('/shipments/import-cargo-template.xlsx', { clientId })
+                    : downloadFile('/shipments/cargo-template.xlsx')
+                ).catch(() =>
+                  setStatus({ text: 'The template could not be downloaded.', warnings: [] }),
+                )
+              }
+            >
+              ⇣ Download Template
+            </button>
+            <button
+              type="button"
+              className="cargo-btn"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading || (isImport && !clientId)}
+              title={isImport && !clientId ? 'Choose the client first' : undefined}
+            >
+              {uploading ? 'Reading…' : '⇪ Upload Excel Template'}
+            </button>
             <button
               type="button"
               className="cargo-btn"
@@ -195,11 +273,11 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
             style={{
               margin: '0 0 12px 18px',
               fontSize: 12,
-              color: 'var(--status-pending-fg)',
+              color: status.error ? 'var(--status-exception-fg)' : 'var(--status-pending-fg)',
               fontWeight: 600,
             }}
           >
-            {status.warnings.slice(0, 8).map((w, i) => (
+            {status.warnings.slice(0, status.error ? 50 : 8).map((w, i) => (
               <li key={i}>
                 {w.row ? `Row ${w.row}: ` : ''}
                 {w.message}
@@ -232,6 +310,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
                     register={register}
                     onDate={setSharedDate}
                     cdcItems={cdcItems}
+                    remainingAfter={remainingAfter}
                     errors={Array.isArray(invErr) ? invErr[gi] : undefined}
                   />
                 ) : (
@@ -255,10 +334,6 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
       {isImport ? (
         <div className="cargo-totals">
           <div className="cargo-totals-label">Shipment Total</div>
-          <div className="cargo-total-item">
-            <span>Packages</span>
-            <span>{fmtNum(totals.pkgs)}</span>
-          </div>
           <div className="cargo-total-item">
             <span>Quantity</span>
             <span>{fmtNum(totals.pcs, 2)}</span>
@@ -721,7 +796,7 @@ function InvoiceCard({
 const materialOf = (it: CutStockRow) => CUT_STOCK_CATEGORY_LABEL[it.category].toUpperCase();
 
 /**
- * An import invoice, laid out like the import schedule: INV · DATE · QTY PKGS, then one line
+ * An import invoice, laid out like the import schedule: INV · DATE, then one line
  * per item (CDC NO · ITEM · MATERIAL · QUANTITY · CDC UNIT · NW · GW · UNIT PRICE · AMOUNT).
  * Choosing a CDC NO from the client's master list fills in its item, material, unit and price.
  */
@@ -734,6 +809,7 @@ function ImportInvoiceCard({
   register,
   onDate,
   cdcItems,
+  remainingAfter,
   errors,
 }: {
   gi: number;
@@ -744,9 +820,11 @@ function ImportInvoiceCard({
   register: ReturnType<typeof useFormContext<FormValues>>['register'];
   onDate: (d: string) => void;
   cdcItems: CutStockRow[];
+  remainingAfter: Map<string, number>;
   errors: unknown;
 }) {
   const { setValue, getValues } = useFormContext<FormValues>();
+  const { can } = useAuth();
   const lines = useFieldArray({ control, name: `invoices.${gi}.lines` });
   const watchedLines = useWatch({ control, name: `invoices.${gi}.lines` });
   const e = errors as InvErrors;
@@ -766,9 +844,8 @@ function ImportInvoiceCard({
   const emp = (v: number) => (v ? '' : ' is-empty');
 
   // The item is chosen from the client's CDC master list; its CDC no., material and unit follow.
-  const key = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/[\s-]/g, '');
   const itemOf = (cdcNo: string | null | undefined) =>
-    cdcNo ? cdcItems.find((x) => key(x.declareRef) === key(cdcNo)) : undefined;
+    cdcNo ? cdcItems.find((x) => cdcKey(x.declareRef) === cdcKey(cdcNo)) : undefined;
   const pickItem = (li: number, cdcNo: string) => {
     const it = itemOf(cdcNo);
     const path = `invoices.${gi}.lines.${li}` as const;
@@ -835,7 +912,7 @@ function ImportInvoiceCard({
 
   return (
     <div className={`cargo-inv${open ? ' open' : ''}`}>
-      <div className="cargo-inv-row">
+      <div className="cargo-inv-row cargo-inv-row-import">
         <label className="cx-f">
           <span className="cx-lbl">Invoice No.</span>
           <input
@@ -855,15 +932,6 @@ function ImportInvoiceCard({
             {...register(`invoices.${gi}.invoiceDate`, {
               onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
             })}
-          />
-        </label>
-        <label className="cx-f">
-          <span className="cx-lbl">Qty Pkgs</span>
-          <NumberInput
-            decimals={3}
-            className="cargo-cell cargo-cell-num"
-            placeholder="0"
-            {...register(`invoices.${gi}.packages`)}
           />
         </label>
         <div className="cx-chips">
@@ -916,6 +984,9 @@ function ImportInvoiceCard({
                 const l = watchedLines?.[li];
                 const amount =
                   l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
+                const it = itemOf(l?.cdcNo);
+                const after = it ? remainingAfter.get(it.id) : undefined;
+                const over = after !== undefined && after < -1e-9;
                 return (
                   <div className="cx-line cx-line-imp" key={f.id}>
                     <div className="cx-line-group">
@@ -948,6 +1019,17 @@ function ImportInvoiceCard({
                               ) : null;
                             })}
                           </select>
+                          {after !== undefined && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: over ? 'var(--status-exception-fg)' : 'var(--text-tertiary)',
+                              }}
+                            >
+                              Balance after saving: {fmtNum(after)} {it?.unit}
+                            </span>
+                          )}
                         </label>
                         {Auto(li, 'cdcNo', 'CDC No.')}
                         {Auto(li, 'material', 'Material')}
@@ -976,6 +1058,21 @@ function ImportInvoiceCard({
                         </div>
                       </div>
                     </div>
+                    {over && (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        {can('cutstock:override') ? (
+                          <input
+                            type="text"
+                            className="cargo-cell"
+                            style={{ width: '100%' }}
+                            placeholder="Reason for importing over the balance (required)"
+                            {...register(`invoices.${gi}.lines.${li}.overrideReason`)}
+                          />
+                        ) : (
+                          <FieldError message="More than the remaining balance. A Manager must approve this item." />
+                        )}
+                      </div>
+                    )}
                     {lines.fields.length > 1 && (
                       <button
                         type="button"

@@ -3508,6 +3508,12 @@ body.sidebar-collapsed .signout {
   align-items: end;
   padding: 16px 18px;
 }
+/* An import invoice has no third field (its packages are the shipment's quantity). */
+@media (min-width: 1101px) {
+  .cargo-inv-row-import {
+    grid-template-columns: minmax(150px, 1.2fr) 160px 1fr 44px !important;
+  }
+}
 .cx-f {
   display: flex;
   flex-direction: column;

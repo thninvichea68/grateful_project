@@ -12,9 +12,7 @@ describe('shipment declarations', () => {
   it('drops a declaration row left blank (the form always offers one)', () => {
     const v = shipmentInputSchema.parse({
       ...base,
-      declarations: [
-        { id: '', declareNo: '', declareDate: '', portId: 'x', notes: '', cdcLines: [] },
-      ],
+      declarations: [{ id: '', declareNo: '', declareDate: '', portId: 'x', notes: '' }],
     });
     expect(v.declarations).toEqual([]);
   });
