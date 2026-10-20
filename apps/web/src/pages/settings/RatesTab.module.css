@@ -121,7 +121,7 @@
 }
 .metalList li {
   display: grid;
-  grid-template-columns: 10px 1fr auto auto;
+  grid-template-columns: 20px 1fr auto auto;
   align-items: center;
   gap: 10px;
 }
@@ -137,18 +137,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Metal swatches: gold, silver, platinum. */
-.swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #d4a514;
+/* Metal icons (public/gold.png, silver.png, platinum.png). */
+.metalIcon,
+.metalIconSm {
+  flex-shrink: 0;
+  object-fit: contain;
 }
-[data-metal='XAG'] .swatch {
-  background: #a8b3bf;
+.metalIcon {
+  width: 34px;
+  height: 34px;
 }
-[data-metal='XPT'] .swatch {
-  background: #7d8fa3;
+.metalIconSm {
+  width: 20px;
+  height: 20px;
 }
 
 .boxFoot {
@@ -256,36 +257,42 @@
   color: var(--text-tertiary);
 }
 
-/* Metals panel */
+/* Metals panel: one plain card per metal. */
 .metalTiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 .tile {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
+  gap: 14px;
   min-width: 0;
+  padding: 20px 22px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
 }
+
 .tileHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 .tileName {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
   color: var(--text-primary);
 }
 .symbol {
   margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: var(--bg-subtle);
   color: var(--text-tertiary);
 }
 .tileMeta {
@@ -297,15 +304,17 @@
   font-weight: 600;
   color: var(--text-tertiary);
 }
+
 .weights {
   width: 100%;
+  margin-top: 2px;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
 }
 .weights th,
 .weights td {
-  padding: 8px 0;
-  border-top: 1px solid var(--border-subtle);
+  padding: 11px 0;
+  border-top: 1px dashed var(--border-subtle);
   font-size: 13px;
 }
 .weights th {
@@ -321,7 +330,21 @@
 .weights td:last-child {
   padding-left: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
+}
+/* First row (1 troy oz) is the headline price. */
+.weights tr:first-child > * {
+  padding-top: 4px;
+  padding-bottom: 14px;
+  border-top: 0;
+}
+.weights tr:first-child td:nth-child(2) {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+.weights tr:first-child td:last-child {
+  font-size: 14px;
 }
 
 @media (max-width: 1200px) {

@@ -27,7 +27,12 @@ import m from './RatesTab.module.css';
  * Settings → Rates: three summary boxes (exchange rate, fuel, metals) with their current
  * figure, update status and actions. The selected box's history / detail shows below.
  */
-
+/** Real metal icons, served from apps/web/public. */
+const METAL_ICON: Record<MetalQuote['symbol'], string> = {
+  XAU: '/gold.png',
+  XAG: '/silver.png',
+  XPT: '/platinum.png',
+};
 const INVALIDATE = [['settings'], queryKeys.lookups];
 const MEF_RATE = 'https://data.mef.gov.kh/datasets/pd_66a0cd503e0bd300012638fb4';
 const MEF_FUEL = 'https://data.mef.gov.kh/datasets/pd_681d89b4dbc953000126f5e7';
@@ -384,7 +389,7 @@ export function RatesTab({ manage }: { manage: boolean }) {
               const diff = now !== null && prev ? now - prev : 0;
               return (
                 <li key={q.symbol} data-metal={q.symbol}>
-                  <span className={m.swatch} aria-hidden="true" />
+                  <img className={m.metalIconSm} src={METAL_ICON[q.symbol]} alt="" />
                   <span className={m.metalName}>{METAL_LABEL[q.symbol]}</span>
                   <span className={m.metalValue}>{now === null ? '—' : usd(now)}</span>
                   {prev !== null && (
@@ -691,7 +696,7 @@ function MetalTile({ quote, usdToKhr }: { quote: MetalQuote; usdToKhr: number | 
   const name = METAL_LABEL[quote.symbol];
   const head = (
     <div className={m.tileHead}>
-      <span className={m.swatch} aria-hidden="true" />
+      <img className={m.metalIcon} src={METAL_ICON[quote.symbol]} alt="" />
       <span className={m.tileName}>{name}</span>
       <span className={m.symbol}>{quote.symbol}</span>
     </div>
