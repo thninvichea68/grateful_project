@@ -11,6 +11,7 @@ import { ImportPlanDialog } from './plans/ImportPlanDialog';
 import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
+import { PlansMoreMenu } from './plans/PlansMoreMenu';
 
 const PREFS = 'gs:plans-view';
 const columnsFor = (expand: boolean) =>
@@ -40,10 +41,10 @@ export function ShippingPlansPage() {
   const filters = {
     clientId: params.getAll('clientId'),
     // Always Import or Export (Import unless the link asks for Export).
-    direction: (params.get('direction') === 'EXPORT'
-      ? 'EXPORT'
-      : 'IMPORT') as PlansFilterValue['direction'],
+    direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
+    // Declaration month (YYYY-MM); empty = every month, undeclared shipments included.
+    month: params.get('month') ?? '',
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
     // Newest customs clearance (declaration) date first, unless another order is picked.
@@ -57,16 +58,16 @@ export function ShippingPlansPage() {
     clientId: filters.clientId,
     direction: filters.direction,
     status: filters.status || undefined,
+    month: filters.month || undefined,
   };
   const list = useShipments(query);
   const cols = useMemo(() => columnsFor(prefs.expandAll), [prefs.expandAll]);
 
   const apply = (v: PlansFilterValue) => {
-    const next = new URLSearchParams();
-    v.clientIds.forEach((id) => next.append('clientId', id));
-    if (v.direction === 'EXPORT') next.set('direction', 'EXPORT');
+    const next = new URLSearchParams(params);
+    next.delete('page');
     if (v.status) next.set('status', v.status);
-    if (filters.q) next.set('q', filters.q);
+    else next.delete('status');
     setParams(next);
     const p = { expandAll: v.expandAll, frozen: v.frozen };
     setPrefs(p);
@@ -114,6 +115,7 @@ export function ShippingPlansPage() {
         clientId: filters.clientId,
         direction: filters.direction || undefined,
         status: filters.status || undefined,
+        month: filters.month || undefined,
         q: filters.q || undefined,
         sort: filters.sort,
       });
@@ -125,8 +127,6 @@ export function ShippingPlansPage() {
   };
 
   const filterValue: PlansFilterValue = {
-    clientIds: filters.clientId,
-    direction: filters.direction,
     status: filters.status,
     ...prefs,
   };
@@ -153,48 +153,43 @@ export function ShippingPlansPage() {
                 e.target.value.trim() !== filters.q && setParam('q', e.target.value.trim())
               }
             />
+            <input
+              type="month"
+              className={ui.input}
+              value={filters.month}
+              onChange={(e) => setParam('month', e.target.value)}
+              aria-label="Declaration month"
+              title="Declaration month"
+            />
             <select
               className={ui.input}
-              value={filters.sort}
-              onChange={(e) => setParam('sort', e.target.value)}
-              aria-label="Sort"
+              value={filters.clientId.length === 1 ? filters.clientId[0] : ''}
+              onChange={(e) => setParam('clientId', e.target.value)}
+              aria-label="Client"
             >
-              <option value="-clearanceDate">Newest clearance date first</option>
-              <option value="clearanceDate">Oldest clearance date first</option>
-              <option value="-eta">Newest ETA first</option>
-              <option value="eta">Oldest ETA first</option>
-              <option value="-createdAt">Recently added</option>
-              <option value="client,-eta">Client</option>
-              <option value="status,-eta">Status</option>
+              <option value="">All clients</option>
+              {lookups.data?.clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code}
+                </option>
+              ))}
             </select>
-            <button
-              type="button"
-              className="filter-btn"
-              onClick={() => void doExport()}
-              disabled={exporting}
+            {/* Always Import or Export; the URL only carries Export. */}
+            <select
+              className={ui.input}
+              value={filters.direction}
+              onChange={(e) => setParam('direction', e.target.value === 'EXPORT' ? 'EXPORT' : '')}
+              aria-label="Import or Export"
             >
-              {exporting ? 'Exporting…' : 'Export Excel'}
-            </button>
-            {can('shipments:write') && (
-              <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
-                Import Excel
-              </button>
-            )}
-            <PlansFilter
-              value={filterValue}
-              onApply={apply}
-              clients={lookups.data?.clients ?? []}
-              columnsFor={columnsFor}
+              <option value="IMPORT">Import</option>
+              <option value="EXPORT">Export</option>
+            </select>
+            <PlansFilter value={filterValue} onApply={apply} columnsFor={columnsFor} />
+            <PlansMoreMenu
+              exporting={exporting}
+              onExport={() => void doExport()}
+              onImport={can('shipments:write') ? () => setImporting(true) : undefined}
             />
-            {can('shipments:write') && (
-              <button
-                type="button"
-                className="new-shipment-btn"
-                onClick={() => navigate('/plans/new')}
-              >
-                + New Shipment
-              </button>
-            )}
           </div>
         </div>
         {filters.q && (
@@ -227,6 +222,7 @@ export function ShippingPlansPage() {
                 emptyText={
                   filters.q ||
                   filters.clientId.length ||
+                  filters.month ||
                   filters.direction === 'EXPORT' ||
                   filters.status
                     ? 'No shipments match the selected filters.'

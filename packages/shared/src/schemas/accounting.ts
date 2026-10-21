@@ -448,6 +448,8 @@ export interface CreditNoteReviewCounts {
   total: number;
   checked: number;
   unchecked: number;
+  /** Opened by accounting, not decided yet. */
+  reviewed: number;
   revised: number;
 }
 

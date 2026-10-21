@@ -47,6 +47,7 @@ export interface ShipmentFilters {
   loadType?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
+  month?: string | undefined;
   q?: string | undefined;
 }
 
@@ -72,6 +73,8 @@ export function shipmentWhere(f: ShipmentFilters) {
   // An import by its ETA, an export by its ETD.
   if (f.from) conds.push(sql`${shipmentDate()} >= ${f.from}::date`);
   if (f.to) conds.push(sql`${shipmentDate()} <= ${f.to}::date`);
+  // By the first declare date (the Clearance Date column); undeclared shipments drop out.
+  if (f.month) conds.push(sql`to_char(${SORTS.clearanceDate}, 'YYYY-MM') = ${f.month}`);
   if (f.q) {
     const like = likePattern(f.q);
     conds.push(sql`(s.reference ILIKE ${like} OR s.hbl_no ILIKE ${like} OR s.booking_no ILIKE ${like} OR c.code ILIKE ${like}

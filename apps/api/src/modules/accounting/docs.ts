@@ -54,6 +54,7 @@ import {
   numberEligible,
   periodOf,
   releaseNumber,
+  resequence,
   takeNumber,
   type AssignedNumbers,
   type NumberKind,
@@ -685,6 +686,7 @@ export async function voidDoc(
           ),
         );
       await assignNumbers(tx, doc.accountingRecordId as string, req, [KIND[type]]);
+      await resequence(tx, req);
     }
     await audit(
       tx,
@@ -831,6 +833,8 @@ export async function applyClearanceDate(
         req.auth?.userId ?? null,
       );
   }
+  // The new date may put the shipment before or after others in its runs.
+  await resequence(tx, req);
 }
 
 /**
@@ -1318,6 +1322,7 @@ export async function listCreditNoteReview(p: {
     sql`SELECT count(*)::int AS total,
           (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
           (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
+          (count(*) FILTER (WHERE t.review_status = 'REVIEWED'))::int AS reviewed,
           (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
         ${from} ${whereAll(c)}`,
   );
@@ -1337,7 +1342,8 @@ export async function listCreditNoteReview(p: {
 
 /**
  * Accounting's check of a submitted credit note.
- * - CHECKED: the declaration goes into the Monthly Ledger (its clear fee is this note's
+ * - REVIEWED: set when accounting opens an Unchecked note; nothing else changes.
+ * - CHECKED (shown as "Approved"): the declaration goes into the Monthly Ledger (its clear fee is this note's
  *   total) and gets its INV / DIS / DN numbers; the broker gets a "Checked" message.
  * - REVISED: the note goes back to the broker as an editable draft, its Clear Fee comes out of
  *   the Monthly Ledger until it is submitted again, and the broker gets the message saying
@@ -1357,6 +1363,26 @@ export async function setCreditNoteReview(
           ? 'This credit note is with the broker for revision; it comes back when they submit it again'
           : 'Only a credit note submitted to the Monthly Ledger can be checked',
       );
+    // Opened by accounting: only a note nobody has looked at yet, and the broker isn't told.
+    if (reviewStatus === 'REVIEWED') {
+      if (doc.reviewStatus !== 'UNCHECKED') return [];
+      await tx
+        .update(creditNotes)
+        .set({ reviewStatus, reviewedBy: req.auth?.userId ?? null, reviewedAt: new Date() })
+        .where(eq(creditNotes.id, id));
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: 'credit_note',
+          entityId: id,
+          before: { reviewStatus: doc.reviewStatus },
+          after: { reviewStatus },
+        },
+        req,
+      );
+      return [];
+    }
     if (reviewStatus === 'REVISED') {
       await tx.update(creditNotes).set({ status: 'DRAFT' }).where(eq(creditNotes.id, id));
       await takeOutOfLedger(tx, CONFIG['credit-notes'], doc);
@@ -1456,6 +1482,7 @@ export async function listRecordSummaryReview(p: {
     sql`SELECT count(*)::int AS total,
           (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
           (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
+          (count(*) FILTER (WHERE t.review_status = 'REVIEWED'))::int AS reviewed,
           (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
         ${from} ${whereAll(c)}`,
   );
@@ -1476,7 +1503,8 @@ export async function listRecordSummaryReview(p: {
 
 /**
  * Accounting's check of a submitted record summary.
- * - CHECKED: its lines fill the shipment's Monthly Ledger row (INV, THC, REIM, DN).
+ * - REVIEWED: set when accounting opens an Unchecked summary; nothing else changes.
+ * - CHECKED (shown as "Approved"): its lines fill the shipment's Monthly Ledger row (INV, THC, REIM, DN).
  * - REVISED: back to Operations as an editable draft with the note saying what to change; its
  *   amounts leave the ledger until it is submitted and checked again.
  * - UNCHECKED: back to waiting; its amounts leave the ledger.
@@ -1495,6 +1523,8 @@ export async function setRecordSummaryReview(
           ? 'This record summary is with Operations for revision; it comes back when they submit it again'
           : 'Only a submitted record summary can be checked',
       );
+    // Opened by accounting: only a summary nobody has looked at yet; nothing else changes.
+    if (reviewStatus === 'REVIEWED' && doc.reviewStatus !== 'UNCHECKED') return;
     const recordId = doc.accountingRecordId as string | null;
     if (reviewStatus === 'CHECKED' && !recordId)
       throw businessRule('This record summary has no Monthly Ledger entry to fill');

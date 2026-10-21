@@ -9,6 +9,7 @@ import {
   chargeLineAmount,
   computeChargeLinesTotal,
   type BillingDoc,
+  type CreditNoteReviewStatus,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import {
@@ -17,6 +18,7 @@ import {
   useDoc,
   useDocAction,
   usePrefill,
+  useSetCreditNoteReview,
 } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
@@ -30,6 +32,7 @@ import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
 import { initialValues, type Values } from '../accounting/DocEditorPage';
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
+import { REVIEW, REVIEW_PILL, ReviseModal, checkIcon } from '../accounting/CreditNotesReview';
 import { CreditNote } from '../print/PrintDocPage';
 import ps from '../print/print.module.css';
 import { timeAgo } from './Inbox';
@@ -239,6 +242,36 @@ function CreditNotedEditor({
     await action.mutateAsync({ action: 'void', id: doc.id, body: { reason } });
     toast('Credit Noted discarded.');
   };
+  // Accounting's decision, from Accounting → Chea Payments (not the broker's own Credit Noted).
+  const setReview = useSetCreditNoteReview();
+  const [revising, setRevising] = useState(false);
+  const reviewStatus = doc?.header.reviewStatus as CreditNoteReviewStatus | undefined;
+  const canDecide =
+    base.startsWith('/accounting') && can('accounting:write') && doc?.status === 'ISSUED';
+  // Opening an Unchecked note marks it Reviewed, once.
+  const markedReviewed = useRef(false);
+  useEffect(() => {
+    if (!canDecide || reviewStatus !== 'UNCHECKED' || markedReviewed.current || !doc) return;
+    markedReviewed.current = true;
+    setReview.mutate({ id: doc.id, reviewStatus: 'REVIEWED' });
+  }, [canDecide, reviewStatus, doc, setReview]);
+  const approve = () => {
+    if (!doc) return;
+    setReview.mutate(
+      { id: doc.id, reviewStatus: 'CHECKED' },
+      {
+        // Approved: into the Monthly Ledger with its INV / DIS / DN numbers.
+        onSuccess: ({ numbered }) => {
+          const mine = numbered.find((x) => x.declareNo === doc.declareNo);
+          toast(
+            mine
+              ? `${doc.declareNo} approved: ${mine.numbers.map((x) => x.number).join(' · ')} in the Monthly Ledger.`
+              : `${doc.declareNo ?? `Credit Noted No. ${cnSeq(doc.number)}`} approved.`,
+          );
+        },
+      },
+    );
+  };
   const remove = async () => {
     if (!doc || !window.confirm('Delete this draft?')) return;
     await action.mutateAsync({ action: 'delete', id: doc.id });
@@ -312,6 +345,9 @@ function CreditNotedEditor({
               {doc?.number && <span className={s.number}>No. {cnSeq(doc.number)}</span>}{' '}
               {doc && (
                 <Pill tone={DOC_STATUS_PILL[doc.status].tone}>{CN_STATUS_LABEL[doc.status]}</Pill>
+              )}{' '}
+              {canDecide && reviewStatus && (
+                <Pill tone={REVIEW_PILL[reviewStatus]}>{REVIEW[reviewStatus].label}</Pill>
               )}
             </h2>
             <p>Generate clean payment vouchers for operations &amp; finance</p>
@@ -349,6 +385,30 @@ function CreditNotedEditor({
                 {icons.send({ width: 15, height: 15 })} Submit to Monthly
               </button>
             )}
+            {canDecide && doc && (
+              <>
+                <button
+                  type="button"
+                  className={s.headIcon}
+                  disabled={setReview.isPending}
+                  onClick={() => setRevising(true)}
+                  aria-label="Revise: send back to the broker"
+                  title="Revise: send back to the broker"
+                >
+                  {icons.edit({})}
+                </button>
+                {reviewStatus !== 'CHECKED' && (
+                  <button
+                    type="button"
+                    className={s.submit}
+                    disabled={setReview.isPending}
+                    onClick={approve}
+                  >
+                    {checkIcon} Approve
+                  </button>
+                )}
+              </>
+            )}
             {can('accounting:write') && doc?.status === 'ISSUED' && (
               <button type="button" className="btn-delete-shipment" onClick={() => void discard()}>
                 Discard
@@ -357,7 +417,18 @@ function CreditNotedEditor({
           </div>
         </header>
         <ReviewBanner doc={doc} />
-        <ErrorBanner error={action.error} />
+        <ErrorBanner error={action.error ?? setReview.error} />
+        {revising && doc && (
+          <ReviseModal
+            row={{
+              id: doc.id,
+              declareNo: doc.declareNo,
+              clientName: doc.clientName,
+              total: doc.totals.total,
+            }}
+            onClose={() => setRevising(false)}
+          />
+        )}
 
         <form
           className={s.body}
@@ -644,7 +715,7 @@ function ReviewBanner({ doc }: { doc?: BillingDoc | undefined }) {
   return (
     <div className={`${s.banner} ${returned ? s.bannerRevise : s.bannerCheck}`} role="status">
       <div className={s.bannerHead}>
-        <b>{returned ? 'Returned by accounting for revision' : 'Checked by accounting'}</b>
+        <b>{returned ? 'Returned by accounting for revision' : 'Approved by accounting'}</b>
         <span>
           {m.senderName ?? 'Accounting'} · {timeAgo(m.createdAt)}
         </span>

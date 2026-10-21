@@ -294,7 +294,7 @@ describe('numbers on approval', () => {
 });
 
 describe('deleting an issued invoice', () => {
-  it('releases its numbers to the next approved shipment, with an audit trail', async () => {
+  it('releases its DN to the next approved shipment; INV and DIS leave a gap', async () => {
     const a = await shipment(b.jr.id, 'E 70', '2026-10-05');
     const c = await shipment(b.jr.id, 'E 71', '2026-10-06');
     const inv = await draft('tax-invoices', a.recordId);
@@ -312,8 +312,8 @@ describe('deleting an issued invoice', () => {
     const del = await deleteInvoice(a.recordId);
     expect(del.status).toBe(200);
     expect(del.body.released).toEqual([
-      { kind: 'INV', number: 'GS26-001', kept: true },
-      { kind: 'DIS', number: 'DIS001', kept: true },
+      { kind: 'INV', number: 'GS26-001', kept: false },
+      { kind: 'DIS', number: 'DIS001', kept: false },
       { kind: 'DN', number: 'JR2610001', kept: true },
     ]);
     // Not invoiced again: no numbers, no documents, Chea payment back to Unchecked.
@@ -328,13 +328,17 @@ describe('deleting an issued invoice', () => {
       .body.data;
     expect(review.map((r: { declareNo: string }) => r.declareNo)).toEqual(['E 70']);
 
-    // The next approved shipment takes the released numbers (its date by the usual rule).
+    // The next approved shipment takes the released DN, then the run is put back in date
+    // order: E 71 (8 Oct… 7 Oct) comes first. INV and DIS continue the run.
     const d = await shipment(b.jr.id, 'E 72', '2026-10-07');
-    expect(await numbersOf(d)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+    expect(await numbersOf(d)).toEqual(['GS26-003', 'DIS003', 'JR2610002']);
+    expect(await numbersOf(c)).toEqual(['GS26-002', 'DIS002', 'JR2610001']);
     expect((await d.row()).invDate).toBe('2026-10-08');
-    // Re-approving the first one continues the run.
+    // Re-approved, the first one takes the first slot again and the others move down.
     await a.check();
-    expect(await numbersOf(a)).toEqual(['GS26-003', 'DIS003', 'JR2610003']);
+    expect(await numbersOf(a)).toEqual(['GS26-002', 'DIS002', 'JR2610001']);
+    expect(await numbersOf(c)).toEqual(['GS26-003', 'DIS003', 'JR2610002']);
+    expect(await numbersOf(d)).toEqual(['GS26-004', 'DIS004', 'JR2610003']);
 
     const [log] = await queryRows<{ reason: string; after: { released: unknown[] } }>(
       db,
@@ -347,11 +351,7 @@ describe('deleting an issued invoice', () => {
       db,
       sql`SELECT number, reassigned_to_declare_no AS "to" FROM released_numbers ORDER BY number`,
     );
-    expect(reused).toEqual([
-      { number: 'DIS001', to: 'E 72' },
-      { number: 'GS26-001', to: 'E 72' },
-      { number: 'JR2610001', to: 'E 72' },
-    ]);
+    expect(reused).toEqual([{ number: 'JR2610001', to: 'E 72' }]);
   });
 
   it('the latest numbers are not held: the run simply continues from them', async () => {
@@ -361,6 +361,60 @@ describe('deleting an issued invoice', () => {
     expect(del.body.released.map((r: { kept: boolean }) => r.kept)).toEqual([false, false, false]);
     await c.check();
     expect(await numbersOf(c)).toEqual(['GS26-002', 'DIS002', 'JR2610002']);
+  });
+});
+
+describe('a shipment approved late with an earlier INV date', () => {
+  it('takes its slot; the later ones move down, issued documents included', async () => {
+    const e1 = await shipment(b.jr.id, 'E 90', '2026-10-01'); // → Fri 2 Oct
+    const e2 = await shipment(b.jr.id, 'E 91', '2026-10-02'); // → Mon 5 Oct
+    const e3 = await shipment(b.jr.id, 'E 92', '2026-10-09'); // → Tue 13 Oct (Pchum Ben)
+    expect(await numbersOf(e3)).toEqual(['GS26-003', 'DIS003', 'JR2610003']);
+    const inv = await draft('tax-invoices', e3.recordId);
+    expect((await acc('post', `/docs/tax-invoices/${inv.id}/issue`)).status).toBe(200);
+    const dis = await draft('disbursements', e3.recordId);
+
+    // Another client, declared 7 Oct (→ 8 Oct): before E 92. INV and DIS move; DN runs per
+    // client, so E 92 keeps JR2610003.
+    const late = await shipment(b.jyx.id, 'E 93', '2026-10-07', { approve: false });
+    expect(await late.check()).toMatchObject([
+      {
+        declareNo: 'E 93',
+        numbers: [{ number: 'GS26-003' }, { number: 'DIS003' }, { number: 'JYX2610001' }],
+      },
+    ]);
+    expect(await numbersOf(e3)).toEqual(['GS26-004', 'DIS004', 'JR2610003']);
+    expect(await doc('tax-invoices', inv.id)).toMatchObject({
+      number: 'GS26-004',
+      status: 'ISSUED',
+    });
+    expect((await doc('disbursements', dis.id)).number).toBe('DIS004');
+    expect(await numbersOf(e1)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+    expect(await numbersOf(e2)).toEqual(['GS26-002', 'DIS002', 'JR2610002']);
+
+    // The same client, declared 6 Oct: its DN moves E 92 down too.
+    const jr = await shipment(b.jr.id, 'E 94', '2026-10-06');
+    expect(await numbersOf(jr)).toEqual(['GS26-003', 'DIS003', 'JR2610003']);
+    expect(await numbersOf(late)).toEqual(['GS26-004', 'DIS004', 'JYX2610001']);
+    expect(await numbersOf(e3)).toEqual(['GS26-005', 'DIS005', 'JR2610004']);
+
+    const [log] = await queryRows<{ reason: string; before: unknown; after: unknown }>(
+      db,
+      sql`SELECT reason, before, after FROM audit_log WHERE entity = 'accounting_record'
+          AND entity_id = ${e3.recordId} AND reason LIKE 'Renumbered%' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(log).toEqual({
+      reason: 'Renumbered E 92 to keep INV-date order',
+      before: { invNo: 'GS26-004', disNo: 'DIS004', dnNo: 'JR2610003' },
+      after: { invNo: 'GS26-005', disNo: 'DIS005', dnNo: 'JR2610004' },
+    });
+  });
+
+  it('a late September shipment moves October’s INV and DIS numbers', async () => {
+    const oct = await shipment(b.jr.id, 'E 95', '2026-10-07');
+    const sep = await shipment(b.jr.id, 'E 96', '2026-09-28');
+    expect(await numbersOf(sep)).toEqual(['GS26-001', 'DIS001', 'JR2609001']);
+    expect(await numbersOf(oct)).toEqual(['GS26-002', 'DIS002', 'JR2610001']);
   });
 });
 

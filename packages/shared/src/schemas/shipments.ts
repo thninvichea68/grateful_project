@@ -256,6 +256,11 @@ export const shipmentListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  /** Declaration month (YYYY-MM): the shipment's first declare date falls in it. */
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM')
+    .optional(),
 });
 export type ShipmentListQuery = z.input<typeof shipmentListQuerySchema>;
 

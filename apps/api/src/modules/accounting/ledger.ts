@@ -32,6 +32,7 @@ import {
   whereAll,
 } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
+import { resequence } from './numbers';
 
 type LedgerInput = z.output<typeof ledgerInputSchema>;
 
@@ -314,6 +315,8 @@ export async function updateLedger(
       .set({ ...values, updatedById: req.auth!.userId })
       .where(eq(accountingRecords.id, id));
     await recompute(tx, id);
+    if (values.invDate !== undefined && values.invDate !== before.invDate)
+      await resequence(tx, req);
     const [after] = await tx.select().from(accountingRecords).where(eq(accountingRecords.id, id));
     await audit(
       tx,

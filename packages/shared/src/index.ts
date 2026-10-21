@@ -13,6 +13,7 @@ export * from './schemas/cutstock';
 export * from './schemas/analytics';
 export * from './schemas/accounting';
 export * from './schemas/billing';
+export * from './schemas/search';
 export * from './words';
 export * from './schemas/admin';
 export * from './assistant';

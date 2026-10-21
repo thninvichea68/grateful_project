@@ -458,6 +458,14 @@ describe('shipments', () => {
     expect(byDir.body.meta.total).toBe(1);
     const byContainer = await request(app).get('/api/v1/shipments').query({ q: '8974303' }).set(h);
     expect(byContainer.body.meta.total).toBe(1);
+    // By declaration month: the undeclared import drops out.
+    const byMonth = await request(app).get('/api/v1/shipments').query({ month: '2026-07' }).set(h);
+    expect(byMonth.body.data.map((r: { clientCode: string }) => r.clientCode)).toEqual(['JR']);
+    const otherMonth = await request(app)
+      .get('/api/v1/shipments')
+      .query({ month: '2026-08' })
+      .set(h);
+    expect(otherMonth.body.meta.total).toBe(0);
     const noMatch = await request(app).get('/api/v1/shipments').query({ q: '%' }).set(h);
     expect(noMatch.body.meta.total).toBe(0);
   });

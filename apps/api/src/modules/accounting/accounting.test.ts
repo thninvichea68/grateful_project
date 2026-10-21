@@ -633,7 +633,14 @@ describe('billing documents', () => {
           .send({ reviewStatus: 'CHECKED' })
       ).status,
     ).toBe(403);
+    // Opened by accounting: Reviewed, still out of the ledger.
+    await review('REVIEWED').expect(200);
+    expect((await queue()).counts).toMatchObject({ unchecked: 0, reviewed: 1 });
+    expect((await led()).dnTotal).toBe(before.dnTotal);
     await review('CHECKED').expect(200);
+    expect((await queue()).counts).toMatchObject({ checked: 1, reviewed: 0 });
+    // Opening it again keeps it Approved.
+    await review('REVIEWED').expect(200);
     expect((await queue()).counts).toMatchObject({ checked: 1 });
     const after = await led();
     // INV = processing fee; DIS = the receipt lines; DN = the rest; THC = the HBL fee.
@@ -927,7 +934,7 @@ describe('customs broker: Credit Noted only', () => {
     const review = () =>
       request(app).get('/api/v1/accounting/credit-notes/review').query({ year: 2026 }).set(acc);
     let list = (await review()).body;
-    expect(list.counts).toEqual({ total: 1, checked: 0, unchecked: 1, revised: 0 });
+    expect(list.counts).toEqual({ total: 1, checked: 0, unchecked: 1, reviewed: 0, revised: 0 });
     expect(list.data[0]).toMatchObject({
       declareNo: 'I 122050',
       clientCode: 'JR',
@@ -935,11 +942,18 @@ describe('customs broker: Credit Noted only', () => {
       total: '115.00',
       reviewStatus: 'UNCHECKED',
     });
-    const mark = (who: Record<string, string>) =>
+    const mark = (who: Record<string, string>, reviewStatus = 'CHECKED') =>
       request(app)
         .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
         .set(who)
-        .send({ reviewStatus: 'CHECKED' });
+        .send({ reviewStatus });
+    // Opened by accounting: Reviewed, nothing else changes and the broker isn't told.
+    expect((await mark(acc, 'REVIEWED')).body.numbered).toEqual([]);
+    list = (await review()).body;
+    expect(list.counts).toMatchObject({ unchecked: 0, reviewed: 1 });
+    expect(list.data[0].reviewStatus).toBe('REVIEWED');
+    expect((await ledger()).body.data).toHaveLength(0);
+    expect((await api('get', '/credit-notes/inbox')).body.unread).toBe(0);
     expect((await mark(h)).status).toBe(403);
     expect((await ledger()).body.data).toHaveLength(0);
     expect((await mark(acc)).status).toBe(200);
@@ -952,7 +966,10 @@ describe('customs broker: Credit Noted only', () => {
       dnNo: 'JR2608001',
     });
     list = (await review()).body;
-    expect(list.counts).toMatchObject({ checked: 1, unchecked: 0 });
+    expect(list.counts).toMatchObject({ checked: 1, unchecked: 0, reviewed: 0 });
+    // Opening it again doesn't take it back to Reviewed.
+    await mark(acc, 'REVIEWED');
+    expect((await review()).body.data[0].reviewStatus).toBe('CHECKED');
     expect((await review().query({ review: 'UNCHECKED' })).body.data).toHaveLength(0);
     expect((await review().query({ q: 'I122050', direction: 'IMPORT' })).body.data).toHaveLength(1);
 

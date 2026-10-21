@@ -11,14 +11,18 @@ import { formatNumber, highestNumber, regexLiteral } from '../../lib/numbering';
  * - INV  GS26-NNN: one run for every client, per year (GS27-001 in January).
  * - DIS  DISNNN:   one run for every client, restarting at DIS001 each January.
  * - DN   <client><YYMM>NNN: per client, restarting each month.
- * The next number is the highest one in use (ledger + documents) + 1, except that a number
- * released by deleting an issued invoice set is handed out first, lowest first, so the run
- * has no gaps. Everything here runs under one transaction-scoped lock, so two people
- * approving at the same moment can't take the same number.
+ * The next number is the highest one in use (ledger + documents) + 1. A debit note number
+ * released by deleting an issued invoice set is handed out first, lowest first, so a client's
+ * month has no gaps. INV and DIS never reuse one: a freed number stays a gap so the year's run
+ * keeps date order (GS26-017 must not turn up in October between January's invoices).
+ * Everything here runs under one transaction-scoped lock, so two people approving at the same
+ * moment can't take the same number.
  */
 
 export type NumberKind = InvoiceNumberKind;
 export const NUMBER_KINDS: NumberKind[] = ['INV', 'DIS', 'DN'];
+/** Kinds whose released numbers are handed out again. */
+const REUSED_KINDS: NumberKind[] = ['DN'];
 /** The ledger column holding each kind. */
 export const LEDGER_NUMBER_COL = { INV: 'inv_no', DIS: 'dis_no', DN: 'dn_no' } as const;
 
@@ -85,8 +89,8 @@ async function dropStale(tx: Tx, p: Period, highest: number) {
 }
 
 /**
- * The next number of a kind for a document dated `date`: the lowest released one, else the
- * highest in use + 1. `forDeclareNo` is recorded when a released number is reused.
+ * The next number of a kind for a document dated `date`: the lowest released one (debit notes
+ * only), else the highest in use + 1. `forDeclareNo` is recorded when a released number is reused.
  */
 export async function takeNumber(
   tx: Tx,
@@ -98,6 +102,7 @@ export async function takeNumber(
   await lockNumbering(tx);
   const p = periodOf(kind, date, clientCode);
   const highest = await highestNumber(tx, p.used, p.pattern);
+  if (!REUSED_KINDS.includes(kind)) return { number: p.format(highest + 1), reused: false };
   await dropStale(tx, p, highest);
   const [free] = await queryRows<{ id: string; number: string }>(
     tx,
@@ -115,9 +120,9 @@ export async function takeNumber(
 }
 
 /**
- * Gives a number back after it was taken off its shipment and documents. It is kept for the
- * next shipment unless it was the highest of its run (then the run just continues from it).
- * Returns whether it was kept.
+ * Gives a number back after it was taken off its shipment and documents. A debit note number
+ * is kept for the next shipment unless it was the highest of its run (then the run just
+ * continues from it); INV and DIS numbers are never kept. Returns whether it was kept.
  */
 export async function releaseNumber(
   tx: Tx,
@@ -128,6 +133,7 @@ export async function releaseNumber(
   fromDeclareNo: string | null,
   userId: string | null,
 ): Promise<boolean> {
+  if (!REUSED_KINDS.includes(kind)) return false;
   await lockNumbering(tx);
   const p = periodOf(kind, date, clientCode);
   const seq = seqOf(p, number);
@@ -145,6 +151,7 @@ export async function releaseNumber(
 interface LedgerNumbers {
   id: string;
   declareNo: string;
+  declareDate: string;
   invDate: string;
   code: string;
   invNo: string | null;
@@ -152,7 +159,8 @@ interface LedgerNumbers {
   dnNo: string | null;
 }
 const LEDGER_NUMBERS = sql`
-  SELECT a.id, d.declare_no AS "declareNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
+  SELECT a.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+         to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
          a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
   FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
   JOIN clients c ON c.id = a.client_id`;
@@ -202,9 +210,112 @@ export async function assignNumbers(
   return { recordId, declareNo: r.declareNo, numbers };
 }
 
+/** The documents carrying each kind's number, renumbered with their ledger entry. */
+const DOC_NUMBER_COL = {
+  INV: { table: 'tax_invoices', col: 'invoice_no' },
+  DIS: { table: 'disbursements', col: 'dis_no' },
+  DN: { table: 'debit_notes', col: 'dn_no' },
+} as const;
+
+export interface Renumbered {
+  recordId: string;
+  declareNo: string;
+  kind: NumberKind;
+  from: string;
+  to: string;
+}
+
+/**
+ * Keeps every run in INV-date order. A shipment approved late with an earlier INV date takes
+ * its slot and the later ones move down: each run's numbers (INV per year, DIS per year, DN
+ * per client and month) are handed out again in order of INV date, then declare date, then
+ * the number held now. Only the numbers already in the run are reused, so gaps and the
+ * numbers of cancelled documents stay where they are. Draft and issued documents and record
+ * summaries take their entry's new number.
+ */
+export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
+  await lockNumbering(tx);
+  const rows = await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS);
+  const changes: Renumbered[] = [];
+  for (const kind of NUMBER_KINDS) {
+    const runs = new Map<string, { p: Period; entries: { r: LedgerNumbers; seq: number }[] }>();
+    for (const r of rows) {
+      const number = r[FIELD[kind]];
+      if (!number) continue;
+      const p = periodOf(kind, r.invDate, r.code);
+      const seq = seqOf(p, number);
+      if (seq === null) continue; // typed in another format, or not of its date's period
+      const run = runs.get(p.key) ?? { p, entries: [] };
+      run.entries.push({ r, seq });
+      runs.set(p.key, run);
+    }
+    for (const { p, entries } of runs.values()) {
+      const slots = entries.map((e) => e.seq).sort((a, b) => a - b);
+      entries.sort(
+        (a, b) =>
+          a.r.invDate.localeCompare(b.r.invDate) ||
+          a.r.declareDate.localeCompare(b.r.declareDate) ||
+          a.seq - b.seq ||
+          a.r.declareNo.localeCompare(b.r.declareNo),
+      );
+      entries.forEach(({ r, seq }, i) => {
+        if (slots[i] !== seq)
+          changes.push({
+            recordId: r.id,
+            declareNo: r.declareNo,
+            kind,
+            from: r[FIELD[kind]]!,
+            to: p.format(slots[i]!),
+          });
+      });
+    }
+  }
+  if (!changes.length) return changes;
+  // Two passes, so numbers trading places never meet a unique index.
+  for (const c of changes) {
+    const d = DOC_NUMBER_COL[c.kind];
+    await tx.execute(sql`
+      UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = NULL WHERE id = ${c.recordId}`);
+    await tx.execute(sql`
+      UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = '~' || id::text
+      WHERE accounting_record_id = ${c.recordId} AND ${sql.raw(d.col)} = ${c.from} AND status <> 'VOID'`);
+    await tx.execute(sql`
+      UPDATE record_summaries SET ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = ${c.to}
+      WHERE accounting_record_id = ${c.recordId} AND ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = ${c.from}
+        AND status <> 'VOID'`);
+  }
+  for (const c of changes) {
+    const d = DOC_NUMBER_COL[c.kind];
+    await tx.execute(sql`
+      UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = ${c.to},
+        updated_by_id = ${req.auth?.userId ?? null}
+      WHERE id = ${c.recordId}`);
+    await tx.execute(sql`
+      UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = ${c.to}
+      WHERE accounting_record_id = ${c.recordId} AND ${sql.raw(d.col)} = '~' || id::text`);
+  }
+  const byRecord = new Map<string, Renumbered[]>();
+  for (const c of changes) byRecord.set(c.recordId, [...(byRecord.get(c.recordId) ?? []), c]);
+  for (const [recordId, cs] of byRecord)
+    await audit(
+      tx,
+      {
+        action: 'UPDATE',
+        entity: 'accounting_record',
+        entityId: recordId,
+        before: Object.fromEntries(cs.map((c) => [FIELD[c.kind], c.from])),
+        after: Object.fromEntries(cs.map((c) => [FIELD[c.kind], c.to])),
+        reason: `Renumbered ${cs[0]!.declareNo} to keep INV-date order`,
+      },
+      req,
+    );
+  return changes;
+}
+
 /**
  * Numbers every shipment that is approved (its Chea payment is Checked) but not invoiced yet,
- * in clearance-date order, so released numbers go to the earliest one waiting.
+ * in clearance-date order, so released numbers go to the earliest one waiting. Then every run
+ * is put back in INV-date order.
  */
 export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumbers[]> {
   await lockNumbering(tx);
@@ -221,5 +332,10 @@ export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumb
     const a = await assignNumbers(tx, w.id, req);
     if (a.numbers.length) out.push(a);
   }
+  if (!out.length) return out;
+  // Report the numbers each shipment ends up with.
+  for (const c of await resequence(tx, req))
+    for (const n of out.find((a) => a.recordId === c.recordId)?.numbers ?? [])
+      if (n.kind === c.kind) n.number = c.to;
   return out;
 }

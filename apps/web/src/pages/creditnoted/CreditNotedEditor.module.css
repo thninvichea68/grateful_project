@@ -80,6 +80,35 @@
   opacity: 0.5;
   cursor: wait;
 }
+/* Revise (pencil): sends a submitted note back to the broker; tints violet on hover. */
+.headIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: #7c3aed;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.headIcon svg {
+  width: 16px;
+  height: 16px;
+}
+.headIcon:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.14);
+  border-color: #7c3aed;
+}
+.headIcon:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 .submit {
   display: inline-flex;
   align-items: center;

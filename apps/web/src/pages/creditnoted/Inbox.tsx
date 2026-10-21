@@ -82,7 +82,7 @@ export function InboxTable({ search }: { search?: string | undefined }) {
     markRead.mutate(m.id, {
       onSuccess: () => {
         if (m.kind === 'REVISED') open(m);
-        else toast(`Accepted: No. ${cnSeq(m.number)} was checked by accounting.`);
+        else toast(`Accepted: No. ${cnSeq(m.number)} was approved by accounting.`);
       },
     });
 
@@ -154,7 +154,7 @@ export function InboxTable({ search }: { search?: string | undefined }) {
               <td className={`${t.num} ${t.fee}`}>{fmtMoney(m.total)}</td>
               <td className={s.remarkCell}>
                 <span className={`${s.tag} ${revise ? t.revised : t.checked}`}>
-                  {revise ? 'Revise' : 'Checked'}
+                  {revise ? 'Revise' : 'Approved'}
                 </span>
                 <span className={s.remark} title={m.body || undefined}>
                   {m.body || (revise ? 'Please revise this credit note.' : 'All correct.')}

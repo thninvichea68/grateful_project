@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CreditNoteReviewRow, CreditNoteReviewStatus } from '@gs/shared';
-import { useAuth } from '../../auth/AuthProvider';
 import { useCreditNoteReview, useSetCreditNoteReview } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Modal, Pager, ui } from '../../components/ui';
@@ -11,11 +10,20 @@ import { fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import s from './CreditNotesReview.module.css';
 
+/** CHECKED is stored as before and shown as "Approved". */
 export const REVIEW: Record<CreditNoteReviewStatus, { label: string; cls: string }> = {
-  CHECKED: { label: 'Checked', cls: s.checked! },
+  CHECKED: { label: 'Approved', cls: s.checked! },
   UNCHECKED: { label: 'Unchecked', cls: s.unchecked! },
+  REVIEWED: { label: 'Reviewed', cls: s.reviewed! },
   REVISED: { label: 'Revised', cls: s.revised! },
 };
+/** The same statuses as header pills (inside a credit note or record summary). */
+export const REVIEW_PILL = {
+  UNCHECKED: 'pending',
+  REVIEWED: 'progress',
+  CHECKED: 'completed',
+  REVISED: 'exception',
+} as const;
 export const MONTHS = [
   'Jan',
   'Feb',
@@ -60,6 +68,12 @@ export const alertIcon = svg(
     <path d="M12 7.5v5.5M12 16.5h.01" />
   </>,
 );
+export const eyeIcon = svg(
+  <>
+    <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
+    <circle cx="12" cy="12" r="2.5" />
+  </>,
+);
 
 /**
  * Accounting → Chea Payments: the broker's submitted Credit Noted vouchers, for accounting
@@ -67,12 +81,8 @@ export const alertIcon = svg(
  * The four stat cards double as the status filter.
  */
 export function CreditNotesReview() {
-  const { can } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
   const lookups = useLookups();
-  const setReview = useSetCreditNoteReview();
-  const [revising, setRevising] = useState<CreditNoteReviewRow | null>(null);
   const [params, setParams] = useSearchParams();
   const get = (k: string) => params.get(k) || undefined;
   const q = {
@@ -96,7 +106,6 @@ export function CreditNotesReview() {
   const counts = list.data?.counts;
   const thisYear = new Date().getFullYear();
   const years = [thisYear, thisYear - 1, thisYear - 2];
-  const canCheck = can('accounting:write');
   const open = (id: string) => navigate(`/accounting/credit-notes/${id}`);
   const filtered = !!(q.clientId || q.direction || q.q || q.month || q.year || q.review);
 
@@ -122,8 +131,15 @@ export function CreditNotesReview() {
       cls: s.unchecked!,
     },
     {
+      review: 'REVIEWED',
+      label: 'Reviewed',
+      value: counts?.reviewed,
+      icon: eyeIcon,
+      cls: s.reviewed!,
+    },
+    {
       review: 'CHECKED',
-      label: 'Checked',
+      label: 'Approved',
       value: counts?.checked,
       icon: checkIcon,
       cls: s.checked!,
@@ -139,7 +155,7 @@ export function CreditNotesReview() {
 
   return (
     <section className={`view active ${s.page}`}>
-      <div className={s.stats} role="group" aria-label="Filter by status">
+      <div className={`${s.stats} ${s.five}`} role="group" aria-label="Filter by status">
         {stats.map((k) => {
           const on = (q.review ?? '') === k.review;
           return (
@@ -160,7 +176,7 @@ export function CreditNotesReview() {
         })}
       </div>
 
-      <ErrorBanner error={list.error ?? setReview.error} />
+      <ErrorBanner error={list.error} />
       <div className={s.card}>
         <div className={s.toolbar}>
           <SearchBox
@@ -294,7 +310,8 @@ export function CreditNotesReview() {
                   <td>{r.port ?? '-'}</td>
                   <td>{r.transportMode ? MODE[r.transportMode] : '-'}</td>
                   <td className={`${s.num} ${s.fee}`}>{fmtMoney(r.total)}</td>
-                  <td onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  <td>
+                    {/* Approve and Revise are inside the credit note, next to Discard. */}
                     {r.status === 'DRAFT' ? (
                       // Sent back; it returns as Unchecked when the broker submits it again.
                       <span
@@ -303,40 +320,6 @@ export function CreditNotesReview() {
                       >
                         Revised · with broker
                       </span>
-                    ) : canCheck ? (
-                      <select
-                        className={`${s.status} ${REVIEW[r.reviewStatus].cls}`}
-                        value={r.reviewStatus}
-                        aria-label={`Status of ${r.declareNo ?? r.number}`}
-                        disabled={setReview.isPending}
-                        onChange={(e) => {
-                          const v = e.target.value as CreditNoteReviewStatus;
-                          if (v === 'REVISED') {
-                            setRevising(r);
-                            return;
-                          }
-                          setReview.mutate(
-                            { id: r.id, reviewStatus: v },
-                            {
-                              // Checked: into the Monthly Ledger with its INV / DIS / DN numbers.
-                              onSuccess: ({ numbered }) => {
-                                const mine = numbered.find((x) => x.declareNo === r.declareNo);
-                                toast(
-                                  mine
-                                    ? `${r.declareNo} checked: ${mine.numbers.map((x) => x.number).join(' · ')} in the Monthly Ledger.`
-                                    : `${r.declareNo ?? r.number} marked ${REVIEW[v].label.toLowerCase()}.`,
-                                );
-                              },
-                            },
-                          );
-                        }}
-                      >
-                        {(['UNCHECKED', 'CHECKED', 'REVISED'] as const).map((v) => (
-                          <option key={v} value={v}>
-                            {REVIEW[v].label}
-                          </option>
-                        ))}
-                      </select>
                     ) : (
                       <span className={`${s.statusPill} ${REVIEW[r.reviewStatus].cls}`}>
                         {REVIEW[r.reviewStatus].label}
@@ -369,13 +352,18 @@ export function CreditNotesReview() {
           </div>
         )}
       </div>
-      {revising && <ReviseModal row={revising} onClose={() => setRevising(null)} />}
     </section>
   );
 }
 
 /** "Revised": send the note back to the broker with what to change. */
-function ReviseModal({ row, onClose }: { row: CreditNoteReviewRow; onClose: () => void }) {
+export function ReviseModal({
+  row,
+  onClose,
+}: {
+  row: Pick<CreditNoteReviewRow, 'id' | 'declareNo' | 'clientName' | 'total'>;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const setReview = useSetCreditNoteReview();
   const [message, setMessage] = useState('');

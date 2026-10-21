@@ -1,40 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LookupsResponse, ShipmentStatus } from '@gs/shared';
+import type { ShipmentStatus } from '@gs/shared';
 import type { PlanColumn } from './columns';
 
 export interface PlansFilterValue {
-  clientIds: string[]; // empty = all
-  /** Always one of the two; Import is the default. */
-  direction: 'IMPORT' | 'EXPORT';
   status: '' | ShipmentStatus;
   expandAll: boolean;
   frozen: string[];
 }
 
-const check = (
-  <svg
-    viewBox="0 0 24 24"
-    width="10"
-    height="10"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3.5"
-    aria-hidden="true"
-  >
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
-
-/** The prototype's "Filter Shipments" dropdown, wired to real lookups. */
+/** The prototype's "Filter Shipments" dropdown (client, month and Import/Export sit in the toolbar). */
 export function PlansFilter({
   value,
   onApply,
-  clients,
   columnsFor,
 }: {
   value: PlansFilterValue;
   onApply: (v: PlansFilterValue) => void;
-  clients: LookupsResponse['clients'];
   columnsFor: (expandAll: boolean) => PlanColumn[];
 }) {
   const [open, setOpen] = useState(false);
@@ -54,27 +35,8 @@ export function PlansFilter({
     };
   }, [open]);
 
-  const allClientIds = clients.map((c) => c.id);
-  const selected = draft.clientIds.length ? draft.clientIds : allClientIds;
-  const toggleClient = (id: string) => {
-    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
-    setDraft({ ...draft, clientIds: next.length === allClientIds.length ? [] : next });
-  };
-  const count =
-    (value.clientIds.length ? 1 : 0) +
-    (value.direction === 'EXPORT' ? 1 : 0) +
-    (value.status ? 1 : 0) +
-    (value.expandAll ? 1 : 0) +
-    (value.frozen.length ? 1 : 0);
-  const hint = [
-    value.clientIds.length
-      ? `${value.clientIds.length} client${value.clientIds.length > 1 ? 's' : ''}`
-      : 'All clients',
-    value.direction || null,
-    value.status ? value.status.replace('_', ' ').toLowerCase() : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const count = (value.status ? 1 : 0) + (value.expandAll ? 1 : 0) + (value.frozen.length ? 1 : 0);
+  const hint = value.status ? value.status.replace('_', ' ').toLowerCase() : 'All shipments';
 
   return (
     <div className={`card-dropdown filter-dropdown${open ? ' open' : ''}`} ref={ref}>
@@ -112,63 +74,6 @@ export function PlansFilter({
           </button>
         </div>
         <div className="filter-menu-body">
-          <div className="filter-section">
-            <div className="filter-col">
-              <div className="filter-col-title">
-                <span>Client</span>
-                <button
-                  type="button"
-                  className="filter-mini-link"
-                  onClick={() => setDraft({ ...draft, clientIds: [] })}
-                >
-                  Select all
-                </button>
-              </div>
-              <div className="filter-chip-group">
-                {clients.map((c) => (
-                  <label className="filter-chip" key={c.id} title={c.name}>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(c.id)}
-                      onChange={() => toggleClient(c.id)}
-                    />
-                    <span className="filter-chip-check">{check}</span>
-                    <span>{c.code}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="filter-section">
-            <div className="filter-col">
-              <div className="filter-col-title">
-                <span>Transport</span>
-              </div>
-              {/* Exactly one of the two is always chosen (Import by default). */}
-              <div className="filter-seg-group">
-                {(
-                  [
-                    ['IMPORT', 'Import'],
-                    ['EXPORT', 'Export'],
-                  ] as const
-                ).map(([v, l]) => {
-                  const on = draft.direction === v;
-                  return (
-                    <label className="filter-seg-item" key={v}>
-                      <input
-                        type="radio"
-                        name="plansTransport"
-                        checked={on}
-                        onChange={() => setDraft({ ...draft, direction: v })}
-                      />
-                      <span className="seg-dot" />
-                      <span>{l}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
           <div className="filter-section">
             <div className="filter-col">
               <div className="filter-col-title">
@@ -253,8 +158,6 @@ export function PlansFilter({
               className="filter-reset-btn"
               onClick={() =>
                 setDraft({
-                  clientIds: [],
-                  direction: 'IMPORT',
                   status: '',
                   expandAll: false,
                   frozen: [],

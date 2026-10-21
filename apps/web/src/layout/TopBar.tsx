@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { icons } from './icons';
 import { AskAi } from './AskAi';
+import { GlobalSearch } from './GlobalSearch';
 import { LiveClock } from './LiveClock';
 import { LiveMonthPill } from './LiveMonthPill';
 import { useNavCounts } from './useNavCounts';
@@ -19,14 +19,7 @@ export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
   const { pathname } = useLocation();
   const { can } = useAuth();
   const counts = useNavCounts();
-  const [q, setQ] = useState('');
   const overdue = counts.data?.overdueFollowUps ?? 0;
-
-  function onSearch(e: FormEvent) {
-    e.preventDefault();
-    const term = q.trim();
-    if (term) navigate(`/plans?q=${encodeURIComponent(term)}`);
-  }
 
   return (
     <header className="topbar">
@@ -47,18 +40,7 @@ export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
       </div>
 
       <div className="topbar-right">
-        {can('shipments:read') && (
-          <form className="search-box" role="search" onSubmit={onSearch}>
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search shipments, containers…"
-              aria-label="Search shipments and containers"
-            />
-            {icons.search({})}
-          </form>
-        )}
+        <GlobalSearch />
 
         <AskAi />
 

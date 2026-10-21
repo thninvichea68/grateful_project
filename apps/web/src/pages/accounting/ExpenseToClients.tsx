@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CreditNoteReviewStatus, RecordSummaryReviewRow } from '@gs/shared';
-import { useAuth } from '../../auth/AuthProvider';
 import { useRecordSummaryReview, useSetRecordSummaryReview } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Modal, Pager, ui } from '../../components/ui';
@@ -9,22 +8,27 @@ import { SearchBox } from '../../components/SearchBox';
 import { useToast } from '../../components/Toast';
 import { fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
-import { MODE, MONTHS, PAGE_SIZES, REVIEW, alertIcon, checkIcon } from './CreditNotesReview';
+import {
+  MODE,
+  MONTHS,
+  PAGE_SIZES,
+  REVIEW,
+  alertIcon,
+  checkIcon,
+  eyeIcon,
+} from './CreditNotesReview';
 import s from './CreditNotesReview.module.css';
 
 /**
  * Accounting → Expense to Clients: Operations' submitted Record Summaries, for accounting to
  * check, as Chea Payments does for the broker's credit notes. Checking one fills the
  * shipment's Monthly Ledger row (INV, THC, REIM, DN); summaries are made in the sidebar's
- * Record Summary, not here. The four stat cards double as the status filter.
+ * Record Summary, not here. The five stat cards double as the status filter. Opening an
+ * Unchecked summary marks it Reviewed; Approve and Revise are inside the summary.
  */
 export function ExpenseToClients() {
-  const { can } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
   const lookups = useLookups();
-  const setReview = useSetRecordSummaryReview();
-  const [revising, setRevising] = useState<RecordSummaryReviewRow | null>(null);
   const [params, setParams] = useSearchParams();
   const get = (k: string) => params.get(k) || undefined;
   const q = {
@@ -48,7 +52,6 @@ export function ExpenseToClients() {
   const counts = list.data?.counts;
   const thisYear = new Date().getFullYear();
   const years = [thisYear, thisYear - 1, thisYear - 2];
-  const canCheck = can('accounting:write');
   const open = (id: string) => navigate(`/accounting/record-summaries/${id}`);
   const filtered = !!(q.clientId || q.direction || q.q || q.month || q.year || q.review);
 
@@ -74,8 +77,15 @@ export function ExpenseToClients() {
       cls: s.unchecked!,
     },
     {
+      review: 'REVIEWED',
+      label: 'Reviewed',
+      value: counts?.reviewed,
+      icon: eyeIcon,
+      cls: s.reviewed!,
+    },
+    {
       review: 'CHECKED',
-      label: 'Checked',
+      label: 'Approved',
       value: counts?.checked,
       icon: checkIcon,
       cls: s.checked!,
@@ -91,7 +101,7 @@ export function ExpenseToClients() {
 
   return (
     <section className={`view active ${s.page}`}>
-      <div className={s.stats} role="group" aria-label="Filter by status">
+      <div className={`${s.stats} ${s.five}`} role="group" aria-label="Filter by status">
         {stats.map((k) => {
           const on = (q.review ?? '') === k.review;
           return (
@@ -112,7 +122,7 @@ export function ExpenseToClients() {
         })}
       </div>
 
-      <ErrorBanner error={list.error ?? setReview.error} />
+      <ErrorBanner error={list.error} />
       <div className={s.card}>
         <div className={s.toolbar}>
           <SearchBox
@@ -248,7 +258,8 @@ export function ExpenseToClients() {
                   <td>{r.port ?? '-'}</td>
                   <td>{MODE[r.transportMode] ?? '-'}</td>
                   <td className={`${s.num} ${s.fee}`}>{fmtMoney(r.total)}</td>
-                  <td onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  <td>
+                    {/* Approve and Revise are inside the record summary, as in Chea Payments. */}
                     {r.status === 'DRAFT' ? (
                       // Sent back; it returns as Unchecked when Operations submit it again.
                       <span
@@ -257,37 +268,6 @@ export function ExpenseToClients() {
                       >
                         Revised · with Operations
                       </span>
-                    ) : canCheck ? (
-                      <select
-                        className={`${s.status} ${REVIEW[r.reviewStatus].cls}`}
-                        value={r.reviewStatus}
-                        aria-label={`Status of ${r.declareNo ?? 'record summary'}`}
-                        disabled={setReview.isPending}
-                        onChange={(e) => {
-                          const v = e.target.value as CreditNoteReviewStatus;
-                          if (v === 'REVISED') {
-                            setRevising(r);
-                            return;
-                          }
-                          setReview.mutate(
-                            { id: r.id, reviewStatus: v },
-                            {
-                              onSuccess: ({ drafts }) =>
-                                toast(
-                                  v === 'CHECKED'
-                                    ? `${r.declareNo ?? 'Record summary'} checked: INV, DIS and DN are in the Monthly Ledger${drafts ? `; ${drafts} draft${drafts === 1 ? '' : 's'} made in Client Billing` : ''}.`
-                                    : `${r.declareNo ?? 'Record summary'} marked unchecked; its amounts left the Monthly Ledger.`,
-                                ),
-                            },
-                          );
-                        }}
-                      >
-                        {(['UNCHECKED', 'CHECKED', 'REVISED'] as const).map((v) => (
-                          <option key={v} value={v}>
-                            {REVIEW[v].label}
-                          </option>
-                        ))}
-                      </select>
                     ) : (
                       <span className={`${s.statusPill} ${REVIEW[r.reviewStatus].cls}`}>
                         {REVIEW[r.reviewStatus].label}
@@ -320,13 +300,18 @@ export function ExpenseToClients() {
           </div>
         )}
       </div>
-      {revising && <ReviseModal row={revising} onClose={() => setRevising(null)} />}
     </section>
   );
 }
 
 /** "Revised": send the summary back to Operations with what to change. */
-function ReviseModal({ row, onClose }: { row: RecordSummaryReviewRow; onClose: () => void }) {
+export function SummaryReviseModal({
+  row,
+  onClose,
+}: {
+  row: Pick<RecordSummaryReviewRow, 'id' | 'declareNo' | 'clientName' | 'total'>;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const setReview = useSetRecordSummaryReview();
   const [message, setMessage] = useState('');
@@ -361,7 +346,7 @@ function ReviseModal({ row, onClose }: { row: RecordSummaryReviewRow; onClose: (
       </label>
       <p className={s.reviseNote}>
         The record summary goes back to Operations as a draft with this note, and its amounts leave
-        the Monthly Ledger until they submit it again and you check it.
+        the Monthly Ledger until they submit it again and you approve it.
       </p>
       <div className={ui.actions}>
         <button type="button" className="btn-cancel-shipment" onClick={onClose}>

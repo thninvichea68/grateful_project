@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import {
   chargeLineAmount,
   computeChargeLinesTotal,
   type BillingDoc,
+  type CreditNoteReviewStatus,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import {
@@ -19,6 +20,7 @@ import {
   useDocAction,
   useEligible,
   usePrefill,
+  useSetRecordSummaryReview,
 } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
@@ -36,6 +38,8 @@ import { printCreditNote } from '../creditnoted/creditNoteExport';
 import { exportRecordSummaryExcel, recordSummaryFileName } from './recordSummaryExport';
 import { initialValues, type Values } from './DocEditorPage';
 import { DOC_STATUS_PILL } from './DocsListPage';
+import { REVIEW, REVIEW_PILL, checkIcon } from './CreditNotesReview';
+import { SummaryReviseModal } from './ExpenseToClients';
 import s from '../creditnoted/CreditNotedEditor.module.css';
 import r from './RecordSummaryEditor.module.css';
 
@@ -270,6 +274,31 @@ function RecordSummaryEditor({
     await action.mutateAsync({ action: 'void', id: doc.id, body: { reason } });
     toast('Record summary cancelled.');
   };
+  // Accounting's decision, from Accounting → Expense to Clients (not Operations' own list).
+  const setReview = useSetRecordSummaryReview();
+  const [revising, setRevising] = useState(false);
+  const reviewStatus = doc?.header.reviewStatus as CreditNoteReviewStatus | undefined;
+  const canDecide =
+    base.startsWith('/accounting') && can('accounting:write') && doc?.status === 'ISSUED';
+  // Opening an Unchecked summary marks it Reviewed, once.
+  const markedReviewed = useRef(false);
+  useEffect(() => {
+    if (!canDecide || reviewStatus !== 'UNCHECKED' || markedReviewed.current || !doc) return;
+    markedReviewed.current = true;
+    setReview.mutate({ id: doc.id, reviewStatus: 'REVIEWED' });
+  }, [canDecide, reviewStatus, doc, setReview]);
+  const approve = () => {
+    if (!doc) return;
+    setReview.mutate(
+      { id: doc.id, reviewStatus: 'CHECKED' },
+      {
+        onSuccess: ({ drafts }) =>
+          toast(
+            `${doc.declareNo ?? 'Record summary'} approved: INV, DIS and DN are in the Monthly Ledger${drafts ? `; ${drafts} draft${drafts === 1 ? '' : 's'} made in Client Billing` : ''}.`,
+          ),
+      },
+    );
+  };
   const remove = async () => {
     if (!doc || !window.confirm('Delete this draft?')) return;
     await action.mutateAsync({ action: 'delete', id: doc.id });
@@ -365,10 +394,14 @@ function RecordSummaryEditor({
                   {DOC_STATUS_PILL[doc.status].label}
                 </Pill>
               )}{' '}
-              {doc?.status === 'ISSUED' && (
-                <Pill tone={doc.header.reviewStatus === 'CHECKED' ? 'completed' : 'pending'}>
-                  {doc.header.reviewStatus === 'CHECKED' ? 'Checked' : 'Awaiting check'}
-                </Pill>
+              {canDecide && reviewStatus ? (
+                <Pill tone={REVIEW_PILL[reviewStatus]}>{REVIEW[reviewStatus].label}</Pill>
+              ) : (
+                doc?.status === 'ISSUED' && (
+                  <Pill tone={reviewStatus === 'CHECKED' ? 'completed' : 'pending'}>
+                    {reviewStatus === 'CHECKED' ? 'Checked' : 'Awaiting check'}
+                  </Pill>
+                )
               )}
             </h2>
             <p>Live invoice numbers populate automatically from Monthly updates</p>
@@ -406,6 +439,30 @@ function RecordSummaryEditor({
                 {icons.send({ width: 15, height: 15 })} Submit to Monthly
               </button>
             )}
+            {canDecide && doc && (
+              <>
+                <button
+                  type="button"
+                  className={s.headIcon}
+                  disabled={setReview.isPending}
+                  onClick={() => setRevising(true)}
+                  aria-label="Revise: send back to Operations"
+                  title="Revise: send back to Operations"
+                >
+                  {icons.edit({})}
+                </button>
+                {reviewStatus !== 'CHECKED' && (
+                  <button
+                    type="button"
+                    className={s.submit}
+                    disabled={setReview.isPending}
+                    onClick={approve}
+                  >
+                    {checkIcon} Approve
+                  </button>
+                )}
+              </>
+            )}
             {can('recordsummaries:write') && doc?.status === 'ISSUED' && (
               <button type="button" className="btn-delete-shipment" onClick={() => void voidDoc()}>
                 Cancel document
@@ -422,7 +479,18 @@ function RecordSummaryEditor({
             <p className={s.bannerHint}>Make the changes, then press “Submit to Monthly” again.</p>
           </div>
         )}
-        <ErrorBanner error={action.error} />
+        <ErrorBanner error={action.error ?? setReview.error} />
+        {revising && doc && (
+          <SummaryReviseModal
+            row={{
+              id: doc.id,
+              declareNo: doc.declareNo,
+              clientName: doc.clientName,
+              total: doc.totals.total,
+            }}
+            onClose={() => setRevising(false)}
+          />
+        )}
 
         <form
           className={s.body}
