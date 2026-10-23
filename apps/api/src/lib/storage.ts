@@ -37,6 +37,11 @@ export function readFile(key: string): fs.ReadStream {
   return fs.createReadStream(resolveKey(key));
 }
 
+/** Remove a stored file; a file that's already gone is fine. */
+export async function deleteFile(key: string): Promise<void> {
+  await fs.promises.rm(resolveKey(key), { force: true });
+}
+
 export async function fileExists(key: string): Promise<boolean> {
   try {
     await fs.promises.access(resolveKey(key));

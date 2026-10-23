@@ -186,7 +186,65 @@
   text-decoration: underline;
 }
 
+/* Appearance: light / dark theme */
+.appearance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 18px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-surface);
+}
+.appearance h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.appearance p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.themes {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.themes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.themes button svg {
+  width: 16px;
+  height: 16px;
+}
+.themes button[aria-pressed='true'] {
+  background: var(--accent-primary);
+  color: #041b2d;
+}
+
 @media (max-width: 760px) {
+  .appearance {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .card {
     grid-template-columns: 1fr;
   }

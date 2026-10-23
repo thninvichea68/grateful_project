@@ -18,3 +18,4 @@ export * from './schemas/search';
 export * from './words';
 export * from './schemas/admin';
 export * from './assistant';
+export * from './chat';

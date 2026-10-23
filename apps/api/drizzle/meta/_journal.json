@@ -204,6 +204,20 @@
       "when": 1792727470694,
       "tag": "0028_supplier_hidden",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1792736857651,
+      "tag": "0029_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792739272900,
+      "tag": "0030_chat_mentions",
+      "breakpoints": true
     }
   ]
 }

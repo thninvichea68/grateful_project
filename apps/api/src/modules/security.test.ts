@@ -62,6 +62,18 @@ const SELF_SERVICE = new Set([
   'post /api/v1/accounting/credit-notes/inbox/read', // marks my own inbox messages read
   'post /api/v1/assistant/chat', // "Ask AI": everyone may ask; it writes nothing
   'post /api/v1/assistant/follow-ups', // "Ask AI" follow-up questions: also writes nothing
+  // Team chat: everyone may chat; each call is limited to chats the caller is a member of.
+  'post /api/v1/chat/direct',
+  'post /api/v1/chat/groups',
+  'patch /api/v1/chat/conversations/:id',
+  'post /api/v1/chat/conversations/:id/photo',
+  'delete /api/v1/chat/conversations/:id/photo',
+  'post /api/v1/chat/conversations/:id/members',
+  'delete /api/v1/chat/conversations/:id/members/:userId',
+  'post /api/v1/chat/conversations/:id/messages',
+  'post /api/v1/chat/conversations/:id/files',
+  'delete /api/v1/chat/messages/:id',
+  'post /api/v1/chat/conversations/:id/read',
 ]);
 const concrete = (p: string) =>
   p

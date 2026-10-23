@@ -44,7 +44,7 @@ const INVALIDATE = [['settings'], queryKeys.lookups, ['meta', 'company']];
  * workspace tabs need settings:read.
  */
 export function SettingsPage() {
-  const { can } = useAuth();
+  const { can, logout } = useAuth();
   const canRead = can('settings:read');
   const [params, setParams] = useSearchParams();
   const tabs = canRead ? TABS : TABS.filter(([k]) => k === 'profile');
@@ -72,6 +72,16 @@ export function SettingsPage() {
             {l}
           </button>
         ))}
+        {/* Here rather than in the sidebar; everyone reaches Settings (My profile). */}
+        <button
+          type="button"
+          className={ui.dangerBtn}
+          style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          onClick={() => void logout()}
+        >
+          {icons.signout({ width: 16, height: 16 })}
+          Sign Out
+        </button>
       </nav>
       {tab === 'profile' ? <MyProfile /> : <Workspace tab={tab} />}
     </section>

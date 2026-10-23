@@ -4,6 +4,7 @@ import { logger } from './lib/logger';
 import { pool } from './db/client';
 import { startExchangeRateSync } from './modules/settings/rateSync';
 import { startMarketSync } from './modules/settings/marketSync';
+import { startChatRetention } from './modules/chat/retention';
 
 const app = createApp();
 const server = app.listen(env.PORT, () => {
@@ -11,11 +12,13 @@ const server = app.listen(env.PORT, () => {
 });
 const stopRateSync = startExchangeRateSync();
 const stopMarketSync = startMarketSync();
+const stopChatRetention = startChatRetention();
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down');
   stopRateSync();
   stopMarketSync();
+  stopChatRetention();
   server.close(() => {
     void pool.end().finally(() => process.exit(0));
   });

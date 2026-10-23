@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
-  const { user, can, logout } = useAuth();
+  const { user, can } = useAuth();
   const counts = useNavCounts();
   if (!user) return null;
 
@@ -113,13 +113,6 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             );
           })}
         </nav>
-
-        <div className="sidebar-footer">
-          <button type="button" className="signout" onClick={() => void logout()}>
-            {icons.signout({})}
-            Sign Out
-          </button>
-        </div>
       </aside>
       <div className="sidebar-scrim" onClick={onNavigate} aria-hidden="true" />
     </>

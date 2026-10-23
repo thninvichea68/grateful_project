@@ -73,6 +73,8 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   /** Base URL; the metal symbol is appended (…/price/XAU). */
   METAL_PRICE_API_URL: z.string().url().default('https://api.gold-api.com/price'),
+  /** Team chat messages (and their files) older than this many days are deleted; 0 keeps them. */
+  CHAT_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(7),
 });
 
 export type Env = z.infer<typeof envSchema>;

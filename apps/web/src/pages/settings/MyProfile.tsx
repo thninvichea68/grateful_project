@@ -7,38 +7,11 @@ import { ErrorBanner, FieldError } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import { formResolver } from '../../lib/zodForm';
+import { squareImage } from '../../lib/image';
 import s from './MyProfile.module.css';
 import { initials } from '../../components/Avatar';
-
-const SIZE = 320; // px; pictures are cropped square and resized before upload
-
-/** Centre-crop to a square and shrink, so every avatar is small and looks the same. */
-async function squareImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
-  const side = Math.min(bitmap.width, bitmap.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = Math.min(SIZE, side);
-  canvas
-    .getContext('2d')!
-    .drawImage(
-      bitmap,
-      (bitmap.width - side) / 2,
-      (bitmap.height - side) / 2,
-      side,
-      side,
-      0,
-      0,
-      canvas.width,
-      canvas.height,
-    );
-  bitmap.close();
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('Could not read that picture'))),
-      'image/png',
-    ),
-  );
-}
+import { icons } from '../../layout/icons';
+import { useTheme } from '../../layout/theme';
 
 /** Settings → My profile: every signed-in user can change their picture, name and password. */
 export function MyProfile() {
@@ -48,6 +21,7 @@ export function MyProfile() {
   const [busy, setBusy] = useState<'photo' | 'name' | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [pwOpen, setPwOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
   const {
     register,
     handleSubmit,
@@ -208,6 +182,20 @@ export function MyProfile() {
           </div>
           <p className={s.hint}>Your email and role are set by an Admin in Staff Management.</p>
         </form>
+      </section>
+      <section className={s.appearance}>
+        <div>
+          <h3>Appearance</h3>
+          <p>Light or dark theme for this browser.</p>
+        </div>
+        <div className={s.themes} role="group" aria-label="Theme">
+          {(['light', 'dark'] as const).map((t) => (
+            <button key={t} type="button" aria-pressed={theme === t} onClick={() => setTheme(t)}>
+              {t === 'light' ? icons.sun({}) : icons.moon({})}
+              {t === 'light' ? 'Light' : 'Dark'}
+            </button>
+          ))}
+        </div>
       </section>
       {pwOpen && <ChangePasswordModal onClose={() => setPwOpen(false)} />}
     </div>

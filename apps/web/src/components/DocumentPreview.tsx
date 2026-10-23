@@ -27,8 +27,24 @@ const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 const TEXT_LIMIT = 200_000; // characters shown for text/CSV; the download has the rest
 const CSV_ROWS = 500;
 
-/** Outlook-style viewer: shows the file first, with Download in the header. */
-export function DocumentPreview({ doc, onClose }: { doc: DocumentRow; onClose: () => void }) {
+export type PreviewDoc = Pick<
+  DocumentRow,
+  'id' | 'title' | 'originalName' | 'mimeType' | 'sizeBytes' | 'createdAt' | 'uploadedBy'
+>;
+
+/**
+ * Outlook-style viewer: shows the file first, with Download in the header. `path` is where
+ * the file is fetched from (a document's by default; chat files pass their own).
+ */
+export function DocumentPreview({
+  doc,
+  path = `/documents/${doc.id}/download`,
+  onClose,
+}: {
+  doc: PreviewDoc;
+  path?: string;
+  onClose: () => void;
+}) {
   const kind = kindOf(doc);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [error, setError] = useState(false);
@@ -40,11 +56,11 @@ export function DocumentPreview({ doc, onClose }: { doc: DocumentRow; onClose: (
   useEffect(() => {
     if (kind === 'none') return;
     const ctrl = new AbortController();
-    fetchFile(`/documents/${doc.id}/download`, { inline: '1' }, ctrl.signal)
+    fetchFile(path, { inline: '1' }, ctrl.signal)
       .then((r) => setBlob(r.blob))
       .catch(() => !ctrl.signal.aborted && setError(true));
     return () => ctrl.abort();
-  }, [doc.id, kind]);
+  }, [path, kind]);
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -59,7 +75,7 @@ export function DocumentPreview({ doc, onClose }: { doc: DocumentRow; onClose: (
 
   const download = async () => {
     try {
-      const b = blob ?? (await fetchFile(`/documents/${doc.id}/download`)).blob;
+      const b = blob ?? (await fetchFile(path)).blob;
       saveBlob(b, doc.originalName);
     } catch {
       setError(true);

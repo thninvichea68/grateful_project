@@ -6,15 +6,14 @@ import { GlobalSearch } from './GlobalSearch';
 import { LiveClock } from './LiveClock';
 import { LiveMonthPill } from './LiveMonthPill';
 import { useNavCounts } from './useNavCounts';
+import { TeamChat } from './chat/TeamChat';
 
 interface Props {
   title: string;
   onToggleMenu: () => void;
-  onToggleTheme: () => void;
-  theme: 'dark' | 'light';
 }
 
-export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
+export function TopBar({ title, onToggleMenu }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { can } = useAuth();
@@ -44,15 +43,7 @@ export function TopBar({ title, onToggleMenu, onToggleTheme, theme }: Props) {
 
         <AskAi />
 
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onToggleTheme}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          aria-pressed={theme === 'light'}
-        >
-          {icons.sun({})}
-        </button>
+        <TeamChat />
 
         {can('followups:read') && (
           <button
