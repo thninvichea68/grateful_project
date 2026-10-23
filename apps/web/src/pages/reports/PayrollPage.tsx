@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { Workbook } from 'exceljs';
 import type { PayrollMonthDetail } from '@gs/shared';
 import { useSearchParams } from 'react-router-dom';
@@ -23,6 +23,10 @@ import {
 } from './payroll';
 import { exportPayrollExcel } from './payrollExport';
 import { CapacityReport } from './CapacityReport';
+// Bklit's charts (visx, motion) load only when the Charts view is opened.
+const PayrollCharts = lazy(() =>
+  import('./PayrollCharts').then((m) => ({ default: m.PayrollCharts })),
+);
 import { SavedMonths, SaveMonthDialog } from './PayrollMonths';
 import s from './Payroll.module.css';
 
@@ -41,6 +45,13 @@ const savedInfo = (m: PayrollMonthDetail): Loaded['saved'] => ({
   savedByName: m.savedByName,
   savedAt: m.savedAt,
 });
+
+/** The Payroll views, by ?view= (Analysis is the default, with no param). */
+const VIEWS: [key: string, label: string][] = [
+  ['charts', 'Charts'],
+  ['', 'Analysis'],
+  ['capacity', 'Capacity report'],
+];
 
 /** The payroll on screen, kept for this session so switching tabs doesn't lose it. */
 let lastLoaded: Loaded | null = null;
@@ -145,6 +156,7 @@ export function PayrollPage() {
 
   const r = loaded?.report;
   const capacity = view === 'capacity';
+  const charts = view === 'charts';
   return (
     <>
       <div className="card" style={{ marginBottom: 14 }}>
@@ -175,22 +187,20 @@ export function PayrollPage() {
           {r && (
             <div className={ui.toolbar}>
               <div className={s.views} role="group" aria-label="View">
-                <button
-                  type="button"
-                  className={`filter-btn${capacity ? '' : ' active'}`}
-                  aria-pressed={!capacity}
-                  onClick={() => setView('')}
-                >
-                  Analysis
-                </button>
-                <button
-                  type="button"
-                  className={`filter-btn${capacity ? ' active' : ''}`}
-                  aria-pressed={capacity}
-                  onClick={() => setView('capacity')}
-                >
-                  Capacity report
-                </button>
+                {VIEWS.map(([key, label]) => {
+                  const on = (view ?? '') === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`filter-btn${on ? ' active' : ''}`}
+                      aria-pressed={on}
+                      onClick={() => setView(key)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
               {loaded.sheets.length > 1 && (
                 <select
@@ -269,7 +279,12 @@ export function PayrollPage() {
       )}
 
       {r && capacity && <CapacityReport payroll={r} />}
-      {r && !capacity && (
+      {r && charts && (
+        <Suspense fallback={<div className="card">Loading charts…</div>}>
+          <PayrollCharts r={r} />
+        </Suspense>
+      )}
+      {r && !capacity && !charts && (
         <Report
           r={r}
           filter={filter}
