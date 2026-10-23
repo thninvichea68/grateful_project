@@ -65,6 +65,7 @@ describe('Sidebar', () => {
       'Analytics',
       'CDC Master List',
       'Documents',
+      'PDF Tools',
       'Follow Up',
       'Accounting',
       'Credit Noted',

@@ -1,0 +1,733 @@
+import { useEffect, useState } from 'react';
+import { ui } from '../../components/ui';
+import { fmtFileSize } from '../../lib/format';
+import {
+  baseName,
+  burstPdf,
+  COMPRESS_LEVELS,
+  compressPdf,
+  imagesToPdf,
+  mergePdfs,
+  organizePdf,
+  pageCount,
+  pdfToImages,
+  splitPdf,
+  thumbnails,
+  type CompressLevel,
+  type OutFile,
+  type PagePlan,
+} from '../../lib/pdfEngine';
+import { addPageNumbers, addWatermark, type Corner } from '../../lib/pdfEdit';
+import {
+  ChosenFile,
+  DropZone,
+  FileOrderList,
+  IMAGE_ACCEPT,
+  PDF_ACCEPT,
+  Results,
+  RunRow,
+  useRun,
+} from './parts';
+import s from './PdfTools.module.css';
+
+/** Page count of the chosen file, shown next to its name. */
+function usePageCount(file: File | null) {
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    setN(null);
+    if (!file) return;
+    let live = true;
+    pageCount(file)
+      .then((c) => live && setN(c))
+      .catch(() => live && setN(null));
+    return () => {
+      live = false;
+    };
+  }, [file]);
+  return n;
+}
+
+const pagesLabel = (n: number | null) => (n === null ? '' : ` · ${n} page${n === 1 ? '' : 's'}`);
+
+export function MergeTool() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const r = useRun();
+  return (
+    <>
+      <DropZone
+        accept={PDF_ACCEPT}
+        multiple
+        label="Add PDFs to merge"
+        onFiles={(f) => {
+          setFiles((xs) => [...xs, ...f]);
+          setOut([]);
+        }}
+      />
+      <FileOrderList files={files} onChange={setFiles} />
+      <RunRow
+        label="Merge PDFs"
+        disabled={files.length < 2}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              const blob = await mergePdfs(files);
+              setOut([{ name: `${baseName(files[0]!.name)}-merged.pdf`, blob }]);
+            }),
+        }}
+      />
+      {files.length === 1 && <div className={s.note}>Add at least one more PDF.</div>}
+      <Results files={out} />
+    </>
+  );
+}
+
+type SplitMode = 'each' | 'single' | 'burst';
+
+export function SplitTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [mode, setMode] = useState<SplitMode>('each');
+  const [ranges, setRanges] = useState('');
+  const [out, setOut] = useState<OutFile[]>([]);
+  const pages = usePageCount(file);
+  const r = useRun();
+  if (!file)
+    return (
+      <DropZone accept={PDF_ACCEPT} label="Choose a PDF to split" onFiles={([f]) => setFile(f!)} />
+    );
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(pages)}
+        onClear={() => (setFile(null), setOut([]))}
+      />
+      <div className={s.options}>
+        <div className={s.option}>
+          How to split
+          <div className={s.radioRow}>
+            {(
+              [
+                ['each', 'One file per range'],
+                ['single', 'Extract pages into one file'],
+                ['burst', 'Every page as its own file'],
+              ] as const
+            ).map(([v, label]) => (
+              <label key={v}>
+                <input type="radio" checked={mode === v} onChange={() => setMode(v)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+        {mode !== 'burst' && (
+          <label className={s.option}>
+            Pages
+            <input
+              className={ui.input}
+              value={ranges}
+              onChange={(e) => setRanges(e.target.value)}
+              placeholder="e.g. 1-3, 5, 8-"
+              style={{ width: 220 }}
+            />
+          </label>
+        )}
+      </div>
+      <RunRow
+        label="Split PDF"
+        disabled={mode !== 'burst' && !ranges.trim()}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () =>
+              setOut(mode === 'burst' ? await burstPdf(file) : await splitPdf(file, ranges, mode)),
+            ),
+        }}
+      />
+      <Results files={out} />
+    </>
+  );
+}
+
+interface PageCard extends PagePlan {
+  key: number;
+  thumb: string;
+}
+
+export function OrganizeTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [cards, setCards] = useState<PageCard[]>([]);
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const load = useRun();
+  const save = useRun();
+
+  useEffect(() => {
+    setCards([]);
+    setOut([]);
+    if (!file) return;
+    let live = true;
+    void load.run(async () => {
+      load.setProgress('Reading pages…');
+      const thumbs = await thumbnails(file);
+      if (live) setCards(thumbs.map((thumb, i) => ({ key: i, index: i, rotate: 0, thumb })));
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only on a new file
+  }, [file]);
+
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to organize"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+
+  const update = (key: number, fn: (c: PageCard) => PageCard | null) => {
+    setCards((cs) => cs.flatMap((c) => (c.key === key ? (fn(c) ?? []) : [c])));
+    setOut([]);
+  };
+  const moveTo = (from: number, to: number) => {
+    setCards((cs) => {
+      const next = [...cs];
+      const [c] = next.splice(from, 1);
+      next.splice(to, 0, c!);
+      return next;
+    });
+    setOut([]);
+  };
+  const rotateAll = (deg: number) => {
+    setCards((cs) => cs.map((c) => ({ ...c, rotate: (c.rotate + deg + 360) % 360 })));
+    setOut([]);
+  };
+
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(cards.length || null)}
+        onClear={() => setFile(null)}
+      />
+      {load.busy && <div className={s.note}>{load.progress}</div>}
+      {load.error && <div className={s.error}>{load.error}</div>}
+      {cards.length > 0 && (
+        <>
+          <div className={s.runRow}>
+            <button type="button" className={ui.ghostBtn} onClick={() => rotateAll(-90)}>
+              ⟲ Rotate all left
+            </button>
+            <button type="button" className={ui.ghostBtn} onClick={() => rotateAll(90)}>
+              ⟳ Rotate all right
+            </button>
+            <button
+              type="button"
+              className={ui.ghostBtn}
+              onClick={() => setCards((cs) => [...cs].reverse())}
+            >
+              Reverse order
+            </button>
+            <span className={s.progress}>Drag pages to reorder.</span>
+          </div>
+          <div className={s.pages}>
+            {cards.map((c, i) => (
+              <div
+                key={c.key}
+                className={`${s.page}${dragging === i ? ` ${s.pageDragging}` : ''}${over === i && dragging !== i ? ` ${s.pageOver}` : ''}`}
+                draggable
+                onDragStart={() => setDragging(i)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setOver(i);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragging !== null && dragging !== i) moveTo(dragging, i);
+                  setDragging(null);
+                  setOver(null);
+                }}
+                onDragEnd={() => {
+                  setDragging(null);
+                  setOver(null);
+                }}
+              >
+                <div className={s.thumbBox}>
+                  <img
+                    src={c.thumb}
+                    alt={`Page ${c.index + 1}`}
+                    style={{
+                      transform: `rotate(${c.rotate}deg) scale(${c.rotate % 180 ? 0.75 : 1})`,
+                    }}
+                    draggable={false}
+                  />
+                </div>
+                <div className={s.pageBar}>
+                  <span>
+                    {i + 1}
+                    {c.index !== i && ` (p${c.index + 1})`}
+                  </span>
+                  <span className={s.pageBtns}>
+                    <button
+                      type="button"
+                      className={s.iconBtn}
+                      onClick={() =>
+                        update(c.key, (x) => ({ ...x, rotate: (x.rotate + 270) % 360 }))
+                      }
+                      aria-label={`Rotate page ${i + 1} left`}
+                      title="Rotate left"
+                    >
+                      ⟲
+                    </button>
+                    <button
+                      type="button"
+                      className={s.iconBtn}
+                      onClick={() =>
+                        update(c.key, (x) => ({ ...x, rotate: (x.rotate + 90) % 360 }))
+                      }
+                      aria-label={`Rotate page ${i + 1} right`}
+                      title="Rotate right"
+                    >
+                      ⟳
+                    </button>
+                    <button
+                      type="button"
+                      className={s.iconBtn}
+                      onClick={() =>
+                        setCards((cs) => {
+                          const next = [...cs];
+                          next.splice(i + 1, 0, {
+                            ...c,
+                            key: Math.max(...cs.map((x) => x.key)) + 1,
+                          });
+                          return next;
+                        })
+                      }
+                      aria-label={`Duplicate page ${i + 1}`}
+                      title="Duplicate"
+                    >
+                      ⧉
+                    </button>
+                    <button
+                      type="button"
+                      className={s.iconBtn}
+                      disabled={cards.length === 1}
+                      onClick={() => update(c.key, () => null)}
+                      aria-label={`Delete page ${i + 1}`}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <RunRow
+            label="Save PDF"
+            disabled={!cards.length}
+            state={{
+              ...save,
+              onRun: () =>
+                save.run(async () => {
+                  const blob = await organizePdf(file, cards);
+                  setOut([{ name: `${baseName(file.name)}-organized.pdf`, blob }]);
+                }),
+            }}
+          />
+          <Results files={out} />
+        </>
+      )}
+    </>
+  );
+}
+
+export function CompressTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [level, setLevel] = useState<CompressLevel>('medium');
+  const [out, setOut] = useState<OutFile[]>([]);
+  const [summary, setSummary] = useState('');
+  const pages = usePageCount(file);
+  const r = useRun();
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to compress"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(pages)}
+        onClear={() => (setFile(null), setOut([]))}
+      />
+      <div className={s.options}>
+        <div className={s.option}>
+          Compression
+          <div className={s.radioRow}>
+            {(Object.keys(COMPRESS_LEVELS) as CompressLevel[]).map((k) => (
+              <label key={k}>
+                <input type="radio" checked={level === k} onChange={() => setLevel(k)} />
+                {COMPRESS_LEVELS[k].label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className={s.note}>
+        Scanned and photo-heavy PDFs shrink the most. If the smaller version needs pages redrawn as
+        images, text in it can no longer be selected — keep the original for that.
+      </div>
+      <RunRow
+        label="Compress PDF"
+        disabled={false}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              const res = await compressPdf(file, level, (d, t) =>
+                r.setProgress(`Page ${d} of ${t}…`),
+              );
+              const saved = 1 - res.blob.size / file.size;
+              setSummary(
+                res.method === 'unchanged'
+                  ? 'This file is already as small as it gets — no smaller version was found.'
+                  : `${fmtFileSize(file.size)} → ${fmtFileSize(res.blob.size)} (${Math.round(saved * 100)}% smaller${res.method === 'rasterized' ? ', pages redrawn as images' : ''}).`,
+              );
+              setOut([{ name: `${baseName(file.name)}-compressed.pdf`, blob: res.blob }]);
+            }),
+        }}
+      />
+      <Results files={out} summary={summary} />
+    </>
+  );
+}
+
+export function ImagesToPdfTool() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [size, setSize] = useState<'a4' | 'fit'>('a4');
+  const [out, setOut] = useState<OutFile[]>([]);
+  const r = useRun();
+  return (
+    <>
+      <DropZone
+        accept={IMAGE_ACCEPT}
+        multiple
+        label="Add images (JPG, PNG, WebP…)"
+        onFiles={(f) => {
+          setFiles((xs) => [...xs, ...f]);
+          setOut([]);
+        }}
+      />
+      <FileOrderList files={files} onChange={setFiles} />
+      <div className={s.options}>
+        <div className={s.option}>
+          Page size
+          <div className={s.radioRow}>
+            <label>
+              <input type="radio" checked={size === 'a4'} onChange={() => setSize('a4')} />
+              A4 (with margin)
+            </label>
+            <label>
+              <input type="radio" checked={size === 'fit'} onChange={() => setSize('fit')} />
+              Same as image
+            </label>
+          </div>
+        </div>
+      </div>
+      <RunRow
+        label="Create PDF"
+        disabled={!files.length}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              const blob = await imagesToPdf(files, size);
+              setOut([{ name: `${baseName(files[0]!.name)}.pdf`, blob }]);
+            }),
+        }}
+      />
+      <Results files={out} />
+    </>
+  );
+}
+
+export function PdfToImagesTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [format, setFormat] = useState<'png' | 'jpeg'>('jpeg');
+  const [dpi, setDpi] = useState(150);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const pages = usePageCount(file);
+  const r = useRun();
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to convert"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(pages)}
+        onClear={() => (setFile(null), setOut([]))}
+      />
+      <div className={s.options}>
+        <label className={s.option}>
+          Format
+          <select
+            className={ui.input}
+            value={format}
+            onChange={(e) => setFormat(e.target.value as 'png' | 'jpeg')}
+          >
+            <option value="jpeg">JPG (smaller)</option>
+            <option value="png">PNG (sharp, larger)</option>
+          </select>
+        </label>
+        <label className={s.option}>
+          Quality
+          <select className={ui.input} value={dpi} onChange={(e) => setDpi(Number(e.target.value))}>
+            <option value={96}>Screen (96 dpi)</option>
+            <option value={150}>Standard (150 dpi)</option>
+            <option value={300}>Print (300 dpi)</option>
+          </select>
+        </label>
+      </div>
+      <RunRow
+        label="Convert to images"
+        disabled={false}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () =>
+              setOut(
+                await pdfToImages(file, format, dpi, (d, t) => r.setProgress(`Page ${d} of ${t}…`)),
+              ),
+            ),
+        }}
+      />
+      <Results files={out} />
+    </>
+  );
+}
+
+const CORNERS: [Corner, string][] = [
+  ['bottom-center', 'Bottom centre'],
+  ['bottom-right', 'Bottom right'],
+  ['bottom-left', 'Bottom left'],
+  ['top-right', 'Top right'],
+];
+
+export function PageNumbersTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [position, setPosition] = useState<Corner>('bottom-center');
+  const [format, setFormat] = useState('Page {n} of {total}');
+  const [start, setStart] = useState(1);
+  const [size, setSize] = useState(10);
+  const [skipFirst, setSkipFirst] = useState(false);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const pages = usePageCount(file);
+  const r = useRun();
+  if (!file)
+    return (
+      <DropZone accept={PDF_ACCEPT} label="Choose a PDF to number" onFiles={([f]) => setFile(f!)} />
+    );
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(pages)}
+        onClear={() => (setFile(null), setOut([]))}
+      />
+      <div className={s.options}>
+        <label className={s.option}>
+          Position
+          <select
+            className={ui.input}
+            value={position}
+            onChange={(e) => setPosition(e.target.value as Corner)}
+          >
+            {CORNERS.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={s.option}>
+          Format
+          <select className={ui.input} value={format} onChange={(e) => setFormat(e.target.value)}>
+            <option value="Page {n} of {total}">Page 1 of 9</option>
+            <option value="{n} / {total}">1 / 9</option>
+            <option value="Page {n}">Page 1</option>
+            <option value="{n}">1</option>
+            <option value="- {n} -">- 1 -</option>
+          </select>
+        </label>
+        <label className={s.option}>
+          First number
+          <input
+            className={ui.input}
+            type="number"
+            min={0}
+            value={start}
+            onChange={(e) => setStart(Math.max(0, Number(e.target.value) || 0))}
+            style={{ width: 90 }}
+          />
+        </label>
+        <label className={s.option}>
+          Size
+          <select
+            className={ui.input}
+            value={size}
+            onChange={(e) => setSize(Number(e.target.value))}
+          >
+            {[8, 9, 10, 11, 12, 14].map((n) => (
+              <option key={n} value={n}>
+                {n} pt
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className={s.radioRow}>
+          <label>
+            <input
+              type="checkbox"
+              checked={skipFirst}
+              onChange={(e) => setSkipFirst(e.target.checked)}
+            />
+            Skip the first page (cover)
+          </label>
+        </div>
+      </div>
+      <RunRow
+        label="Add page numbers"
+        disabled={false}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              const blob = await addPageNumbers(file, { position, format, start, size, skipFirst });
+              setOut([{ name: `${baseName(file.name)}-numbered.pdf`, blob }]);
+            }),
+        }}
+      />
+      <Results files={out} />
+    </>
+  );
+}
+
+export function WatermarkTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [text, setText] = useState('CONFIDENTIAL');
+  const [size, setSize] = useState(60);
+  const [color, setColor] = useState('#dc2626');
+  const [opacity, setOpacity] = useState(0.2);
+  const [diagonal, setDiagonal] = useState(true);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const pages = usePageCount(file);
+  const r = useRun();
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to watermark"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(pages)}
+        onClear={() => (setFile(null), setOut([]))}
+      />
+      <div className={s.options}>
+        <label className={s.option}>
+          Text
+          <input
+            className={ui.input}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            style={{ width: 220 }}
+          />
+        </label>
+        <label className={s.option}>
+          Size
+          <select
+            className={ui.input}
+            value={size}
+            onChange={(e) => setSize(Number(e.target.value))}
+          >
+            {[36, 48, 60, 72, 96].map((n) => (
+              <option key={n} value={n}>
+                {n} pt
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={s.option}>
+          Color
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            style={{ width: 44, height: 32, padding: 2, cursor: 'pointer' }}
+          />
+        </label>
+        <label className={s.option}>
+          Opacity
+          <select
+            className={ui.input}
+            value={opacity}
+            onChange={(e) => setOpacity(Number(e.target.value))}
+          >
+            {[0.1, 0.2, 0.3, 0.5].map((n) => (
+              <option key={n} value={n}>
+                {Math.round(n * 100)}%
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className={s.radioRow}>
+          <label>
+            <input type="radio" checked={diagonal} onChange={() => setDiagonal(true)} />
+            Diagonal
+          </label>
+          <label>
+            <input type="radio" checked={!diagonal} onChange={() => setDiagonal(false)} />
+            Horizontal
+          </label>
+        </div>
+      </div>
+      <RunRow
+        label="Add watermark"
+        disabled={!text.trim()}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              const blob = await addWatermark(file, {
+                text: text.trim(),
+                size,
+                color,
+                opacity,
+                diagonal,
+              });
+              setOut([{ name: `${baseName(file.name)}-watermarked.pdf`, blob }]);
+            }),
+        }}
+      />
+      <Results files={out} />
+    </>
+  );
+}

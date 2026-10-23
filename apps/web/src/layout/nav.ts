@@ -76,6 +76,13 @@ export const NAV: NavGroup[] = [
         permission: 'documents:read',
       },
       {
+        to: '/pdf-tools',
+        label: 'PDF Tools',
+        title: 'PDF Tools',
+        icon: 'pdftools',
+        permission: 'documents:read',
+      },
+      {
         to: '/followup',
         label: 'Follow Up',
         title: 'Follow Up',

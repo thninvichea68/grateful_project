@@ -36,6 +36,9 @@ const CutStockPage = lazy(() =>
 const DocumentsPage = lazy(() =>
   import('./pages/DocumentsPage').then((m) => ({ default: m.DocumentsPage })),
 );
+const PdfToolsPage = lazy(() =>
+  import('./pages/PdfToolsPage').then((m) => ({ default: m.PdfToolsPage })),
+);
 const FollowUpPage = lazy(() =>
   import('./pages/FollowUpPage').then((m) => ({ default: m.FollowUpPage })),
 );
@@ -281,6 +284,7 @@ export const router = createBrowserRouter([
       { path: 'analytics', element: guard('dashboard:read', <AnalyticsPage />) },
       { path: 'cutstock', element: guard('cutstock:read', <CutStockPage />) },
       { path: 'documents', element: guard('documents:read', <DocumentsPage />) },
+      { path: 'pdf-tools', element: guard('documents:read', <PdfToolsPage />) },
       { path: 'followup', element: guard('followups:read', <FollowUpPage />) },
       {
         path: 'accounting',
