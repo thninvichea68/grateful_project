@@ -136,3 +136,34 @@ describe('readPayroll', () => {
     expect(() => readPayroll(wb.getWorksheet('Notes')!)).toThrow(/no staff header row/);
   });
 });
+
+describe('payrollFromSaved', () => {
+  it('reopens a saved month with the same figures as the import', async () => {
+    const { payrollFromSaved, payrollToSave } = await import('./payroll');
+    const r = readPayroll(sheet(new ExcelJS.Workbook(), 'Payroll'));
+    const sent = payrollToSave(r, { fileName: 'p.xlsx', clientId: null, period: '2026-07' });
+    const saved = {
+      ...sent,
+      id: 'x',
+      clientId: null,
+      sheetName: sent.sheetName ?? '',
+      fileName: 'p.xlsx',
+      sections: sent.sections ?? [],
+      issues: sent.issues ?? [],
+      staff: sent.staff.map(({ pay, ...s }) => ({ ...s, pay: { basic: pay.basic! } })),
+      staffCount: 5,
+      female: 3,
+      male: 1,
+      gross: '0',
+      net: '0',
+      savedByName: null,
+      savedAt: '',
+    };
+    const back = payrollFromSaved(saved as never);
+    expect(back.totals).toEqual(r.totals);
+    expect(back.byCategory).toEqual(r.byCategory);
+    expect(back.issues).toEqual(r.issues);
+    // Earnings left out of a saved row read as 0.
+    expect(back.staff[0]!.pay.lunch).toBe(0);
+  });
+});

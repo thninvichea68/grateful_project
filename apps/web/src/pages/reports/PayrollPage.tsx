@@ -1,15 +1,20 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Workbook } from 'exceljs';
+import type { PayrollMonthDetail } from '@gs/shared';
+import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../auth/AuthProvider';
 import { FilePicker } from '../../components/FilePicker';
 import { SearchBox } from '../../components/SearchBox';
 import { StatTile, StatTiles } from '../../components/StatTiles';
-import { ui } from '../../components/ui';
+import { ErrorBanner, ui } from '../../components/ui';
+import { usePayrollMonth } from '../../features/reports';
 import { icons } from '../../layout/icons';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import {
   CATEGORIES,
   DEPARTMENTS,
   loadWorkbook,
+  payrollFromSaved,
   payrollSheets,
   periodLabel,
   readPayroll,
@@ -17,19 +22,27 @@ import {
   type PayrollReport,
 } from './payroll';
 import { exportPayrollExcel } from './payrollExport';
+import { CapacityReport } from './CapacityReport';
+import { SavedMonths, SaveMonthDialog } from './PayrollMonths';
 import s from './Payroll.module.css';
 
 interface Loaded {
   fileName: string;
-  wb: Workbook;
+  /** Read from a file: the workbook and its payroll sheets (none when reopened from the list). */
+  wb?: Workbook;
   sheets: string[];
   report: PayrollReport;
+  /** Saved on the server: opened from the list, or saved after importing. */
+  saved?: { id: string; savedByName: string | null; savedAt: string };
 }
 
-/**
- * The last file read, kept for this session so switching tabs doesn't lose it. Salaries are
- * never uploaded or stored; a reload clears it.
- */
+const savedInfo = (m: PayrollMonthDetail): Loaded['saved'] => ({
+  id: m.id,
+  savedByName: m.savedByName,
+  savedAt: m.savedAt,
+});
+
+/** The payroll on screen, kept for this session so switching tabs doesn't lose it. */
 let lastLoaded: Loaded | null = null;
 
 interface Filter {
@@ -52,10 +65,45 @@ export function PayrollPage() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>(NO_FILTER);
   const listRef = useRef<HTMLDivElement>(null);
+  // Analysis (default) or the monthly capacity report built from it.
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view');
+  const setView = (v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set('view', v);
+    else next.delete('view');
+    setParams(next, { replace: true });
+  };
+
+  const { can } = useAuth();
+  const [saving, setSaving] = useState(false);
 
   const keep = (next: Loaded | null) => {
     lastLoaded = next;
     setLoaded(next);
+  };
+  /** ?payroll=<id>: the saved month on screen (so a reload or a link reopens it). */
+  const setSavedParam = (id: string | null, extra: Record<string, string | null> = {}) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries({ payroll: id, ...extra }))
+      if (v) next.set(k, v);
+      else next.delete(k);
+    setParams(next, { replace: true });
+  };
+
+  const savedId = params.get('payroll') ?? undefined;
+  const wanted = savedId && loaded?.saved?.id !== savedId ? savedId : undefined;
+  const savedMonth = usePayrollMonth(wanted);
+  useEffect(() => {
+    const m = savedMonth.data;
+    if (!m || m.id !== wanted) return;
+    keep({ fileName: m.fileName, sheets: [], report: payrollFromSaved(m), saved: savedInfo(m) });
+    setFilter(NO_FILTER);
+  }, [savedMonth.data, wanted]);
+
+  const close = () => {
+    keep(null);
+    setSavedParam(null, { view: null });
   };
 
   const open = async (f: File | null) => {
@@ -72,6 +120,7 @@ export function PayrollPage() {
         );
       keep({ fileName: f.name, wb, sheets, report: readPayroll(wb.getWorksheet(sheets[0])!) });
       setFilter(NO_FILTER);
+      setSavedParam(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The file could not be read.');
     } finally {
@@ -81,9 +130,11 @@ export function PayrollPage() {
   };
 
   const pickSheet = (name: string) => {
-    if (!loaded) return;
-    keep({ ...loaded, report: readPayroll(loaded.wb.getWorksheet(name)!) });
+    if (!loaded?.wb) return;
+    // Another sheet is another payroll: it isn't the saved one any more.
+    keep({ ...loaded, report: readPayroll(loaded.wb.getWorksheet(name)!), saved: undefined });
     setFilter(NO_FILTER);
+    setSavedParam(null);
   };
 
   /** Clicking a category or department row narrows the staff list to it. */
@@ -93,6 +144,7 @@ export function PayrollPage() {
   };
 
   const r = loaded?.report;
+  const capacity = view === 'capacity';
   return (
     <>
       <div className="card" style={{ marginBottom: 14 }}>
@@ -109,10 +161,37 @@ export function PayrollPage() {
                     r.sections.length ? ` · section ${r.sections.join(', ')}` : ''
                   }`
                 : 'Import the month’s salary sheet (薪资明细表) to get head counts, categories and salary totals.'}
+              {loaded?.saved && (
+                <>
+                  {' · '}
+                  <span className={s.savedNote}>
+                    Saved {fmtDate(loaded.saved.savedAt.slice(0, 10))}
+                    {loaded.saved.savedByName ? ` by ${loaded.saved.savedByName}` : ''}
+                  </span>
+                </>
+              )}
             </p>
           </div>
           {r && (
             <div className={ui.toolbar}>
+              <div className={s.views} role="group" aria-label="View">
+                <button
+                  type="button"
+                  className={`filter-btn${capacity ? '' : ' active'}`}
+                  aria-pressed={!capacity}
+                  onClick={() => setView('')}
+                >
+                  Analysis
+                </button>
+                <button
+                  type="button"
+                  className={`filter-btn${capacity ? ' active' : ''}`}
+                  aria-pressed={capacity}
+                  onClick={() => setView('capacity')}
+                >
+                  Capacity report
+                </button>
+              </div>
               {loaded.sheets.length > 1 && (
                 <select
                   className={ui.input}
@@ -125,16 +204,23 @@ export function PayrollPage() {
                   ))}
                 </select>
               )}
-              <button type="button" className={ui.ghostBtn} onClick={() => keep(null)}>
-                Import another
+              {!loaded.saved && can('reports:write') && (
+                <button type="button" className={ui.ghostBtn} onClick={() => setSaving(true)}>
+                  Save month
+                </button>
+              )}
+              <button type="button" className={ui.ghostBtn} onClick={close}>
+                {loaded.saved ? 'All months' : 'Import another'}
               </button>
-              <button
-                type="button"
-                className="new-shipment-btn"
-                onClick={() => void exportPayrollExcel(r)}
-              >
-                {icons.download({ width: 15, height: 15 })} Export Excel
-              </button>
+              {!capacity && (
+                <button
+                  type="button"
+                  className="new-shipment-btn"
+                  onClick={() => void exportPayrollExcel(r)}
+                >
+                  {icons.download({ width: 15, height: 15 })} Export Excel
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -143,7 +229,11 @@ export function PayrollPage() {
             <FilePicker
               id="payroll-file"
               accept=".xlsx"
-              hint={busy ? 'Reading…' : 'Excel .xlsx · read in your browser, not uploaded or saved'}
+              hint={
+                busy
+                  ? 'Reading…'
+                  : 'Excel .xlsx · read in your browser; nothing is stored until you press Save month'
+              }
               file={file}
               onChange={(f) => void open(f)}
             />
@@ -156,7 +246,30 @@ export function PayrollPage() {
         )}
       </div>
 
-      {r && (
+      {!r &&
+        (wanted && !savedMonth.error ? (
+          <div className="card">Opening the saved month…</div>
+        ) : (
+          <>
+            {savedMonth.error ? <ErrorBanner error={savedMonth.error} /> : null}
+            <SavedMonths onOpen={(id) => setSavedParam(id, { view: null })} />
+          </>
+        ))}
+      {saving && r && loaded && (
+        <SaveMonthDialog
+          report={r}
+          fileName={loaded.fileName}
+          onClose={() => setSaving(false)}
+          onSaved={(m) => {
+            setSaving(false);
+            keep({ ...loaded, report: payrollFromSaved(m), saved: savedInfo(m) });
+            setSavedParam(m.id);
+          }}
+        />
+      )}
+
+      {r && capacity && <CapacityReport payroll={r} />}
+      {r && !capacity && (
         <Report
           r={r}
           filter={filter}

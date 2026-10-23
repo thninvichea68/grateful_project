@@ -1,14 +1,20 @@
 import type { CellValue, Workbook, Worksheet } from 'exceljs';
+import type {
+  PayrollCategory,
+  PayrollGender,
+  PayrollMonthDetail,
+  PayrollMonthInput,
+} from '@gs/shared';
 
 /*
  * Reports → Payroll: reads the monthly salary sheet (JR APPAREL "薪资明细表", one row per staff
  * member under a Khmer and a Chinese header row) and works out what the accountant's formulas
  * did by hand: each person's category from the card no., head counts by gender, and salary
- * totals. Everything runs in the browser; the file is never uploaded.
+ * totals. The file is read in the browser; "Save month" keeps the rows on the server.
  */
 
-export type PayrollCategory = 'foreign' | 'khmer' | 'sewing' | 'production';
-export type Gender = 'F' | 'M' | '?';
+export type { PayrollCategory };
+export type Gender = PayrollGender;
 
 /** The sheet's own Khmer labels (as its COUNTIF formulas use them), with English. */
 export const CATEGORIES: { key: PayrollCategory; label: string; labelKh: string }[] = [
@@ -384,6 +390,42 @@ export function readPayroll(ws: Worksheet): PayrollReport {
   };
 }
 
+/** A saved month, worked out again exactly as when its file was imported. */
+export function payrollFromSaved(m: PayrollMonthDetail): PayrollReport {
+  const zero = Object.fromEntries(PAY_COMPONENTS.map((c) => [c.key, 0])) as Record<
+    PayComponent,
+    number
+  >;
+  const staff: PayrollStaff[] = m.staff.map((s) => ({ ...s, pay: { ...zero, ...s.pay } }));
+  return {
+    sheetName: m.sheetName,
+    company: m.company,
+    period: m.period,
+    sections: m.sections,
+    staff,
+    issues: m.issues,
+    ...summarise(staff, m.period),
+  };
+}
+
+/** What "Save month" sends: the rows as read, not the totals (the server adds those up). */
+export function payrollToSave(
+  r: PayrollReport,
+  extra: { fileName: string; clientId: string | null; period: string; replace?: boolean },
+): PayrollMonthInput {
+  return {
+    period: extra.period,
+    company: r.company,
+    clientId: extra.clientId,
+    sheetName: r.sheetName,
+    fileName: extra.fileName,
+    sections: r.sections,
+    staff: r.staff,
+    issues: r.issues,
+    replace: extra.replace ?? false,
+  };
+}
+
 const MONEY_LABEL: Record<(typeof REQUIRED_MONEY)[number], string> = {
   gross: 'gross pay',
   advance: 'half-month advance',
@@ -488,6 +530,17 @@ export async function loadWorkbook(file: File): Promise<Workbook> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
   return wb;
+}
+
+/** "JR APPAREL CO.,LTD" → the client "JR APPAREL" (longest client name the title starts with). */
+export function matchClient(
+  company: string,
+  clients: { id: string; name: string; legalName: string | null }[],
+): string | undefined {
+  const t = company.toUpperCase();
+  return clients
+    .filter((c) => [c.name, c.legalName].some((n) => n && t.startsWith(n.toUpperCase())))
+    .sort((a, b) => b.name.length - a.name.length)[0]?.id;
 }
 
 /** "2026-07" → "July 2026". */

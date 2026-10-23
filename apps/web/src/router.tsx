@@ -108,6 +108,11 @@ const ReportComingSoon = lazy(() =>
 const PayrollPage = lazy(() =>
   import('./pages/reports/PayrollPage').then((m) => ({ default: m.PayrollPage })),
 );
+const PrintCapacityReportPage = lazy(() =>
+  import('./pages/print/PrintCapacityReportPage').then((m) => ({
+    default: m.PrintCapacityReportPage,
+  })),
+);
 const QuotationEditorPage = lazy(() =>
   import('./pages/quotations/QuotationEditorPage').then((m) => ({
     default: m.QuotationEditorPage,
@@ -260,6 +265,19 @@ export const router = createBrowserRouter([
         <RequirePermission permission="sealplans:read">
           <Suspense fallback={null}>
             <PrintSealPlansPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
+    // Reports → Payroll → Capacity report → Print: the report left in session storage.
+    path: '/print/capacity-report',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="reports:read">
+          <Suspense fallback={null}>
+            <PrintCapacityReportPage />
           </Suspense>
         </RequirePermission>
       </RequireAuth>

@@ -7,3 +7,4 @@ export * from './quotations';
 export * from './documents';
 export * from './audit';
 export * from './chat';
+export * from './reports';

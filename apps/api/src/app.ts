@@ -31,6 +31,7 @@ import { quotationsRouter } from './modules/quotations/router';
 import { assistantRouter } from './modules/assistant/router';
 import { searchRouter } from './modules/search/router';
 import { chatRouter } from './modules/chat/router';
+import { reportsRouter } from './modules/reports/router';
 import { buildOpenApiDocument } from './openapi/spec';
 
 export function createApp(): Express {
@@ -109,6 +110,7 @@ export function createApp(): Express {
   v1.use('/assistant', assistantRouter);
   v1.use('/search', searchRouter);
   v1.use('/chat', chatRouter);
+  v1.use('/reports', reportsRouter);
 
   app.use('/api/v1', v1);
 

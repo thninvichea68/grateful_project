@@ -225,6 +225,20 @@
       "when": 1792739332900,
       "tag": "0031_reports_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792739392900,
+      "tag": "0032_reports_write_permission",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792768757733,
+      "tag": "0033_payroll_months",
+      "breakpoints": true
     }
   ]
 }

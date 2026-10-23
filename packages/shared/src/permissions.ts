@@ -29,6 +29,8 @@ export const PERMISSIONS = [
   'quotations:write',
   /** Reports (Payroll, MIH, Import & Export): staff salaries, so kept apart from accounting. */
   'reports:read',
+  /** Saving a report's setup (e.g. the capacity report's company details, machines, weights). */
+  'reports:write',
   'documents:read',
   'documents:write',
   'followups:read',
@@ -76,6 +78,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
     ...READ_ALL.filter((p) => p !== 'audit:read'),
     'accounting:write',
     'creditnotes:write',
+    'reports:write',
     'recordsummaries:write',
     'quotations:write',
     'documents:write',
