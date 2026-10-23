@@ -27,6 +27,8 @@ export const PERMISSIONS = [
   'recordsummaries:write',
   'quotations:read',
   'quotations:write',
+  /** Reports (Payroll, MIH, Import & Export): staff salaries, so kept apart from accounting. */
+  'reports:read',
   'documents:read',
   'documents:write',
   'followups:read',
@@ -56,7 +58,11 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
   MANAGER: PERMISSIONS.filter((p) => p !== 'settings:manage' && p !== 'staff:manage'),
   OPERATOR: [
     ...READ_ALL.filter(
-      (p) => p !== 'audit:read' && p !== 'accounting:read' && p !== 'creditnotes:read',
+      (p) =>
+        p !== 'audit:read' &&
+        p !== 'accounting:read' &&
+        p !== 'creditnotes:read' &&
+        p !== 'reports:read',
     ),
     'shipments:write',
     'sealplans:write',
@@ -75,7 +81,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
     'documents:write',
     'followups:write',
   ],
-  VIEWER: READ_ALL.filter((p) => p !== 'audit:read' && p !== 'staff:read'),
+  VIEWER: READ_ALL.filter((p) => p !== 'audit:read' && p !== 'staff:read' && p !== 'reports:read'),
   /** The customs broker (Chea): writes Credit Noted vouchers and can look up shipments. */
   CUSTOMS_BROKER: ['shipments:read', 'creditnotes:read', 'creditnotes:write'],
 };

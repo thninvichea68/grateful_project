@@ -43,7 +43,7 @@ export function ShippingPlansPage() {
     // Always Import or Export (Import unless the link asks for Export).
     direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
-    // Declaration month (YYYY-MM); empty = every month, undeclared shipments included.
+    // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
     month: params.get('month') ?? '',
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),

@@ -41,6 +41,7 @@ const AREAS: Record<string, { label: string; desc: string }> = {
   creditnotes: { label: 'Credit Noted', desc: 'Customs broker credit notes' },
   recordsummaries: { label: 'Record Summary', desc: 'Shipment record summaries' },
   quotations: { label: 'Quotations', desc: 'Quotation builder' },
+  reports: { label: 'Reports', desc: 'Payroll, MIH and Import & Export' },
   documents: { label: 'Documents', desc: 'Uploaded files' },
   followups: { label: 'Follow-ups', desc: 'Tasks and reminders' },
   staff: { label: 'Staff', desc: 'Team members and roles' },

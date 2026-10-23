@@ -480,6 +480,14 @@ describe('shipments', () => {
       .query({ month: '2026-08' })
       .set(h);
     expect(otherMonth.body.meta.total).toBe(0);
+    // Undeclared shipments count in the month they were added.
+    const added = await request(app)
+      .get('/api/v1/shipments')
+      .query({ month: new Date().toISOString().slice(0, 7) })
+      .set(h);
+    expect(added.body.data.map((r: { invoiceNos: string[] }) => r.invoiceNos)).toEqual([
+      ['CNG26040'],
+    ]);
     const noMatch = await request(app).get('/api/v1/shipments').query({ q: '%' }).set(h);
     expect(noMatch.body.meta.total).toBe(0);
   });

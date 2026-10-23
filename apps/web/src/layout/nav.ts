@@ -103,6 +103,13 @@ export const NAV: NavGroup[] = [
         permission: 'accounting:read',
       },
       {
+        to: '/reports',
+        label: 'Reports',
+        title: 'Reports',
+        icon: 'reports',
+        permission: 'reports:read',
+      },
+      {
         to: '/credit-noted',
         label: 'Credit Noted',
         title: 'Credit Noted (Chea Payment)',

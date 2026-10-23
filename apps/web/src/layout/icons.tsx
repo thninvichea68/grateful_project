@@ -79,6 +79,13 @@ export const icons = {
       <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" />
     </svg>
   ),
+  /** Clipboard with a bar chart: Reports (Payroll, MIH, Import & Export). */
+  reports: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <rect x="5" y="4" width="14" height="18" rx="2" />
+      <path d="M9 2h6v4H9zM9 18v-3M12 18v-6M15 18v-4" />
+    </svg>
+  ),
   /** Receipt: Credit Noted (the broker's payment voucher), as in the accounting engine. */
   creditnote: (p: IconProps) => (
     <svg {...base} {...p}>

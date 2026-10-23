@@ -16,7 +16,7 @@ import type {
 import { db } from '../../db/client';
 import { env } from '../../config/env';
 import { queryRows } from '../../lib/listing';
-import { clearanceDate } from '../../lib/shipmentDate';
+import { periodDate } from '../../lib/shipmentDate';
 
 export interface Filters {
   from?: string | undefined;
@@ -42,12 +42,12 @@ export function yearRange(year: number): Period {
 
 /**
  * WHERE for the shipments alias `s`. The period applies to the clearance date (the first
- * declaration date), as on Shipping Plans; undeclared shipments are left out of period-bound figures.
+ * declaration date), as on Shipping Plans; undeclared shipments count by the day they were added.
  */
 function shipWhere(f: Filters, opts: { ignoreDirection?: boolean } = {}): SQL {
   const c: SQL[] = [sql`s.deleted_at IS NULL`];
-  if (f.from) c.push(sql`${clearanceDate()} >= ${f.from}::date`);
-  if (f.to) c.push(sql`${clearanceDate()} <= ${f.to}::date`);
+  if (f.from) c.push(sql`${periodDate()} >= ${f.from}::date`);
+  if (f.to) c.push(sql`${periodDate()} <= ${f.to}::date`);
   if (f.clientId?.length)
     c.push(
       sql`s.client_id IN (${sql.join(
@@ -129,7 +129,7 @@ export async function kpis(
   };
 }
 
-/** One row per month of the period, zero-filled, bucketed on clearance date. */
+/** One row per month of the period, zero-filled, bucketed on clearance date (else date added). */
 export async function monthlyVolume(f: Filters & Period): Promise<MonthlyVolumeRow[]> {
   return queryRows<MonthlyVolumeRow>(
     db,
@@ -137,7 +137,7 @@ export async function monthlyVolume(f: Filters & Period): Promise<MonthlyVolumeR
     WITH months AS (
       SELECT generate_series(date_trunc('month', ${f.from}::date), date_trunc('month', ${f.to}::date), interval '1 month')::date AS m
     ), agg AS (
-      SELECT date_trunc('month', ${clearanceDate()})::date AS m,
+      SELECT date_trunc('month', ${periodDate()})::date AS m,
              count(*) FILTER (WHERE s.direction = 'IMPORT') AS imports,
              count(*) FILTER (WHERE s.direction = 'EXPORT') AS exports
       FROM shipments s ${shipWhere(f)} GROUP BY 1

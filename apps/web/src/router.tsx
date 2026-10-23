@@ -99,6 +99,15 @@ const RecordSummaryRoute = lazy(() =>
     default: m.RecordSummaryRoute,
   })),
 );
+const ReportsLayout = lazy(() =>
+  import('./pages/reports/ReportsLayout').then((m) => ({ default: m.ReportsLayout })),
+);
+const ReportComingSoon = lazy(() =>
+  import('./pages/reports/ReportsLayout').then((m) => ({ default: m.ReportComingSoon })),
+);
+const PayrollPage = lazy(() =>
+  import('./pages/reports/PayrollPage').then((m) => ({ default: m.PayrollPage })),
+);
 const QuotationEditorPage = lazy(() =>
   import('./pages/quotations/QuotationEditorPage').then((m) => ({
     default: m.QuotationEditorPage,
@@ -335,6 +344,37 @@ export const router = createBrowserRouter([
             element: (
               <Suspense fallback={null}>
                 <DocEditorRoute />
+              </Suspense>
+            ),
+          },
+        ],
+      },
+      {
+        // Reports: Payroll (built), MIH and Import & Export (later phases), as tabs.
+        path: 'reports',
+        element: guard('reports:read', <ReportsLayout />),
+        children: [
+          {
+            index: true,
+            element: (
+              <Suspense fallback={null}>
+                <PayrollPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'mih',
+            element: (
+              <Suspense fallback={null}>
+                <ReportComingSoon name="MIH" />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'import-export',
+            element: (
+              <Suspense fallback={null}>
+                <ReportComingSoon name="IMPORT & EXPORT Reports" />
               </Suspense>
             ),
           },

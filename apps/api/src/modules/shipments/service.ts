@@ -35,7 +35,7 @@ import {
 } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { applyClearanceDate } from '../accounting/docs';
-import { clearanceDate, shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
+import { clearanceDate, periodDate, shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
 
 /* ============================== List ============================== */
 
@@ -74,7 +74,7 @@ export function shipmentWhere(f: ShipmentFilters) {
   if (f.from) conds.push(sql`${shipmentDate()} >= ${f.from}::date`);
   if (f.to) conds.push(sql`${shipmentDate()} <= ${f.to}::date`);
   // By the first declare date (the Clearance Date column); undeclared shipments drop out.
-  if (f.month) conds.push(sql`to_char(${SORTS.clearanceDate}, 'YYYY-MM') = ${f.month}`);
+  if (f.month) conds.push(sql`to_char(${periodDate()}, 'YYYY-MM') = ${f.month}`);
   if (f.q) {
     const like = likePattern(f.q);
     conds.push(sql`(s.reference ILIKE ${like} OR s.hbl_no ILIKE ${like} OR s.booking_no ILIKE ${like} OR c.code ILIKE ${like}

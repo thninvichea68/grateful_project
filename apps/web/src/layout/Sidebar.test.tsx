@@ -68,6 +68,7 @@ describe('Sidebar', () => {
       'PDF Tools',
       'Follow Up',
       'Accounting',
+      'Reports',
       'Credit Noted',
       'Record Summary',
       'Quotations',
@@ -80,7 +81,18 @@ describe('Sidebar', () => {
   it('hides finance from Operators and admin pages from Viewers', () => {
     renderAs('OPERATOR');
     expect(links()).not.toContain('Accounting');
+    expect(links()).not.toContain('Reports');
     expect(links()).toContain('Shipping Plans');
+  });
+
+  it('shows Reports (payroll) to Accountants', () => {
+    renderAs('ACCOUNTANT');
+    expect(links()).toContain('Reports');
+  });
+
+  it('keeps Reports (payroll) from Viewers', () => {
+    renderAs('VIEWER');
+    expect(links()).not.toContain('Reports');
   });
 
   it('leaves the Operations tools Credit Noted and Record Summary out for Accountants', () => {

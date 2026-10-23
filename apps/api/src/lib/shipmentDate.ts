@@ -1,4 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { env } from '../config/env';
 
 /**
  * The date a shipment belongs to, for periods and monthly figures: an import's ETA, an
@@ -16,6 +17,15 @@ export const shipmentDate = (alias = 's'): SQL => {
 export const clearanceDate = (alias = 's'): SQL => {
   const s = sql.raw(alias);
   return sql`(SELECT min(x.declare_date) FROM customs_declarations x WHERE x.shipment_id = ${s}.id)`;
+};
+
+/**
+ * The month a shipment counts in: its clearance date, or the day it was added (business
+ * time zone) until it is declared. Setting a declaration date moves it to that month.
+ */
+export const periodDate = (alias = 's'): SQL => {
+  const s = sql.raw(alias);
+  return sql`coalesce(${clearanceDate(alias)}, (${s}.created_at AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date)`;
 };
 
 /** The same rule for a shipment being saved (its numbering year). */
