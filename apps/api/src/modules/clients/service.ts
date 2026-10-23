@@ -2,8 +2,9 @@ import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { ClientDetail, ClientInputParsed, ClientListItem, Paginated } from '@gs/shared';
 import type { Request } from 'express';
 import { db } from '../../db/client';
-import { clients } from '../../db/schema';
+import { clients, consignees, countries } from '../../db/schema';
 import { env } from '../../config/env';
+import { listSuppliers } from './parties';
 import { audit } from '../../lib/audit';
 import { conflict, notFound } from '../../lib/errors';
 import {
@@ -88,8 +89,9 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
   const consigneeRows = await queryRows<ClientDetail['consignees'][number]>(
     db,
     sql`
-    SELECT id, name, country_iso2 AS "countryIso2" FROM consignees WHERE client_id = ${id} AND is_active ORDER BY name`,
+    SELECT id, name, country_iso2 AS "countryIso2", address FROM consignees WHERE client_id = ${id} AND is_active ORDER BY name`,
   );
+  const supplierRows = await listSuppliers(id);
   const recent = await queryRows<ClientDetail['recentShipments'][number]>(
     db,
     sql`
@@ -115,8 +117,35 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
     exportCount: e.exports,
     cutStockItems: e.cut,
     consignees: consigneeRows,
+    suppliers: supplierRows,
     recentShipments: recent,
   };
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The client's own consignee: one named exactly as its legal name and linked to it (imports
+ * default to it). An unlinked consignee of that name is linked; one already belonging to
+ * another client is left alone.
+ */
+async function ensureOwnConsignee(tx: Tx, clientId: string, legalName: string | null | undefined) {
+  const name = legalName?.trim();
+  if (!name) return;
+  const [found] = await tx
+    .select({ id: consignees.id, clientId: consignees.clientId })
+    .from(consignees)
+    .where(sql`lower(${consignees.name}) = lower(${name})`);
+  if (found) {
+    if (!found.clientId)
+      await tx.update(consignees).set({ clientId }).where(eq(consignees.id, found.id));
+    return;
+  }
+  const [kh] = await tx
+    .select({ iso2: countries.iso2 })
+    .from(countries)
+    .where(eq(countries.iso2, 'KH'));
+  await tx.insert(consignees).values({ clientId, name, countryIso2: kh?.iso2 ?? null });
 }
 
 export async function createClient(input: ClientInputParsed, req: Request): Promise<string> {
@@ -125,6 +154,7 @@ export async function createClient(input: ClientInputParsed, req: Request): Prom
       .insert(clients)
       .values({ ...input, commissionUsd: input.commissionUsd! })
       .returning();
+    await ensureOwnConsignee(tx, row!.id, row!.legalName);
     await audit(tx, { action: 'CREATE', entity: 'client', entityId: row!.id, after: row }, req);
     return row!.id;
   });
@@ -145,6 +175,7 @@ export async function updateClient(
     const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
     if (patch.commissionUsd === null) delete patch.commissionUsd;
     const [after] = await tx.update(clients).set(patch).where(eq(clients.id, id)).returning();
+    if (after!.legalName !== before.legalName) await ensureOwnConsignee(tx, id, after!.legalName);
     await audit(tx, { action: 'UPDATE', entity: 'client', entityId: id, before, after }, req);
   });
 }

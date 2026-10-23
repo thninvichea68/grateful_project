@@ -187,3 +187,30 @@ export function FieldError({ message }: { message?: string | undefined }) {
     </span>
   ) : null;
 }
+
+/** Chevron button at a card's top right: shows more of the card (or all of it) when open. */
+export function ExpandToggle({
+  open,
+  onToggle,
+  label,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  /** What it shows, e.g. "all forwarders" ("Show all forwarders" / "Show fewer…"). */
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={s.expandToggle}
+      aria-expanded={open}
+      aria-label={`${open ? 'Hide' : 'Show'} ${label}`}
+      title={`${open ? 'Hide' : 'Show'} ${label}`}
+      onClick={onToggle}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </button>
+  );
+}

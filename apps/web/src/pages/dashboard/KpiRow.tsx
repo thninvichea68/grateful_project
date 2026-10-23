@@ -81,16 +81,16 @@ function Card({
   );
 }
 
-/** "↗ 22.2%" pill plus "vs last month", or a note when last month had nothing. */
-function Change({ value, prev }: { value: number; prev: number }) {
+/** "↗ 22.2%" pill plus "vs last month" (or year), or a note when that had nothing. */
+function Change({ value, prev, unit }: { value: number; prev: number; unit: 'month' | 'year' }) {
   const ch = changePct(value, prev);
-  if (!ch) return <span className={s.sub}>no data last month</span>;
+  if (!ch) return <span className={s.sub}>no data last {unit}</span>;
   return (
     <>
       <span className={s.delta} data-up={ch.up}>
         {ch.text}
       </span>
-      <span className={s.sub}>vs last month</span>
+      <span className={s.sub}>vs last {unit}</span>
     </>
   );
 }
@@ -140,14 +140,14 @@ function Spark({ rows, color }: { rows: { month: string; v: number }[]; color: s
   );
 }
 
-/** This month vs last month as two horizontal bars, labelled with month and count. */
-function Compare({ rows }: { rows: { month: string; v: number }[] }) {
+/** This period vs the one before as two horizontal bars, labelled with period and count. */
+function Compare({ rows }: { rows: { label: string; v: number }[] }) {
   const max = Math.max(1, ...rows.map((r) => r.v));
   return (
     <div className={s.compare}>
       {rows.map((r, i) => (
-        <div key={r.month} className={s.compareRow} data-now={i === rows.length - 1 || undefined}>
-          <span className={s.compareLabel}>{monthLabel(r.month)}</span>
+        <div key={r.label} className={s.compareRow} data-now={i === rows.length - 1 || undefined}>
+          <span className={s.compareLabel}>{r.label}</span>
           <span className={s.compareTrack}>
             <span style={{ width: `${Math.max(4, (r.v / max) * 100)}%` }} />
           </span>
@@ -196,11 +196,23 @@ function Ring({ rate }: { rate: number }) {
   );
 }
 
-export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeRow[] }) {
+export function KpiRow({
+  k,
+  monthly,
+  fullYear = false,
+}: {
+  k: KpiResponse;
+  monthly: MonthlyVolumeRow[];
+  /** The KPIs cover January to the month shown, compared with the year before. */
+  fullYear?: boolean;
+}) {
   const navigate = useNavigate();
   const toPlans = (q: string) => navigate(`/plans?${q}`);
+  const unit = fullYear ? 'year' : 'month';
   // The last six months up to the one shown (the year's months come zero-filled).
-  const upTo = k.period.from.slice(0, 7);
+  const upTo = k.period.to.slice(0, 7);
+  const periodLabel = (p: { from: string }) =>
+    fullYear ? p.from.slice(0, 4) : monthLabel(p.from.slice(0, 7));
   const recent = monthly.filter((m) => m.month <= upTo).slice(-6);
   const series = (key: 'total' | 'imports' | 'exports') =>
     recent.map((m) => ({ month: m.month, v: m[key] }));
@@ -212,9 +224,9 @@ export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeR
       <Card
         tone="cyan"
         icon={ICONS.box}
-        label="Total Shipments This Month"
+        label={fullYear ? 'Total Shipments This Year' : 'Total Shipments This Month'}
         value={k.total}
-        meta={<Change value={k.total} prev={k.previous.total} />}
+        meta={<Change value={k.total} prev={k.previous.total} unit={unit} />}
         chart={recent.length > 1 && <Bars rows={series('total')} />}
         onOpen={() => toPlans('sort=-eta')}
       />
@@ -223,7 +235,7 @@ export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeR
         icon={ICONS.import}
         label="Import Shipments"
         value={k.imports}
-        meta={<Change value={k.imports} prev={k.previous.imports} />}
+        meta={<Change value={k.imports} prev={k.previous.imports} unit={unit} />}
         chart={recent.length > 1 && <Spark rows={series('imports')} color="#22d3ee" />}
         onOpen={() => toPlans('direction=IMPORT')}
       />
@@ -232,12 +244,12 @@ export function KpiRow({ k, monthly }: { k: KpiResponse; monthly: MonthlyVolumeR
         icon={ICONS.export}
         label="Export Shipments"
         value={k.exports}
-        meta={<Change value={k.exports} prev={k.previous.exports} />}
+        meta={<Change value={k.exports} prev={k.previous.exports} unit={unit} />}
         chart={
           <Compare
             rows={[
-              { month: k.previousPeriod.from.slice(0, 7), v: k.previous.exports },
-              { month: upTo, v: k.exports },
+              { label: periodLabel(k.previousPeriod), v: k.previous.exports },
+              { label: periodLabel(k.period), v: k.exports },
             ]}
           />
         }

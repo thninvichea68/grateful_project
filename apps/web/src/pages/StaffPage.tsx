@@ -34,6 +34,7 @@ const PERM_GROUPS = [...new Set(PERMISSIONS.map((p) => p.split(':')[0]!))];
 const AREAS: Record<string, { label: string; desc: string }> = {
   dashboard: { label: 'Dashboard', desc: 'Overview and Analytics' },
   shipments: { label: 'Shipments', desc: 'Shipping Plans and shipment forms' },
+  sealplans: { label: 'Seal Plans', desc: 'Container seals, trucking and depot' },
   clients: { label: 'Clients', desc: 'Client list and details' },
   cutstock: { label: 'CDC Master List', desc: 'Licensed items and balances' },
   accounting: { label: 'Accounting', desc: 'Ledger, invoices and notes' },

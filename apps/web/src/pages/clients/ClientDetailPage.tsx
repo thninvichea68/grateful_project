@@ -9,6 +9,8 @@ import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { CLIENT_STATUS_PILL } from '../ClientsPage';
 import { ClientFormModal } from './ClientFormModal';
+import { PartiesCard } from './PartiesCard';
+import { RemarksCard } from './RemarksCard';
 import s from './ClientDetailPage.module.css';
 
 export function ClientDetailPage() {
@@ -132,53 +134,56 @@ export function ClientDetailPage() {
       </div>
 
       <div className={s.layout}>
-        <div className="card">
-          <div className="card-header-row">
-            <h3>Recent shipments</h3>
-            <Link to={`/plans?clientId=${c.id}`} className="filter-btn">
-              View all in Shipping Plans
-            </Link>
-          </div>
-          <div className="plans-table-scroll">
-            <table className="data-table-clean">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Invoice No.</th>
-                  <th>Transport</th>
-                  <th>ETA</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <TableState
-                  cols={5}
-                  loading={false}
-                  error={null}
-                  empty={!c.recentShipments.length}
-                  emptyText="No shipments for this client yet."
-                />
-                {c.recentShipments.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="plans-row-clickable"
-                    onClick={() => navigate(`/plans/${r.id}`)}
-                  >
-                    <td className="val-bold">{r.reference}</td>
-                    <td>{r.invoiceNos.join(', ') || '-'}</td>
-                    <td>{r.direction}</td>
-                    <td>{fmtDate(r.eta)}</td>
-                    <td>
-                      <ShipmentStatusPill status={r.status} />
-                    </td>
+        <div className={s.column}>
+          <div className="card">
+            <div className="card-header-row">
+              <h3>Recent shipments</h3>
+              <Link to={`/plans?clientId=${c.id}`} className="filter-btn">
+                View all in Shipping Plans
+              </Link>
+            </div>
+            <div className="plans-table-scroll">
+              <table className="data-table-clean">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Invoice No.</th>
+                    <th>Transport</th>
+                    <th>ETA</th>
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  <TableState
+                    cols={5}
+                    loading={false}
+                    error={null}
+                    empty={!c.recentShipments.length}
+                    emptyText="No shipments for this client yet."
+                  />
+                  {c.recentShipments.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="plans-row-clickable"
+                      onClick={() => navigate(`/plans/${r.id}`)}
+                    >
+                      <td className="val-bold">{r.reference}</td>
+                      <td>{r.invoiceNos.join(', ') || '-'}</td>
+                      <td>{r.direction}</td>
+                      <td>{fmtDate(r.eta)}</td>
+                      <td>
+                        <ShipmentStatusPill status={r.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
+          <PartiesCard client={c} />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className={s.column}>
           <div className="card">
             <div className="card-header-row">
               <h3>Details</h3>
@@ -212,18 +217,7 @@ export function ClientDetailPage() {
               <dd>{fmtDate(c.createdAt)}</dd>
             </dl>
           </div>
-          <div className="card">
-            <div className="card-header-row">
-              <h3>Consignees</h3>
-            </div>
-            <div className={s.list}>
-              {c.consignees.length ? (
-                c.consignees.map((x) => <div key={x.id}>{x.name}</div>)
-              ) : (
-                <span className={s.muted}>None linked to this client.</span>
-              )}
-            </div>
-          </div>
+          <RemarksCard clientId={c.id} />
           <div className="card">
             <div className="card-header-row">
               <h3>CDC master list</h3>

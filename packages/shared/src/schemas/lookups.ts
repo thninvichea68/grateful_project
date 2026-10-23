@@ -7,6 +7,7 @@ export interface LookupsResponse {
     id: string;
     code: string;
     name: string;
+    legalName: string | null;
     status: ClientStatus;
     commissionUsd: string;
   }[];

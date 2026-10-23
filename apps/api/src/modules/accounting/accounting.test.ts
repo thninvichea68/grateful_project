@@ -791,6 +791,64 @@ describe('billing documents', () => {
     ).toBe(403);
   });
 
+  it("accounting's Approved and Revised land in Operations' Record Summary inbox", async () => {
+    const rec = await ledgerRow();
+    const op = await as('OPERATOR');
+    const h = await as('ACCOUNTANT');
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ recordId: rec.id })
+        .set(op)
+    ).body;
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(op)
+      .send(pre)
+      .expect(201);
+    const submit = () =>
+      request(app)
+        .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+        .set(op)
+        .expect(200);
+    const review = (reviewStatus: string, message?: string) =>
+      request(app)
+        .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
+        .set(h)
+        .send({ reviewStatus, message })
+        .expect(200);
+    const inbox = async () =>
+      (await request(app).get('/api/v1/accounting/record-summaries/inbox').set(op).expect(200))
+        .body;
+    await submit();
+    // Opening it (Reviewed) shows on their list but sends no message.
+    await review('REVIEWED');
+    expect((await inbox()).unread).toBe(0);
+    const listed = (await request(app).get('/api/v1/accounting/docs/record-summaries').set(op)).body
+      .data;
+    expect(listed[0].reviewStatus).toBe('REVIEWED');
+    await review('REVISED', 'THC should be 35.00');
+    await submit();
+    await review('CHECKED');
+    const box = await inbox();
+    expect(box.unread).toBe(2);
+    expect(box.data.map((m: { kind: string }) => m.kind)).toEqual(['CHECKED', 'REVISED']);
+    expect(box.data[1]).toMatchObject({ recordSummaryId: rs.body.id, body: 'THC should be 35.00' });
+    expect(
+      (await request(app).get('/api/v1/meta/nav-counts').set(op)).body.recordSummaryInbox,
+    ).toBe(2);
+    await request(app)
+      .post('/api/v1/accounting/record-summaries/inbox/read')
+      .set(op)
+      .send({ messageId: box.data[0].id })
+      .expect(204);
+    expect((await inbox()).unread).toBe(1);
+    // The accountant who sent them gets nothing.
+    expect(
+      (await request(app).get('/api/v1/accounting/record-summaries/inbox').set(h)).body.unread,
+    ).toBe(0);
+  });
+
   it('ignores a typed number, refuses a second invoice and a ledger row from another client', async () => {
     const h = await as('ACCOUNTANT');
     const rec = await ledgerRow();

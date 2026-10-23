@@ -56,7 +56,7 @@
   object-fit: contain;
 }
 .companyKm {
-  font-family: var(--km-title);
+  font-family: 'Khmer OS Muol', 'Khmer OS Muol Light', 'GS Moul', serif;
   font-size: 13.5pt;
   font-weight: 500;
   margin-bottom: 3px;
@@ -109,7 +109,7 @@
   border-top: 3px solid #000;
 }
 .titleKm {
-  font-family: var(--km-title);
+  font-family: 'Khmer OS Muol', 'Khmer OS Muol Light', 'GS Moul', serif;
   font-size: 14pt;
   font-weight: 500;
   margin: 5px 0 1px;

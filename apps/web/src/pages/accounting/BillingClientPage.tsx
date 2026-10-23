@@ -13,7 +13,7 @@ import {
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useClientMonth, useIssueDrafts, useVoidReceipt } from '../../features/billing';
-import { ErrorBanner, ui } from '../../components/ui';
+import { ErrorBanner, ExpandToggle, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
@@ -78,6 +78,8 @@ function Workspace({
   const issue = useIssueDrafts(m.client.id);
   const [drafting, setDrafting] = useState(false);
   const [paying, setPaying] = useState<BillingStatement | null>(null);
+  // The statements stay folded under their heading until opened.
+  const [statementsOpen, setStatementsOpen] = useState(false);
   const s = m.summary;
   const here = `/accounting/billing/${m.client.id}?month=${month}`;
   const back = encodeURIComponent(here);
@@ -188,7 +190,11 @@ function Workspace({
             type="button"
             className={b.step}
             data-state={st.state}
-            onClick={() => document.getElementById(st.id)?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => {
+              // The statements open when their steps are clicked.
+              if (st.id === 'statements') setStatementsOpen(true);
+              document.getElementById(st.id)?.scrollIntoView({ behavior: 'smooth' });
+            }}
           >
             <span className={b.stepNum}>{st.state === 'done' ? '✓' : i + 1}</span>
             <span>
@@ -342,25 +348,32 @@ function Workspace({
               the official receipt.
             </div>
           </div>
+          <ExpandToggle
+            open={statementsOpen}
+            onToggle={() => setStatementsOpen((o) => !o)}
+            label="the statements and payments"
+          />
         </div>
-        {s.drafts > 0 && (
+        {statementsOpen && s.drafts > 0 && (
           <div className={ui.notice}>
             {s.drafts} draft{s.drafts === 1 ? ' is' : 's are'} on the statements marked DRAFT. Issue{' '}
             {s.drafts === 1 ? 'it' : 'them'} to make the statements and receipts final.
           </div>
         )}
-        <div className={b.statements}>
-          {(['INVOICE', 'DEBIT_NOTE'] as const).map((k) => (
-            <StatementPanel
-              key={k}
-              st={m.statements[k]}
-              month={month}
-              clientId={m.client.id}
-              canWrite={canWrite}
-              onPay={() => setPaying(m.statements[k])}
-            />
-          ))}
-        </div>
+        {statementsOpen && (
+          <div className={b.statements}>
+            {(['INVOICE', 'DEBIT_NOTE'] as const).map((k) => (
+              <StatementPanel
+                key={k}
+                st={m.statements[k]}
+                month={month}
+                clientId={m.client.id}
+                canWrite={canWrite}
+                onPay={() => setPaying(m.statements[k])}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {drafting && (

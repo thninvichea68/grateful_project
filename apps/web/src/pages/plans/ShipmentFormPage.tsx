@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   FormProvider,
   useFieldArray,
@@ -143,6 +143,33 @@ function ShipmentForm({
   useEffect(() => {
     if (transportMode === 'AIR') setValue('loadType', 'NONE');
   }, [transportMode, setValue]);
+
+  // An import's consignee starts as the client itself (its factory-side consignee) when the
+  // client or direction is picked, replacing one that was blank, filled in this way, or
+  // another client's own. Any other consignee chosen by hand is kept; a saved shipment is
+  // left as it was until its client is changed.
+  const autoConsignee = useRef<string | null>(null);
+  const firstPick = useRef(true);
+  useEffect(() => {
+    const skip = firstPick.current && !!detail;
+    firstPick.current = false;
+    if (skip || direction !== 'IMPORT') return;
+    // The one named as the client's legal name, else its Cambodian one, else any of its own.
+    const legal = lookups.clients
+      .find((c) => c.id === clientId)
+      ?.legalName?.trim()
+      .toLowerCase();
+    const own =
+      (legal && lookups.consignees.find((c) => c.name.trim().toLowerCase() === legal)) ||
+      lookups.consignees.find((c) => c.clientId === clientId && c.countryIso2 === 'KH') ||
+      lookups.consignees.find((c) => c.clientId === clientId);
+    const now = methods.getValues('consigneeId') ?? '';
+    const owner = lookups.consignees.find((c) => c.id === now)?.clientId;
+    const replaceable = !now || now === autoConsignee.current || (!!owner && owner !== clientId);
+    if (!replaceable) return;
+    autoConsignee.current = own?.id ?? null;
+    setValue('consigneeId', own?.id ?? '', { shouldDirty: !!detail });
+  }, [clientId, direction, detail, lookups.clients, lookups.consignees, methods, setValue]);
 
   const steps = useMemo(() => buildSteps(direction, lookups, detail), [direction, lookups, detail]);
   const current = Math.min(step, steps.length - 1);

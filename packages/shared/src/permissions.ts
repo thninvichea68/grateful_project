@@ -9,6 +9,9 @@ export const PERMISSIONS = [
   'shipments:read',
   'shipments:write',
   'shipments:delete',
+  /** Seal Plans (container seals, trucking and depot); saving also updates the containers. */
+  'sealplans:read',
+  'sealplans:write',
   'clients:read',
   'clients:write',
   'cutstock:read',
@@ -56,6 +59,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
       (p) => p !== 'audit:read' && p !== 'accounting:read' && p !== 'creditnotes:read',
     ),
     'shipments:write',
+    'sealplans:write',
     'clients:write',
     'cutstock:write',
     'recordsummaries:write',

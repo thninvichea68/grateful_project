@@ -183,9 +183,10 @@ export function cleanForSubmit(v: FormValues): FormValues {
     invoices: (v.invoices ?? [])
       .filter((i) => i.invoiceNo || i.lines.some(lineFilled))
       .map((i) => ({ ...i, lines: i.lines.filter(lineFilled) })),
-    declarations: (v.declarations ?? []).filter(
-      (d) => d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim(),
-    ),
+    declarations: (v.declarations ?? [])
+      .filter((d) => d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim())
+      // An import has no port picker on its declarations: they clear at the Clearance Port.
+      .map((d) => (v.direction === 'IMPORT' ? { ...d, portId: v.clearancePortId ?? '' } : d)),
   };
 }
 

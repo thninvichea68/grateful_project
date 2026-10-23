@@ -92,21 +92,24 @@ export function DeclarationsSection({
                 />
                 <FieldError message={e?.declareDate?.message} />
               </div>
-              <div className="form-field-group">
-                <label htmlFor={`d-${di}-port`}>Customs Port</label>
-                <select
-                  id={`d-${di}-port`}
-                  className="form-select-box"
-                  {...register(`declarations.${di}.portId`)}
-                >
-                  <option value="">Port</option>
-                  {ports.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} · {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* An import's declarations take the Clearance Port from step 3 (set on save). */}
+              {!isImport && (
+                <div className="form-field-group">
+                  <label htmlFor={`d-${di}-port`}>Customs Port</label>
+                  <select
+                    id={`d-${di}-port`}
+                    className="form-select-box"
+                    {...register(`declarations.${di}.portId`)}
+                  >
+                    <option value="">Port</option>
+                    {ports.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} · {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="form-field-group" style={{ justifyContent: 'flex-end' }}>
                 {di === 0 ? null : ledger ? (
                   <span className="create-header-desc">

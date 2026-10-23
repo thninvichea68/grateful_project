@@ -23,7 +23,7 @@ const svg = (children: ReactNode, size = 17) => (
     {children}
   </svg>
 );
-const inboxIcon = (size?: number) =>
+export const inboxIcon = (size?: number) =>
   svg(
     <>
       <path d="M22 12h-6l-2 3h-4l-2-3H2" />

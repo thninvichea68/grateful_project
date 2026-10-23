@@ -10,6 +10,7 @@ export * from './schemas/lookups';
 export * from './schemas/clients';
 export * from './schemas/shipments';
 export * from './schemas/cutstock';
+export * from './schemas/sealPlans';
 export * from './schemas/analytics';
 export * from './schemas/accounting';
 export * from './schemas/billing';

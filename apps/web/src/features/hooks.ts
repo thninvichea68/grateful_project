@@ -3,6 +3,11 @@ import type {
   ClientDetail,
   ClientInput,
   ClientListItem,
+  ClientNote,
+  ClientConsigneeInput,
+  ClientNoteInput,
+  ConsigneeAddressInput,
+  SupplierInput,
   CutStockImportResult,
   CutStockItemInput,
   CutStockMovement,
@@ -10,6 +15,11 @@ import type {
   CutStockSummary,
   LookupsResponse,
   Paginated,
+  SealPlanInput,
+  SealPlanRow,
+  SealPlanShipment,
+  SealPlanShipmentOption,
+  SealPlanStandaloneInput,
   ShipmentDetail,
   ShipmentInput,
   ShipmentListItem,
@@ -63,6 +73,93 @@ export function useClient(id: string) {
   return useQuery({
     queryKey: queryKeys.client(id),
     queryFn: () => api<ClientDetail>(`/clients/${id}`),
+  });
+}
+
+/* ---------- Client suppliers / consignees (addresses for the INV + PL) ---------- */
+export function useSaveSupplier(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SupplierInput) =>
+      api<{ id: string }>(`/clients/${clientId}/suppliers`, { method: 'PUT', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.client(clientId) }),
+  });
+}
+
+/** Hides a supplier (by name) from the client's list and clears its address. */
+export function useDeleteSupplier(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      api<undefined>(`/clients/${clientId}/suppliers`, { method: 'DELETE', query: { name } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.client(clientId) }),
+  });
+}
+
+/** Client Details → Consignees → "+ Add": a consignee for this client, with its address. */
+export function useAddClientConsignee(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ClientConsigneeInput) =>
+      api<{ id: string }>(`/clients/${clientId}/consignees`, { method: 'POST', json: body }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.client(clientId) }),
+        qc.invalidateQueries({ queryKey: queryKeys.lookups }),
+      ]),
+  });
+}
+
+/** Makes a consignee inactive: off the client's list and the dropdowns; shipments keep it. */
+export function useDeleteConsignee(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<undefined>(`/clients/${clientId}/consignees/${id}`, { method: 'DELETE' }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: queryKeys.client(clientId) }),
+        qc.invalidateQueries({ queryKey: queryKeys.lookups }),
+      ]),
+  });
+}
+
+export function useSetConsigneeAddress(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ConsigneeAddressInput }) =>
+      api<undefined>(`/clients/${clientId}/consignees/${id}`, { method: 'PATCH', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.client(clientId) }),
+  });
+}
+
+/* ---------- Client remarks (notes under a subject) ---------- */
+const clientNotesKey = (clientId: string) => [...queryKeys.client(clientId), 'notes'] as const;
+
+export function useClientNotes(clientId: string) {
+  return useQuery({
+    queryKey: clientNotesKey(clientId),
+    queryFn: () => api<ClientNote[]>(`/clients/${clientId}/notes`),
+  });
+}
+
+export function useSaveClientNote(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string | null; body: ClientNoteInput }) =>
+      id
+        ? api<undefined>(`/clients/${clientId}/notes/${id}`, { method: 'PUT', json: body })
+        : api<{ id: string }>(`/clients/${clientId}/notes`, { method: 'POST', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: clientNotesKey(clientId) }),
+  });
+}
+
+export function useDeleteClientNote(clientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<undefined>(`/clients/${clientId}/notes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: clientNotesKey(clientId) }),
   });
 }
 
@@ -140,6 +237,74 @@ export function useDeleteShipment() {
   return useMutation({
     mutationFn: (id: string) => api<undefined>(`/shipments/${id}`, { method: 'DELETE' }),
     onSuccess: () => invalidateShipmentData(qc),
+  });
+}
+
+/* ---------- Seal plans ---------- */
+export function useSealPlans(query: Query & { year: number }) {
+  return useQuery({
+    queryKey: [...queryKeys.sealPlans, query],
+    queryFn: () => api<SealPlanRow[]>('/seal-plans', { query }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useSaveSealPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      shipmentId,
+      containerNo,
+      body,
+    }: {
+      shipmentId: string;
+      containerNo: string;
+      body: SealPlanInput;
+    }) =>
+      api<undefined>(`/seal-plans/${shipmentId}/${encodeURIComponent(containerNo)}`, {
+        method: 'PUT',
+        json: body,
+      }),
+    // The seals (and a container added here) also show on the shipment itself.
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shipments }),
+  });
+}
+
+/** "+ New Seal Plan": export CY/CY shipments to fill from. */
+export function useSealPlanShipments(q: string) {
+  return useQuery({
+    queryKey: [...queryKeys.sealPlans, 'shipments', q],
+    queryFn: () =>
+      api<SealPlanShipmentOption[]>('/seal-plans/shipments', { query: { q: q || undefined } }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useSealPlanShipment(id: string | null) {
+  return useQuery({
+    queryKey: [...queryKeys.sealPlans, 'shipment', id],
+    queryFn: () => api<SealPlanShipment>(`/seal-plans/shipments/${id}`),
+    enabled: !!id,
+  });
+}
+
+/** A plan without a shipment: create (no id), update or delete. */
+export function useSaveStandaloneSealPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string | null; body: SealPlanStandaloneInput }) =>
+      id
+        ? api<undefined>(`/seal-plans/${id}`, { method: 'PUT', json: body })
+        : api<{ id: string }>('/seal-plans', { method: 'POST', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sealPlans }),
+  });
+}
+
+export function useDeleteSealPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<undefined>(`/seal-plans/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.sealPlans }),
   });
 }
 

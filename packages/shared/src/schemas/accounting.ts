@@ -409,6 +409,29 @@ export interface CreditNoteMessage {
   port: string | null;
   total: string;
 }
+/** A message from accounting in Operations' Record Summary inbox. */
+export interface RecordSummaryMessage {
+  id: string;
+  recordSummaryId: string;
+  invNo: string | null;
+  declareNo: string | null;
+  clientName: string;
+  /** CHECKED (shown as "Approved"), or REVISED (returned to Operations to fix). */
+  kind: CreditNoteReviewStatus;
+  body: string;
+  senderName: string | null;
+  createdAt: string;
+  /** When I accepted (read) it; null = new. */
+  readAt: string | null;
+  // The summary's details, for the inbox table.
+  date: string;
+  status: BillingDocStatus;
+  direction: Direction;
+  transportMode: TransportMode;
+  quantityText: string | null;
+  port: string | null;
+  total: string;
+}
 
 export interface CreditNoteReviewRow {
   id: string;

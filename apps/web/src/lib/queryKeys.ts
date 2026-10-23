@@ -9,6 +9,8 @@ export const queryKeys = {
   client: (id: string) => ['clients', id] as const,
   shipments: ['shipments'] as const,
   shipment: (id: string) => ['shipments', 'detail', id] as const,
+  /** Under shipments, so saving a shipment refreshes its containers here too. */
+  sealPlans: ['shipments', 'seal-plans'] as const,
   cutStock: ['cut-stock'] as const,
   cutStockItem: (id: string) => ['cut-stock', 'item', id] as const,
   /** Phase 4 dashboards: invalidated whenever shipments or ledger data change. */

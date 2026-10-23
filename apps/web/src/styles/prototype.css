@@ -1134,24 +1134,32 @@ body.sidebar-collapsed .signout {
 #view-cutstock .card > #cutstockSummary {
   flex-shrink: 0;
 }
-/* Shipping Plans: same full-height card; the table takes the space between the header
-   and the pager and scrolls inside it. Small screens keep normal page scrolling. */
+/* Shipping Plans, Seal Plans and Operations: same full-height card; the table takes the space
+   between the header and the pager and scrolls inside it. Small screens keep normal page scrolling. */
 @media (min-width: 900px) and (min-height: 600px) {
-  #view-plans.view.active {
+  #view-plans.view.active,
+  #view-sealplans.view.active,
+  #view-operations.view.active {
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--topbar-h) - 48px);
   }
-  #view-plans > .card {
+  #view-plans > .card,
+  #view-sealplans > .card,
+  #view-operations > .card {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
   }
-  #view-plans > .card > * {
+  #view-plans > .card > *,
+  #view-sealplans > .card > *,
+  #view-operations > .card > * {
     flex-shrink: 0;
   }
-  #view-plans > .card > .plans-table-scroll {
+  #view-plans > .card > .plans-table-scroll,
+  #view-sealplans > .card > .plans-table-scroll,
+  #view-operations > .card > .plans-table-scroll {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
@@ -4481,6 +4489,23 @@ th.frozen-col.frozen-col-edge {
 .cutstock-table th {
   white-space: nowrap;
 }
+
+/* Seal Plans: one line per container; a heading row per month, as in the spreadsheet. */
+.seal-plan-table td,
+.seal-plan-table th {
+  white-space: nowrap;
+}
+.seal-plan-table tr.seal-plan-month td {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+/* The month label stays in view while the table scrolls sideways. */
+.seal-plan-table tr.seal-plan-month td > span {
+  position: sticky;
+  left: 12px;
+}
 .cutstock-table td:nth-child(2) {
   white-space: normal;
   min-width: 200px;
@@ -5156,4 +5181,26 @@ table.an-detail-table td.center {
   .cx-g-item {
     grid-template-columns: 1fr;
   }
+}
+
+/* Open invoice: one plain card (no shaded panel); every input, total and line total is a
+   soft filled box, the same fill as the summary chips. */
+.cargo-inv-panel {
+  background: transparent;
+}
+.cx-line .cx-f .cargo-cell,
+.cx-desc-row .cargo-cell,
+.cx-line-total-box .cargo-line-total {
+  background: var(--bg-inset);
+}
+.cx-line .cx-f .cargo-cell:hover,
+.cx-desc-row .cargo-cell:hover {
+  background: var(--bg-subtle);
+}
+.cx-line .cx-f .cargo-cell:focus,
+.cx-desc-row .cargo-cell:focus {
+  background: var(--bg-surface);
+}
+.cx-desc-row .cargo-cell {
+  font-weight: 400;
 }

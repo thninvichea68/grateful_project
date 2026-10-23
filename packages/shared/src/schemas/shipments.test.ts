@@ -30,3 +30,38 @@ describe('shipment declarations', () => {
     expect(half.success).toBe(false);
   });
 });
+
+describe('shipment cargo invoices', () => {
+  const blankLine = {
+    poNo: '',
+    styleNo: '',
+    cdcNo: '',
+    pcs: '',
+    netWeightKg: '',
+    fobUnitPrice: '',
+  };
+
+  it('are optional: an untouched invoice row (even with a preset date) is dropped', () => {
+    const v = shipmentInputSchema.parse({
+      ...base,
+      invoices: [
+        {
+          invoiceNo: '',
+          invoiceDate: '2026-10-01',
+          description: '',
+          packages: '',
+          lines: [blankLine],
+        },
+      ],
+    });
+    expect(v.invoices).toEqual([]);
+  });
+
+  it('still checks an invoice with something typed in', () => {
+    const half = shipmentInputSchema.safeParse({
+      ...base,
+      invoices: [{ invoiceNo: '', lines: [{ ...blankLine, pcs: '10' }] }],
+    });
+    expect(half.success).toBe(false);
+  });
+});

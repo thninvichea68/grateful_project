@@ -35,7 +35,7 @@ import {
 } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { applyClearanceDate } from '../accounting/docs';
-import { shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
+import { clearanceDate, shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
 
 /* ============================== List ============================== */
 
@@ -125,7 +125,7 @@ const listSelect = (extra: SQL = sql``) => sql`
 const SORTS = {
   eta: sql`s.eta`,
   // Customs clearance (declaration) date: the shipment's first declaration; none → last.
-  clearanceDate: sql`(SELECT min(x.declare_date) FROM customs_declarations x WHERE x.shipment_id = s.id)`,
+  clearanceDate: clearanceDate(),
   reference: sql`s.reference`,
   status: sql`s.status`,
   client: sql`c.code`,

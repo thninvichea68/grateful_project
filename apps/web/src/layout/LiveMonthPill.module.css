@@ -109,6 +109,44 @@
   cursor: not-allowed;
 }
 
+/* "Full year 2026 · Jan – Oct (so far)" under the months. */
+.fullYear {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  margin-top: 6px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fullYear small {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.fullYear:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.fullYear[data-selected] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #041b2d;
+}
+.fullYear[data-selected] small {
+  color: inherit;
+  opacity: 0.75;
+}
+
 .back {
   display: flex;
   align-items: center;

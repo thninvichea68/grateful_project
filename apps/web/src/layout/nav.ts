@@ -1,4 +1,4 @@
-import type { Permission } from '@gs/shared';
+import type { Permission, RoleCode } from '@gs/shared';
 import type { IconName } from './icons';
 
 export interface NavItem {
@@ -10,7 +10,9 @@ export interface NavItem {
   permission: Permission;
   /** Rendered with the prototype's indented sub-item style. */
   sub?: boolean;
-  badge?: 'openFollowUps' | 'creditNoteInbox';
+  badge?: 'openFollowUps' | 'creditNoteInbox' | 'recordSummaryInbox';
+  /** Roles that don't see this item even with the permission (they use another page for it). */
+  hideFor?: RoleCode[];
   /** Exact match for NavLink active state. */
   end?: boolean;
 }
@@ -37,6 +39,13 @@ export const NAV: NavGroup[] = [
         title: 'Shipping Plans',
         icon: 'plans',
         permission: 'shipments:read',
+      },
+      {
+        to: '/seal-plans',
+        label: 'Seal Plans',
+        title: 'Seal Plans — Container Shipment Schedule',
+        icon: 'seal',
+        permission: 'sealplans:read',
       },
       {
         to: '/clients',
@@ -93,6 +102,8 @@ export const NAV: NavGroup[] = [
         icon: 'creditnote',
         permission: 'creditnotes:read',
         badge: 'creditNoteInbox',
+        // An Operations tool: accountants check credit notes in Accounting → Chea Payments.
+        hideFor: ['ACCOUNTANT'],
       },
       {
         // Record Summary list (its own permission, so Operations can use it).
@@ -101,6 +112,9 @@ export const NAV: NavGroup[] = [
         title: 'Record Summary',
         icon: 'recordsummary',
         permission: 'recordsummaries:read',
+        badge: 'recordSummaryInbox',
+        // Accountants check record summaries in Accounting → Expense to Clients.
+        hideFor: ['ACCOUNTANT'],
       },
       {
         to: '/quotations',

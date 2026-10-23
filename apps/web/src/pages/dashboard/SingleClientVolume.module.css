@@ -7,7 +7,7 @@
   background: var(--bg-surface);
 }
 
-/* Title on the left, View / Year dropdowns on the right. */
+/* Title on the left, the client dropdown (Operators) on the right. */
 .head {
   display: flex;
   align-items: flex-start;

@@ -67,7 +67,12 @@ export interface ClientDetail extends ClientListItem {
   importCount: number;
   exportCount: number;
   cutStockItems: number;
-  consignees: { id: string; name: string; countryIso2: string | null }[];
+  consignees: { id: string; name: string; countryIso2: string | null; address: string | null }[];
+  /**
+   * Shipper names on the client's shipments plus suppliers added by hand, with their address.
+   * `id` is null for a shipper name that has no supplier record (no address) yet.
+   */
+  suppliers: { id: string | null; name: string; address: string | null }[];
   recentShipments: {
     id: string;
     reference: string;
@@ -77,3 +82,39 @@ export interface ClientDetail extends ClientListItem {
     invoiceNos: string[];
   }[];
 }
+
+/** Client Details → Remarks: a note under a subject (a login link, a password, anything). */
+export const clientNoteInputSchema = z.object({
+  subject: z.string().trim().min(1, 'Enter a subject').max(120),
+  body: z.string().trim().max(4000).default(''),
+  /** Passwords and the like: the text shows only when someone clicks Show. */
+  hidden: z.boolean().default(false),
+});
+export type ClientNoteInput = z.input<typeof clientNoteInputSchema>;
+
+export interface ClientNote {
+  id: string;
+  subject: string;
+  body: string;
+  hidden: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** A client's supplier (import shipper): its name and the address under it on the letterhead. */
+export const supplierInputSchema = z.object({
+  name: z.string().trim().min(1, 'Enter the supplier name').max(200),
+  address: optText(500),
+});
+export type SupplierInput = z.input<typeof supplierInputSchema>;
+
+/** A consignee's address (printed on the export INV + PL). */
+export const consigneeAddressSchema = z.object({ address: optText(500) });
+export type ConsigneeAddressInput = z.input<typeof consigneeAddressSchema>;
+
+/** Client Details → Consignees → "+ Add": a consignee for this client, with its address. */
+export const clientConsigneeInputSchema = z.object({
+  name: z.string().trim().min(2, 'Enter the consignee name').max(160),
+  address: optText(500),
+});
+export type ClientConsigneeInput = z.input<typeof clientConsigneeInputSchema>;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
-import type { Permission } from '@gs/shared';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
+import type { Permission, RoleCode } from '@gs/shared';
 import { useAuth } from './AuthProvider';
 import { FullPageLoader } from '../components/FullPageLoader';
 
@@ -11,6 +11,26 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (status === 'loading') return <FullPageLoader />;
   if (status === 'anonymous')
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  return <>{children}</>;
+}
+
+/**
+ * Sends the listed roles to their own page for the same records (`to` may hold `:id`), e.g. an
+ * accountant opening Credit Noted lands in Accounting → Chea Payments.
+ */
+export function RedirectRoles({
+  roles,
+  to,
+  children,
+}: {
+  roles: RoleCode[];
+  to: string;
+  children: ReactNode;
+}) {
+  const { user } = useAuth();
+  const { id } = useParams();
+  if (user && roles.includes(user.role))
+    return <Navigate to={id ? to.replace(':id', id) : to} replace />;
   return <>{children}</>;
 }
 

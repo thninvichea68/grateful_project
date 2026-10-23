@@ -9,6 +9,15 @@ export const shipmentDate = (alias = 's'): SQL => {
   return sql`(CASE WHEN ${s}.direction = 'EXPORT' THEN coalesce(${s}.etd, ${s}.eta) ELSE coalesce(${s}.eta, ${s}.etd) END)`;
 };
 
+/**
+ * A shipment's clearance date: its first declaration date (the Clearance Date column).
+ * Periods and monthly figures go by this; undeclared shipments have none.
+ */
+export const clearanceDate = (alias = 's'): SQL => {
+  const s = sql.raw(alias);
+  return sql`(SELECT min(x.declare_date) FROM customs_declarations x WHERE x.shipment_id = ${s}.id)`;
+};
+
 /** The same rule for a shipment being saved (its numbering year). */
 export const shipmentDateOf = (s: {
   direction: string;

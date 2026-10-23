@@ -9,6 +9,13 @@
     grid-template-columns: 1fr;
   }
 }
+/* Left: recent shipments, consignees. Right: details, remarks, CDC master list. */
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
 .head {
   display: flex;
   justify-content: space-between;

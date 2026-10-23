@@ -148,6 +148,62 @@
       "when": 1792566722279,
       "tag": "0020_credit_note_reviewed",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792566782279,
+      "tag": "0021_client_own_consignee",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792649361111,
+      "tag": "0022_record_summary_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792719245921,
+      "tag": "0023_container_seal_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792720155435,
+      "tag": "0024_seal_plans_standalone",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792724446150,
+      "tag": "0025_seal_plan_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792726073946,
+      "tag": "0026_client_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792726903197,
+      "tag": "0027_suppliers",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1792727470694,
+      "tag": "0028_supplier_hidden",
+      "breakpoints": true
     }
   ]
 }

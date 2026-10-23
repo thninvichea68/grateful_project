@@ -57,7 +57,9 @@ accountingRouter.use(requireAuth);
 const isCreditNotes = (path: string) =>
   path.startsWith('/docs/credit-notes') || path.startsWith('/credit-notes/');
 const isRecordSummaries = (path: string) =>
-  path.startsWith('/docs/record-summaries') || path === '/eligible/record-summaries';
+  path.startsWith('/docs/record-summaries') ||
+  path === '/eligible/record-summaries' ||
+  path.startsWith('/record-summaries/inbox');
 accountingRouter.use((req, res, next) =>
   requirePermission(
     isCreditNotes(req.path)
@@ -338,6 +340,16 @@ accountingRouter.get('/credit-notes/inbox', async (req, res) => {
 accountingRouter.post('/credit-notes/inbox/read', async (req, res) => {
   const { messageId } = parse(z.object({ messageId: z.string().uuid().optional() }), req.body);
   await docs.markCreditNoteMessagesRead(req.auth!.userId, messageId);
+  res.status(204).end();
+});
+
+/* Operations' Record Summary inbox: accounting's messages from Expense to Clients. */
+accountingRouter.get('/record-summaries/inbox', async (req, res) => {
+  res.json(await docs.recordSummaryInbox(req.auth!.userId));
+});
+accountingRouter.post('/record-summaries/inbox/read', async (req, res) => {
+  const { messageId } = parse(z.object({ messageId: z.string().uuid().optional() }), req.body);
+  await docs.markRecordSummaryMessagesRead(req.auth!.userId, messageId);
   res.status(204).end();
 });
 

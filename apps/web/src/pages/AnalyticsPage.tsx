@@ -26,6 +26,7 @@ import {
   type AnalyticsFilters,
 } from '../features/analytics';
 import { useAuth } from '../auth/AuthProvider';
+import { ExpandToggle } from '../components/ui';
 import { useLookups } from '../features/hooks';
 import { AccountsBreakdown } from './analytics/AccountsBreakdown';
 import { ClientRevenueCards } from './analytics/ClientRevenueCards';
@@ -138,6 +139,8 @@ export function AnalyticsPage() {
   const [countryFlow, setCountryFlow] = useState<'import' | 'export'>('import');
   const countries = useByCountry(filters, countryFlow);
   const fwd = useForwarders(filters);
+  // Forwarder ranking: the top 3 until "show all" is opened.
+  const [allForwarders, setAllForwarders] = useState(false);
   const ports = usePorts(filters);
   const accounts = useAccounts(filters);
 
@@ -512,6 +515,13 @@ export function AnalyticsPage() {
                 Ranked by shipments; on-time = arrived on or before ETA.
               </div>
             </div>
+            {(fwd.data?.length ?? 0) > 3 && (
+              <ExpandToggle
+                open={allForwarders}
+                onToggle={() => setAllForwarders((o) => !o)}
+                label={`all ${fwd.data!.length} forwarders`}
+              />
+            )}
           </div>
           <ChartState
             loading={fwd.isLoading}
@@ -520,7 +530,7 @@ export function AnalyticsPage() {
             height={150}
           >
             <HBarList
-              rows={(fwd.data ?? []).map((f) => ({
+              rows={(allForwarders ? (fwd.data ?? []) : (fwd.data ?? []).slice(0, 3)).map((f) => ({
                 key: f.id,
                 name: f.name,
                 value: f.shipments,

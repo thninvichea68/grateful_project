@@ -17,6 +17,7 @@ import type {
   LedgerSummary,
   NumberedShipment,
   Paginated,
+  RecordSummaryMessage,
   RecordSummaryReviewRow,
   ReleasedInvoiceSet,
 } from '@gs/shared';
@@ -296,6 +297,32 @@ export function useMarkInboxRead() {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: [...KEY, 'cn-inbox'] }),
+        qc.invalidateQueries({ queryKey: queryKeys.navCounts }),
+      ]),
+  });
+}
+
+/** My Record Summary inbox (messages from accounting's Expense to Clients). */
+export function useRecordSummaryInbox() {
+  return useQuery({
+    queryKey: [...KEY, 'rs-inbox'],
+    queryFn: () =>
+      api<{ data: RecordSummaryMessage[]; unread: number }>('/accounting/record-summaries/inbox'),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkRecordSummaryInboxRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId?: string) =>
+      api<undefined>('/accounting/record-summaries/inbox/read', {
+        method: 'POST',
+        json: { messageId },
+      }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: [...KEY, 'rs-inbox'] }),
         qc.invalidateQueries({ queryKey: queryKeys.navCounts }),
       ]),
   });

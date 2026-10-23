@@ -21,6 +21,8 @@ import {
 
 interface Head {
   shipperName: string | null;
+  /** From the client's Suppliers (Client Details), matched on the shipper name. */
+  supplierAddress: string | null;
   quantity: string | null;
   quantityUnit: string | null;
   hblNo: string | null;
@@ -123,7 +125,10 @@ async function load(shipmentId: string): Promise<{ head: Head; lines: Line[] }> 
   const [head] = await queryRows<Head>(
     db,
     sql`
-    SELECT s.shipper_name AS "shipperName", s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
+    SELECT s.shipper_name AS "shipperName",
+           (SELECT sp.address FROM suppliers sp WHERE sp.client_id = s.client_id
+              AND lower(sp.name) = lower(trim(s.shipper_name))) AS "supplierAddress",
+           s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            s.hbl_no AS "hblNo", to_char(s.etd, 'YYYY-MM-DD') AS etd,
            p.code AS "portCode", p.name AS "portName", co.name AS "originName",
            c.code AS "clientCode", c.name AS "clientName", c.legal_name AS "legalName",
@@ -345,9 +350,24 @@ function addInvoiceSheet(
   const supplier = (h.shipperName ?? '').toUpperCase();
   put('A1', supplier, { ...sz(16, { bold: true }), h: 'center' });
   mirror('H1', 'A1', supplier, { ...sz(16, { bold: true }), h: 'center' });
-  // The supplier's address isn't held in the system; rows 2–3 are left for it.
-  put('A2', '', { ...sz(9), h: 'center', v: 'middle', wrap: true });
-  put('H2', '', { ...sz(9), h: 'center', v: 'middle', wrap: true });
+  // The supplier's address (Client Details → Suppliers): its first line in row 2, the rest in
+  // row 3; blank when none is saved.
+  const [supplierLine = '', ...supplierRest] = (h.supplierAddress ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (const [r, text] of [
+    [2, supplierLine],
+    [3, supplierRest.join(', ')],
+  ] as const) {
+    put(`A${r}`, text.toUpperCase(), { ...sz(9), h: 'center', v: 'middle', wrap: true });
+    mirror(`H${r}`, `A${r}`, text.toUpperCase(), {
+      ...sz(9),
+      h: 'center',
+      v: 'middle',
+      wrap: true,
+    });
+  }
   // The rule under the letterhead: top of row 4 on the invoice, bottom of row 3 on the list.
   for (const l of 'ABCDEFG') ws.getCell(`${l}4`).border = { top: { style: 'medium' } };
   for (const l of 'HIJKL') ws.getCell(`${l}3`).border = { bottom: { style: 'medium' } };
@@ -745,7 +765,10 @@ function addAuthorSheet(
     ),
   );
   put('A9', h.legalName ?? h.clientName, { font: { name: FONT, size: 12, bold: true } });
-  put('H9', `អត្តសញ្ញាណកម្មសារពើពន្ធ (VAT)លេខ\u200b ${h.vattin ?? ''}\u200b ទូរស័ព្ទលេខ ${p.companyPhone}`);
+  put(
+    'H9',
+    `អត្តសញ្ញាណកម្មសារពើពន្ធ (VAT)លេខ\u200b ${h.vattin ?? ''}\u200b ទូរស័ព្ទលេខ ${p.companyPhone}`,
+  );
   put('A10', rich('និងជាម្ចាស់ទំនិញ ', km('សូមផ្ទេរសិទ្ធិជូន', { name: KH_BOLD }), '\u200b\u200b'));
   put('J10', rich('លោក\u200b ', wd('þ'), '   /\u200b លោកស្រី ', wd('¨')));
   put('Q10', BROKER.grantee.name, bold);

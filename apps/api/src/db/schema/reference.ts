@@ -117,6 +117,48 @@ export const consignees = pgTable(
   ],
 );
 
+/**
+ * A client's supplier (the shipper on its imports) with its address, printed under the name on
+ * the import INV + PL letterhead. Shipments keep the shipper as free text; the name matches it
+ * case-insensitively.
+ */
+export const suppliers = pgTable(
+  'suppliers',
+  {
+    id: id(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    address: text('address'),
+    /** Deleted from Client Details: left out of its list even while shipments use the name. */
+    hidden: boolean('hidden').notNull().default(false),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('suppliers_client_name_unique').on(t.clientId, sql`lower(${t.name})`)],
+);
+
+/**
+ * Client Details → Remarks: notes kept per client under a subject, e.g. a ministry website's
+ * login link and password. A hidden note's text shows only on request (and is never audited).
+ */
+export const clientNotes = pgTable(
+  'client_notes',
+  {
+    id: id(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    subject: text('subject').notNull(),
+    body: text('body').notNull().default(''),
+    hidden: boolean('hidden').notNull().default(false),
+    createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [index('client_notes_client_idx').on(t.clientId)],
+);
+
 /** Replaces the prototype's localStorage "Add New" lists for simple dropdowns. */
 export const lookupValues = pgTable(
   'lookup_values',

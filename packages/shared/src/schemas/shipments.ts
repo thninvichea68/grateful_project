@@ -17,7 +17,7 @@ import { paginationQuerySchema } from './common';
 import { decimal, multi, optDate, optText, optUuid } from './fields';
 
 /** ISO 6346 shape: 4 letters + 7 digits. Spaces/dashes are stripped. */
-const containerNo = z
+export const containerNo = z
   .string()
   .transform((v) => v.toUpperCase().replace(/[\s-]/g, ''))
   .refine(
@@ -106,6 +106,27 @@ function blankContainerRow(c: unknown): boolean {
   const text = (v: unknown) => String(v ?? '').trim();
   return !text(x.containerNo) && !text(x.linerSeal) && !text(x.customsSeal);
 }
+/** An invoice row nothing was typed into (the form always offers one; its date may be preset). */
+function blankInvoiceRow(i: unknown): boolean {
+  if (!i || typeof i !== 'object') return false;
+  const x = i as Record<string, unknown>;
+  const text = (v: unknown) => String(v ?? '').trim();
+  const blankLine = (l: unknown) =>
+    !!l && typeof l === 'object' && Object.values(l).every((v) => !text(v));
+  return (
+    !text(x.invoiceNo) &&
+    !text(x.description) &&
+    !text(x.packages) &&
+    (!Array.isArray(x.lines) || x.lines.every(blankLine))
+  );
+}
+const invoiceArray = z.array(cargoInvoiceInputSchema).default([]);
+/** Cargo invoices are optional: an untouched row is dropped before validation. */
+const invoiceRows = z.preprocess(
+  (v) => (Array.isArray(v) ? v.filter((i) => !blankInvoiceRow(i)) : v),
+  invoiceArray,
+) as unknown as typeof invoiceArray;
+
 const containerArray = z.array(containerInputSchema).default([]);
 /** Blank rows are dropped before validation, so the ready-made empty row never blocks saving. */
 const containerRows = z.preprocess(
@@ -191,7 +212,7 @@ export const shipmentInputSchema = z
     coStatus: optText(30),
     remark: optText(1000),
     containers: containerRows,
-    invoices: z.array(cargoInvoiceInputSchema).default([]),
+    invoices: invoiceRows,
     declarations: declarationRows,
   })
   .superRefine((s, ctx) => {

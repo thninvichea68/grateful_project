@@ -2,7 +2,7 @@ import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import type { Permission } from '@gs/shared';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { AppLayout } from './layout/AppLayout';
-import { RequireAuth, RequirePermission } from './auth/guards';
+import { RedirectRoles, RequireAuth, RequirePermission } from './auth/guards';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AccountingLayout } from './pages/accounting/AccountingLayout';
@@ -17,6 +17,9 @@ const ShippingPlansPage = lazy(() =>
 );
 const ShipmentFormPage = lazy(() =>
   import('./pages/plans/ShipmentFormPage').then((m) => ({ default: m.ShipmentFormPage })),
+);
+const SealPlansPage = lazy(() =>
+  import('./pages/SealPlansPage').then((m) => ({ default: m.SealPlansPage })),
 );
 const ClientsPage = lazy(() =>
   import('./pages/ClientsPage').then((m) => ({ default: m.ClientsPage })),
@@ -108,6 +111,9 @@ const PrintCreditNotePackPage = lazy(() =>
   import('./pages/print/PrintCreditNotePackPage').then((m) => ({
     default: m.PrintCreditNotePackPage,
   })),
+);
+const PrintSealPlansPage = lazy(() =>
+  import('./pages/print/PrintSealPlansPage').then((m) => ({ default: m.PrintSealPlansPage })),
 );
 const guard = (permission: Permission, el: ReactNode) => (
   <RequirePermission permission={permission}>
@@ -235,6 +241,19 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    // Seal Plans → ⋯ → Export PDF: the filtered schedule on A4 landscape.
+    path: '/print/seal-plans',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="sealplans:read">
+          <Suspense fallback={null}>
+            <PrintSealPlansPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
     // Printable documents: full page, no sidebar.
     path: '/print/:type/:id',
     element: (
@@ -256,6 +275,7 @@ export const router = createBrowserRouter([
       { path: 'plans', element: guard('shipments:read', <ShippingPlansPage />) },
       { path: 'plans/new', element: guard('shipments:write', <ShipmentFormPage />) },
       { path: 'plans/:id', element: guard('shipments:read', <ShipmentFormPage />) },
+      { path: 'seal-plans', element: guard('sealplans:read', <SealPlansPage />) },
       { path: 'clients', element: guard('clients:read', <ClientsPage />) },
       { path: 'clients/:id', element: guard('clients:read', <ClientDetailPage />) },
       { path: 'analytics', element: guard('dashboard:read', <AnalyticsPage />) },
@@ -316,22 +336,40 @@ export const router = createBrowserRouter([
           },
         ],
       },
+      // Credit Noted and Record Summary are Operations tools: accountants use the Accounting
+      // tabs Chea Payments and Expense to Clients for the same records.
       {
         path: 'credit-noted',
-        element: guard('creditnotes:read', <CreditNotedList />),
+        element: (
+          <RedirectRoles roles={['ACCOUNTANT']} to="/accounting/credit-notes">
+            {guard('creditnotes:read', <CreditNotedList />)}
+          </RedirectRoles>
+        ),
       },
       {
         path: 'credit-noted/:id',
-        element: guard('creditnotes:read', <CreditNotedRoute base="/credit-noted" />),
+        element: (
+          <RedirectRoles roles={['ACCOUNTANT']} to="/accounting/credit-notes/:id">
+            {guard('creditnotes:read', <CreditNotedRoute base="/credit-noted" />)}
+          </RedirectRoles>
+        ),
       },
       {
         // Sidebar → Record Summary: the list (like Credit Noted); a row opens the editor.
         path: 'record-summary',
-        element: guard('recordsummaries:read', <RecordSummariesList base="/record-summary" />),
+        element: (
+          <RedirectRoles roles={['ACCOUNTANT']} to="/accounting/record-summaries">
+            {guard('recordsummaries:read', <RecordSummariesList base="/record-summary" />)}
+          </RedirectRoles>
+        ),
       },
       {
         path: 'record-summary/:id',
-        element: guard('recordsummaries:read', <RecordSummaryRoute base="/record-summary" />),
+        element: (
+          <RedirectRoles roles={['ACCOUNTANT']} to="/accounting/record-summaries/:id">
+            {guard('recordsummaries:read', <RecordSummaryRoute base="/record-summary" />)}
+          </RedirectRoles>
+        ),
       },
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },

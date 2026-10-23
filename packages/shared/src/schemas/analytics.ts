@@ -179,9 +179,11 @@ export interface OverviewSummary {
   year: number;
   /** The day the figures run to: today for the live month, else the chosen month's last day. */
   today: string;
-  /** The month shown (YYYY-MM). */
+  /** The month shown (YYYY-MM); for a full year, its last month (this month for this year). */
   month: string;
-  /** True for the current month (figures refresh); false for a past month. */
+  /** True when the KPIs cover January to `month` (kpis.period) instead of one month. */
+  fullYear: boolean;
+  /** True for the current month or year (figures refresh); false for a past one. */
   live: boolean;
   kpis: KpiResponse;
   monthly: MonthlyVolumeRow[];

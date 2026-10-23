@@ -17,6 +17,7 @@ import {
   type BillingDocType,
   type BillingLineInput,
   type CreditNoteMessage,
+  type RecordSummaryMessage,
   type CreditNoteReviewCounts,
   type CreditNoteReviewRow,
   type CreditNoteReviewStatus,
@@ -1541,6 +1542,13 @@ export async function setRecordSummaryReview(
       if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req.auth!.userId);
       else if (doc.reviewStatus === 'CHECKED') await summaryOutOfLedger(tx, recordId);
     }
+    // Approved or Revised: Operations hear about it in their Record Summary inbox.
+    if (reviewStatus === 'CHECKED' || reviewStatus === 'REVISED')
+      await tx.execute(sql`
+        INSERT INTO record_summary_messages (record_summary_id, recipient_id, sender_id, kind, body)
+        SELECT ${id}::uuid, u.id, ${req.auth?.userId ?? null}::uuid, ${reviewStatus}::credit_note_review, ${message ?? ''}
+        FROM ${recordSummaryRecipients(id, doc.createdById as string | null)} u
+        WHERE u.id IS DISTINCT FROM ${req.auth?.userId ?? null}::uuid`);
     await audit(
       tx,
       {
@@ -1557,6 +1565,21 @@ export async function setRecordSummaryReview(
       req,
     );
   });
+}
+
+/**
+ * Who hears about a record summary: every active Operations user who can see its client, plus
+ * whoever created it.
+ */
+function recordSummaryRecipients(recordSummaryId: string, createdById: string | null) {
+  return sql`(
+    SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id
+    JOIN record_summaries t ON t.id = ${recordSummaryId}::uuid
+    WHERE r.code = 'OPERATOR' AND u.is_active AND u.deleted_at IS NULL
+      AND (u.client_ids IS NULL OR t.client_id = ANY(u.client_ids))
+    UNION
+    SELECT id FROM users WHERE id = ${createdById}::uuid AND deleted_at IS NULL
+  )`;
 }
 
 /* ---------- The broker's inbox ---------- */
@@ -1609,5 +1632,41 @@ export async function creditNoteMessagesFor(id: string): Promise<CreditNoteMessa
     db,
     sql`SELECT ${MESSAGE_COLUMNS} ${MESSAGE_FROM}
         WHERE m.credit_note_id = ${id} ORDER BY m.created_at DESC LIMIT 20`,
+  );
+}
+
+/* ---------- Operations' Record Summary inbox ---------- */
+
+export async function recordSummaryInbox(
+  userId: string,
+): Promise<{ data: RecordSummaryMessage[]; unread: number }> {
+  const data = await queryRows<RecordSummaryMessage>(
+    db,
+    sql`SELECT m.id, m.record_summary_id AS "recordSummaryId", t.inv_no AS "invNo",
+          t.declare_no AS "declareNo", cl.name AS "clientName", m.kind, m.body,
+          u.full_name AS "senderName", m.created_at AS "createdAt", m.read_at AS "readAt",
+          to_char(t.summary_date, 'YYYY-MM-DD') AS date, t.status, t.direction,
+          t.transport_mode AS "transportMode", t.quantity_text AS "quantityText",
+          po.short_name AS port, t.total::text AS total
+        FROM record_summary_messages m
+        JOIN record_summaries t ON t.id = m.record_summary_id
+        JOIN clients cl ON cl.id = t.client_id
+        LEFT JOIN users u ON u.id = m.sender_id
+        LEFT JOIN ports po ON po.id = t.port_id
+        WHERE m.recipient_id = ${userId} ORDER BY m.created_at DESC LIMIT 50`,
+  );
+  const [r] = await queryRows<{ n: number }>(
+    db,
+    sql`SELECT count(*)::int AS n FROM record_summary_messages
+        WHERE recipient_id = ${userId} AND read_at IS NULL`,
+  );
+  return { data, unread: r?.n ?? 0 };
+}
+
+/** Marks my Record Summary messages read: one, or all when no id is given. */
+export async function markRecordSummaryMessagesRead(userId: string, id?: string): Promise<void> {
+  await db.execute(
+    sql`UPDATE record_summary_messages SET read_at = now()
+        WHERE recipient_id = ${userId} AND read_at IS NULL ${id ? sql`AND id = ${id}` : sql``}`,
   );
 }

@@ -1,14 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import type { AccountRow, MonthlyVolumeRow } from '@gs/shared';
 import { useMonthlyVolume } from '../../features/analytics';
-import { CardDropdown, MONTHS_LONG, monthLabel } from './parts';
+import { MONTHS_LONG, monthLabel } from './parts';
 import s from './SingleClientVolume.module.css';
 
 const IMPORT = 'var(--accent-primary)';
 const EXPORT = 'var(--accent-blue)';
 
-type View = 'month' | 'quarter';
 type Point = {
   key: string;
   label: string;
@@ -19,126 +18,84 @@ type Point = {
 };
 
 /**
- * "Shipments by Client" when the user sees one client: their year by month or quarter
- * (import and export stacked), with the totals and the figures people ask about next.
- * Monthly/Quarterly and this year/last year are chosen at the top right.
+ * "Shipments by Client" when the user sees one client. Follows the Overview's period: the
+ * headline is that month, or January to it for a full year (import and export); the bars
+ * are its year month by month up to it.
  */
 export function SingleClientVolume({
   a,
-  year,
+  month,
+  fullYear = false,
   monthly,
-  currentMonth,
   clientId,
   picker,
 }: {
   a: AccountRow;
-  year: number;
+  /** The Overview's month (YYYY-MM); for a full year, the last month of it. */
+  month: string;
+  fullYear?: boolean;
+  /** The Overview's year month by month (all of the user's clients). */
   monthly: MonthlyVolumeRow[];
-  currentMonth: string;
-  /** Set when the user has several clients: every year is fetched for this one client. */
+  /** Set when the user has several clients: the year is fetched for this one client. */
   clientId?: string | undefined;
-  /** The client dropdown, shown first in the controls. */
+  /** The client dropdown, shown at the top right. */
   picker?: ReactNode;
 }) {
-  const [view, setView] = useState<View>('month');
-  const [shown, setShown] = useState(String(year));
-  const isCurrent = shown === String(year);
-  // This year comes with the Overview; another year, or one of several clients, is fetched.
+  const year = month.slice(0, 4);
   const other = useMonthlyVolume({
-    from: `${shown}-01-01`,
-    to: `${shown}-12-31`,
+    from: `${year}-01-01`,
+    to: `${year}-12-31`,
     clientId: clientId ? [clientId] : undefined,
   });
   const rows = useMemo(
-    () => (isCurrent && !clientId ? monthly : (other.data ?? [])),
-    [isCurrent, clientId, monthly, other.data],
+    () => (clientId ? (other.data ?? []) : monthly),
+    [clientId, monthly, other.data],
   );
 
-  const points = useMemo<Point[]>(() => {
-    if (view === 'month')
-      return rows.map((m) => ({
+  const points = useMemo<Point[]>(
+    () =>
+      rows.map((m) => ({
         key: m.month,
         label: monthLabel(m.month).slice(0, 1),
         name: `${MONTHS_LONG[Number(m.month.slice(5, 7)) - 1]} ${m.month.slice(0, 4)}`,
         imports: m.imports,
         exports: m.exports,
         total: m.total,
-      }));
-    return [1, 2, 3, 4].map((q) => {
-      const ms = rows.filter((m) => Math.ceil(Number(m.month.slice(5, 7)) / 3) === q);
-      const imports = ms.reduce((n, m) => n + m.imports, 0);
-      const exports = ms.reduce((n, m) => n + m.exports, 0);
-      return {
-        key: `${shown}-Q${q}`,
-        label: `Q${q}`,
-        name: `Q${q} ${shown}`,
-        imports,
-        exports,
-        total: imports + exports,
-      };
-    });
-  }, [rows, view, shown]);
+      })),
+    [rows],
+  );
 
-  const imports = rows.reduce((n, m) => n + m.imports, 0);
-  const exports = rows.reduce((n, m) => n + m.exports, 0);
+  // Months after the Overview's month keep their letter on the axis but draw no bar.
+  const upcoming = (p: Point) => p.key > month;
+  const chartData = points.map((p) => (upcoming(p) ? { ...p, imports: 0, exports: 0 } : p));
+  const sofar = points.filter((p) => !upcoming(p));
+  const headline = fullYear ? sofar : points.filter((p) => p.key === month);
+  const imports = headline.reduce((n, p) => n + p.imports, 0);
+  const exports = headline.reduce((n, p) => n + p.exports, 0);
   const total = imports + exports;
   const share = (n: number) => (total ? Math.round((n / total) * 100) : 0);
-  // The highlighted bar: this month / this quarter (only in the current year).
-  const nowKey = !isCurrent
-    ? null
-    : view === 'month'
-      ? currentMonth
-      : `${shown}-Q${Math.ceil(Number(currentMonth.slice(5, 7)) / 3)}`;
-  const now = points.find((p) => p.key === nowKey);
-  // Months / quarters after the current one ("2026-11" > "2026-10", "2026-Q4" > "2026-Q3").
-  const upcoming = (p: Point) => !!nowKey && p.key > nowKey;
-  // Months not reached yet keep their letter on the axis but draw no bar.
-  const chartData = points.map((p) => (upcoming(p) ? { ...p, imports: 0, exports: 0 } : p));
-  // Average over the periods so far (all of them for a past year).
-  const elapsed = nowKey ? points.findIndex((p) => p.key === nowKey) + 1 : points.length;
-  const avg = elapsed ? total / elapsed : 0;
-  const busiest = points
-    .slice(0, elapsed)
-    .reduce<Point | null>((b, p) => (p.total > (b?.total ?? 0) ? p : b), null);
-  const quietest = points
-    .slice(0, elapsed)
-    .reduce<Point | null>((q, p) => (!q || p.total < q.total ? p : q), null);
-  const unit = view === 'month' ? 'month' : 'quarter';
-  const short = (p: Point) => (view === 'month' ? monthLabel(p.key) : p.label);
+  const ytd = sofar.reduce((n, p) => n + p.total, 0);
+  const avg = sofar.length ? ytd / sofar.length : 0;
+  const busiest = sofar.reduce<Point | null>((b, p) => (p.total > (b?.total ?? 0) ? p : b), null);
+  const quietest = sofar.reduce<Point | null>((q, p) => (!q || p.total < q.total ? p : q), null);
+  const periodName = fullYear
+    ? `Jan – ${monthLabel(month)} ${year}`
+    : `${MONTHS_LONG[Number(month.slice(5, 7)) - 1]} ${year}`;
 
   return (
     <div className={`rc-card ga-revenue ${s.card}`}>
       <div className={s.head}>
         <div className={s.titles}>
           <div className="rc-title">Shipments · {a.name}</div>
-          <div className="rc-subtitle">
-            {view === 'month' ? 'Month by month' : 'Quarter by quarter'}, {shown}
-          </div>
+          <div className="rc-subtitle">Month by month, {year}</div>
         </div>
-        <div className={s.controls}>
-          {picker}
-          <CardDropdown
-            label="View"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'month', label: 'Monthly' },
-              { value: 'quarter', label: 'Quarterly' },
-            ]}
-          />
-          <CardDropdown
-            label="Year"
-            value={shown}
-            onChange={setShown}
-            options={[0, 1, 2].map((d) => ({ value: String(year - d), label: String(year - d) }))}
-          />
-        </div>
+        {picker && <div className={s.controls}>{picker}</div>}
       </div>
 
       <div className={s.hero}>
         <div>
           <div className={s.total}>{total.toLocaleString()}</div>
-          <div className={s.totalLabel}>shipments in {shown}</div>
+          <div className={s.totalLabel}>shipments in {periodName}</div>
         </div>
         <div className={s.legend}>
           <span>
@@ -155,14 +112,14 @@ export function SingleClientVolume({
       <div
         className={s.chart}
         role="img"
-        aria-label={`Shipments per ${unit} in ${shown}`}
-        aria-busy={!isCurrent && other.isLoading}
+        aria-label={`Shipments per month in ${year}`}
+        aria-busy={!!clientId && other.isLoading}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
-            barCategoryGap={view === 'month' ? '22%' : '30%'}
+            barCategoryGap="22%"
           >
             <XAxis
               dataKey="label"
@@ -188,7 +145,13 @@ export function SingleClientVolume({
                     textAnchor="middle"
                     fontSize={10}
                     fontWeight={700}
-                    fill={p && upcoming(p) ? 'var(--border-strong)' : 'var(--text-tertiary)'}
+                    fill={
+                      p?.key === month && !fullYear
+                        ? 'var(--accent-primary)'
+                        : p && upcoming(p)
+                          ? 'var(--border-strong)'
+                          : 'var(--text-tertiary)'
+                    }
                   >
                     {payload.value}
                   </text>
@@ -228,35 +191,35 @@ export function SingleClientVolume({
       </div>
 
       <div className={s.stats}>
-        {now ? (
+        {fullYear ? (
           <div>
-            <span>This {unit}</span>
-            <b>{now.total}</b>
-          </div>
-        ) : (
-          <div>
-            <span>Quietest {unit}</span>
+            <span>Quietest month</span>
             <b>
               {quietest ? (
                 <>
-                  {short(quietest)} <small>{quietest.total}</small>
+                  {monthLabel(quietest.key)} <small>{quietest.total}</small>
                 </>
               ) : (
                 '—'
               )}
             </b>
           </div>
+        ) : (
+          <div>
+            <span>Year to date</span>
+            <b>{ytd}</b>
+          </div>
         )}
         <div>
-          <span>Average per {unit}</span>
+          <span>Average per month</span>
           <b>{avg.toFixed(1)}</b>
         </div>
         <div>
-          <span>Busiest {unit}</span>
+          <span>Busiest month</span>
           <b>
             {busiest ? (
               <>
-                {short(busiest)} <small>{busiest.total}</small>
+                {monthLabel(busiest.key)} <small>{busiest.total}</small>
               </>
             ) : (
               '—'

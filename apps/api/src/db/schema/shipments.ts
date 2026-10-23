@@ -132,6 +132,52 @@ export const containers = pgTable(
   ],
 );
 
+/**
+ * Seal Plans: trucking and loading details of an export container. Keyed by container no., not
+ * the containers row, because saving a shipment replaces its container rows. A plan started
+ * blank has no shipment and keeps its own factory, SO no., port, vessel, ETD, size and seals.
+ */
+export const containerSealPlans = pgTable(
+  'container_seal_plans',
+  {
+    id: id(),
+    shipmentId: uuid('shipment_id').references(() => shipments.id, { onDelete: 'cascade' }),
+    containerNo: text('container_no').notNull(),
+    // Only for a plan without a shipment (the shipment's values are used otherwise).
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'restrict' }),
+    bookingNo: text('booking_no'),
+    portId: uuid('port_id').references(() => ports.id, { onDelete: 'restrict' }),
+    vesselName: text('vessel_name'),
+    etd: date('etd'),
+    size: containerSizeEnum('size'),
+    linerSeal: text('liner_seal'),
+    customsSeal: text('customs_seal'),
+    /** Shipping line, e.g. MAERSK, COSCO (the shipment's forwarder is the agent). */
+    carrier: text('carrier'),
+    /** Port or city of discharge, e.g. LOS ANGELES, CA. */
+    destination: text('destination'),
+    tareWeightKg: qty('tare_weight_kg'),
+    truckBy: text('truck_by'),
+    driverPhone: text('driver_phone'),
+    truckNo: text('truck_no'),
+    deliverTo: text('deliver_to'),
+    /** Date the container is delivered to the factory for loading; sets its Seal Plan month. */
+    loadingDate: date('loading_date'),
+    depot: text('depot'),
+    other: text('other'),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('container_seal_plans_shipment_no_unique').on(t.shipmentId, t.containerNo),
+    index('container_seal_plans_client_idx').on(t.clientId),
+    check(
+      'container_seal_plans_has_factory',
+      sql`shipment_id IS NOT NULL OR client_id IS NOT NULL`,
+    ),
+  ],
+);
+
 /** Commercial (cargo) invoices of a shipment — the "Cargo, Pricing & FOB" section. */
 export const cargoInvoices = pgTable(
   'cargo_invoices',

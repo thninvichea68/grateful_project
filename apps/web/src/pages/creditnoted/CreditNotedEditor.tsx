@@ -346,9 +346,10 @@ function CreditNotedEditor({
               {doc && (
                 <Pill tone={DOC_STATUS_PILL[doc.status].tone}>{CN_STATUS_LABEL[doc.status]}</Pill>
               )}{' '}
-              {canDecide && reviewStatus && (
-                <Pill tone={REVIEW_PILL[reviewStatus]}>{REVIEW[reviewStatus].label}</Pill>
-              )}
+              {reviewStatus &&
+                (canDecide || (doc?.status === 'ISSUED' && reviewStatus !== 'UNCHECKED')) && (
+                  <Pill tone={REVIEW_PILL[reviewStatus]}>{REVIEW[reviewStatus].label}</Pill>
+                )}
             </h2>
             <p>Generate clean payment vouchers for operations &amp; finance</p>
           </div>

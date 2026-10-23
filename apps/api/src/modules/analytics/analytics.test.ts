@@ -24,7 +24,10 @@ async function as(role: RoleCode) {
   return { Authorization: `Bearer ${tokens[role]}` };
 }
 
+let declSeq = 0;
 async function ship(o: Record<string, unknown>) {
+  // Figures go by clearance date, so by default each fixture is declared on its ETA.
+  const declareDate = (o.eta as string | undefined) ?? '2026-03-10';
   const body = {
     clientId: b.jr.id,
     direction: 'IMPORT',
@@ -38,7 +41,7 @@ async function ship(o: Record<string, unknown>) {
     destinationCountryIso2: 'KH',
     eta: '2026-03-10',
     invoices: [],
-    declarations: [],
+    declarations: [{ declareNo: `T ${++declSeq}`, declareDate }],
     ...o,
   };
   const res = await request(app)
@@ -239,6 +242,7 @@ describe('analytics endpoints (aggregated in SQL)', () => {
         loadType: 'FCL',
         destinationCountryIso2: 'US',
         eta: '2026-06-15',
+        declarations: [{ ...s.declarations[0], declareDate: '2026-06-15' }],
       });
     const after = (await get('/analytics/monthly-volume', year)).body;
     expect(after[4].total).toBe(before.total);
@@ -309,6 +313,27 @@ describe('overview and profit', () => {
     // A month still to come falls back to the current one.
     const later = await get('/overview/summary', { month: '2999-01' }, 'ACCOUNTANT');
     expect(later.body.live).toBe(true);
+
+    // A full past year: January to December, against the whole year before.
+    const past = await get('/overview/summary', { fullYear: '2025' }, 'ACCOUNTANT');
+    expect(past.body).toMatchObject({ month: '2025-12', fullYear: true, live: false, year: 2025 });
+    expect(past.body.kpis.period).toEqual({ from: '2025-01-01', to: '2025-12-31' });
+    expect(past.body.kpis.previousPeriod).toEqual({ from: '2024-01-01', to: '2024-12-31' });
+    // This year: January to today (live), adding up its months so far.
+    const now = await get(
+      '/overview/summary',
+      { fullYear: acc.body.month.slice(0, 4) },
+      'ACCOUNTANT',
+    );
+    expect(now.body).toMatchObject({ month: acc.body.month, fullYear: true, live: true });
+    expect(now.body.kpis.period).toEqual({
+      from: `${acc.body.month.slice(0, 4)}-01-01`,
+      to: acc.body.today,
+    });
+    const sofar = (now.body.monthly as { month: string; total: number }[])
+      .filter((m) => m.month <= acc.body.month)
+      .reduce((n, m) => n + m.total, 0);
+    expect(now.body.kpis.total).toBe(sofar);
   });
 
   it('leaves entries with nothing billed yet out of profit and reports them as unbilled', async () => {

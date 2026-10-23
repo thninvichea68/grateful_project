@@ -187,3 +187,32 @@
   composes: ghostBtn;
   color: var(--status-exception-fg);
 }
+.expandToggle {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.expandToggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.expandToggle svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+.expandToggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}

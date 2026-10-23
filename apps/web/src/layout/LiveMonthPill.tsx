@@ -6,19 +6,25 @@ import s from './LiveMonthPill.module.css';
 
 /**
  * Beside the Overview title: "October 2026 (Live)", or the month being looked at. Click it to
- * pick another month and year (months still to come can't be picked).
+ * pick another month and year (months still to come can't be picked), or a whole year:
+ * "Jan – Oct 2026" for this year so far, "Jan – Dec 2025" for a past one.
  */
 export function LiveMonthPill() {
-  const { month, setMonth } = useOverviewMonth();
-  const live = !month;
+  const { month, fullYear, setMonth, setFullYear } = useOverviewMonth();
+  const now = currentMonth();
+  const nowYear = Number(now.slice(0, 4));
+  // This year as a whole is live too (it runs to today).
+  const live = fullYear ? Number(fullYear) === nowYear : !month;
   // Same query (and cache) as the Overview page itself.
-  const summary = useOverviewSummary(month);
-  const shown = month ?? summary.data?.month ?? currentMonth();
+  const summary = useOverviewSummary(month, fullYear);
+  const shown = fullYear
+    ? Number(fullYear) === nowYear
+      ? now
+      : `${fullYear}-12`
+    : (month ?? summary.data?.month ?? currentMonth());
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(Number(shown.slice(0, 4)));
   const box = useRef<HTMLDivElement>(null);
-  const now = currentMonth();
-  const nowYear = Number(now.slice(0, 4));
 
   useEffect(() => {
     if (!open) return;
@@ -39,11 +45,18 @@ export function LiveMonthPill() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const label = `${MONTHS_LONG[Number(shown.slice(5, 7)) - 1]} ${shown.slice(0, 4)}`;
+  const label = fullYear
+    ? `Jan – ${MONTHS[Number(shown.slice(5, 7)) - 1]} ${fullYear}`
+    : `${MONTHS_LONG[Number(shown.slice(5, 7)) - 1]} ${shown.slice(0, 4)}`;
   const pick = (m: string) => {
     setMonth(m === now ? undefined : m);
     setOpen(false);
   };
+  const pickYear = () => {
+    setFullYear(String(year));
+    setOpen(false);
+  };
+  const yearEnd = year === nowYear ? MONTHS[Number(now.slice(5, 7)) - 1] : 'Dec';
 
   return (
     <div className={s.wrap} ref={box}>
@@ -93,7 +106,7 @@ export function LiveMonthPill() {
                   type="button"
                   key={m}
                   className={s.month}
-                  data-selected={m === shown || undefined}
+                  data-selected={(!fullYear && m === shown) || undefined}
                   data-now={m === now || undefined}
                   disabled={m > now}
                   onClick={() => pick(m)}
@@ -103,7 +116,19 @@ export function LiveMonthPill() {
               );
             })}
           </div>
-          {!live && (
+          <button
+            type="button"
+            className={s.fullYear}
+            data-selected={fullYear === String(year) || undefined}
+            onClick={pickYear}
+          >
+            Full year {year}
+            <small>
+              Jan – {yearEnd}
+              {year === nowYear && ' (so far)'}
+            </small>
+          </button>
+          {(month || fullYear) && (
             <button type="button" className={s.back} onClick={() => pick(now)}>
               <i className={s.liveDot} aria-hidden /> Back to this month (Live)
             </button>

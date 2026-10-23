@@ -411,3 +411,29 @@ export const creditNoteMessages = pgTable(
     index('credit_note_messages_note_idx').on(t.creditNoteId),
   ],
 );
+
+/**
+ * Accounting → Operations messages about a record summary ("Approved", or "Revised" with what
+ * to fix). Shown in the Record Summary inbox.
+ */
+export const recordSummaryMessages = pgTable(
+  'record_summary_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    recordSummaryId: uuid('record_summary_id')
+      .notNull()
+      .references(() => recordSummaries.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    senderId: uuid('sender_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: creditNoteReviewEnum('kind').notNull(),
+    body: text('body').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('record_summary_messages_recipient_idx').on(t.recipientId, t.createdAt),
+    index('record_summary_messages_summary_idx').on(t.recordSummaryId),
+  ],
+);

@@ -25,6 +25,7 @@ vi.mock('../lib/api', () => ({
     overdueFollowUps: 4,
     unreadNotifications: 0,
     creditNoteInbox: 0,
+    recordSummaryInbox: 0,
   })),
 }));
 
@@ -59,6 +60,7 @@ describe('Sidebar', () => {
     expect(links()).toEqual([
       'Overview',
       'Shipping Plans',
+      'Seal Plans',
       'Clients',
       'Analytics',
       'CDC Master List',
@@ -78,6 +80,13 @@ describe('Sidebar', () => {
     renderAs('OPERATOR');
     expect(links()).not.toContain('Accounting');
     expect(links()).toContain('Shipping Plans');
+  });
+
+  it('leaves the Operations tools Credit Noted and Record Summary out for Accountants', () => {
+    renderAs('ACCOUNTANT');
+    expect(links()).toContain('Accounting');
+    expect(links()).not.toContain('Credit Noted');
+    expect(links()).not.toContain('Record Summary');
   });
 
   it('gives a Customs Broker only Shipping Plans, Credit Noted and Operations', () => {

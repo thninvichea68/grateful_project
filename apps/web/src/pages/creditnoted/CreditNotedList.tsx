@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { BillingDocStatus } from '@gs/shared';
+import type { BillingDocStatus, CreditNoteReviewRow } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useCreditNoteList } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
@@ -13,6 +13,7 @@ import { InboxTable, InboxToggle } from './Inbox';
 import { cnSeq } from './seq';
 import { PackMenu } from './PackMenu';
 import { packFilters } from './creditNotePack';
+import { REVIEW } from '../accounting/CreditNotesReview';
 // Same look as Accounting → Chea Payments.
 import s from '../accounting/CreditNotesReview.module.css';
 
@@ -22,6 +23,13 @@ const STATUS: Record<BillingDocStatus, { label: string; cls: string }> = {
   ISSUED: { label: 'Submitted', cls: s.checked! },
   VOID: { label: 'Discarded', cls: s.void! },
 };
+/** Once submitted, accounting's check (Reviewed / Approved) replaces "Submitted". */
+const statusOf = (r: CreditNoteReviewRow): { label: string; cls: string } =>
+  r.status === 'DRAFT' && r.reviewStatus === 'REVISED'
+    ? { label: 'Revised', cls: s.revised! }
+    : r.status === 'ISSUED' && r.reviewStatus !== 'UNCHECKED'
+      ? REVIEW[r.reviewStatus]
+      : STATUS[r.status];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
 const PAGE_SIZES = [10, 25, 50];
@@ -224,9 +232,9 @@ export function CreditNotedList() {
                     <td>{r.transportMode ? MODE[r.transportMode] : '-'}</td>
                     <td className={`${s.num} ${s.fee}`}>{fmtMoney(r.total)}</td>
                     <td>
-                      <span className={`${s.statusPill} ${STATUS[r.status].cls}`}>
+                      <span className={`${s.statusPill} ${statusOf(r).cls}`}>
                         <i className={s.pillDot} />
-                        {STATUS[r.status].label}
+                        {statusOf(r).label}
                       </span>
                     </td>
                   </tr>

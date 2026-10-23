@@ -442,32 +442,40 @@ function ClientDropdown({ accounts, pick }: { accounts: AccountRow[]; pick: Clie
 
 /** Shown instead of profit to roles without accounting access: shipment share per client. */
 export function ClientShareCard({
+  clients,
   accounts,
-  year,
+  month,
+  fullYear = false,
+  period,
   monthly,
-  currentMonth,
   pick,
 }: {
+  /** The year's clients (who can be picked, and whether there is only one). */
+  clients: AccountRow[];
+  /** The Overview period's figures per client. */
   accounts: AccountRow[];
-  year: number;
+  /** The Overview's month (YYYY-MM); for a full year, the last month of it. */
+  month: string;
+  fullYear?: boolean;
+  /** "October 2026" or "Jan – Oct 2026". */
+  period: string;
   monthly: MonthlyVolumeRow[];
-  currentMonth: string;
   /** Operators: one client at a time, month by month. */
   pick?: ClientPick | undefined;
 }) {
   const total = accounts.reduce((s, a) => s + a.all.total, 0);
   // One client: a share-of-total donut is always 100%, so show their year month by month.
-  if (accounts.length === 1 || (pick && accounts.length)) {
-    const a = accounts.find((x) => x.clientId === pick?.value) ?? accounts[0]!;
+  if (clients.length === 1 || (pick && clients.length)) {
+    const a = clients.find((x) => x.clientId === pick?.value) ?? clients[0]!;
     return (
       <SingleClientVolume
         key={a.clientId}
         a={a}
-        year={year}
+        month={month}
+        fullYear={fullYear}
         monthly={monthly}
-        currentMonth={currentMonth}
-        clientId={accounts.length > 1 ? a.clientId : undefined}
-        picker={pick && <ClientDropdown accounts={accounts} pick={pick} />}
+        clientId={clients.length > 1 ? a.clientId : undefined}
+        picker={pick && <ClientDropdown accounts={clients} pick={pick} />}
       />
     );
   }
@@ -475,7 +483,7 @@ export function ClientShareCard({
     <div className="rc-card ga-revenue">
       <div className="rc-header">
         <div className="rc-title">Shipments by Client</div>
-        <div className="rc-subtitle">Share of all shipments in {year}</div>
+        <div className="rc-subtitle">Share of all shipments in {period}</div>
       </div>
       <div className="rc-top-hero">
         <div className="rc-metric-left">
@@ -608,75 +616,37 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
 
 export function AccountsCard({
   filters,
+  period,
   pick,
   clients = [],
 }: {
   filters: { from: string; to: string };
+  /** The Overview's period: "October 2026" or "Jan – Oct 2026". */
+  period: string;
   /** Operators: one client at a time, picked here or on the Shipments card. */
   pick?: ClientPick | undefined;
   /** The clients to pick from (this year's accounts). */
   clients?: AccountRow[];
 }) {
   const [type, setType] = useState<'all' | 'import' | 'export'>('all');
-  // A user limited to one client (and every Operator) picks a year and month instead of
-  // All / Import / Export (their card already shows the import/export split).
+  // A user limited to one client (and every Operator) sees no All / Import / Export
+  // (their card already shows the import/export split).
   const { user } = useAuth();
   const single = user?.clientIds?.length === 1 || !!pick;
   const picked = pick && clients.length > 1 ? pick.value || clients[0]!.clientId : '';
-  const thisYear = Number(filters.from.slice(0, 4));
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' })
-    .format(new Date())
-    .slice(0, 7);
-  const [year, setYear] = useState(String(thisYear));
-  const [month, setMonth] = useState(''); // '' = the whole year
-  // Months up to the current one in the current year; all twelve for a past year.
-  const lastMonth = year === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
-  const range = !single
-    ? filters
-    : month
-      ? {
-          from: `${year}-${month}-01`,
-          to: new Date(Date.UTC(Number(year), Number(month), 0)).toISOString().slice(0, 10),
-        }
-      : { from: `${year}-01-01`, to: `${year}-12-31` };
-  const q = useAccounts(range);
+  const q = useAccounts(filters);
   const rows = picked ? q.data?.filter((a) => a.clientId === picked) : q.data;
   const pickedName = clients.find((c) => c.clientId === picked)?.code;
-  const period = month ? `${MONTHS_LONG[Number(month) - 1]} ${year}` : year;
   return (
     <div className="accounts-card ga-accounts">
       <div className="accounts-card-header">
         <h3>Key Logistics Accounts</h3>
         {single ? (
-          <div className={acc.controls}>
-            {pick && <ClientDropdown accounts={clients} pick={pick} />}
-            <CardDropdown
-              label="Year"
-              value={year}
-              onChange={(y) => {
-                setYear(y);
-                // Keep the month only if it exists in that year so far.
-                const last = y === today.slice(0, 4) ? Number(today.slice(5, 7)) : 12;
-                if (Number(month) > last) setMonth('');
-              }}
-              options={[0, 1, 2].map((d) => ({
-                value: String(thisYear - d),
-                label: String(thisYear - d),
-              }))}
-            />
-            <CardDropdown
-              label="Month"
-              value={month}
-              onChange={setMonth}
-              options={[
-                { value: '', label: 'All months' },
-                ...Array.from({ length: lastMonth }, (_, i) => ({
-                  value: String(i + 1).padStart(2, '0'),
-                  label: MONTHS[i]!,
-                })),
-              ]}
-            />
-          </div>
+          pick && (
+            <div className={acc.controls}>
+              <ClientDropdown accounts={clients} pick={pick} />
+            </div>
+          )
         ) : (
           <div className="accounts-seg-control" role="tablist">
             {(['all', 'import', 'export'] as const).map((t) => (
@@ -698,19 +668,11 @@ export function AccountsCard({
           loading={q.isLoading}
           error={q.error}
           empty={!rows?.length}
-          emptyText={
-            single
-              ? `No shipments${pickedName ? ` for ${pickedName}` : ''} in ${period}`
-              : undefined
-          }
+          emptyText={`No shipments${pickedName ? ` for ${pickedName}` : ''} in ${period}`}
           height={120}
         >
           {rows?.length === 1 ? (
-            <SingleAccount
-              a={rows[0]!}
-              type={single ? 'all' : type}
-              period={single ? period : 'this year'}
-            />
+            <SingleAccount a={rows[0]!} type={single ? 'all' : type} period={period} />
           ) : (
             <table className="accounts-table">
               <thead>
@@ -785,7 +747,7 @@ function SingleAccount({
 }: {
   a: AccountRow;
   type: 'all' | 'import' | 'export';
-  /** "this year", "2025" or "October 2026". */
+  /** "October 2026" or "Jan – Oct 2026". */
   period: string;
 }) {
   const d = a[type];
@@ -802,8 +764,8 @@ function SingleAccount({
             {a.name}
           </Link>
           <span className={acc.sub}>
-            {type === 'all' ? 'All shipments' : type === 'import' ? 'Imports' : 'Exports'}{' '}
-            {period === 'this year' ? period : `in ${period}`}
+            {type === 'all' ? 'All shipments' : type === 'import' ? 'Imports' : 'Exports'} in{' '}
+            {period}
           </span>
         </div>
         <div className={acc.total}>

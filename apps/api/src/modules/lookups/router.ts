@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import {
   LOOKUP_TYPES,
   consigneeInputSchema,
@@ -26,6 +26,7 @@ lookupsRouter.get('/', async (req, res) => {
         id: clients.id,
         code: clients.code,
         name: clients.name,
+        legalName: clients.legalName,
         status: clients.status,
         commissionUsd: clients.commissionUsd,
       })
@@ -90,6 +91,36 @@ lookupsRouter.post('/consignees', requirePermission('shipments:write'), async (r
   const input = parse(consigneeInputSchema, req.body);
   if (input.clientId) assertClientAllowed(req, input.clientId);
   const row = await db.transaction(async (tx) => {
+    // A consignee deleted from Client Details (inactive) comes back instead of clashing on its name.
+    const [inactive] = await tx
+      .select()
+      .from(consignees)
+      .where(
+        and(sql`lower(${consignees.name}) = lower(${input.name})`, eq(consignees.isActive, false)),
+      );
+    if (inactive) {
+      const [back] = await tx
+        .update(consignees)
+        .set({
+          isActive: true,
+          clientId: input.clientId ?? inactive.clientId,
+          countryIso2: input.countryIso2 ?? inactive.countryIso2,
+        })
+        .where(eq(consignees.id, inactive.id))
+        .returning();
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: 'consignee',
+          entityId: back!.id,
+          before: inactive,
+          after: back,
+        },
+        req,
+      );
+      return back!;
+    }
     const [created] = await tx.insert(consignees).values(input).returning();
     await audit(
       tx,

@@ -33,6 +33,7 @@ export const navCountsSchema = z.object({
   unreadNotifications: z.number().int(),
   /** Unread messages from accounting in my Credit Noted inbox. */
   creditNoteInbox: z.number().int(),
+  recordSummaryInbox: z.number().int(),
 });
 export type NavCounts = z.infer<typeof navCountsSchema>;
 

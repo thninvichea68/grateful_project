@@ -1,0 +1,135 @@
+/* Client Details: Suppliers | Consignees, each list scrolling on its own when long. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+@media (max-width: 700px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+.column {
+  min-width: 0;
+}
+.column + .column {
+  padding-left: 24px;
+  border-left: 1px solid var(--border-subtle);
+}
+@media (max-width: 700px) {
+  .column + .column {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* Same height with or without "+ Add", so both lists start level. */
+  min-height: 34px;
+  margin-bottom: 12px;
+}
+/* As the other cards' titles (.card-header-row h3). */
+.head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+.count {
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+.scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* A name (click to set the address) with its delete button on the right. */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 8px;
+}
+.row:hover {
+  background: var(--bg-subtle);
+}
+.delete {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.row:hover .delete,
+.delete:focus-visible {
+  color: var(--status-exception-fg);
+  border-color: var(--border-subtle);
+}
+.delete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-family: var(--font-main);
+  text-align: left;
+  cursor: pointer;
+}
+.item:focus-visible {
+  background: var(--bg-subtle);
+}
+.item:disabled {
+  cursor: default;
+}
+.item b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.address {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.noAddress {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+.muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}

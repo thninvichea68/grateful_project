@@ -75,7 +75,9 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
 
         <nav className="menu" id="menu">
           {NAV.map((group) => {
-            const items = group.items.filter((i) => can(i.permission));
+            const items = group.items.filter(
+              (i) => can(i.permission) && !i.hideFor?.includes(user.role),
+            );
             if (!items.length) return null;
             return (
               <div className="menu-group" key={group.heading}>
@@ -98,7 +100,7 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
                         {badge > 0 && (
                           <span
                             className="item-badge"
-                            aria-label={`${badge} ${item.badge === 'creditNoteInbox' ? 'unread' : 'open'}`}
+                            aria-label={`${badge} ${item.badge === 'openFollowUps' ? 'open' : 'unread'}`}
                           >
                             {badge}
                           </span>

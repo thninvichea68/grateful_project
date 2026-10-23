@@ -37,7 +37,7 @@ export function OperationsPage() {
     setParams(next, { replace: true });
   };
   return (
-    <section className="view active">
+    <section className="view active" id="view-operations">
       <div className="card">
         <div className="card-header-row">
           <div>

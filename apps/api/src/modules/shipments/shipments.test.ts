@@ -315,6 +315,15 @@ describe('shipments', () => {
           ],
         })
     ).body;
+    // Client Details → Suppliers: the address under the name on the letterhead (any case).
+    const supplier = await request(app)
+      .put(`/api/v1/clients/${basics.jr.id}/suppliers`)
+      .set(h)
+      .send({
+        name: 'Shanghai Yongyue Imp.&Exp. Trading Co., Ltd.',
+        address: 'Room 1201, No. 88 Century Ave\nPudong, Shanghai\nChina',
+      });
+    expect(supplier.status).toBe(200);
 
     const res = await request(app)
       .get(`/api/v1/shipments/${created.id}/invoice-packing-list.xlsx`)
@@ -356,6 +365,11 @@ describe('shipments', () => {
       'VAT# L001-902501613',
       'CHINA',
       'CIF SIHANOUKVILLE',
+    ]);
+    expect(['A2', 'A3', 'H2'].map((a) => v(inv, a))).toEqual([
+      'ROOM 1201, NO. 88 CENTURY AVE',
+      'PUDONG, SHANGHAI, CHINA',
+      'ROOM 1201, NO. 88 CENTURY AVE',
     ]);
     expect(formula(inv, 'I7')).toBe('B7');
     expect(['B', 'C', 'D', 'E', 'F', 'G', 'I', 'K', 'L'].map((c) => v(inv, `${c}19`))).toEqual([
@@ -963,6 +977,34 @@ describe('clients', () => {
       activeShipments: 1,
     });
     expect(res.body.recentShipments[0].invoiceNos).toEqual(['JRA26045']);
+  });
+
+  it("keeps a consignee named as the client's legal name, linked to it", async () => {
+    const h = await as('ADMIN');
+    const created = await request(app).post('/api/v1/clients').set(h).send({
+      code: 'VFL',
+      name: 'VFL APPAREL',
+      legalName: 'VFL APPAREL (CAMBODIA) CO., LTD',
+      countryIso2: 'KH',
+      commissionUsd: '50',
+    });
+    expect(created.status).toBe(201);
+    const own = async () =>
+      (await request(app).get('/api/v1/lookups').set(h)).body.consignees.filter(
+        (c: { clientId: string | null }) => c.clientId === created.body.id,
+      );
+    expect(await own()).toEqual([
+      expect.objectContaining({ name: 'VFL APPAREL (CAMBODIA) CO., LTD', countryIso2: 'KH' }),
+    ]);
+    // A new legal name adds its consignee (the old one stays for past shipments).
+    await request(app)
+      .patch(`/api/v1/clients/${created.body.id}`)
+      .set(h)
+      .send({ legalName: 'VFL Apparel (Cambodia) Co., Ltd.' });
+    expect((await own()).map((c: { name: string }) => c.name).sort()).toEqual([
+      'VFL APPAREL (CAMBODIA) CO., LTD',
+      'VFL Apparel (Cambodia) Co., Ltd.',
+    ]);
   });
 
   it('rejects a duplicate client code', async () => {

@@ -398,8 +398,10 @@ function RecordSummaryEditor({
                 <Pill tone={REVIEW_PILL[reviewStatus]}>{REVIEW[reviewStatus].label}</Pill>
               ) : (
                 doc?.status === 'ISSUED' && (
-                  <Pill tone={reviewStatus === 'CHECKED' ? 'completed' : 'pending'}>
-                    {reviewStatus === 'CHECKED' ? 'Checked' : 'Awaiting check'}
+                  <Pill tone={reviewStatus ? REVIEW_PILL[reviewStatus] : 'pending'}>
+                    {reviewStatus && reviewStatus !== 'UNCHECKED'
+                      ? REVIEW[reviewStatus].label
+                      : 'Awaiting check'}
                   </Pill>
                 )
               )}
