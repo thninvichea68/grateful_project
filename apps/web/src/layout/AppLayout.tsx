@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { RememberedOutlet } from './RememberedOutlet';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { titleFor } from './nav';
@@ -64,7 +65,7 @@ export function AppLayout() {
         <TopBar title={title} onToggleMenu={() => setMobileOpen((o) => !o)} />
         <main className="content" id="main-content" tabIndex={-1}>
           <ErrorBoundary resetKey={location.pathname}>
-            <Outlet />
+            <RememberedOutlet />
           </ErrorBoundary>
         </main>
       </div>
