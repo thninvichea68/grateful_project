@@ -1,7 +1,10 @@
 import { sql } from 'drizzle-orm';
 import {
   RECORD_SUMMARY_ITEMS,
+  chargeLineUnit,
+  containerUnit,
   recordSummaryLedgerGroup,
+  shipmentChargeUnit,
   type BillingDocType,
   type BillingLineInput,
   type BillingPackType,
@@ -193,7 +196,7 @@ export async function prefill(
         lines: RECORD_SUMMARY_ITEMS[c.direction].map(([description, mark], i) => ({
           description,
           qty: '1',
-          unit: c.containerSize ?? 'SHIP',
+          unit: chargeLineUnit(description, shipmentChargeUnit(c)),
           unitPrice: (i === 0 && n(c.invRevenue)) || '0',
           mark,
         })),
@@ -240,6 +243,8 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
     declareNo: string;
     declareDate: string;
     direction: 'IMPORT' | 'EXPORT';
+    transportMode: string;
+    loadType: string;
     portId: string | null;
     shipper: string;
     hbl: string | null;
@@ -255,7 +260,8 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
     db,
     sql`
     SELECT a.id AS "recordId", s.client_id AS "clientId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
-           s.direction, coalesce(d.port_id, s.clearance_port_id) AS "portId", upper(coalesce(c.legal_name, c.name)) AS shipper,
+           s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType",
+           coalesce(d.port_id, s.clearance_port_id) AS "portId", upper(coalesce(c.legal_name, c.name)) AS shipper,
            s.hbl_no AS hbl, s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
@@ -269,15 +275,15 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
   );
   if (!c) throw notFound('Declaration');
   const size = c.containerSize ?? '';
-  // "MRKU8974303 (1X20'GP)" as on the broker's voucher.
+  // "MRKU8974303 (1X20'GP)" as on the broker's voucher; the editor reads the unit back from it.
   const containerNo = c.containers
-    ? `${c.containers}${size ? ` (${c.containerCount}X${size.replace(/^(\d+)/, "$1'")})` : ''}`
+    ? `${c.containers}${size ? ` (${c.containerCount}X${containerUnit(size)})` : ''}`
     : null;
-  const unit = size ? size.replace(/^(\d+).*/, "$1'") : 'SHIP';
-  const line = (description: string, u = unit) => ({
+  const unit = shipmentChargeUnit(c);
+  const line = (description: string) => ({
     description,
     qty: '1',
-    unit: u,
+    unit: chargeLineUnit(description, unit),
     unitPrice: '',
     mark: '',
   });
@@ -300,8 +306,8 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
     lines: [
       line(c.direction === 'IMPORT' ? 'IMPORT-CLEARANCE' : 'EXPORT-CLEARANCE'),
       line('TRUCKING'),
-      line('CUSTOMS ACC', 'SHIP'),
-      line('CUSTOM PROCESSING FEE', 'SHIP'),
+      line('CUSTOMS ACC'),
+      line('CUSTOM PROCESSING FEE'),
       line('LOLO'),
     ],
   };

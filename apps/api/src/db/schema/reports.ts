@@ -1,6 +1,16 @@
-import { integer, jsonb, pgTable, text, uniqueIndex, uuid, index, char } from 'drizzle-orm/pg-core';
+import {
+  char,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { PayrollMonthDetail } from '@gs/shared';
+import type { MihMonthData, PayrollMonthDetail } from '@gs/shared';
 import { id, money, timestamps } from './_common';
 import { users } from './auth';
 import { clients } from './reference';
@@ -35,4 +45,33 @@ export const payrollMonths = pgTable(
     uniqueIndex('payroll_months_company_period_unique').on(sql`upper(${t.company})`, t.period),
     index('payroll_months_period_idx').on(t.period),
   ],
+);
+
+/**
+ * Reports → MIH: a month's report to the Ministry of Industry, one per client and month. The
+ * report itself is kept whole in `data`; the head counts and export totals are copied out for
+ * the list. Year-to-date figures aren't stored: they're added up from the saved months.
+ */
+export const mihMonths = pgTable(
+  'mih_months',
+  {
+    id: id(),
+    /** "2026-09". */
+    period: char('period', { length: 7 }).notNull(),
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'cascade' }),
+    employees: integer('employees').notNull(),
+    female: integer('female').notNull(),
+    salary: money('salary').notNull(),
+    exportQty: numeric('export_qty', { precision: 16, scale: 2 }).notNull(),
+    exportValue: money('export_value').notNull(),
+    data: jsonb('data').$type<MihMonthData>().notNull(),
+    source: text('source').$type<'app' | 'excel'>().notNull().default('app'),
+    fileName: text('file_name').notNull().default(''),
+    issues: jsonb('issues').$type<string[]>().notNull().default([]),
+    savedById: uuid('saved_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('mih_months_client_period_unique').on(t.clientId, t.period)],
 );

@@ -20,3 +20,4 @@ export * from './schemas/admin';
 export * from './assistant';
 export * from './chat';
 export * from './schemas/reports';
+export * from './schemas/mih';

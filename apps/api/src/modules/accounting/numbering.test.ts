@@ -508,3 +508,57 @@ describe('authorised correction of an issued document', () => {
     ).toBe(409);
   });
 });
+
+describe('a shipment without a tax invoice', () => {
+  /** Operations submit a record summary for the shipment and accounting checks it. */
+  async function checkSummary(recordId: string, processingFee: string) {
+    const pre = (await acc('get', '/docs/record-summaries/prefill', { query: { recordId } })).body;
+    const line = (description: string, unitPrice: string, mark = '') => ({
+      description,
+      qty: '1',
+      unit: 'SHIP',
+      unitPrice,
+      mark,
+    });
+    const rs = await acc('post', '/docs/record-summaries', {
+      body: {
+        ...pre,
+        lines: [
+          line('EXPORT PROCESSING FEE', processingFee, 'VAT 10%'),
+          line('HBL FEE', '6445.72', 'Receipt'),
+          line('DOCUMENT FEE', '25'),
+        ],
+      },
+    });
+    if (rs.status !== 201) throw new Error(JSON.stringify(rs.body));
+    await acc('post', `/docs/record-summaries/${rs.body.id}/issue`);
+    const res = await acc('patch', `/docs/record-summaries/${rs.body.id}/review`, {
+      body: { reviewStatus: 'CHECKED' },
+    });
+    if (res.status !== 200) throw new Error(JSON.stringify(res.body));
+  }
+
+  it('has no INV number when its record summary has no processing fee; the next ones follow on', async () => {
+    const a = await shipment(b.jr.id, 'E 301', '2026-10-01');
+    const none = await shipment(b.jr.id, 'E 302', '2026-10-05');
+    const c = await shipment(b.jr.id, 'E 303', '2026-10-06');
+    expect(await numbersOf(none)).toEqual(['GS26-002', 'DIS002', 'JR2610002']);
+
+    await checkSummary(none.recordId, '0');
+    // Like the monthly sheets: INV left blank, DIS and DN kept, and no gap in the INV run.
+    expect(await numbersOf(none)).toEqual([null, 'DIS002', 'JR2610002']);
+    expect(await numbersOf(a)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+    expect(await numbersOf(c)).toEqual(['GS26-002', 'DIS003', 'JR2610003']);
+    const docs = await acc('get', '/docs/tax-invoices', { query: { recordId: none.recordId } });
+    expect(
+      docs.body.data.filter(
+        (d: { accountingRecordId: string }) => d.accountingRecordId === none.recordId,
+      ),
+    ).toEqual([]);
+
+    // Approving the next shipment doesn't hand it an INV number again.
+    const d = await shipment(b.jr.id, 'E 304', '2026-10-07');
+    expect(await numbersOf(d)).toEqual(['GS26-003', 'DIS004', 'JR2610004']);
+    expect((await none.row()).invNo).toBeNull();
+  });
+});

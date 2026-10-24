@@ -56,6 +56,7 @@ import {
   periodOf,
   releaseNumber,
   resequence,
+  syncInvoiceNumber,
   takeNumber,
   type AssignedNumbers,
   type NumberKind,
@@ -586,8 +587,9 @@ async function summaryToLedger(
   tx: Tx,
   summaryId: string,
   recordId: string,
-  userId: string,
+  req: Request,
 ): Promise<void> {
+  const userId = req.auth!.userId;
   const lines = await tx
     .select({
       description: recordSummaryLines.description,
@@ -609,6 +611,8 @@ async function summaryToLedger(
     })
     .where(eq(accountingRecords.id, recordId));
   await recompute(tx, recordId);
+  // No processing fee means no tax invoice, so no INV number.
+  await syncInvoiceNumber(tx, recordId, req);
 }
 
 /** A checked record summary unchecked, revised or cancelled: the amounts go back to the issued documents'. */
@@ -903,7 +907,10 @@ export async function deleteDoc(type: BillingDocType, id: string, req: Request):
   const cfg = CONFIG[type];
   await db.transaction(async (tx) => {
     const doc = await lockDoc(tx, type, id);
-    if (doc.status !== 'DRAFT')
+    // A discarded credit note or cancelled record summary is already out of the ledger and
+    // carries no billing number, so it can go too; cancelled invoices keep theirs on record.
+    const voidDeletable = doc.status === 'VOID' && !isIssueDated(type);
+    if (doc.status !== 'DRAFT' && !voidDeletable)
       throw conflict('Only drafts can be deleted. Cancel an issued document instead.');
     await tx.delete(cfg.table).where(eq(col(cfg.table, 'id'), id));
     // A shipment's draft only borrowed its ledger number; a loose one gives its number back.
@@ -1539,7 +1546,7 @@ export async function setRecordSummaryReview(
       })
       .where(eq(recordSummaries.id, id));
     if (recordId) {
-      if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req.auth!.userId);
+      if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req);
       else if (doc.reviewStatus === 'CHECKED') await summaryOutOfLedger(tx, recordId);
     }
     // Approved or Revised: Operations hear about it in their Record Summary inbox.

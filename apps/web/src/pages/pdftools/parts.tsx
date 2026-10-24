@@ -158,10 +158,18 @@ export function ChosenFile({
 }
 
 /** Output files with per-file download and, for several, one zip. */
-export function Results({ files, summary }: { files: OutFile[]; summary?: ReactNode }) {
+export function Results({
+  files,
+  summary,
+  zipName: zipNameProp,
+}: {
+  files: OutFile[];
+  summary?: ReactNode;
+  zipName?: string;
+}) {
   const [zipping, setZipping] = useState(false);
   if (!files.length) return null;
-  const zipName = files[0]!.name.replace(/(-p\d+(-\d+)?)?\.[^.]+$/, '') + '.zip';
+  const zipName = zipNameProp ?? files[0]!.name.replace(/(-p\d+(-\d+)?)?\.[^.]+$/, '') + '.zip';
   return (
     <div className={s.results}>
       <div className={s.resultsHead}>

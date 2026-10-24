@@ -187,6 +187,48 @@ export const RECORD_SUMMARY_ITEMS: Record<
   ],
 };
 
+/** Charges billed per set, whatever the shipment. */
+export const PER_SET_CHARGES = [
+  'PERMIT FEE',
+  'SERVICE TAXATION',
+  'MISSING INSURANCE',
+  'DOCUMENT FEE',
+];
+
+/** "40HQ" → "40'HQ", the unit container charges are billed in. */
+export const containerUnit = (size: string): string => size.trim().replace(/^(\d+)'?/, "$1'");
+
+/**
+ * The unit a shipment's charges are billed in: its container size ("40'HQ"), or SHIP for air,
+ * LCL and anything without a size.
+ */
+export function shipmentChargeUnit(s: {
+  transportMode?: string | null;
+  loadType?: string | null;
+  containerSize?: string | null;
+}): string {
+  if (s.transportMode === 'AIR' || s.loadType === 'LCL' || !s.containerSize?.trim()) return 'SHIP';
+  return containerUnit(s.containerSize);
+}
+
+/** A credit note / record summary line's unit: SET for the per-set charges, else the shipment's. */
+export const chargeLineUnit = (description: string | null | undefined, shipUnit: string): string =>
+  PER_SET_CHARGES.includes((description ?? '').trim().toUpperCase()) ? 'SET' : shipUnit;
+
+/**
+ * A unit that follows the shipment (SHIP, SET or a container size: 20GP, 40'HQ, 40'). Others
+ * (DAY, CBM, TRUCK 5T…) were picked on purpose and are left alone.
+ */
+export const isShipmentUnit = (unit: string | null | undefined): boolean =>
+  /^(SHIP|SET|\d{2}'?\s*[A-Z]{0,2})$/i.test((unit ?? '').trim());
+
+/** A line's unit once the shipment's unit or the line's description changed. */
+export const followShipmentUnit = (
+  line: { description?: string | null; unit?: string | null },
+  shipUnit: string,
+): string =>
+  isShipmentUnit(line.unit) ? chargeLineUnit(line.description, shipUnit) : (line.unit ?? '');
+
 /**
  * Where a record summary line goes ("Accountant (Monthly) data flow"):
  * - INV: the Import / Export Processing Fee (GS's service, VAT 10% on top);

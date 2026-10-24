@@ -9,7 +9,11 @@ import {
   DEFAULT_CHARGE_UNITS,
   RECORD_SUMMARY_ITEMS,
   chargeLineAmount,
+  chargeLineUnit,
   computeChargeLinesTotal,
+  containerUnit,
+  followShipmentUnit,
+  shipmentChargeUnit,
   type BillingDoc,
   type CreditNoteReviewStatus,
 } from '@gs/shared';
@@ -32,6 +36,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
+import { nextLineOnEnter } from '../../lib/lineKeys';
 import { RecordSummary, transportLabel } from '../print/PrintDocPage';
 import { Preview, useFillWindow } from '../creditnoted/CreditNotedEditor';
 import { printCreditNote } from '../creditnoted/creditNoteExport';
@@ -44,18 +49,25 @@ import s from '../creditnoted/CreditNotedEditor.module.css';
 import r from './RecordSummaryEditor.module.css';
 
 const TYPE = 'record-summaries' as const;
-const BLANK_LINE = { description: '', qty: '1', unit: 'SHIP', unitPrice: '', mark: '' };
+const blankLine = (unit: string) => ({ description: '', qty: '1', unit, unitPrice: '', mark: '' });
 /** The Unit dropdown's "+ Add New" choice. */
 const NEW_ITEM = '__new__';
 /** A blank summary starts with the standard import / export breakdown; prices to fill. */
-const itemsFor = (direction: unknown) =>
+const itemsFor = (direction: unknown, shipUnit: string) =>
   RECORD_SUMMARY_ITEMS[direction === 'EXPORT' ? 'EXPORT' : 'IMPORT'].map(([description, mark]) => ({
     description,
     qty: '1',
-    unit: '20GP',
+    unit: chargeLineUnit(description, shipUnit),
     unitPrice: '',
     mark,
   }));
+/** The unit the summary's charges are billed in, from its transport type and container size. */
+const shipUnitOf = (v: Partial<Values>) =>
+  shipmentChargeUnit({
+    transportMode: v.transportMode as string | undefined,
+    loadType: v.loadType as string | undefined,
+    containerSize: v.containerSize as string | undefined,
+  });
 /** An empty price is saved as 0: the line stays on the summary, off the sheet until priced. */
 const baseResolver = formResolver(BILLING_DOC_SCHEMAS[TYPE]);
 const priceOrZero: typeof baseResolver = (values, ctx, options) =>
@@ -139,7 +151,7 @@ function RecordSummaryEditor({
   const eligible = useEligible(TYPE);
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
-    if (!doc && !prefill) v.lines = itemsFor(v.direction);
+    if (!doc && !prefill) v.lines = itemsFor(v.direction, shipUnitOf(v));
     // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
     v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
     return v;
@@ -149,6 +161,7 @@ function RecordSummaryEditor({
     control,
     handleSubmit,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<Values>({
     resolver: priceOrZero as never,
@@ -159,6 +172,16 @@ function RecordSummaryEditor({
     name: 'lines',
   });
   const values = useWatch({ control }) as Values;
+  // Units follow the container size (SHIP for air / LCL; SET for the per-set charges) on every
+  // line not given a unit of its own (DAY, CBM…), as the size or transport type changes.
+  const shipUnit = shipUnitOf(values);
+  useEffect(() => {
+    if (!editable) return;
+    getValues('lines').forEach((l, i) => {
+      const unit = followShipmentUnit(l, shipUnit);
+      if (l.unit !== unit) setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
+    });
+  }, [shipUnit, editable, getValues, setValue]);
   // The processing fee carries 10% VAT on top (see chargeLineAmount).
   const total = computeChargeLinesTotal(values.lines ?? []);
   const client = lookups.data?.clients.find((c) => c.id === values.clientId);
@@ -177,7 +200,7 @@ function RecordSummaryEditor({
   const units = [
     ...new Set([
       ...DEFAULT_CHARGE_UNITS,
-      ...CONTAINER_SIZES,
+      ...CONTAINER_SIZES.map(containerUnit),
       ...(lookups.data?.values.CHARGE_UNIT ?? []).map((u) => u.label),
     ]),
   ];
@@ -299,10 +322,20 @@ function RecordSummaryEditor({
       },
     );
   };
+  /** Delete a draft, or a cancelled summary for good (it is already out of the ledger). */
   const remove = async () => {
-    if (!doc || !window.confirm('Delete this draft?')) return;
+    if (!doc) return;
+    const voided = doc.status === 'VOID';
+    if (
+      !window.confirm(
+        voided
+          ? `Delete the cancelled record summary for ${doc.declareNo ?? 'this shipment'} for good? This can't be undone.`
+          : 'Delete this draft?',
+      )
+    )
+      return;
     await action.mutateAsync({ action: 'delete', id: doc.id });
-    toast('Draft deleted.');
+    toast(voided ? 'Cancelled record summary deleted.' : 'Draft deleted.');
     navigate(base, { replace: true });
   };
 
@@ -421,7 +454,7 @@ function RecordSummaryEditor({
                 {icons.trash({})}
               </button>
             )}
-            {editable && doc && (
+            {editable && (
               <button
                 type="button"
                 className="btn-cancel-shipment"
@@ -470,6 +503,16 @@ function RecordSummaryEditor({
                 Cancel document
               </button>
             )}
+            {can('recordsummaries:write') && doc?.status === 'VOID' && (
+              <button
+                type="button"
+                className="btn-delete-shipment"
+                disabled={action.isPending}
+                onClick={() => void remove()}
+              >
+                {icons.trash({ width: 15, height: 15 })} Delete
+              </button>
+            )}
           </div>
         </header>
         {doc?.status === 'DRAFT' && doc.header.reviewStatus === 'REVISED' && (
@@ -513,7 +556,7 @@ function RecordSummaryEditor({
                       // Still unpriced: switch to that direction's standard breakdown.
                       onChange: (e: { target: { value: string } }) => {
                         if (!(values.lines ?? []).some((l) => Number(l.unitPrice) > 0))
-                          lines.replace(itemsFor(e.target.value));
+                          lines.replace(itemsFor(e.target.value, shipUnit));
                       },
                     })}
                   >
@@ -663,12 +706,21 @@ function RecordSummaryEditor({
             <Panel title="2. Breakdown line items">
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
               {lines.fields.map((f, i) => (
-                <div className={r.rowItem} key={f.id}>
+                <div className={r.rowItem} key={f.id} onKeyDown={nextLineOnEnter}>
                   <span className={r.no}>{i + 1}</span>
                   <input
                     className={`form-field-box ${r.desc}`}
                     list="rs-charges"
-                    {...register(`lines.${i}.description`)}
+                    {...register(`lines.${i}.description`, {
+                      onChange: (e: { target: { value: string } }) => {
+                        const unit = followShipmentUnit(
+                          { description: e.target.value, unit: getValues(`lines.${i}.unit`) },
+                          shipUnit,
+                        );
+                        if (unit !== getValues(`lines.${i}.unit`))
+                          setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
+                      },
+                    })}
                     aria-label={`Line ${i + 1} description`}
                     aria-invalid={!!lineErr(i, 'description')}
                     title={lineErr(i, 'description') ?? values.lines?.[i]?.description}
@@ -725,7 +777,9 @@ function RecordSummaryEditor({
                       type="button"
                       className={r.del}
                       onClick={() =>
-                        lines.fields.length > 1 ? lines.remove(i) : lines.update(i, BLANK_LINE)
+                        lines.fields.length > 1
+                          ? lines.remove(i)
+                          : lines.update(i, blankLine(shipUnit))
                       }
                       aria-label={`Remove line ${i + 1}`}
                       title={lines.fields.length > 1 ? 'Remove row' : 'Clear this row'}
@@ -744,7 +798,7 @@ function RecordSummaryEditor({
                 <button
                   type="button"
                   className={r.addItem}
-                  onClick={() => lines.append(BLANK_LINE)}
+                  onClick={() => lines.append(blankLine(shipUnit))}
                 >
                   + Add Custom Row
                 </button>

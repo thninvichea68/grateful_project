@@ -14,8 +14,10 @@ import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
 
 const PREFS = 'gs:plans-view';
-const columnsFor = (expand: boolean) =>
-  expand ? [...BASE_COLUMNS, ...EXPANDED_COLUMNS] : BASE_COLUMNS;
+const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
+  expand
+    ? [...BASE_COLUMNS, ...EXPANDED_COLUMNS.filter((c) => direction === 'EXPORT' || !c.exportOnly)]
+    : BASE_COLUMNS;
 
 function readPrefs(): { expandAll: boolean; frozen: string[] } {
   try {
@@ -61,7 +63,10 @@ export function ShippingPlansPage() {
     month: filters.month || undefined,
   };
   const list = useShipments(query);
-  const cols = useMemo(() => columnsFor(prefs.expandAll), [prefs.expandAll]);
+  const cols = useMemo(
+    () => columnsFor(prefs.expandAll, filters.direction),
+    [prefs.expandAll, filters.direction],
+  );
 
   const apply = (v: PlansFilterValue) => {
     const next = new URLSearchParams(params);
@@ -184,7 +189,11 @@ export function ShippingPlansPage() {
               <option value="IMPORT">Import</option>
               <option value="EXPORT">Export</option>
             </select>
-            <PlansFilter value={filterValue} onApply={apply} columnsFor={columnsFor} />
+            <PlansFilter
+              value={filterValue}
+              onApply={apply}
+              columnsFor={(expand) => columnsFor(expand, filters.direction)}
+            />
             <PlansMoreMenu
               exporting={exporting}
               onExport={() => void doExport()}

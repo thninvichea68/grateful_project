@@ -5,9 +5,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_DOC_SCHEMAS,
+  CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
   chargeLineAmount,
   computeChargeLinesTotal,
+  containerUnit,
+  followShipmentUnit,
   type BillingDoc,
   type CreditNoteReviewStatus,
 } from '@gs/shared';
@@ -30,6 +33,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
+import { nextLineOnEnter } from '../../lib/lineKeys';
 import { initialValues, type Values } from '../accounting/DocEditorPage';
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
 import { REVIEW, REVIEW_PILL, ReviseModal, checkIcon } from '../accounting/CreditNotesReview';
@@ -46,6 +50,16 @@ const A4_WIDTH = 794; // 210mm at 96dpi
 
 /** The "+ Add New Item" choice in a line's description dropdown. */
 const NEW_ITEM = '__new__';
+
+/**
+ * The unit the note's charges are billed in, read from the Container box ("MRKU8974303
+ * (1X40'HQ)" → 40'HQ). No size there (air, LCL) → SHIP.
+ */
+export function creditNoteShipUnit(containerNo: unknown): string {
+  const m = /\b(\d{2})\s*'?\s*(GP|HQ|HC)\b/i.exec(String(containerNo ?? ''));
+  return m ? containerUnit(`${m[1]}${m[2]!.toUpperCase()}`) : 'SHIP';
+}
+const blankLine = (unit: string) => ({ description: '', qty: '1', unit, unitPrice: '', mark: '' });
 
 /** /credit-noted/:id (or /accounting/credit-notes/:id): loads the note or a fresh draft. */
 export function CreditNotedRoute({ base }: { base: string }) {
@@ -125,6 +139,23 @@ function CreditNotedEditor({
   });
   const values = useWatch({ control }) as Values;
 
+  // Units follow the container size in the Container box (SHIP without one; SET for the
+  // per-set charges) on every line not given a unit of its own (DAY, CBM…).
+  const shipUnit = creditNoteShipUnit(values.containerNo);
+  useEffect(() => {
+    if (!editable) return;
+    getValues('lines').forEach((l, i) => {
+      const unit = followShipmentUnit(l, shipUnit);
+      if (l.unit !== unit) setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
+    });
+  }, [shipUnit, editable, getValues, setValue]);
+  /** A line's description changed: PERMIT FEE and the like go to SET, others back to the shipment's. */
+  const reunit = (i: number) => {
+    const unit = followShipmentUnit(getValues(`lines.${i}`), shipUnit);
+    if (unit !== getValues(`lines.${i}.unit`))
+      setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
+  };
+
   // The company details may load after the form opened: fill Bill to / Address if still empty.
   useEffect(() => {
     if (!editable || !company.data) return;
@@ -141,6 +172,7 @@ function CreditNotedEditor({
   const units = [
     ...new Set([
       ...DEFAULT_CHARGE_UNITS,
+      ...CONTAINER_SIZES.map(containerUnit),
       ...(lookups.data?.values.CHARGE_UNIT ?? []).map((u) => u.label),
     ]),
   ];
@@ -157,6 +189,7 @@ function CreditNotedEditor({
     if (!typed) return true;
     const label = typed.toUpperCase();
     setValue(`lines.${i}.${field}`, label, { shouldDirty: true, shouldValidate: true });
+    if (field === 'description') reunit(i);
     // Also add it to the list so it's there next time (already there = no change).
     try {
       await api(field === 'unit' ? '/lookups/charge-units' : '/lookups/charges', {
@@ -272,10 +305,20 @@ function CreditNotedEditor({
       },
     );
   };
+  /** Delete a draft, or a discarded note for good (it is already out of the ledger). */
   const remove = async () => {
-    if (!doc || !window.confirm('Delete this draft?')) return;
+    if (!doc) return;
+    const voided = doc.status === 'VOID';
+    if (
+      !window.confirm(
+        voided
+          ? `Delete discarded Credit Noted No. ${cnSeq(doc.number)} for good? This can't be undone.`
+          : 'Delete this draft?',
+      )
+    )
+      return;
     await action.mutateAsync({ action: 'delete', id: doc.id });
-    toast('Draft deleted.');
+    toast(voided ? 'Discarded credit note deleted.' : 'Draft deleted.');
     navigate(base);
   };
   // Print / PDF / Excel use the live preview, so what's on screen is what comes out.
@@ -415,6 +458,16 @@ function CreditNotedEditor({
                 Discard
               </button>
             )}
+            {can('creditnotes:write') && doc?.status === 'VOID' && (
+              <button
+                type="button"
+                className="btn-delete-shipment"
+                disabled={action.isPending}
+                onClick={() => void remove()}
+              >
+                {icons.trash({ width: 15, height: 15 })} Delete
+              </button>
+            )}
           </div>
         </header>
         <ReviewBanner doc={doc} />
@@ -517,7 +570,7 @@ function CreditNotedEditor({
               {lines.fields.map((f, i) => {
                 const l = values.lines?.[i];
                 return (
-                  <div className={s.line} key={f.id}>
+                  <div className={s.line} key={f.id} onKeyDown={nextLineOnEnter}>
                     <span className={s.no}>{i + 1}</span>
                     {(() => {
                       const current = String(l?.description ?? '');
@@ -527,8 +580,10 @@ function CreditNotedEditor({
                           className="form-select-box"
                           {...reg}
                           onChange={async (e) => {
-                            if (!(await chooseNew(i, 'description', e.target, current)))
+                            if (!(await chooseNew(i, 'description', e.target, current))) {
                               await reg.onChange(e);
+                              reunit(i);
+                            }
                           }}
                           aria-label={`Line ${i + 1} description`}
                           aria-invalid={!!lineErr(i, 'description')}
@@ -594,13 +649,7 @@ function CreditNotedEditor({
                         onClick={() =>
                           lines.fields.length > 1
                             ? lines.remove(i)
-                            : lines.update(i, {
-                                description: '',
-                                qty: '1',
-                                unit: 'SHIP',
-                                unitPrice: '',
-                                mark: '',
-                              })
+                            : lines.update(i, blankLine(shipUnit))
                         }
                         aria-label={`Remove line ${i + 1}`}
                         title={lines.fields.length > 1 ? 'Remove item' : 'Clear this item'}
@@ -617,15 +666,7 @@ function CreditNotedEditor({
                 <button
                   type="button"
                   className={s.addLine}
-                  onClick={() =>
-                    lines.append({
-                      description: '',
-                      qty: '1',
-                      unit: 'SHIP',
-                      unitPrice: '',
-                      mark: '',
-                    })
-                  }
+                  onClick={() => lines.append(blankLine(shipUnit))}
                 >
                   + Add item
                 </button>

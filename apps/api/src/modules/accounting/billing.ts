@@ -71,6 +71,8 @@ interface LedgerPart {
   direction: 'IMPORT' | 'EXPORT';
   hbl: string | null;
   containers: string | null;
+  quantity: string | null;
+  quantityUnit: string | null;
   invNo: string | null;
   disNo: string | null;
   dnNo: string | null;
@@ -114,6 +116,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     SELECT a.id AS "recordId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", d.declare_no AS "declareNo",
            s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction, s.hbl_no AS hbl,
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
+           s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.inv_revenue::text AS "invRevenue",
            a.vat::text AS vat, a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
            EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id AND cn.status <> 'VOID') AS "fromChea"
@@ -190,6 +193,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       direction: l.direction,
       hbl: l.hbl,
       containers: l.containers,
+      quantity: l.quantity,
+      quantityUnit: l.quantityUnit,
       docs: docsByType,
       manual,
       _docs: own,

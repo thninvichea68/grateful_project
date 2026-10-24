@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  MihDraft,
+  MihMonth,
+  MihMonthInput,
+  MihMonthRow,
+  MihYear,
   PayrollMonthDetail,
   PayrollMonthInput,
   PayrollMonthRow,
@@ -58,5 +63,48 @@ export function useDeletePayrollMonth() {
   return useMutation({
     mutationFn: (id: string) => api<undefined>(`/reports/payroll/${id}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reports', 'payroll'] }),
+  });
+}
+
+/* ---------- MIH ---------- */
+
+/** MIH → every saved month (all factories), newest first. */
+export const useMihMonths = () =>
+  useQuery({
+    queryKey: ['reports', 'mih', 'list'],
+    queryFn: () => api<MihMonthRow[]>('/reports/mih'),
+  });
+
+/** A factory's saved months of the year, with its payroll months. */
+export const useMihYear = (clientId: string | undefined, year: number) =>
+  useQuery({
+    queryKey: ['reports', 'mih', 'year', clientId, year],
+    queryFn: () => api<MihYear>('/reports/mih/year', { query: { clientId, year } }),
+    enabled: !!clientId,
+  });
+
+/** A new month filled in from the payroll, the invoices and the last saved month. */
+export const useMihDraft = (clientId: string | undefined, month: string | undefined) =>
+  useQuery({
+    queryKey: ['reports', 'mih', 'draft', clientId, month],
+    queryFn: () => api<MihDraft>('/reports/mih/draft', { query: { clientId, month } }),
+    enabled: !!clientId && !!month,
+    staleTime: 0,
+  });
+
+export function useSaveMihMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: MihMonthInput) =>
+      api<MihMonth>('/reports/mih', { method: 'POST', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reports', 'mih'] }),
+  });
+}
+
+export function useDeleteMihMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<undefined>(`/reports/mih/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reports', 'mih'] }),
   });
 }

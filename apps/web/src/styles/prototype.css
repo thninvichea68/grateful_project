@@ -2317,11 +2317,6 @@ body.sidebar-collapsed .user-card {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(
-    50% 60% at 50% 50%,
-    color-mix(in srgb, var(--accent-primary) 7%, transparent),
-    transparent 100%
-  );
 }
 /* Land is near-white on the dark theme and soft slate on light; countries with
    shipments are filled in the accent cyan (strength set inline by share). */

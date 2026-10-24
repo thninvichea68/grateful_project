@@ -168,6 +168,22 @@ const FIELD = { INV: 'invNo', DIS: 'disNo', DN: 'dnNo' } as const;
 
 export type AssignedNumbers = NumberedShipment;
 
+/**
+ * No tax invoice: the shipment's checked record summary has no Import / Export Processing Fee,
+ * so the ledger's INV revenue is 0. Such a shipment takes no INV number (DIS and DN as usual),
+ * as in the accountant's monthly sheets.
+ */
+async function notInvoiced(tx: Tx, recordId: string): Promise<boolean> {
+  const [r] = await queryRows<{ yes: boolean }>(
+    tx,
+    sql`SELECT a.inv_revenue = 0 AND EXISTS (
+          SELECT 1 FROM record_summaries s WHERE s.accounting_record_id = a.id
+            AND s.status = 'ISSUED' AND s.review_status = 'CHECKED') AS yes
+        FROM accounting_records a WHERE a.id = ${recordId}`,
+  );
+  return !!r?.yes;
+}
+
 /** Gives a Monthly Ledger entry the INV / DIS / DN numbers (of `kinds`) it is still missing. */
 export async function assignNumbers(
   tx: Tx,
@@ -181,6 +197,7 @@ export async function assignNumbers(
   const numbers: AssignedNumbers['numbers'] = [];
   for (const kind of kinds) {
     if (r[FIELD[kind]]) continue;
+    if (kind === 'INV' && (await notInvoiced(tx, recordId))) continue;
     const got = await takeNumber(tx, kind, r.invDate, r.code, r.declareNo);
     await tx.execute(sql`
       UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[kind])} = ${got.number}, updated_by_id = ${req.auth?.userId ?? null}
@@ -228,8 +245,9 @@ export interface Renumbered {
 /**
  * Keeps every run in INV-date order. A shipment approved late with an earlier INV date takes
  * its slot and the later ones move down: each run's numbers (INV per year, DIS per year, DN
- * per client and month) are handed out again in order of INV date, then declare date, then
- * the number held now. Only the numbers already in the run are reused, so gaps and the
+ * per client and month) are handed out again in order of INV date, then the number held now
+ * (same-day shipments keep the order they were numbered in, as in the accountant's monthly
+ * sheets). Only the numbers already in the run are reused, so gaps and the
  * numbers of cancelled documents stay where they are. Draft and issued documents and record
  * summaries take their entry's new number.
  */
@@ -254,7 +272,6 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
       entries.sort(
         (a, b) =>
           a.r.invDate.localeCompare(b.r.invDate) ||
-          a.r.declareDate.localeCompare(b.r.declareDate) ||
           a.seq - b.seq ||
           a.r.declareNo.localeCompare(b.r.declareNo),
       );
@@ -270,7 +287,21 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
       });
     }
   }
-  if (!changes.length) return changes;
+  await renumber(tx, changes, req, (declareNo) => `Renumbered ${declareNo} to keep INV-date order`);
+  return changes;
+}
+
+/**
+ * Moves ledger entries to new numbers; their draft and issued documents and record summaries
+ * follow. A change `to: null` takes the number away. Each entry's change is audited.
+ */
+async function renumber(
+  tx: Tx,
+  changes: (Omit<Renumbered, 'to'> & { to: string | null })[],
+  req: Request,
+  reason: (declareNo: string) => string,
+): Promise<void> {
+  if (!changes.length) return;
   // Two passes, so numbers trading places never meet a unique index.
   for (const c of changes) {
     const d = DOC_NUMBER_COL[c.kind];
@@ -294,7 +325,7 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
       UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = ${c.to}
       WHERE accounting_record_id = ${c.recordId} AND ${sql.raw(d.col)} = '~' || id::text`);
   }
-  const byRecord = new Map<string, Renumbered[]>();
+  const byRecord = new Map<string, typeof changes>();
   for (const c of changes) byRecord.set(c.recordId, [...(byRecord.get(c.recordId) ?? []), c]);
   for (const [recordId, cs] of byRecord)
     await audit(
@@ -305,11 +336,66 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
         entityId: recordId,
         before: Object.fromEntries(cs.map((c) => [FIELD[c.kind], c.from])),
         after: Object.fromEntries(cs.map((c) => [FIELD[c.kind], c.to])),
-        reason: `Renumbered ${cs[0]!.declareNo} to keep INV-date order`,
+        reason: reason(cs[0]!.declareNo),
       },
       req,
     );
-  return changes;
+}
+
+/**
+ * Brings a shipment's INV number in line with its checked record summary: one without a
+ * processing fee has no tax invoice, so its INV number is taken away and the later INV
+ * numbers of the year move down one to close the gap (as in the monthly sheets: the next
+ * shipment's INV just follows on). A number on a live tax invoice is left alone. A summary
+ * that has a fee again gets a number back, put in INV-date order.
+ */
+export async function syncInvoiceNumber(tx: Tx, recordId: string, req: Request): Promise<void> {
+  await lockNumbering(tx);
+  const [r] = await queryRows<LedgerNumbers>(tx, sql`${LEDGER_NUMBERS} WHERE a.id = ${recordId}`);
+  if (!r) return;
+  if (!(await notInvoiced(tx, recordId))) {
+    // Numbered already (DIS / DN) but without INV: the summary has a fee now.
+    if (!r.invNo && (r.disNo || r.dnNo)) {
+      await assignNumbers(tx, recordId, req, ['INV']);
+      await resequence(tx, req);
+    }
+    return;
+  }
+  if (!r.invNo) return;
+  const [live] = await queryRows<{ id: string }>(
+    tx,
+    sql`SELECT id FROM tax_invoices WHERE accounting_record_id = ${recordId}
+          AND invoice_no = ${r.invNo} AND status <> 'VOID' LIMIT 1`,
+  );
+  if (live) return;
+  const p = periodOf('INV', r.invDate, r.code);
+  const gone = seqOf(p, r.invNo);
+  const changes: Parameters<typeof renumber>[1] = [
+    { recordId, declareNo: r.declareNo, kind: 'INV', from: r.invNo, to: null },
+  ];
+  if (gone !== null) {
+    const later = (await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS))
+      .map((e) => ({ e, seq: e.invNo ? seqOf(periodOf('INV', e.invDate, e.code), e.invNo) : null }))
+      .filter((x): x is { e: LedgerNumbers; seq: number } => x.seq !== null && x.seq > gone)
+      .filter((x) => periodOf('INV', x.e.invDate, x.e.code).key === p.key)
+      .sort((a, b) => a.seq - b.seq);
+    // Each takes the slot below it; numbers not on the ledger (cancelled invoices) stay put.
+    const slots = [gone, ...later.map((x) => x.seq)];
+    later.forEach(({ e }, i) =>
+      changes.push({
+        recordId: e.id,
+        declareNo: e.declareNo,
+        kind: 'INV',
+        from: e.invNo!,
+        to: p.format(slots[i]!),
+      }),
+    );
+  }
+  await renumber(tx, changes, req, (declareNo) =>
+    declareNo === r.declareNo
+      ? `No tax invoice for ${declareNo} (no processing fee on its record summary): INV number taken away`
+      : `Renumbered ${declareNo} to close the gap left by ${r.invNo}`,
+  );
 }
 
 /**

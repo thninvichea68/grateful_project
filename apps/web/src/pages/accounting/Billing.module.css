@@ -380,6 +380,15 @@
 }
 
 /* Shipments table: one row per Monthly Ledger entry, a cell per document type. */
+.docTable .actionCol {
+  width: 1%;
+  text-align: center;
+  white-space: nowrap;
+}
+.docTable .rowPrint {
+  display: inline-flex;
+  padding: 4px 12px;
+}
 .docTable td {
   vertical-align: top;
 }

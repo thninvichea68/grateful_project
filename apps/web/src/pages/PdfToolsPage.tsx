@@ -97,7 +97,7 @@ const TOOLS: Tool[] = [
   {
     id: 'compress',
     name: 'Compress PDF',
-    desc: 'Shrink a PDF for email or upload, especially scanned documents.',
+    desc: 'Shrink one or many PDFs for email or upload, especially scanned documents.',
     group: 'Optimize',
     icon: svg(<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />),
     Panel: CompressTool,

@@ -7,6 +7,8 @@ export interface PlanColumn {
   label: string;
   render: (r: ShipmentListItem) => ReactNode;
   bold?: boolean;
+  /** Export-side details (booking, seals, CO, PO/style…): left out of the Import list. */
+  exportOnly?: boolean;
 }
 
 const dash = (v: ReactNode) => (v === null || v === undefined || v === '' ? '-' : v);
@@ -52,7 +54,12 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
   { key: 'invoiceDate', label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },
-  { key: 'bookingNo', label: 'Booking / SO No.', render: (r) => dash(r.bookingNo) },
+  {
+    key: 'bookingNo',
+    label: 'Booking / SO No.',
+    render: (r) => dash(r.bookingNo),
+    exportOnly: true,
+  },
   {
     key: 'linerSeal',
     label: 'Liner Seal',
@@ -63,6 +70,7 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
           .filter(Boolean)
           .join(', '),
       ),
+    exportOnly: true,
   },
   {
     key: 'customsSeal',
@@ -74,8 +82,9 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
           .filter(Boolean)
           .join(', '),
       ),
+    exportOnly: true,
   },
-  { key: 'crd', label: 'CRD', render: (r) => fmtDate(r.crd) },
+  { key: 'crd', label: 'CRD', render: (r) => fmtDate(r.crd), exportOnly: true },
   { key: 'thcHblNo', label: 'INVOICE / THC No.', render: (r) => dash(r.thcHblNo) },
   { key: 'thcHblDate', label: 'Invoice / THC Date', render: (r) => fmtDate(r.thcHblDate) },
   {
@@ -90,9 +99,9 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   },
   { key: 'vessel', label: 'Vessel Name', render: (r) => dash(r.vesselName) },
   { key: 'voyage', label: 'Voyage No.', render: (r) => dash(r.voyageNo) },
-  { key: 'coForm', label: 'CO Form', render: (r) => dash(r.coForm) },
-  { key: 'coNumber', label: 'CO Number', render: (r) => dash(r.coNumber) },
-  { key: 'coStatus', label: 'CO Status', render: (r) => dash(r.coStatus) },
+  { key: 'coForm', label: 'CO Form', render: (r) => dash(r.coForm), exportOnly: true },
+  { key: 'coNumber', label: 'CO Number', render: (r) => dash(r.coNumber), exportOnly: true },
+  { key: 'coStatus', label: 'CO Status', render: (r) => dash(r.coStatus), exportOnly: true },
   { key: 'netWeight', label: 'Net Weight', render: (r) => `${fmtNum(r.totals.netWeightKg, 2)} KG` },
   {
     key: 'grossWeight',
@@ -100,9 +109,19 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
     render: (r) => `${fmtNum(r.totals.grossWeightKg, 2)} KG`,
   },
   { key: 'cbm', label: 'CBM', render: (r) => fmtNum(r.totals.cbm) },
-  { key: 'poNo', label: 'PO No.', render: (r) => dash(r.firstLine?.poNo) },
-  { key: 'styleNo', label: 'Style No.', render: (r) => dash(r.firstLine?.styleNo) },
-  { key: 'htsCode', label: 'HTS Code', render: (r) => dash(r.firstLine?.htsCode) },
+  { key: 'poNo', label: 'PO No.', render: (r) => dash(r.firstLine?.poNo), exportOnly: true },
+  {
+    key: 'styleNo',
+    label: 'Style No.',
+    render: (r) => dash(r.firstLine?.styleNo),
+    exportOnly: true,
+  },
+  {
+    key: 'htsCode',
+    label: 'HTS Code',
+    render: (r) => dash(r.firstLine?.htsCode),
+    exportOnly: true,
+  },
   { key: 'qtyPcs', label: 'Qty (PCS)', render: (r) => fmtNum(r.totals.pcs) },
   { key: 'ctns', label: 'CTNS', render: (r) => fmtNum(r.totals.ctns) },
   {
@@ -122,7 +141,7 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
   { key: 'description', label: 'Description', render: (r) => dash(r.firstLine?.description) },
-  { key: 'etdPort', label: 'ETD Port', render: (r) => dash(r.etdPort) },
-  { key: 'atd', label: 'ATD Date', render: (r) => fmtDate(r.atd) },
+  { key: 'etdPort', label: 'ETD Port', render: (r) => dash(r.etdPort), exportOnly: true },
+  { key: 'atd', label: 'ATD Date', render: (r) => fmtDate(r.atd), exportOnly: true },
   { key: 'remark', label: 'Remark', render: (r) => dash(r.remark) },
 ];

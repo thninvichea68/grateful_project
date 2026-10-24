@@ -8,6 +8,9 @@ import {
   chargeLineAmount,
   computeChargeLinesTotal,
   isVatChargedLine,
+  chargeLineUnit,
+  followShipmentUnit,
+  shipmentChargeUnit,
 } from './accounting';
 import { computeCutStockBalance, wouldOverImport } from './cutstock';
 import { toMoneyString, sumMoney, round2 } from './money';
@@ -229,5 +232,34 @@ describe('credit note / record summary lines (processing fee + 10% VAT)', () => 
         { description: 'LOLO AT PORT', qty: 1, unitPrice: 45 },
       ]),
     ).toBe(265);
+  });
+});
+
+describe('charge line units (credit noted / record summary)', () => {
+  it('bills by the container size, SHIP for air / LCL, SET for the per-set charges', () => {
+    const fcl = shipmentChargeUnit({
+      transportMode: 'SEA',
+      loadType: 'FCL',
+      containerSize: '40HQ',
+    });
+    expect(fcl).toBe("40'HQ");
+    expect(
+      shipmentChargeUnit({ transportMode: 'SEA', loadType: 'LCL', containerSize: '40HQ' }),
+    ).toBe('SHIP');
+    expect(
+      shipmentChargeUnit({ transportMode: 'AIR', loadType: 'NONE', containerSize: null }),
+    ).toBe('SHIP');
+    expect(chargeLineUnit('TRUCKING FEE', fcl)).toBe("40'HQ");
+    for (const d of ['PERMIT FEE', 'service taxation', 'MISSING INSURANCE', 'DOCUMENT FEE'])
+      expect(chargeLineUnit(d, fcl)).toBe('SET');
+  });
+  it('re-units only lines whose unit follows the shipment', () => {
+    expect(followShipmentUnit({ description: 'THC FEE', unit: '20GP' }, "40'HQ")).toBe("40'HQ");
+    expect(followShipmentUnit({ description: 'THC FEE', unit: 'SET' }, 'SHIP')).toBe('SHIP');
+    expect(followShipmentUnit({ description: 'PERMIT FEE', unit: "40'HQ" }, "40'HQ")).toBe('SET');
+    expect(followShipmentUnit({ description: 'STORAGE', unit: 'DAY' }, "40'HQ")).toBe('DAY');
+    expect(followShipmentUnit({ description: 'TRUCK', unit: 'TRUCK 5T' }, "40'HQ")).toBe(
+      'TRUCK 5T',
+    );
   });
 });

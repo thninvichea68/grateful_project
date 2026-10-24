@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ui } from '../../components/ui';
 import { fmtFileSize } from '../../lib/format';
 import {
@@ -346,35 +346,120 @@ export function OrganizeTool() {
   );
 }
 
+/** `name`, or `name (2)` etc. when already taken, so zip entries don't overwrite each other. */
+function uniqueName(name: string, taken: Set<string>) {
+  let n = name;
+  for (let i = 2; taken.has(n); i++) n = name.replace(/(\.[^.]+)$/, ` (${i})$1`);
+  taken.add(n);
+  return n;
+}
+
 export function CompressTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [level, setLevel] = useState<CompressLevel>('medium');
   const [out, setOut] = useState<OutFile[]>([]);
-  const [summary, setSummary] = useState('');
-  const pages = usePageCount(file);
+  const [summary, setSummary] = useState<ReactNode>('');
   const r = useRun();
-  if (!file)
-    return (
-      <DropZone
-        accept={PDF_ACCEPT}
-        label="Choose a PDF to compress"
-        onFiles={([f]) => setFile(f!)}
-      />
-    );
+  const reset = () => (setOut([]), setSummary(''));
   return (
     <>
-      <ChosenFile
-        file={file}
-        extra={pagesLabel(pages)}
-        onClear={() => (setFile(null), setOut([]))}
+      <DropZone
+        accept={PDF_ACCEPT}
+        multiple
+        label={files.length ? 'Add more PDFs' : 'Choose PDFs to compress'}
+        onFiles={(f) => {
+          setFiles((xs) => [...xs, ...f]);
+          reset();
+        }}
       />
+      <FileOrderList
+        files={files}
+        onChange={(f) => {
+          setFiles(f);
+          reset();
+        }}
+      />
+      {files.length > 0 && (
+        <CompressOptions
+          level={level}
+          onLevel={(l) => {
+            setLevel(l);
+            reset();
+          }}
+        />
+      )}
+      <RunRow
+        label={files.length > 1 ? `Compress ${files.length} PDFs` : 'Compress PDF'}
+        disabled={!files.length}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              reset();
+              const done: OutFile[] = [];
+              const notes: string[] = [];
+              const failed: string[] = [];
+              const taken = new Set<string>();
+              let before = 0;
+              for (const [fi, file] of files.entries()) {
+                const prefix = files.length > 1 ? `File ${fi + 1} of ${files.length} · ` : '';
+                r.setProgress(`${prefix}Starting…`);
+                try {
+                  const res = await compressPdf(file, level, (d, t) =>
+                    r.setProgress(`${prefix}Page ${d} of ${t}…`),
+                  );
+                  before += file.size;
+                  done.push({
+                    name: uniqueName(`${baseName(file.name)}-compressed.pdf`, taken),
+                    blob: res.blob,
+                  });
+                  if (res.method === 'unchanged')
+                    notes.push(`${file.name}: already as small as it gets.`);
+                  else if (res.method === 'rasterized')
+                    notes.push(`${file.name}: pages redrawn as images.`);
+                } catch {
+                  failed.push(file.name);
+                }
+              }
+              if (!done.length) throw new Error('None of the files could be compressed.');
+              const after = done.reduce((t, f) => t + f.blob.size, 0);
+              const saved = Math.max(0, Math.round((1 - after / before) * 100));
+              setSummary(
+                <>
+                  {after >= before
+                    ? `Already as small as ${done.length === 1 ? 'it gets' : 'they get'} — no smaller version was found.`
+                    : `${fmtFileSize(before)} → ${fmtFileSize(after)} (${saved}% smaller${done.length > 1 ? ' in total' : ''}).`}
+                  {notes.map((n) => (
+                    <div key={n}>{n}</div>
+                  ))}
+                  {failed.length > 0 && <div>Could not compress: {failed.join(', ')}.</div>}
+                </>,
+              );
+              setOut(done);
+            }),
+        }}
+      />
+      <Results files={out} summary={summary} zipName="compressed-pdfs.zip" />
+    </>
+  );
+}
+
+function CompressOptions({
+  level,
+  onLevel,
+}: {
+  level: CompressLevel;
+  onLevel: (l: CompressLevel) => void;
+}) {
+  return (
+    <>
       <div className={s.options}>
         <div className={s.option}>
           Compression
           <div className={s.radioRow}>
             {(Object.keys(COMPRESS_LEVELS) as CompressLevel[]).map((k) => (
               <label key={k}>
-                <input type="radio" checked={level === k} onChange={() => setLevel(k)} />
+                <input type="radio" checked={level === k} onChange={() => onLevel(k)} />
                 {COMPRESS_LEVELS[k].label}
               </label>
             ))}
@@ -385,27 +470,6 @@ export function CompressTool() {
         Scanned and photo-heavy PDFs shrink the most. If the smaller version needs pages redrawn as
         images, text in it can no longer be selected — keep the original for that.
       </div>
-      <RunRow
-        label="Compress PDF"
-        disabled={false}
-        state={{
-          ...r,
-          onRun: () =>
-            r.run(async () => {
-              const res = await compressPdf(file, level, (d, t) =>
-                r.setProgress(`Page ${d} of ${t}…`),
-              );
-              const saved = 1 - res.blob.size / file.size;
-              setSummary(
-                res.method === 'unchanged'
-                  ? 'This file is already as small as it gets — no smaller version was found.'
-                  : `${fmtFileSize(file.size)} → ${fmtFileSize(res.blob.size)} (${Math.round(saved * 100)}% smaller${res.method === 'rasterized' ? ', pages redrawn as images' : ''}).`,
-              );
-              setOut([{ name: `${baseName(file.name)}-compressed.pdf`, blob: res.blob }]);
-            }),
-        }}
-      />
-      <Results files={out} summary={summary} />
     </>
   );
 }

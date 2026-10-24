@@ -15,7 +15,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import { useClientMonth, useIssueDrafts, useVoidReceipt } from '../../features/billing';
 import { ErrorBanner, ExpandToggle, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
-import { fmtDate, fmtMoney } from '../../lib/format';
+import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { MonthStepper, PackPrintMenu, StagePill } from './billingParts';
 import {
@@ -256,11 +256,12 @@ function Workspace({
               <tr>
                 <th>Date</th>
                 <th>Declaration</th>
+                <th>Quantity</th>
                 <th>HBL · Container</th>
                 {BILLING_PACK_TYPES.map((t) => (
                   <th key={t}>{PACK_LABEL[t]}</th>
                 ))}
-                <th aria-label="Print" />
+                <th className={b.actionCol}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -273,6 +274,9 @@ function Workspace({
                       {r.direction === 'IMPORT' ? 'Import' : 'Export'} ·{' '}
                       <Link to={`/plans/${r.shipmentId}`}>{r.shipmentReference}</Link>
                     </span>
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {r.quantity ? `${fmtNum(r.quantity)} ${r.quantityUnit ?? ''}`.trim() : '—'}
                   </td>
                   <td>
                     <span className={b.declare} style={{ fontWeight: 700 }}>
@@ -287,11 +291,11 @@ function Workspace({
                       <DocCell row={r} type={t} back={back} canWrite={canWrite} />
                     </td>
                   ))}
-                  <td style={{ textAlign: 'right' }}>
+                  <td className={b.actionCol}>
                     {/* The row's tax invoice, disbursement and debit note in one go. */}
                     {BILLING_PACK_TYPES.some((t) => r.docs[t].some((d) => d.status !== 'VOID')) && (
                       <PrintLink
-                        className="filter-btn"
+                        className={`filter-btn ${b.rowPrint}`}
                         href={`/print/billing/${m.client.id}?month=${month}&record=${r.recordId}`}
                         title={`Print ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
                       >
@@ -303,7 +307,7 @@ function Workspace({
               ))}
               {m.rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={ui.empty}>
+                  <td colSpan={8} className={ui.empty}>
                     No shipments in the Monthly Ledger for {monthName(month)}.
                   </td>
                 </tr>

@@ -22,7 +22,7 @@ import type { z } from 'zod';
 const profileKey = (clientId: string) => `productionReport:${clientId}`;
 
 /** First and last day of "2026-08". */
-function monthRange(month: string): [string, string] {
+export function monthRange(month: string): [string, string] {
   const [y, m] = month.split('-').map(Number) as [number, number];
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return [`${month}-01`, `${month}-${String(last).padStart(2, '0')}`];

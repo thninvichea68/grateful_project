@@ -108,6 +108,7 @@ const ReportComingSoon = lazy(() =>
 const PayrollPage = lazy(() =>
   import('./pages/reports/PayrollPage').then((m) => ({ default: m.PayrollPage })),
 );
+const MihPage = lazy(() => import('./pages/reports/MihPage').then((m) => ({ default: m.MihPage })));
 const PrintCapacityReportPage = lazy(() =>
   import('./pages/print/PrintCapacityReportPage').then((m) => ({
     default: m.PrintCapacityReportPage,
@@ -368,7 +369,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // Reports: Payroll (built), MIH and Import & Export (later phases), as tabs.
+        // Reports: Payroll and MIH (built), Import & Export (a later phase), as tabs.
         path: 'reports',
         element: guard('reports:read', <ReportsLayout />),
         children: [
@@ -384,7 +385,7 @@ export const router = createBrowserRouter([
             path: 'mih',
             element: (
               <Suspense fallback={null}>
-                <ReportComingSoon name="MIH" />
+                <MihPage />
               </Suspense>
             ),
           },

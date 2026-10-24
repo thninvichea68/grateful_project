@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
-/** Reports' tabs, laid out like Accounting's. Payroll is built; MIH and Import & Export are next. */
+/** Reports' tabs, laid out like Accounting's. Payroll and MIH are built; Import & Export is next. */
 const TABS: { to: string; label: string; end?: boolean }[] = [
   { to: '/reports', label: 'Payroll', end: true },
   { to: '/reports/mih', label: 'MIH' },

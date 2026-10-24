@@ -415,6 +415,10 @@ describe('billing documents', () => {
     led = (await request(app).get(`/api/v1/accounting/ledger/${rec.id}`).set(h)).body;
     // A cancelled number is never reused: the shipment takes the next one.
     expect(led).toMatchObject({ invNo: 'GS26-002', invRevenue: '0.00', netProfit: '17.80' });
+    // A cancelled invoice stays on record with its number.
+    expect(
+      (await request(app).delete(`/api/v1/accounting/docs/tax-invoices/${id}`).set(h)).status,
+    ).toBe(409);
 
     const next = await request(app).post('/api/v1/accounting/docs/tax-invoices').set(h).send(pre);
     expect(next.body.number).toBe('GS26-002');
@@ -519,7 +523,11 @@ describe('billing documents', () => {
       subtotal: '203.50',
       mark: 'VAT 10%',
     });
-    expect(rs.body.lines[1].description).toBe('HBL FEE');
+    expect(rs.body.lines[1]).toMatchObject({ description: 'HBL FEE', unit: "40'HQ" });
+    // Per-set charges are billed by the SET whatever the container.
+    expect(
+      rs.body.lines.find((l: { description: string }) => l.description === 'DOCUMENT FEE').unit,
+    ).toBe('SET');
     expect(rs.body.totals.total).toBe('203.50');
     expect(rs.body.header).toMatchObject({
       direction: 'EXPORT',
@@ -740,6 +748,17 @@ describe('billing documents', () => {
       disTotal: '0.00',
       dnTotal: '0.00',
     });
+
+    // A cancelled summary can then be deleted for good; the ledger stays as it is.
+    await request(app)
+      .delete(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
+      .set(h)
+      .expect(204);
+    await request(app)
+      .get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
+      .set(h)
+      .expect(404);
+    expect(await led()).toMatchObject({ invRevenue: '100.00', thc: '0.00', dnTotal: '0.00' });
   });
 
   it('record summaries have their own access: Operations work on them, not the rest of accounting', async () => {
@@ -958,7 +977,7 @@ describe('customs broker: Credit Noted only', () => {
     const draft = (await api('get', '/docs/credit-notes/prefill').query({ declarationId: declId }))
       .body;
     expect(draft).toMatchObject({ declareNo: 'I 122050', accountingRecordId: '' });
-    expect(draft.lines[0]).toMatchObject({ description: 'IMPORT-CLEARANCE', unit: "40'" });
+    expect(draft.lines[0]).toMatchObject({ description: 'IMPORT-CLEARANCE', unit: "40'HQ" });
     draft.lines = [{ description: 'IMPORT-CLEARANCE', qty: '1', unit: "40'", unitPrice: '115' }];
     const cn = await api('post', '/docs/credit-notes').send(draft);
     expect(cn.status).toBe(201);

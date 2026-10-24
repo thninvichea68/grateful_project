@@ -120,6 +120,9 @@ export interface BillingShipmentRow {
   direction: Direction;
   hbl: string | null;
   containers: string | null;
+  /** The shipment's package count and its unit (PKGS, CTNS, ROLLS…). */
+  quantity: string | null;
+  quantityUnit: string | null;
   /** Live (non-void) documents of each type. */
   docs: Record<BillingPackType, BillingDocSlot[]>;
   /**
