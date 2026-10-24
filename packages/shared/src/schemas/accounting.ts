@@ -333,7 +333,7 @@ export const recordSummaryInputSchema = z.object({
     .or(z.literal(''))
     .transform((v) => (v ? v : null)),
   grossWeightKg: decimal(3, { min: 0 }),
-  cbm: decimal(3, { min: 0 }),
+  cbm: optText(30),
 });
 
 export const BILLING_DOC_SCHEMAS = {

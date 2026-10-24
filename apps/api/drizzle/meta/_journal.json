@@ -246,6 +246,20 @@
       "when": 1792807532858,
       "tag": "0034_mih_months",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792833316244,
+      "tag": "0035_record_summary_cbm_text",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792833327796,
+      "tag": "0036_shv_port_short_name",
+      "breakpoints": true
     }
   ]
 }

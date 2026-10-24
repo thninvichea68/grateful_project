@@ -7,6 +7,7 @@ import {
   forwarderInputSchema,
   type LookupType,
   type LookupsResponse,
+  type Permission,
 } from '@gs/shared';
 import { db } from '../../db/client';
 import { clients, consignees, countries, forwarders, lookupValues, ports } from '../../db/schema';
@@ -156,13 +157,19 @@ lookupsRouter.post('/forwarders', requirePermission('shipments:write'), async (r
 
 /**
  * "+ Add New" in a credit note line's dropdowns: adds a charge description (Charge descriptions)
- * or a unit (Charge units) to its list in Settings → Dropdown lists. Stored in capitals; one
- * that already exists is returned as is.
+ * or a unit (Charge units) to its list in Settings → Dropdown lists; in a record summary's
+ * Quantity, a unit (Quantity units). Stored in capitals; one that already exists is returned as is.
  */
-const quickAdd = (type: 'CHARGE' | 'CHARGE_UNIT', min: number, max: number) =>
+const quickAdd = (
+  type: 'CHARGE' | 'CHARGE_UNIT' | 'QUANTITY_UNIT',
+  path: string,
+  permission: Permission,
+  min: number,
+  max: number,
+) =>
   lookupsRouter.post(
-    type === 'CHARGE' ? '/charges' : '/charge-units',
-    requirePermission('creditnotes:write'),
+    path,
+    requirePermission(permission),
     async (req, res) => {
       const { label } = parse(
         z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
@@ -186,5 +193,6 @@ const quickAdd = (type: 'CHARGE' | 'CHARGE_UNIT', min: number, max: number) =>
       res.status(row ? 201 : 200).json({ value, label: value });
     },
   );
-quickAdd('CHARGE', 2, 200);
-quickAdd('CHARGE_UNIT', 1, 20);
+quickAdd('CHARGE', '/charges', 'creditnotes:write', 2, 200);
+quickAdd('CHARGE_UNIT', '/charge-units', 'creditnotes:write', 1, 20);
+quickAdd('QUANTITY_UNIT', '/quantity-units', 'recordsummaries:write', 1, 20);

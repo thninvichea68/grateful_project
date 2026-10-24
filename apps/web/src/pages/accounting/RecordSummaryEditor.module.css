@@ -60,6 +60,13 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+/* Quantity | Unit, side by side in one cell. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
 .item {
   display: flex;
   flex-direction: column;

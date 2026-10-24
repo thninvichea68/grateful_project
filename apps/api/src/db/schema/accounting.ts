@@ -307,7 +307,8 @@ export const recordSummaries = pgTable('record_summaries', {
   containerNo: text('container_no'),
   containerSize: containerSizeEnum('container_size'),
   grossWeightKg: qty('gross_weight_kg'),
-  cbm: qty('cbm'),
+  /** Usually a number, sometimes a note such as "NON": kept as typed. */
+  cbm: text('cbm'),
   total: money('total').notNull().default('0'),
   /** Accounting's check of the submitted summary (Accounting → Expense to Clients). */
   reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),

@@ -173,7 +173,7 @@ export const DOC_CONFIG: Record<
         options: () => ['20GP', '40GP', '40HQ', '45HQ'].map((v) => ({ value: v, label: v })),
       },
       { name: 'grossWeightKg', label: 'Gross weight (kg)', type: 'number' },
-      { name: 'cbm', label: 'CBM', type: 'number' },
+      { name: 'cbm', label: 'CBM' },
     ],
   },
 };

@@ -49,7 +49,7 @@ export const PORTS = [
     code: 'SHV11',
     customsPortNo: '11',
     name: 'Sihanoukville Port',
-    shortName: 'SIHANOUKVILLE',
+    shortName: 'SHV PORT',
     kind: 'SEA',
   },
   {

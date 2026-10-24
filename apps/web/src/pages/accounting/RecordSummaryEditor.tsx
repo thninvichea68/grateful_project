@@ -37,6 +37,7 @@ import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
 import { nextLineOnEnter } from '../../lib/lineKeys';
+import { maskDeclareNo } from '../../lib/declareNo';
 import { RecordSummary, transportLabel } from '../print/PrintDocPage';
 import { Preview, useFillWindow } from '../creditnoted/CreditNotedEditor';
 import { printCreditNote } from '../creditnoted/creditNoteExport';
@@ -82,6 +83,11 @@ const priceOrZero: typeof baseResolver = (values, ctx, options) =>
     ctx,
     options,
   );
+/** "306 ROLLS" → ["306", "ROLLS"]: a quantity is saved as that one text. */
+const splitQuantity = (t: string) => {
+  const m = /^\s*([\d.,]*)\s*(.*?)\s*$/.exec(t);
+  return [(m?.[1] ?? '').replace(/,/g, ''), (m?.[2] ?? '').toUpperCase()] as const;
+};
 /** The Transport Type dropdown: one choice sets both the mode and the load. */
 const TRANSPORTS = [
   ['SEA', 'FCL'],
@@ -218,6 +224,25 @@ function RecordSummaryEditor({
       toast('Unit used on this line, but it could not be added to the list.');
     }
     return true;
+  };
+
+  // Quantity: a number box and a unit dropdown (Settings → Dropdown lists → Quantity units),
+  // saved together as "306 ROLLS".
+  const [qtyNum, qtyUnit] = splitQuantity(String(values.quantityText ?? ''));
+  const qtyUnits = (lookups.data?.values.QUANTITY_UNIT ?? []).map((u) => u.label);
+  const setQuantity = (num: string, unit: string) =>
+    setValue('quantityText', [num, unit].filter(Boolean).join(' '), { shouldDirty: true });
+  /** "+ Add New" in the Quantity unit dropdown: ask, use it, and add it to the list. */
+  const chooseNewQtyUnit = async () => {
+    const label = window.prompt('New quantity unit')?.trim().toUpperCase();
+    if (!label) return;
+    setQuantity(qtyNum, label);
+    try {
+      await api('/lookups/quantity-units', { method: 'POST', json: { label } });
+      await qc.invalidateQueries({ queryKey: queryKeys.lookups });
+    } catch {
+      toast('Unit used on this summary, but it could not be added to the list.');
+    }
   };
 
   /** A Declare No. of an approved shipment: reopen as that shipment's summary, filled in. */
@@ -646,6 +671,11 @@ function RecordSummaryEditor({
                       title={doc ? undefined : 'Pick an approved shipment to fill in its numbers'}
                       {...reg}
                       onChange={(e) => {
+                        // A ledger shipment picked from the list is taken as it is listed.
+                        const listed = eligible.data?.some(
+                          (x) => x.declareNo.toUpperCase() === e.target.value.trim().toUpperCase(),
+                        );
+                        if (!listed) maskDeclareNo(e);
                         void reg.onChange(e);
                         pickDeclareNo(e.target.value);
                       }}
@@ -656,7 +686,48 @@ function RecordSummaryEditor({
                 {text('summaryDate', 'Date', { type: 'date' })}
               </div>
               <div className={r.grid3}>
-                {text('quantityText', 'Quantity')}
+                <div className={r.pair}>
+                  {item(
+                    'Quantity',
+                    <input
+                      className="form-field-box"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="e.g. 306"
+                      value={qtyNum}
+                      onChange={(e) =>
+                        setQuantity(
+                          e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'),
+                          qtyUnit,
+                        )
+                      }
+                    />,
+                    'quantityText',
+                  )}
+                  {item(
+                    'Unit',
+                    <select
+                      className="form-select-box"
+                      value={qtyUnit}
+                      onChange={(e) =>
+                        e.target.value === NEW_ITEM
+                          ? void chooseNewQtyUnit()
+                          : setQuantity(qtyNum, e.target.value)
+                      }
+                    >
+                      <option value="">—</option>
+                      {qtyUnit && !qtyUnits.includes(qtyUnit) && (
+                        <option value={qtyUnit}>{qtyUnit}</option>
+                      )}
+                      {qtyUnits.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                      <option value={NEW_ITEM}>+ Add New</option>
+                    </select>,
+                  )}
+                </div>
                 {text('blNo', 'BL / HBL no')}
                 {text('containerNo', 'Container no')}
               </div>
@@ -683,7 +754,13 @@ function RecordSummaryEditor({
                 )}
                 {item(
                   'CBM',
-                  <NumberInput className="form-field-box" decimals={3} {...register('cbm')} />,
+                  // Usually a number, sometimes a note such as "NON".
+                  <input
+                    className="form-field-box"
+                    placeholder="e.g. 61.5 or NON"
+                    {...register('cbm')}
+                    aria-invalid={!!err('cbm')}
+                  />,
                   'cbm',
                 )}
               </div>

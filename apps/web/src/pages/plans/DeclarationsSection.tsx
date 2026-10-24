@@ -1,6 +1,7 @@
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { type LookupsResponse, type ShipmentDetail } from '@gs/shared';
 import { FieldError } from '../../components/ui';
+import { maskDeclareNo } from '../../lib/declareNo';
 import { blankDeclaration, type FormValues } from './formModel';
 
 /** Customs declarations (the CDC master list is drawn down by the import invoice items). */
@@ -77,6 +78,10 @@ export function DeclarationsSection({
                   className="form-field-box"
                   placeholder={isImport ? 'e.g. I 122050' : 'e.g. E 41001'}
                   {...register(`declarations.${di}.declareNo`)}
+                  onChange={(ev) => {
+                    maskDeclareNo(ev);
+                    void register(`declarations.${di}.declareNo`).onChange(ev);
+                  }}
                   aria-invalid={!!e?.declareNo}
                 />
                 <FieldError message={e?.declareNo?.message} />

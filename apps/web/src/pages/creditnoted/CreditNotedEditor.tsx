@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -26,6 +26,7 @@ import {
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
+import { maskDeclareNo } from '../../lib/declareNo';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
@@ -353,11 +354,22 @@ function CreditNotedEditor({
   const field = (
     name: string,
     label: string,
-    opts: { type?: string; span?: boolean; locked?: boolean; decimals?: number } = {},
+    opts: {
+      type?: string;
+      span?: boolean;
+      locked?: boolean;
+      decimals?: number;
+      onInput?: (e: ChangeEvent<HTMLInputElement>) => void;
+    } = {},
   ) => {
+    const reg = register(name);
     const props = {
       className: `form-field-box${opts.locked ? ` ${s.locked}` : ''}`,
-      ...register(name),
+      ...reg,
+      onChange: (e: ChangeEvent<HTMLInputElement>) => {
+        opts.onInput?.(e);
+        return reg.onChange(e);
+      },
       readOnly: opts.locked,
       title: opts.locked ? LOCKED_HINT : undefined,
       'aria-invalid': !!err(name),
@@ -498,7 +510,7 @@ function CreditNotedEditor({
               <div className={s.grid}>
                 {field('billTo', 'Bill to', { span: true, locked: lockBillTo })}
                 {field('cnDate', 'Date', { type: 'date' })}
-                {field('declareNo', 'Declare no')}
+                {field('declareNo', 'Declare no', { onInput: maskDeclareNo })}
                 <label className={s.field}>
                   <span>Client</span>
                   <select

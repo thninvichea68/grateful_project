@@ -211,7 +211,8 @@ export function recordSummaryHeader(
     ['BL NO:', h(d, 'blNo')],
     ['GROSS WEIGHT:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
     ['DECLARE NO:', h(d, 'declareNo')],
-    ['CBM:', plain(h(d, 'cbm'))],
+    // A number, or a note such as "NON" printed as typed.
+    ['CBM:', Number.isFinite(Number(h(d, 'cbm'))) ? plain(h(d, 'cbm')) : h(d, 'cbm')],
     ['DATE:', d.date ? longDate(d.date) : ''],
     ['FORWARDER:', forwarder?.toUpperCase() ?? ''],
   ];

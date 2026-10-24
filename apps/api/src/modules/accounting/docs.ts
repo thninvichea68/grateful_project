@@ -1133,7 +1133,7 @@ export async function listDocs(
            CASE WHEN a.id IS NULL THEN t.inv_no ELSE a.inv_no END AS "invNo",
            CASE WHEN a.id IS NULL THEN t.dis_no ELSE a.dis_no END AS "disNo",
            CASE WHEN a.id IS NULL THEN t.dn_no ELSE a.dn_no END AS "dnNo",
-           t.quantity_text AS "quantityText", (SELECT p.name FROM ports p WHERE p.id = t.port_id) AS port,
+           t.quantity_text AS "quantityText", (SELECT p.short_name FROM ports p WHERE p.id = t.port_id) AS port,
            t.review_status AS "reviewStatus"`
       : sql``;
   const rows = await queryRows<BillingDocListItem & { total_count: string }>(
@@ -1501,7 +1501,7 @@ export async function listRecordSummaryReview(p: {
           cl.id AS "clientId", cl.code AS "clientCode", cl.name AS "clientName",
           t.direction, t.transport_mode AS "transportMode", t.declare_no AS "declareNo",
           coalesce(a.inv_no, t.inv_no) AS "invNo", t.quantity_text AS "quantityText",
-          po.name AS port, t.total::text AS total,
+          po.short_name AS port, t.total::text AS total,
           t.status, t.review_status AS "reviewStatus", count(*) OVER () AS total_count
         ${from} ${whereAll(c)}
         ORDER BY t.summary_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
