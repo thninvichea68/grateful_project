@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../lib/api';
 import s from './ui.module.css';
@@ -59,12 +59,78 @@ export function Modal({
   );
 }
 
+/** The page sizes a table's "Rows" picker offers. */
+export const PAGE_SIZES = [10, 25, 50, 100];
+/** The most rows a list API returns in one page. */
+const MAX_PAGE_SIZE = 1000;
+const CUSTOM = 'custom';
+
+/** The preset sizes, or "Custom…" to type any number of rows (Enter or leaving the box applies it). */
+function RowsPicker({
+  pageSize,
+  onPageSize,
+}: {
+  pageSize: number;
+  onPageSize: (n: number) => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  const sizes = PAGE_SIZES.includes(pageSize)
+    ? PAGE_SIZES
+    : [...PAGE_SIZES, pageSize].sort((a, b) => a - b);
+  const apply = (raw: string) => {
+    setTyping(false);
+    const n = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.round(Number(raw))));
+    if (Number.isFinite(n) && n !== pageSize) onPageSize(n);
+  };
+  return (
+    <label className={s.pagerRows}>
+      Rows
+      {typing ? (
+        <input
+          className={s.pagerInput}
+          type="number"
+          min={1}
+          max={MAX_PAGE_SIZE}
+          defaultValue={pageSize}
+          autoFocus
+          onFocus={(e) => e.target.select()}
+          onBlur={(e) => apply(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') {
+              e.currentTarget.value = String(pageSize);
+              e.currentTarget.blur();
+            }
+          }}
+          aria-label={`Rows per page, 1 to ${MAX_PAGE_SIZE}`}
+        />
+      ) : (
+        <select
+          className={s.pagerSelect}
+          value={pageSize}
+          onChange={(e) =>
+            e.target.value === CUSTOM ? setTyping(true) : onPageSize(Number(e.target.value))
+          }
+        >
+          {sizes.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+          <option value={CUSTOM}>Custom…</option>
+        </select>
+      )}
+    </label>
+  );
+}
+
 export function Pager({
   page,
   totalPages,
   total,
   pageSize,
   onPage,
+  onPageSize,
   children,
 }: {
   page: number;
@@ -72,6 +138,8 @@ export function Pager({
   total: number;
   pageSize: number;
   onPage: (p: number) => void;
+  /** Shows a "Rows" picker before the count when given. */
+  onPageSize?: (n: number) => void;
   /** Extra content in the free space between the count and the buttons. */
   children?: ReactNode;
 }) {
@@ -80,8 +148,11 @@ export function Pager({
   const to = Math.min(total, page * pageSize);
   return (
     <nav className={s.pager} aria-label="Pagination">
-      <span className={s.pagerInfo}>
-        {from}–{to} of {total.toLocaleString()}
+      <span className={s.pagerCount}>
+        {onPageSize && <RowsPicker pageSize={pageSize} onPageSize={onPageSize} />}
+        <span className={s.pagerInfo}>
+          {from}–{to} of {total.toLocaleString()}
+        </span>
       </span>
       {children}
       <div className={s.pagerBtns}>

@@ -29,6 +29,22 @@ describe('shipment declarations', () => {
     });
     expect(half.success).toBe(false);
   });
+
+  it('lets an air shipment save the date with the declare no. pending', () => {
+    const dateOnly = { declarations: [{ declareNo: '', declareDate: '2026-10-20' }] };
+    const air = shipmentInputSchema.parse({
+      ...base,
+      transportMode: 'AIR',
+      loadType: 'NONE',
+      ...dateOnly,
+    });
+    expect(air.declarations.map((d) => d.declareNo)).toEqual([null]);
+    expect(air.status).toBe('PENDING');
+    expect(air.clearanceStatus).toBe('PENDING');
+    const sea = shipmentInputSchema.safeParse({ ...base, ...dateOnly });
+    expect(sea.success).toBe(false);
+    expect(sea.error?.issues[0]?.path).toEqual(['declarations', 0, 'declareNo']);
+  });
 });
 
 describe('shipment cargo invoices', () => {

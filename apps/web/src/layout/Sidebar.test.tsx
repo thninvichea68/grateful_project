@@ -113,11 +113,9 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Admin')).toBeInTheDocument(); // Settings still readable
   });
 
-  it('marks the current route active and shows the user card', () => {
+  it('marks the current route active', () => {
     renderAs('MANAGER', '/plans');
     expect(screen.getByRole('link', { name: 'Shipping Plans' })).toHaveClass('menu-item', 'active');
-    expect(screen.getByText('Customer Service Manager')).toBeInTheDocument();
-    expect(screen.getByText('AW')).toBeInTheDocument(); // initials when no avatar
   });
 
   it('renders the follow-up badge from the API', async () => {

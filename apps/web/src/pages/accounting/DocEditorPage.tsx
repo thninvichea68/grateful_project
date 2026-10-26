@@ -15,7 +15,14 @@ import {
   type BillingDocType,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useDoc, useDocAction, useDocs, useLedgerRow, usePrefill } from '../../features/accounting';
+import {
+  useCompany,
+  useDoc,
+  useDocAction,
+  useDocs,
+  useLedgerRow,
+  usePrefill,
+} from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, ui } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
@@ -34,6 +41,7 @@ import dh from './DocHeader.module.css';
 import { CorrectDocDialog } from './CorrectDocDialog';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { PickShipment } from './PickShipment';
+import { exportInvoiceExcel, INVOICE_EXCEL_TYPES } from './invoiceExport';
 
 /** The three shipment documents: numbered from the Monthly Ledger, dated from clearance. */
 const SHIPMENT_DOCS = ['tax-invoices', 'disbursements', 'debit-notes'] as const;
@@ -186,6 +194,7 @@ function Editor({
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+  const company = useCompany();
   const lookups = useLookups();
   const action = useDocAction(type);
   const back = useBack(type);
@@ -409,9 +418,11 @@ function Editor({
                 type="button"
                 className="filter-btn"
                 onClick={() =>
-                  downloadFile(`/accounting/docs/${type}/${doc.id}/export.xlsx`).catch(() =>
-                    toast('Export failed.'),
-                  )
+                  // Tax invoice, disbursement and debit note: laid out like the printed sheet.
+                  (INVOICE_EXCEL_TYPES.includes(type)
+                    ? exportInvoiceExcel(doc, company.data ?? {})
+                    : downloadFile(`/accounting/docs/${type}/${doc.id}/export.xlsx`)
+                  ).catch(() => toast('Export failed.'))
                 }
               >
                 Excel

@@ -39,7 +39,6 @@ export const MONTHS = [
   'Dec',
 ];
 export const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
-export const PAGE_SIZES = [10, 25, 50];
 
 const svg = (children: ReactNode) => (
   <svg
@@ -334,21 +333,11 @@ export function CreditNotesReview() {
 
         {list.data && list.data.meta.total > 0 && (
           <div className={s.foot}>
-            <label className={s.show}>
-              Rows
-              <select
-                className={s.select}
-                value={q.pageSize}
-                onChange={(e) => set('pageSize', e.target.value)}
-              >
-                {PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />
+            <Pager
+              {...list.data.meta}
+              onPage={(p) => set('page', String(p))}
+              onPageSize={(n) => set('pageSize', String(n))}
+            />
           </div>
         )}
       </div>

@@ -1,10 +1,8 @@
-import { Link, NavLink } from 'react-router-dom';
-import { ROLE_LABEL } from '@gs/shared';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { NAV } from './nav';
 import { icons } from './icons';
 import { useNavCounts } from './useNavCounts';
-import { initials } from '../components/Avatar';
 
 interface Props {
   open: boolean;
@@ -47,31 +45,6 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
             {icons.collapse({})}
           </button>
         </div>
-
-        <Link
-          to="/settings?tab=profile"
-          className="user-card"
-          onClick={onNavigate}
-          title="My profile"
-          style={{ textDecoration: 'none', color: 'inherit' }}
-        >
-          <div className="avatar">
-            {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" />
-            ) : (
-              <span
-                aria-hidden="true"
-                style={{ fontWeight: 700, fontSize: 13, color: 'var(--accent-primary)' }}
-              >
-                {initials(user.fullName)}
-              </span>
-            )}
-          </div>
-          <div>
-            <div className="name">{user.fullName}</div>
-            <div className="role">{user.jobTitle ?? ROLE_LABEL[user.role]}</div>
-          </div>
-        </Link>
 
         <nav className="menu" id="menu">
           {NAV.map((group) => {

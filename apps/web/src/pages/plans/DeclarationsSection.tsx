@@ -20,8 +20,11 @@ export function DeclarationsSection({
   } = useFormContext<FormValues>();
   const decls = useFieldArray({ control, name: 'declarations' });
   const direction = useWatch({ control, name: 'direction' });
+  const transportMode = useWatch({ control, name: 'transportMode' });
   const watched = useWatch({ control, name: 'declarations' });
   const isImport = direction === 'IMPORT';
+  // Air clears before customs numbers the declaration: the date can go in with the no. pending.
+  const isAir = transportMode === 'AIR';
 
   const declErr = errors.declarations;
   return (
@@ -34,6 +37,7 @@ export function DeclarationsSection({
               {isImport
                 ? 'Import declaration numbers and dates'
                 : 'Export declaration numbers and dates'}
+              {isAir && ' · air: the Declare No. can stay pending until customs issues it'}
             </p>
           </div>
         </div>
@@ -76,7 +80,7 @@ export function DeclarationsSection({
                 <input
                   id={`d-${di}-no`}
                   className="form-field-box"
-                  placeholder={isImport ? 'e.g. I 122050' : 'e.g. E 41001'}
+                  placeholder={isAir ? 'Pending' : isImport ? 'e.g. I 122050' : 'e.g. E 41001'}
                   {...register(`declarations.${di}.declareNo`)}
                   onChange={(ev) => {
                     maskDeclareNo(ev);

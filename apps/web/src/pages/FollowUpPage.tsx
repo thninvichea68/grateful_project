@@ -67,7 +67,7 @@ export function FollowUpPage() {
   const filter = params.get('filter') ?? 'active';
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: 50,
+    pageSize: Number(params.get('pageSize') ?? 50),
     q: params.get('q') || undefined,
     status: filter === 'active' ? 'ACTIVE' : filter === 'done' ? 'DONE' : undefined,
     overdue: filter === 'overdue' ? 'true' : undefined,
@@ -223,6 +223,14 @@ export function FollowUpPage() {
               setParams((x) => {
                 const n = new URLSearchParams(x);
                 n.set('page', String(p));
+                return n;
+              })
+            }
+            onPageSize={(size) =>
+              setParams((x) => {
+                const n = new URLSearchParams(x);
+                n.set('pageSize', String(size));
+                n.delete('page');
                 return n;
               })
             }

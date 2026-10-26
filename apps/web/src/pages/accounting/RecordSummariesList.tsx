@@ -24,9 +24,17 @@ const statusOf = (d: BillingDocListItem): { label: string; cls: string } =>
       : d.reviewStatus && d.reviewStatus !== 'UNCHECKED'
         ? REVIEW[d.reviewStatus]
         : { label: 'Submitted', cls: s.neutral! };
+/** The status filter, one option per pill above: its document status and accounting's check. */
+const STATUS_FILTER: Record<string, { label: string; status: string; review?: string }> = {
+  DRAFT: { label: 'Draft', status: 'DRAFT', review: 'UNCHECKED' },
+  REVISED: { label: 'Revised', status: 'DRAFT', review: 'REVISED' },
+  ISSUED: { label: 'Submitted', status: 'ISSUED', review: 'UNCHECKED' },
+  REVIEWED: { label: 'Reviewed', status: 'ISSUED', review: 'REVIEWED' },
+  CHECKED: { label: 'Approved', status: 'ISSUED', review: 'CHECKED' },
+  VOID: { label: 'Cancelled', status: 'VOID' },
+};
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Truck', RAIL: 'Rail' };
-const PAGE_SIZES = [10, 25, 50];
 
 /**
  * Sidebar → Record Summary (Operations), laid out like Credit Noted: one card with the
@@ -46,11 +54,14 @@ export function RecordSummariesList({ base }: { base: string }) {
     monthOfYear: get('month'),
     year: get('year'),
   };
+  const statusKey = get('status');
+  const statusFilter = statusKey ? STATUS_FILTER[statusKey] : undefined;
   const q = {
     ...filters,
     page: Number(params.get('page') ?? 1),
     pageSize: Number(params.get('pageSize') ?? 10),
-    status: get('status'),
+    status: statusFilter?.status,
+    review: statusFilter?.review,
   };
   const list = useDocs(TYPE, q);
 
@@ -70,7 +81,7 @@ export function RecordSummariesList({ base }: { base: string }) {
   const toggleInbox = () => set('view', inboxView ? '' : 'inbox');
 
   return (
-    <section className={`view active ${s.page}`}>
+    <section className={`view active ${s.page} ${s.fill}`}>
       <ErrorBanner error={list.error} />
       <div className={s.card}>
         <div className={s.toolbar}>
@@ -86,14 +97,16 @@ export function RecordSummariesList({ base }: { base: string }) {
             <>
               <select
                 className={s.select}
-                value={q.status ?? ''}
+                value={statusFilter ? statusKey : ''}
                 onChange={(e) => set('status', e.target.value)}
                 aria-label="Status"
               >
                 <option value="">All statuses</option>
-                <option value="DRAFT">Draft</option>
-                <option value="ISSUED">Submitted</option>
-                <option value="VOID">Cancelled</option>
+                {Object.entries(STATUS_FILTER).map(([k, f]) => (
+                  <option key={k} value={k}>
+                    {f.label}
+                  </option>
+                ))}
               </select>
               <select
                 className={s.select}
@@ -250,21 +263,11 @@ export function RecordSummariesList({ base }: { base: string }) {
 
         {!inboxView && list.data && list.data.meta.total > 0 && (
           <div className={s.foot}>
-            <label className={s.show}>
-              Rows
-              <select
-                className={s.select}
-                value={q.pageSize}
-                onChange={(e) => set('pageSize', e.target.value)}
-              >
-                {PAGE_SIZES.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />
+            <Pager
+              {...list.data.meta}
+              onPage={(p) => set('page', String(p))}
+              onPageSize={(n) => set('pageSize', String(n))}
+            />
           </div>
         )}
       </div>

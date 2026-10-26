@@ -149,7 +149,7 @@ export async function declarationOptions(
            c.id AS "clientId", c.code AS "clientCode", s.direction
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN accounting_records a ON a.declaration_id = d.id
-    WHERE a.id IS NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
+    WHERE a.id IS NULL AND d.declare_no IS NOT NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 30`,
   );
 }
@@ -178,7 +178,7 @@ export async function creditNoteDeclarations(
            (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id)
-    WHERE true ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like} OR c.name ILIKE ${like} OR s.hbl_no ILIKE ${like})` : sql``}
+    WHERE d.declare_no IS NOT NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like} OR c.name ILIKE ${like} OR s.hbl_no ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 40`,
   );
 }
@@ -226,6 +226,8 @@ export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request)
       .innerJoin(clients, eq(clients.id, shipments.clientId))
       .where(eq(customsDeclarations.id, input.declarationId));
     if (!d || d.s.deletedAt) throw businessRule('The declaration does not exist');
+    if (!d.d.declareNo)
+      throw businessRule('The declaration no. is still pending: enter it on the shipment first');
     const [exists] = await tx
       .select({ id: accountingRecords.id })
       .from(accountingRecords)

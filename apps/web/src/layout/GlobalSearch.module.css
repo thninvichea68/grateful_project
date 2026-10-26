@@ -10,7 +10,7 @@
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  min-width: 460px;
+  min-width: min(460px, calc(100vw - 24px));
   z-index: 60;
   padding: 6px 0;
   border-radius: var(--radius-md);

@@ -81,3 +81,121 @@
   font-weight: 600;
   color: var(--text-tertiary);
 }
+
+/* Total Net Profit: title + month dropdown in one row; the client split sits right under the figure. */
+.profitHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.profitCard {
+  justify-content: flex-start;
+  gap: 18px;
+}
+.profitCard :global(.rc-top-hero) {
+  margin: 0;
+}
+/* Bklit-style pie: thick slices that grow on hover, names-only legend on the right, and
+   the client's figures in a tooltip at the cursor. */
+.profitBody {
+  gap: 28px;
+}
+/* Doubled up to beat the global .rc-donut-wrapper (130px), which loads after this file. */
+.profitBody .profitPie {
+  width: 150px;
+  height: 150px;
+}
+.profitLegend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profitLegend li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: default;
+  transition: opacity 0.15s ease;
+}
+.profitLegend li[data-dim] {
+  opacity: 0.4;
+}
+.profitLegend i,
+.profitTipName i {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.profitTip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface-elevated);
+  box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.35);
+}
+.profitTipName {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.profitTipRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+.profitTipRow b {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shipment Summary: Import / Export key beside the month dropdown. */
+.ssTools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ssLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.ssLegend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.ssLegend i:not(:first-child) {
+  margin-left: 6px;
+}
+@media (max-width: 560px) {
+  .ssLegend {
+    display: none;
+  }
+}

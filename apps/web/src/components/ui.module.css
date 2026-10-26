@@ -73,6 +73,38 @@
   font-weight: 700;
   color: var(--text-tertiary);
 }
+.pagerCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.pagerRows {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+.pagerSelect {
+  height: 30px;
+  padding-left: 12px;
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.pagerInput {
+  width: 72px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+}
 .pagerBtns {
   display: flex;
   gap: 6px;

@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import { useAuth } from '../../auth/AuthProvider';
 import { useClient, useDeleteClient, useLookups, useSaveClient } from '../../features/hooks';
-import { Pill, ShipmentStatusPill } from '../../components/StatusPill';
-import { ErrorBanner, TableState, ui } from '../../components/ui';
+import { Pill } from '../../components/StatusPill';
+import { ErrorBanner, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { CLIENT_STATUS_PILL } from '../ClientsPage';
@@ -137,56 +137,10 @@ export function ClientDetailPage() {
         <div className={s.column}>
           <div className="card">
             <div className="card-header-row">
-              <h3>Recent shipments</h3>
-              <Link to={`/plans?clientId=${c.id}`} className="filter-btn">
-                View all in Shipping Plans
-              </Link>
-            </div>
-            <div className="plans-table-scroll">
-              <table className="data-table-clean">
-                <thead>
-                  <tr>
-                    <th>Reference</th>
-                    <th>Invoice No.</th>
-                    <th>Transport</th>
-                    <th>ETA</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <TableState
-                    cols={5}
-                    loading={false}
-                    error={null}
-                    empty={!c.recentShipments.length}
-                    emptyText="No shipments for this client yet."
-                  />
-                  {c.recentShipments.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="plans-row-clickable"
-                      onClick={() => navigate(`/plans/${r.id}`)}
-                    >
-                      <td className="val-bold">{r.reference}</td>
-                      <td>{r.invoiceNos.join(', ') || '-'}</td>
-                      <td>{r.direction}</td>
-                      <td>{fmtDate(r.eta)}</td>
-                      <td>
-                        <ShipmentStatusPill status={r.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <PartiesCard client={c} />
-        </div>
-
-        <div className={s.column}>
-          <div className="card">
-            <div className="card-header-row">
               <h3>Details</h3>
+              <Link to={`/plans?clientId=${c.id}`} className="filter-btn">
+                Shipments in Shipping Plans
+              </Link>
             </div>
             <dl className={s.facts}>
               <dt>Legal name</dt>
@@ -217,7 +171,6 @@ export function ClientDetailPage() {
               <dd>{fmtDate(c.createdAt)}</dd>
             </dl>
           </div>
-          <RemarksCard clientId={c.id} />
           <div className="card">
             <div className="card-header-row">
               <h3>CDC master list</h3>
@@ -237,6 +190,13 @@ export function ClientDetailPage() {
             )}
           </div>
         </div>
+        <div className={s.column}>
+          <RemarksCard clientId={c.id} />
+        </div>
+      </div>
+
+      <div className={s.parties}>
+        <PartiesCard client={c} />
       </div>
       {editing && (
         <ClientFormModal

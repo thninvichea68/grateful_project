@@ -34,7 +34,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
-import { nextLineOnEnter } from '../../lib/lineKeys';
+import { moveInLines } from '../../lib/lineKeys';
 import { initialValues, type Values } from '../accounting/DocEditorPage';
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
 import { REVIEW, REVIEW_PILL, ReviseModal, checkIcon } from '../accounting/CreditNotesReview';
@@ -582,7 +582,7 @@ function CreditNotedEditor({
               {lines.fields.map((f, i) => {
                 const l = values.lines?.[i];
                 return (
-                  <div className={s.line} key={f.id} onKeyDown={nextLineOnEnter}>
+                  <div className={s.line} key={f.id} onKeyDown={moveInLines}>
                     <span className={s.no}>{i + 1}</span>
                     {(() => {
                       const current = String(l?.description ?? '');

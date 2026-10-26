@@ -133,7 +133,7 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   {
     key: 'declareNo',
     label: 'Declare No.',
-    render: (r) => dash(r.declarations.map((d) => d.declareNo).join(', ')),
+    render: (r) => dash(r.declarations.map((d) => d.declareNo ?? 'Pending').join(', ')),
   },
   {
     key: 'declareDate',

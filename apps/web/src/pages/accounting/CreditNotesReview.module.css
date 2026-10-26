@@ -330,17 +330,6 @@
 .foot > :last-child {
   flex: 1;
 }
-.show {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-}
-.show .select {
-  height: 30px;
-}
 
 @media (max-width: 1100px) {
   .stats,
@@ -373,4 +362,33 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-tertiary);
+}
+
+/* Fill the window (as the ledger does): the card takes the height left, only the table
+   scrolls, and its header row stays in view. Small screens keep normal page scrolling. */
+@media (min-width: 900px) and (min-height: 600px) {
+  :global(.content):has(> .fill) {
+    display: flex;
+    flex-direction: column;
+  }
+  :global(.view.active).fill {
+    flex: 1;
+    min-height: 0;
+  }
+  .fill > .card {
+    flex: 1;
+    min-height: 0;
+  }
+  .fill .scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+.fill .scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 0 0 var(--border-subtle);
 }

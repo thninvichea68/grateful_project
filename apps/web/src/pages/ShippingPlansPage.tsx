@@ -54,7 +54,7 @@ export function ShippingPlansPage() {
   };
   const query = {
     page: filters.page,
-    pageSize: 50,
+    pageSize: Number(params.get('pageSize') ?? 50),
     sort: filters.sort,
     q: filters.q || undefined,
     clientId: filters.clientId,
@@ -270,7 +270,13 @@ export function ShippingPlansPage() {
             </tbody>
           </table>
         </div>
-        {list.data && <Pager {...list.data.meta} onPage={(p) => setParam('page', String(p))} />}
+        {list.data && (
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => setParam('page', String(p))}
+            onPageSize={(n) => setParam('pageSize', String(n))}
+          />
+        )}
       </div>
       {importing && <ImportPlanDialog onClose={() => setImporting(false)} />}
     </section>

@@ -195,29 +195,6 @@ button {
     transform 0.12s ease;
 }
 
-.user-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  margin: 14px 14px 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-}
-.user-card .avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #0284c7, #0369a1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
-}
 .avatar {
   width: 40px;
   height: 40px;
@@ -230,16 +207,6 @@ button {
   height: 100%;
   object-fit: cover;
   display: block;
-}
-.user-card .name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.user-card .role {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-weight: 600;
 }
 
 nav.menu {
@@ -386,8 +353,7 @@ body.sidebar-collapsed .brand-text,
 body.sidebar-collapsed .menu-heading,
 body.sidebar-collapsed .item-badge,
 body.sidebar-collapsed .submenu-toggle,
-body.sidebar-collapsed .submenu,
-body.sidebar-collapsed .user-card > div:not(.avatar) {
+body.sidebar-collapsed .submenu {
   display: none !important;
 }
 
@@ -455,14 +421,6 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   height: 18px;
 }
 
-body.sidebar-collapsed .user-card {
-  background: transparent;
-  border: none;
-  justify-content: center;
-  margin: 4px 0 12px;
-  padding: 0;
-}
-
 /* =========================================================
    TOPBAR HEADER
 ========================================================= */
@@ -517,7 +475,106 @@ body.sidebar-collapsed .user-card {
 .topbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The title and its month pill keep their size; the search box gives way first. */
+.topbar {
+  position: relative;
+}
+.topbar-left {
+  flex: 0 0 auto;
+}
+.topbar-search {
+  flex: 0 1 400px;
+  min-width: 180px;
+}
+.topbar-search .search-box {
+  width: 100%;
+}
+.topbar-right > * {
+  flex-shrink: 0;
+}
+.topbar-right > .topbar-search {
+  flex-shrink: 1;
+}
+.ask-ai-btn,
+.topbar-right .new-shipment-btn {
+  white-space: nowrap;
+}
+.search-toggle {
+  display: none !important;
+}
+/* Laptops: Ask AI and New Shipment shrink to their icons. */
+@media (max-width: 1280px) {
+  .topbar {
+    padding: 0 20px;
+  }
+  .topbar-right {
+    gap: 8px;
+  }
+  .topbar-btn-label {
+    display: none;
+  }
+  .topbar .ask-ai-btn,
+  .topbar .topbar-right .new-shipment-btn {
+    width: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+/* Tablets and phones: search becomes an icon that opens the field across the whole bar. */
+@media (max-width: 900px) {
+  .search-toggle {
+    display: flex !important;
+  }
+  .topbar-search {
+    display: none;
+  }
+  .topbar.search-open .topbar-search {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    background: var(--bg-surface);
+  }
+}
+/* Phones: compact buttons; the Overview's month pill stands in for the title. */
+@media (max-width: 640px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar-left {
+    flex: 1 1 auto;
+    gap: 8px;
+  }
+  .topbar-right {
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+  .page-title {
+    font-size: 18px;
+  }
+  /* Overview: the month pill says where you are. */
+  .topbar-left:has(.time-pill-btn) .page-title {
+    display: none;
+  }
+  .topbar .menu-toggle,
+  .topbar .topbar-right .icon-btn,
+  .topbar .ask-ai-btn,
+  .topbar .topbar-right .new-shipment-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+@media (max-width: 400px) {
+  header.topbar {
+    padding: 0 12px;
+  }
 }
 .search-box {
   display: flex;
@@ -1032,41 +1089,6 @@ body.sidebar-collapsed .user-card {
   background: var(--accent-lime-bright);
 }
 
-.datetime-widget {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-left: 8px;
-  border-left: 1px solid var(--border-subtle);
-}
-.datetime-widget .dt-col {
-  text-align: right;
-}
-.datetime-widget .day {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-.datetime-widget .date {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-weight: 600;
-}
-.datetime-widget .time {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  letter-spacing: -0.3px;
-}
-.cambodia-flag {
-  width: 28px;
-  height: 18px;
-  border-radius: 3px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
 /* =========================================================
    CONTENT VIEWS & SYSTEM LAYOUT
 ========================================================= */
@@ -1358,6 +1380,21 @@ body.sidebar-collapsed .user-card {
 .ga-forwarder {
   grid-area: forwarder;
 }
+/* Overview → Customize: with a card switched off (or one added) the named areas would leave
+   holes, so the cards flow in order instead, the wide ones still two columns wide. */
+.ov-grid-3col.ov-flow {
+  grid-template-areas: none;
+  grid-template-rows: none;
+  grid-auto-rows: minmax(350px, auto);
+  grid-auto-flow: row dense;
+}
+.ov-flow > * {
+  grid-area: auto;
+}
+.ov-flow > .ga-chart,
+.ov-flow > .ga-accounts {
+  grid-column: span 2;
+}
 
 /* Threat / Shipment Summary Chart Card */
 .shipment-summary-card {
@@ -1375,6 +1412,8 @@ body.sidebar-collapsed .user-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 14px;
 }
 .ss-header-row h3 {
@@ -1481,6 +1520,8 @@ body.sidebar-collapsed .user-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 20px;
 }
 
@@ -4690,9 +4731,29 @@ th.frozen-col.frozen-col-edge {
   .kpi-row-modern {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+/* Overview: sized by the room beside the sidebar (open or collapsed), not the window.
+   Wide: 4 columns. Medium: pairs of cards. Narrow: one column. */
+#view-overview {
+  container: overview / inline-size;
+}
+@container overview (max-width: 1450px) {
   .ov-grid-3col {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
+    grid-template-areas:
+      'chart     revenue'
+      'accounts  map'
+      'port      forwarder';
+  }
+  .ov-flow > .ga-chart,
+  .ov-flow > .ga-accounts {
+    grid-column: auto;
+  }
+}
+@container overview (max-width: 900px) {
+  .ov-grid-3col {
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       'chart'
       'revenue'
@@ -4700,6 +4761,21 @@ th.frozen-col.frozen-col-edge {
       'accounts'
       'port'
       'forwarder';
+  }
+  .ov-grid-3col .rc-card {
+    height: auto;
+    min-height: 350px;
+  }
+}
+/* Phones: the profit ring sits above its client list. */
+@container overview (max-width: 520px) {
+  .ov-grid-3col .rc-main-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+  .ov-grid-3col .rc-donut-wrapper {
+    align-self: center;
   }
 }
 @media (max-width: 860px) {
@@ -4719,9 +4795,6 @@ th.frozen-col.frozen-col-edge {
   }
   .content {
     padding: 16px;
-  }
-  .datetime-widget {
-    display: none;
   }
   .search-box {
     width: 170px;

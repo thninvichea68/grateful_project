@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Pie,
   PieChart,
   PolarAngleAxis,
@@ -12,9 +13,8 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
-  ReferenceArea,
-  ReferenceLine,
   ResponsiveContainer,
+  Sector,
   Tooltip,
   XAxis,
   YAxis,
@@ -45,7 +45,6 @@ import {
 } from './parts';
 import { WorldMap } from './WorldMap';
 import { SingleClientVolume } from './SingleClientVolume';
-import { ProfitBars } from './ProfitBars';
 import acc from './AccountsCard.module.css';
 export { KpiRow } from './KpiRow';
 
@@ -85,6 +84,10 @@ function SummaryTooltip({
   );
 }
 
+/** Shipment Summary bar colours: imports bright cyan, exports a deeper teal stacked on top. */
+const SS_IMPORT = '#22D3EE';
+const SS_EXPORT = '#0E7490';
+
 export function ShipmentSummaryCard({
   year,
   monthly,
@@ -101,65 +104,50 @@ export function ShipmentSummaryCard({
   const [selected, setSelected] = useState(
     currentMonth.startsWith(String(year)) ? currentMonth : `${year}-01`,
   );
-  // Months after the current one haven't happened yet: no line, a hatched "not available" band.
-  const data = monthly.map((m) => {
-    const future = !!currentMonth && m.month > currentMonth;
-    return { ...m, label: monthLabel(m.month), future, actual: future ? null : m.total };
-  });
-  const firstFuture = data.findIndex((d) => d.future);
-  const futureFrom = firstFuture > 0 ? data[firstFuture - 1]!.label : data[0]?.label;
+  // Months after the current one haven't happened yet: an empty dashed slot instead of a bar.
+  const data = monthly.map((m) => ({
+    ...m,
+    label: monthLabel(m.month),
+    future: !!currentMonth && m.month > currentMonth,
+  }));
   const sel = data.find((d) => d.month === selected && !d.future);
   const empty = !loading && data.every((d) => d.total === 0);
+  const top = niceMax(Math.max(1, ...data.map((d) => d.total)));
+  const pick = (i: number | undefined) => {
+    const hit = i === undefined ? undefined : data[i];
+    if (hit && !hit.future) setSelected(hit.month);
+  };
   return (
     <div className="shipment-summary-card ga-chart">
       <div className="ss-header-row">
         <h3>Shipment Summary of {year}</h3>
-        <CardDropdown
-          label="Highlight month"
-          value={selected}
-          onChange={setSelected}
-          options={data.map((d) => ({
-            value: d.month,
-            label: `${MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: ${d.future ? '—' : d.total}`,
-            disabled: d.future,
-          }))}
-        />
+        <div className={dash.ssTools}>
+          <span className={dash.ssLegend}>
+            <i style={{ background: SS_IMPORT }} /> Import
+            <i style={{ background: SS_EXPORT }} /> Export
+          </span>
+          <CardDropdown
+            label="Highlight month"
+            value={selected}
+            onChange={setSelected}
+            options={data.map((d) => ({
+              value: d.month,
+              label: `${MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: ${d.future ? '—' : d.total}`,
+              disabled: d.future,
+            }))}
+          />
+        </div>
       </div>
       <div className="ss-chart-wrap">
         <ChartState loading={loading} error={error} empty={empty} height={250}>
           <div className={dash.chartBox} style={{ minHeight: 250 }}>
             <ResponsiveContainer width="100%" height={250}>
-              <AreaChart
+              <BarChart
                 data={data}
-                margin={{ top: 16, right: 16, bottom: 0, left: -12 }}
-                onClick={(e) => {
-                  const hit = data.find((d) => d.label === e?.activeLabel);
-                  if (hit && !hit.future) setSelected(hit.month);
-                }}
+                margin={{ top: 20, right: 8, bottom: 0, left: -12 }}
+                barCategoryGap="28%"
+                onClick={(e) => pick(e?.activeTooltipIndex)}
               >
-                <defs>
-                  <linearGradient id="ssAreaGlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
-                  </linearGradient>
-                  <pattern
-                    id="ssFutureHatch"
-                    width="8"
-                    height="8"
-                    patternUnits="userSpaceOnUse"
-                    patternTransform="rotate(45)"
-                  >
-                    <line
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="8"
-                      stroke="var(--text-tertiary)"
-                      strokeOpacity={0.22}
-                      strokeWidth={2}
-                    />
-                  </pattern>
-                </defs>
                 <CartesianGrid
                   vertical={false}
                   stroke="var(--border-subtle)"
@@ -169,17 +157,23 @@ export function ShipmentSummaryCard({
                   dataKey="label"
                   tickLine={false}
                   axisLine={false}
-                  tick={(p: { x: number; y: number; payload: { value: string } }) => {
-                    const future = data.find((d) => d.label === p.payload.value)?.future;
+                  tick={(p: {
+                    x: number;
+                    y: number;
+                    index: number;
+                    payload: { value: string };
+                  }) => {
+                    const d = data[p.index];
+                    const on = d?.month === sel?.month;
                     return (
                       <text
                         x={p.x}
                         y={p.y + 12}
                         textAnchor="middle"
                         fontSize={10}
-                        fontWeight={p.payload.value === sel?.label ? 800 : 700}
-                        fill={p.payload.value === sel?.label ? '#22D3EE' : 'var(--text-tertiary)'}
-                        fillOpacity={future ? 0.45 : 1}
+                        fontWeight={on ? 800 : 700}
+                        fill={on ? '#22D3EE' : 'var(--text-tertiary)'}
+                        fillOpacity={d?.future ? 0.45 : 1}
                       >
                         {p.payload.value}
                       </text>
@@ -188,6 +182,7 @@ export function ShipmentSummaryCard({
                 />
                 <YAxis
                   allowDecimals={false}
+                  domain={[0, top]}
                   tickLine={false}
                   axisLine={false}
                   width={44}
@@ -195,45 +190,76 @@ export function ShipmentSummaryCard({
                 />
                 <Tooltip
                   content={<SummaryTooltip year={year} />}
-                  cursor={{ stroke: '#22D3EE', strokeDasharray: '2 3', strokeWidth: 1.5 }}
+                  cursor={{ fill: 'var(--bg-subtle)', fillOpacity: 0.6 }}
                 />
-                {firstFuture >= 0 && (
-                  <ReferenceArea
-                    x1={futureFrom}
-                    x2={data[data.length - 1]!.label}
-                    fill="url(#ssFutureHatch)"
-                    fillOpacity={1}
-                    stroke="var(--border-strong)"
-                    strokeDasharray="4 4"
-                    strokeOpacity={0.6}
-                    ifOverflow="extendDomain"
-                  />
-                )}
-                {sel && (
-                  <ReferenceLine
-                    x={sel.label}
-                    stroke="#22D3EE"
-                    strokeDasharray="2 3"
-                    strokeWidth={1.5}
-                    label={{
-                      value: `${sel.total}`,
-                      position: 'top',
-                      fill: '#22D3EE',
-                      fontSize: 11,
-                      fontWeight: 700,
+                <Bar
+                  dataKey="imports"
+                  stackId="ss"
+                  fill={SS_IMPORT}
+                  maxBarSize={30}
+                  radius={[3, 3, 0, 0]}
+                  // Every month's full-height slot: a faint track, dashed for months to come.
+                  background={(raw: unknown) => {
+                    const p = raw as {
+                      x: number;
+                      y: number;
+                      width: number;
+                      height: number;
+                      index: number;
+                    };
+                    return (
+                      <rect
+                        key={`slot-${p.index}`}
+                        x={p.x}
+                        y={p.y}
+                        width={p.width}
+                        height={p.height}
+                        rx={5}
+                        fill={data[p.index]?.future ? 'none' : 'var(--bg-subtle)'}
+                        fillOpacity={0.5}
+                        stroke={data[p.index]?.future ? 'var(--border-strong)' : 'none'}
+                        strokeOpacity={0.5}
+                        strokeDasharray="4 4"
+                      />
+                    );
+                  }}
+                >
+                  {data.map((d) => (
+                    <Cell key={d.month} fillOpacity={!sel || d.month === sel.month ? 1 : 0.55} />
+                  ))}
+                </Bar>
+                <Bar
+                  dataKey="exports"
+                  stackId="ss"
+                  fill={SS_EXPORT}
+                  maxBarSize={30}
+                  radius={[3, 3, 0, 0]}
+                >
+                  {data.map((d) => (
+                    <Cell key={d.month} fillOpacity={!sel || d.month === sel.month ? 1 : 0.55} />
+                  ))}
+                  <LabelList
+                    dataKey="total"
+                    content={(p) => {
+                      const d = data[Number(p.index)];
+                      if (!d || d.future || !d.total) return null;
+                      const on = d.month === sel?.month;
+                      return (
+                        <text
+                          x={Number(p.x) + Number(p.width) / 2}
+                          y={Number(p.y) - 6}
+                          textAnchor="middle"
+                          fontSize={on ? 12 : 10}
+                          fontWeight={on ? 800 : 700}
+                          fill={on ? '#22D3EE' : 'var(--text-secondary)'}
+                        >
+                          {d.total}
+                        </text>
+                      );
                     }}
                   />
-                )}
-                <Area
-                  type="monotone"
-                  dataKey="actual"
-                  stroke="#22D3EE"
-                  strokeWidth={3}
-                  fill="url(#ssAreaGlow)"
-                  dot={{ r: 3, fill: 'var(--bg-surface)', stroke: '#22D3EE', strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: '#22D3EE', stroke: 'var(--bg-surface)', strokeWidth: 2 }}
-                />
-              </AreaChart>
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </ChartState>
@@ -261,7 +287,7 @@ const MONTH_NAMES = [
 const monthName = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
 
 /**
- * Net profit for one month (this month to start; click a month on the line to change it):
+ * Net profit for one month (this month to start; the month dropdown changes it):
  * the figure, the change on the month before, and that month's split by client.
  */
 export function ProfitCard({ profit }: { profit: ProfitSummary }) {
@@ -286,15 +312,37 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
     pct: sum ? Math.round((Number(c.netProfit) / sum) * 1000) / 10 : 0,
   }));
   const positive = clients.filter((c) => Number(c.netProfit) > 0);
+  const colorOf = (c: (typeof clients)[number]) =>
+    CLIENT_COLORS[clients.indexOf(c) % CLIENT_COLORS.length];
+  // Hovering a slice or a legend name highlights that client; slices also show a tooltip
+  // at the cursor with the client's profit and share.
+  const [hoverId, setHover] = useState<string | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
+  const hovered = clients.find((c) => c.clientId === hoverId) ?? null;
   const unbilled = profit.unbilled.find((u) => u.month === month);
+  // Months still to come can't be picked (the viewer's clock).
+  const today = new Date();
+  const now = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
   return (
-    <div className="rc-card ga-revenue">
-      <div className="rc-header">
-        <div className="rc-title">Total Net Profit</div>
-        <div className="rc-subtitle">
-          {monthName(month)} · all clients · {profit.year} to date {fmtMoney(profit.total)}
+    <div className={`rc-card ga-revenue ${dash.profitCard}`}>
+      <div className={dash.profitHead}>
+        <div className="rc-header">
+          <div className="rc-title">Total Net Profit</div>
+          <div className="rc-subtitle">
+            {monthName(month)} · all clients · {profit.year} to date {fmtMoney(profit.total)}
+          </div>
         </div>
+        <CardDropdown
+          label="Month"
+          value={month}
+          onChange={(m) => setPicked({ year: profit.year, month: m })}
+          options={profit.monthly.map((m) => ({
+            value: m.month,
+            label: MONTHS_LONG[Number(m.month.slice(5, 7)) - 1]!,
+            disabled: m.month > now,
+          }))}
+        />
       </div>
       <div className="rc-top-hero">
         <div className="rc-metric-left">
@@ -330,40 +378,40 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
             </div>
           )}
         </div>
-        <ProfitBars
-          monthly={profit.monthly}
-          selected={month}
-          onSelect={(m) => setPicked({ year: profit.year, month: m })}
-        />
       </div>
-      <div className="rc-main-body">
-        <div className="rc-donut-wrapper">
+      <div className={`rc-main-body ${dash.profitBody}`}>
+        <div className={`rc-donut-wrapper ${dash.profitPie}`}>
           {positive.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={[{ v: 1 }]}
-                  dataKey="v"
-                  innerRadius={44}
-                  outerRadius={56}
-                  fill="var(--bg-subtle)"
-                  stroke="none"
-                  isAnimationActive={false}
-                />
-                <Pie
                   data={positive.map((c) => ({ name: c.code, v: Number(c.netProfit) }))}
                   dataKey="v"
-                  innerRadius={44}
-                  outerRadius={56}
+                  innerRadius={38}
+                  outerRadius={66}
                   startAngle={90}
                   endAngle={-270}
-                  paddingAngle={2}
-                  stroke="none"
+                  stroke="var(--bg-surface)"
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                  activeIndex={hovered ? positive.indexOf(hovered) : undefined}
+                  activeShape={(p: React.ComponentProps<typeof Sector>) => (
+                    <Sector {...p} outerRadius={Number(p.outerRadius) + 5} />
+                  )}
+                  onMouseMove={(_, i, e) => {
+                    setHover(positive[i]!.clientId);
+                    setTip({ x: e.clientX, y: e.clientY });
+                  }}
+                  onMouseLeave={() => {
+                    setHover(null);
+                    setTip(null);
+                  }}
                 >
                   {positive.map((c) => (
                     <Cell
                       key={c.clientId}
-                      fill={CLIENT_COLORS[clients.indexOf(c) % CLIENT_COLORS.length]}
+                      fill={colorOf(c)}
+                      fillOpacity={hovered && hovered !== c ? 0.35 : 1}
                     />
                   ))}
                 </Pie>
@@ -372,47 +420,37 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
           ) : null}
           <div className="rc-donut-center-text">
             <span className="pct">{clients.length}</span>
-            <span className="tag">Clients</span>
+            <span className="tag">{clients.length === 1 ? 'Client' : 'Clients'}</span>
           </div>
         </div>
-        <div className="rc-client-list">
-          {clients.slice(0, 5).map((c, i) => (
-            <div className="rc-client-row" key={c.clientId}>
-              <div className="rc-bar-group">
-                <div className="rc-client-name">
-                  <span
-                    className="dot"
-                    style={{ background: CLIENT_COLORS[i % CLIENT_COLORS.length] }}
-                  />
-                  {c.name}
-                </div>
-                <div className="rc-bar-track">
-                  <div
-                    className="rc-bar-fill"
-                    style={{
-                      width: `${Math.max(0, c.pct)}%`,
-                      background: barGradient(CLIENT_COLORS[i % CLIENT_COLORS.length]),
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="rc-val-group">
-                <span className="rc-client-pct">{c.pct}%</span>
-                <span
-                  className="rc-client-val"
-                  style={
-                    Number(c.netProfit) < 0 ? { color: 'var(--status-exception-fg)' } : undefined
-                  }
-                >
-                  {fmtMoney(c.netProfit)}
-                </span>
-              </div>
-            </div>
+        <ul className={dash.profitLegend}>
+          {clients.map((c) => (
+            <li
+              key={c.clientId}
+              data-dim={(hovered && hovered !== c) || undefined}
+              onMouseEnter={() => setHover(c.clientId)}
+              onMouseLeave={() => setHover(null)}
+            >
+              <i style={{ background: colorOf(c) }} />
+              {c.name}
+            </li>
           ))}
           {!clients.length && (
             <span className={dash.mutedNote}>No ledger entries in {monthName(month)} yet.</span>
           )}
-        </div>
+        </ul>
+        {hovered && tip && (
+          <div className={dash.profitTip} style={{ left: tip.x + 14, top: tip.y + 14 }}>
+            <div className={dash.profitTipName}>
+              <i style={{ background: colorOf(hovered) }} />
+              {hovered.name}
+            </div>
+            <div className={dash.profitTipRow}>
+              <b>{fmtMoney(hovered.netProfit)}</b>
+              <span>{hovered.pct}%</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -480,7 +518,7 @@ export function ClientShareCard({
     );
   }
   return (
-    <div className="rc-card ga-revenue">
+    <div className={`rc-card ga-revenue ${dash.profitCard}`}>
       <div className="rc-header">
         <div className="rc-title">Shipments by Client</div>
         <div className="rc-subtitle">Share of all shipments in {period}</div>

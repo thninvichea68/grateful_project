@@ -32,7 +32,6 @@ const statusOf = (r: CreditNoteReviewRow): { label: string; cls: string } =>
       : STATUS[r.status];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
-const PAGE_SIZES = [10, 25, 50];
 
 /** Sidebar → Credit Noted: the broker's vouchers, drafts and submitted. */
 export function CreditNotedList() {
@@ -69,7 +68,7 @@ export function CreditNotedList() {
   const toggleInbox = () => set('view', inboxView ? '' : 'inbox');
 
   return (
-    <section className={`view active ${s.page}`}>
+    <section className={`view active ${s.page} ${s.fill}`}>
       <ErrorBanner error={list.error} />
       <div className={s.card}>
         <div className={s.toolbar}>
@@ -246,21 +245,11 @@ export function CreditNotedList() {
 
         {!inboxView && list.data && list.data.meta.total > 0 && (
           <div className={s.foot}>
-            <label className={s.show}>
-              Rows
-              <select
-                className={s.select}
-                value={q.pageSize}
-                onChange={(e) => set('pageSize', e.target.value)}
-              >
-                {PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />
+            <Pager
+              {...list.data.meta}
+              onPage={(p) => set('page', String(p))}
+              onPageSize={(n) => set('pageSize', String(n))}
+            />
           </div>
         )}
       </div>

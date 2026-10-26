@@ -259,7 +259,8 @@ export const customsDeclarations = pgTable(
     shipmentId: uuid('shipment_id')
       .notNull()
       .references(() => shipments.id, { onDelete: 'cascade' }),
-    declareNo: text('declare_no').notNull().unique(),
+    /** Null = pending: an air shipment's declaration dated before customs numbers it. */
+    declareNo: text('declare_no').unique(),
     declareDate: date('declare_date').notNull(),
     portId: uuid('port_id').references(() => ports.id, { onDelete: 'restrict' }),
     notes: text('notes'),

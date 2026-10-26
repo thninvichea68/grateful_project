@@ -121,7 +121,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
             </span>{' '}
             <span className={p.metaVal}>{longDate(d.date)}</span>
           </div>
-          <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
+          <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
           <div className={p.ship}>VOLUME: {cbm(h(d, 'volumeCbm'))}</div>
           <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
           <div className={p.ship}>POL: {h(d, 'pol')}</div>
@@ -308,7 +308,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
     <>
       <div className={p.dnHeadline}>DEBIT NOTE</div>
       {/* Laid out like the tax invoice's details, in English only. */}
-      <div className={p.meta}>
+      <div className={`${p.meta} ${p.dnMeta}`}>
         <div>
           <div>
             <span className={p.custLbl}>Customer: </span>

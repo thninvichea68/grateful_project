@@ -61,7 +61,7 @@ export const ledgerListQuerySchema = paginationQuerySchema.extend({
     .optional(),
   clientId: z.string().uuid().optional(),
   cheaStatus: z.enum(CHEA_STATUSES).optional(),
-  pageSize: z.coerce.number().int().min(1).max(500).default(100),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(100),
 });
 
 export interface LedgerRow {
@@ -356,6 +356,8 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   monthOfYear: z.coerce.number().int().min(1).max(12).optional(),
   direction: z.enum(DIRECTIONS).optional(),
+  /** Record summaries only: accounting's check, so Draft and Revised (both DRAFT) filter apart. */
+  review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
 });
 
 /** Accounting → Credit Noted: submitted credit notes waiting for (or past) accounting's check. */

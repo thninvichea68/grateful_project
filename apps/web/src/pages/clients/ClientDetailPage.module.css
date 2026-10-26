@@ -1,6 +1,6 @@
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -9,12 +9,18 @@
     grid-template-columns: 1fr;
   }
 }
-/* Left: recent shipments, consignees. Right: details, remarks, CDC master list. */
+/* Left: details, CDC master list. Right: remarks. Below, full width: suppliers, consignees. */
 .column {
   display: flex;
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+}
+.parties {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 18px;
 }
 .head {
   display: flex;

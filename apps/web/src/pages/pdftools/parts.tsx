@@ -1,8 +1,15 @@
-import { useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { ui } from '../../components/ui';
 import { saveBlob } from '../../lib/files';
 import { fmtFileSize } from '../../lib/format';
-import { zipFiles, type OutFile } from '../../lib/pdfEngine';
+import { openThumbs, zipFiles, type OutFile, type ThumbRenderer } from '../../lib/pdfEngine';
 import s from './PdfTools.module.css';
 
 export const PDF_ACCEPT = 'application/pdf,.pdf';
@@ -217,6 +224,94 @@ export function Results({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Opens `file` for page previews; `count` is known at once, previews come per page. */
+export function usePdfThumbs(file: File | null) {
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [urls, setUrls] = useState<Record<number, string>>({});
+  const renderer = useRef<ThumbRenderer | null>(null);
+
+  useEffect(() => {
+    setCount(0);
+    setUrls({});
+    setError('');
+    if (!file) return;
+    let live = true;
+    let r: ThumbRenderer | null = null;
+    setLoading(true);
+    openThumbs(file)
+      .then((x) => {
+        if (!live) return x.destroy();
+        r = renderer.current = x;
+        setCount(x.count);
+      })
+      .catch(() => live && setError('This PDF could not be opened (it may be damaged).'))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+      r?.destroy();
+      renderer.current = null;
+    };
+  }, [file]);
+
+  const request = useCallback(
+    (index: number) =>
+      renderer.current?.request(index, (url) => setUrls((u) => ({ ...u, [index]: url }))),
+    [],
+  );
+  return { count, loading, error, urls, request };
+}
+
+/** A page preview that asks for its image only when it scrolls near the view. */
+export function LazyThumb({
+  index,
+  url,
+  request,
+  alt = '',
+  style,
+  children,
+}: {
+  index: number;
+  url?: string;
+  request: (index: number) => (() => void) | undefined;
+  alt?: string;
+  style?: CSSProperties;
+  /** Drawn over the preview. */
+  children?: ReactNode;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (url || !box.current) return;
+    let cancel: (() => void) | undefined;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting) cancel ??= request(index);
+        else {
+          cancel?.();
+          cancel = undefined;
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(box.current);
+    return () => {
+      io.disconnect();
+      cancel?.();
+    };
+  }, [index, url, request]);
+  return (
+    <div ref={box} className={s.thumbBox}>
+      {url ? (
+        <img src={url} alt={alt} style={style} draggable={false} />
+      ) : (
+        <span className={s.thumbPending} aria-label={`Loading page ${index + 1}`} />
+      )}
+      {children}
     </div>
   );
 }

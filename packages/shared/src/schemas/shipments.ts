@@ -86,7 +86,15 @@ export const cargoInvoiceInputSchema = z
 export const declarationInputSchema = z.object({
   /** Present when editing an existing declaration (keeps its ledger link). */
   id: optUuid,
-  declareNo: z.string().trim().toUpperCase().min(2, 'Enter the declaration no.').max(30),
+  /** Empty = pending, which only an air shipment may save (customs numbers it later). */
+  declareNo: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .max(30)
+    .nullish()
+    .transform((v) => v || null)
+    .refine((v) => v === null || v.length >= 2, 'Enter the declaration no.'),
   declareDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the declaration date'),
   portId: optUuid,
   notes: optText(300),
@@ -247,7 +255,20 @@ export const shipmentInputSchema = z
     };
     dup(s.containers, (c) => c.containerNo, 'containers', 'Container');
     dup(s.invoices, (i) => i.invoiceNo, 'invoices', 'Invoice');
-    dup(s.declarations, (d) => d.declareNo, 'declarations', 'Declaration');
+    s.declarations.forEach((d, i) => {
+      if (!d.declareNo && s.transportMode !== 'AIR')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['declarations', i, 'declareNo'],
+          message: 'Enter the declaration no.',
+        });
+    });
+    dup(
+      s.declarations.filter((d) => d.declareNo),
+      (d) => d.declareNo!,
+      'declarations',
+      'Declaration',
+    );
   })
   // The statuses are never entered: they follow from the dates and declarations.
   .transform((s) => ({ ...s, status: shipmentStatusOf(s), clearanceStatus: clearanceStatusOf(s) }));
@@ -328,7 +349,8 @@ export interface ShipmentListItem {
   thcHblNo: string | null;
   thcHblDate: string | null;
   thcHblAmount: string | null;
-  declarations: { declareNo: string; declareDate: string }[];
+  /** declareNo null = pending (an air shipment's, before customs numbers it). */
+  declarations: { declareNo: string | null; declareDate: string }[];
   totals: {
     pcs: string;
     ctns: string;
@@ -422,7 +444,8 @@ export interface ShipmentDetail {
   }[];
   declarations: {
     id: string;
-    declareNo: string;
+    /** Null = pending (an air shipment's, before customs numbers it). */
+    declareNo: string | null;
     declareDate: string;
     portId: string | null;
     notes: string | null;

@@ -90,7 +90,7 @@
   gap: 12px;
 }
 .figures {
-  min-width: 0;
+  flex-shrink: 0;
 }
 .value {
   font-size: 34px;
@@ -131,9 +131,10 @@
   color: var(--text-tertiary);
 }
 
+/* Gives way before the figure and "vs last month" do. */
 .chart {
-  flex-shrink: 0;
-  width: 112px;
+  flex: 0 1 112px;
+  min-width: 60px;
   height: 52px;
 }
 .chart:empty {
@@ -166,58 +167,21 @@
   background: color-mix(in srgb, var(--tone) 60%, transparent);
 }
 
-/* This month vs last month: label, bar, count. Last month faded, this month solid. */
-.compare {
-  height: 100%;
+/* Sparkline cards (Import / Export): figure and change on one line, then a full-width
+   sparkline whose hovered month drives the figure. */
+.sparkFigures {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-}
-.compareRow {
-  display: grid;
-  grid-template-columns: 24px 1fr 20px;
   align-items: center;
-  gap: 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--text-tertiary);
+  flex-wrap: wrap;
+  gap: 4px 10px;
 }
-.compareTrack {
-  height: 8px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--tone) 10%, transparent);
-  overflow: hidden;
+.sparkFigures .meta {
+  margin-top: 0;
 }
-.compareTrack > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--tone) 38%, transparent);
-}
-.compareVal {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.compareRow[data-now] {
-  color: var(--text-primary);
-}
-.compareRow[data-now] .compareTrack > span {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tone) 65%, transparent), var(--tone));
-}
-
-.tip {
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface-elevated);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.tip b {
-  color: var(--text-primary);
+.sparkChart {
+  flex: 1;
+  min-height: 44px;
+  margin: 0 -4px -6px;
 }
 
 /* Clearance ring. */
@@ -271,12 +235,13 @@
   }
 }
 
-@media (max-width: 1280px) {
+/* Sized by the Overview's own width (see #view-overview), so the sidebar state counts. */
+@container overview (max-width: 1100px) {
   .row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 860px) {
+@container overview (max-width: 540px) {
   .row {
     grid-template-columns: 1fr;
   }

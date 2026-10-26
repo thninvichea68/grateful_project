@@ -1,8 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useOverviewSummary } from '../features/analytics';
+import { icons } from './icons';
 import { MONTHS, MONTHS_LONG } from '../pages/dashboard/parts';
 import { currentMonth, useOverviewMonth } from '../pages/dashboard/overviewMonth';
 import s from './LiveMonthPill.module.css';
+
+/** Beside the month picker: opens Overview → Customize (?customize=1) to add or remove widgets. */
+export function CustomizeOverviewButton() {
+  const [params, setParams] = useSearchParams();
+  const open = () => {
+    const next = new URLSearchParams(params);
+    next.set('customize', '1');
+    setParams(next, { replace: true });
+  };
+  return (
+    <button
+      type="button"
+      className={`time-pill-btn ${s.btn}`}
+      onClick={open}
+      title="Add or remove Overview widgets"
+      aria-label="Customize Overview"
+    >
+      {icons.edit({ width: 15, height: 15 })}
+      <span className={s.long}>Customize</span>
+    </button>
+  );
+}
 
 /**
  * Beside the Overview title: "October 2026 (Live)", or the month being looked at. Click it to
@@ -48,6 +72,10 @@ export function LiveMonthPill() {
   const label = fullYear
     ? `Jan – ${MONTHS[Number(shown.slice(5, 7)) - 1]} ${fullYear}`
     : `${MONTHS_LONG[Number(shown.slice(5, 7)) - 1]} ${shown.slice(0, 4)}`;
+  // Phones: "Oct 2026" / "Jan – Oct 26".
+  const short = fullYear
+    ? `Jan – ${MONTHS[Number(shown.slice(5, 7)) - 1]} ${fullYear.slice(2)}`
+    : `${MONTHS[Number(shown.slice(5, 7)) - 1]} ${shown.slice(0, 4)}`;
   const pick = (m: string) => {
     setMonth(m === now ? undefined : m);
     setOpen(false);
@@ -69,7 +97,8 @@ export function LiveMonthPill() {
         onClick={() => setOpen((o) => !o)}
       >
         {live && <i className={s.liveDot} aria-hidden />}
-        {label}
+        <span className={s.long}>{label}</span>
+        <span className={s.short}>{short}</span>
         {live && <span className={s.liveTag}>(Live)</span>}
         <svg className={s.caret} viewBox="0 0 24 24" aria-hidden>
           <path d="m6 9 6 6 6-6" />

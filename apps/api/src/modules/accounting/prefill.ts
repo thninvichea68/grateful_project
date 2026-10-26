@@ -85,7 +85,7 @@ export async function prefill(
            a.clear_fee::text AS "clearFee", a.thc::text AS thc,
            a.other_pay::text AS "otherPay", a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
            d.declare_no AS "declareNo", s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.forwarder_id AS "forwarderId",
-           coalesce(d.port_id, s.clearance_port_id) AS "portId", p.name AS "portName", oc.name AS "originName", dc.name AS "destinationName",
+           coalesce(d.port_id, s.clearance_port_id) AS "portId", p.short_name AS "portName", oc.name AS "originName", dc.name AS "destinationName",
            c.name AS "clientName", c.legal_name AS "legalName", c.legal_name_km AS "legalNameKm", c.address, c.vattin,
            s.shipper_name AS shipper, cn.name AS consignee, s.hbl_no AS hbl, s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,

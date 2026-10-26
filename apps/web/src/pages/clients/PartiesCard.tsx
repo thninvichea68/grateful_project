@@ -9,6 +9,7 @@ import {
   useSetConsigneeAddress,
 } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
+import { SearchBox } from '../../components/SearchBox';
 import { useToast } from '../../components/Toast';
 import { icons } from '../../layout/icons';
 import s from './PartiesCard.module.css';
@@ -17,9 +18,13 @@ type Party =
   | { kind: 'supplier'; id: string | null; name: string; address: string | null }
   | { kind: 'consignee'; id: string; name: string; address: string | null };
 
+/** Tiles shown before "Show all"; the search box appears past this many too. */
+const PREVIEW = 12;
+
 /**
- * Client Details: the client's Suppliers (import shippers) and Consignees side by side, each
- * with its address; the INV + PL letterhead prints them (Shipping Plans → Export INV + PL).
+ * Client Details: the client's Suppliers (import shippers) and Consignees, each a full-width
+ * card of address tiles that wrap instead of scrolling; the INV + PL letterhead prints them
+ * (Shipping Plans → Export INV + PL).
  */
 export function PartiesCard({ client }: { client: ClientDetail }) {
   const { can } = useAuth();
@@ -41,27 +46,122 @@ export function PartiesCard({ client }: { client: ClientDetail }) {
     toast(`${p.kind === 'supplier' ? 'Supplier' : 'Consignee'} deleted.`);
   };
 
-  const column = (title: string, rows: Party[], empty: string, add?: () => void) => (
-    <div className={s.column}>
+  return (
+    <>
+      <PartyList
+        title="Suppliers"
+        sub="Shippers on this client's imports"
+        rows={client.suppliers.map((x) => ({ kind: 'supplier' as const, ...x }))}
+        empty="No suppliers yet. Shipper names on imports appear here."
+        editable={editable}
+        deleting={delSupplier.isPending}
+        error={delSupplier.error}
+        onAdd={() => setOpen('supplier')}
+        onOpen={setOpen}
+        onDelete={(p) => void remove(p)}
+      />
+      <PartyList
+        title="Consignees"
+        sub="Receivers on this client's exports"
+        rows={client.consignees.map((x) => ({ kind: 'consignee' as const, ...x }))}
+        empty="None linked to this client."
+        editable={editable}
+        deleting={delConsignee.isPending}
+        error={delConsignee.error}
+        onAdd={() => setOpen('consignee')}
+        onOpen={setOpen}
+        onDelete={(p) => void remove(p)}
+      />
+      {open && (
+        <AddressModal
+          clientId={client.id}
+          party={typeof open === 'string' ? null : open}
+          kind={typeof open === 'string' ? open : open.kind}
+          onClose={() => setOpen(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function PartyList({
+  title,
+  sub,
+  rows,
+  empty,
+  editable,
+  deleting,
+  error,
+  onAdd,
+  onOpen,
+  onDelete,
+}: {
+  title: string;
+  sub: string;
+  rows: Party[];
+  empty: string;
+  editable: boolean;
+  deleting: boolean;
+  error: unknown;
+  onAdd: () => void;
+  onOpen: (p: Party) => void;
+  onDelete: (p: Party) => void;
+}) {
+  const [q, setQ] = useState('');
+  const [all, setAll] = useState(false);
+  const needle = q.trim().toLowerCase();
+  const matches = needle
+    ? rows.filter(
+        (p) =>
+          p.name.toLowerCase().includes(needle) ||
+          (p.address ?? '').toLowerCase().includes(needle),
+      )
+    : rows;
+  const shown = all || needle ? matches : matches.slice(0, PREVIEW);
+  const missing = rows.filter((p) => !p.address).length;
+
+  return (
+    <div className="card">
+      <ErrorBanner error={error} />
       <div className={s.head}>
-        <h3>
-          {title} <span className={s.count}>{rows.length}</span>
-        </h3>
-        {add && editable && (
-          <button type="button" className="filter-btn" onClick={add}>
-            + Add
-          </button>
-        )}
+        <div className={s.titleBlock}>
+          <h3>
+            {title} <span className={s.count}>{rows.length}</span>
+          </h3>
+          <span className={s.sub}>
+            {sub}
+            {missing > 0 && <span className={s.missing}> · {missing} without address</span>}
+          </span>
+        </div>
+        <div className={s.tools}>
+          {rows.length > PREVIEW && (
+            <SearchBox
+              className={s.search}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={`Search ${title.toLowerCase()}`}
+              aria-label={`Search ${title.toLowerCase()}`}
+            />
+          )}
+          {editable && (
+            <button type="button" className="filter-btn" onClick={onAdd}>
+              + Add
+            </button>
+          )}
+        </div>
       </div>
-      <div className={s.scroll}>
-        {rows.length === 0 && <span className={s.muted}>{empty}</span>}
-        {rows.map((p) => (
-          <div key={`${p.kind}:${p.id ?? p.name}`} className={s.row}>
+      {rows.length === 0 && <span className={s.muted}>{empty}</span>}
+      {rows.length > 0 && matches.length === 0 && (
+        <span className={s.muted}>No {title.toLowerCase()} match "{q.trim()}".</span>
+      )}
+      <div className={s.grid}>
+        {shown.map((p) => (
+          <div key={`${p.kind}:${p.id ?? p.name}`} className={s.tile}>
             <button
               type="button"
               className={s.item}
               disabled={!editable}
-              onClick={() => setOpen(p)}
+              onClick={() => onOpen(p)}
               title={editable ? 'Set the address' : undefined}
             >
               <b>{p.name}</b>
@@ -75,8 +175,8 @@ export function PartiesCard({ client }: { client: ClientDetail }) {
               <button
                 type="button"
                 className={s.delete}
-                onClick={() => void remove(p)}
-                disabled={delSupplier.isPending || delConsignee.isPending}
+                onClick={() => onDelete(p)}
+                disabled={deleting}
                 aria-label={`Delete ${p.name}`}
                 title="Delete"
               >
@@ -86,33 +186,10 @@ export function PartiesCard({ client }: { client: ClientDetail }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-
-  return (
-    <div className="card">
-      <ErrorBanner error={delSupplier.error ?? delConsignee.error} />
-      <div className={s.grid}>
-        {column(
-          'Suppliers',
-          client.suppliers.map((x) => ({ kind: 'supplier' as const, ...x })),
-          'No suppliers yet. Shipper names on imports appear here.',
-          () => setOpen('supplier'),
-        )}
-        {column(
-          'Consignees',
-          client.consignees.map((x) => ({ kind: 'consignee' as const, ...x })),
-          'None linked to this client.',
-          () => setOpen('consignee'),
-        )}
-      </div>
-      {open && (
-        <AddressModal
-          clientId={client.id}
-          party={typeof open === 'string' ? null : open}
-          kind={typeof open === 'string' ? open : open.kind}
-          onClose={() => setOpen(null)}
-        />
+      {!needle && matches.length > PREVIEW && (
+        <button type="button" className={s.more} onClick={() => setAll((x) => !x)}>
+          {all ? 'Show fewer' : `Show all ${matches.length}`}
+        </button>
       )}
     </div>
   );

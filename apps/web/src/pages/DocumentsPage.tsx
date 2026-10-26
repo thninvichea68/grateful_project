@@ -145,7 +145,7 @@ export function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: 50,
+    pageSize: Number(params.get('pageSize') ?? 50),
     q: params.get('q') || undefined,
     category: params.get('category') || undefined,
   };
@@ -190,7 +190,13 @@ export function DocumentsPage() {
           </div>
         </div>
         <DocumentTable rows={list.data?.data} loading={list.isLoading} error={list.error} />
-        {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
+        {list.data && (
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => set('page', String(p))}
+            onPageSize={(n) => set('pageSize', String(n))}
+          />
+        )}
       </div>
       {uploading && <DocumentUploadModal onClose={() => setUploading(false)} />}
     </section>

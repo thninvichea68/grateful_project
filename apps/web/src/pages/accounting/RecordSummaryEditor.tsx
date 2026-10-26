@@ -36,7 +36,7 @@ import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
-import { nextLineOnEnter } from '../../lib/lineKeys';
+import { moveInLines } from '../../lib/lineKeys';
 import { maskDeclareNo } from '../../lib/declareNo';
 import { RecordSummary, transportLabel } from '../print/PrintDocPage';
 import { Preview, useFillWindow } from '../creditnoted/CreditNotedEditor';
@@ -783,7 +783,7 @@ function RecordSummaryEditor({
             <Panel title="2. Breakdown line items">
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
               {lines.fields.map((f, i) => (
-                <div className={r.rowItem} key={f.id} onKeyDown={nextLineOnEnter}>
+                <div className={r.rowItem} key={f.id} onKeyDown={moveInLines}>
                   <span className={r.no}>{i + 1}</span>
                   <input
                     className={`form-field-box ${r.desc}`}

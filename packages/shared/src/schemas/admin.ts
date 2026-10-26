@@ -189,7 +189,8 @@ export const declarationRegisterQuerySchema = paginationQuerySchema.extend({
 
 export interface DeclarationRegisterRow {
   id: string;
-  declareNo: string;
+  /** Null = pending (an air shipment's, before customs numbers it). */
+  declareNo: string | null;
   declareDate: string;
   portCode: string | null;
   shipmentId: string;

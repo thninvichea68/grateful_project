@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useAccounts, useOverviewSummary } from '../features/analytics';
 import { ErrorBanner } from '../components/ui';
@@ -16,6 +17,9 @@ import {
 import { KpiRowSkeleton } from './dashboard/KpiRow';
 import { currentMonth, monthRange, useOverviewMonth } from './dashboard/overviewMonth';
 import { MONTHS, MONTHS_LONG } from './dashboard/parts';
+import { useOverviewWidgets } from './dashboard/widgets';
+import { CustomizeWidgets } from './dashboard/CustomizeWidgets';
+import cw from './dashboard/CustomizeWidgets.module.css';
 
 export function OverviewPage() {
   const { can, user } = useAuth();
@@ -43,44 +47,97 @@ export function OverviewPage() {
   const accounts = useAccounts(periodFilters);
   const today = s?.today ?? '';
 
+  // Which widgets this person shows (Customize, opened from the top bar as ?customize=1).
+  const canProfit = can('accounting:read');
+  const widgets = useOverviewWidgets(user?.id ?? '', canProfit);
+  const on = widgets.shown;
+  const [params, setParams] = useSearchParams();
+  const customizing = params.get('customize') === '1';
+  const openCustomize = () => {
+    const next = new URLSearchParams(params);
+    next.set('customize', '1');
+    setParams(next, { replace: true });
+  };
+  const closeCustomize = () => {
+    const next = new URLSearchParams(params);
+    next.delete('customize');
+    setParams(next, { replace: true });
+  };
+  // Profit fills its slot once loaded; until then (or without figures) Shipments by Client
+  // stands in, as it always has.
+  const profitShown = on('profit') && !!s?.profit;
+  const clientsShown = on('clients') || (on('profit') && !s?.profit);
+  const cards = [
+    on('shipments'),
+    profitShown,
+    clientsShown,
+    on('map'),
+    on('accounts'),
+    on('ports'),
+    on('forwarders'),
+  ].filter(Boolean).length;
+  // The six cards as they come fill the grid's named areas; any other set flows in order.
+  const flow = cards !== 6 || (profitShown && clientsShown);
+  const nothing = !on('kpis') && !cards && !on('live');
+
   return (
     <section className="view active" id="view-overview">
       <ErrorBanner error={summary.error} />
-      {s ? <KpiRow k={s.kpis} monthly={s.monthly} fullYear={s.fullYear} /> : <KpiRowSkeleton />}
+      {on('kpis') &&
+        (s ? <KpiRow k={s.kpis} monthly={s.monthly} fullYear={s.fullYear} /> : <KpiRowSkeleton />)}
 
-      <div className="ov-grid-3col">
-        <ShipmentSummaryCard
-          year={year}
-          monthly={s?.monthly ?? []}
-          currentMonth={today.slice(0, 7)}
-          loading={summary.isLoading}
-          error={summary.error}
-        />
-        {can('accounting:read') && s?.profit ? (
-          <ProfitCard key={s.month} profit={s.profit} />
-        ) : (
-          <ClientShareCard
-            clients={clients.data ?? []}
-            accounts={accounts.data ?? []}
-            month={shown}
-            fullYear={wholeYear}
-            period={period}
-            monthly={s?.monthly ?? []}
-            pick={pick}
-          />
-        )}
-        <CountryMapCard filters={periodFilters} />
-        <AccountsCard
-          filters={periodFilters}
-          period={period}
-          pick={pick}
-          clients={clients.data ?? []}
-        />
-        <PortCard filters={periodFilters} />
-        <ForwarderCard filters={periodFilters} />
-      </div>
+      {cards > 0 && (
+        <div className={`ov-grid-3col${flow ? ' ov-flow' : ''}`}>
+          {on('shipments') && (
+            <ShipmentSummaryCard
+              year={year}
+              monthly={s?.monthly ?? []}
+              currentMonth={today.slice(0, 7)}
+              loading={summary.isLoading}
+              error={summary.error}
+            />
+          )}
+          {profitShown && s?.profit && <ProfitCard key={s.month} profit={s.profit} />}
+          {clientsShown && (
+            <ClientShareCard
+              clients={clients.data ?? []}
+              accounts={accounts.data ?? []}
+              month={shown}
+              fullYear={wholeYear}
+              period={period}
+              monthly={s?.monthly ?? []}
+              pick={pick}
+            />
+          )}
+          {on('map') && <CountryMapCard filters={periodFilters} />}
+          {on('accounts') && (
+            <AccountsCard
+              filters={periodFilters}
+              period={period}
+              pick={pick}
+              clients={clients.data ?? []}
+            />
+          )}
+          {on('ports') && <PortCard filters={periodFilters} />}
+          {on('forwarders') && <ForwarderCard filters={periodFilters} />}
+        </div>
+      )}
 
-      <LiveConsignmentsCard />
+      {on('live') && <LiveConsignmentsCard />}
+
+      {nothing && (
+        <div className={cw.empty}>
+          <b>Every widget is switched off</b>
+          <span>Pick the ones you want on your Overview.</span>
+          <button type="button" className="btn-create-submit" onClick={openCustomize}>
+            Customize Overview
+          </button>
+        </div>
+      )}
+
+      {customizing && (
+        <CustomizeWidgets canProfit={canProfit} {...widgets} onClose={closeCustomize} />
+      )}
     </section>
   );
 }

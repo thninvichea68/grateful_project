@@ -36,7 +36,7 @@ export async function exportRecordSummaryExcel(
 }
 
 /** The letterhead logo as a data URL, or null when it can't be fetched (export goes on). */
-async function logoDataUrl(): Promise<string | null> {
+export async function logoDataUrl(): Promise<string | null> {
   try {
     const res = await fetch('/logo.png');
     if (!res.ok) return null;

@@ -1102,6 +1102,8 @@ export async function listDocs(
     monthOfYear?: number | undefined;
     /** Record summaries only (the other tables have no direction). */
     direction?: string | undefined;
+    /** Record summaries only: accounting's check (UNCHECKED, REVISED, …). */
+    review?: string | undefined;
   },
 ): Promise<Paginated<BillingDocListItem>> {
   const cfg = CONFIG[type];
@@ -1120,6 +1122,7 @@ export async function listDocs(
   if (p.year) c.push(sql`extract(year from ${dateCol}) = ${p.year}`);
   if (p.monthOfYear) c.push(sql`extract(month from ${dateCol}) = ${p.monthOfYear}`);
   if (p.direction && type === 'record-summaries') c.push(sql`t.direction = ${p.direction}`);
+  if (p.review && type === 'record-summaries') c.push(sql`t.review_status = ${p.review}`);
   if (p.q) {
     const like = likePattern(p.q);
     c.push(

@@ -82,7 +82,7 @@ export function LedgerPage() {
     cheaStatus: params.get('chea') || undefined,
     q: params.get('q') || undefined,
     page: Number(params.get('page') ?? 1),
-    pageSize: 100,
+    pageSize: Number(params.get('pageSize') ?? 100),
   };
   const list = useLedger(q);
   const t = list.data?.totals;
@@ -360,7 +360,11 @@ export function LedgerPage() {
           </table>
         </div>
         {list.data && (
-          <Pager {...list.data.meta} onPage={(p) => set('page', String(p))}>
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => set('page', String(p))}
+            onPageSize={(n) => set('pageSize', String(n))}
+          >
             {month && <ClearFeePayments month={month} />}
           </Pager>
         )}

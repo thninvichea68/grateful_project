@@ -74,25 +74,86 @@ async function eachRenderedPage(
   }
 }
 
-/** Small page previews (data URLs) for the page organizer. */
-export async function thumbnails(file: Blob, width = 160): Promise<string[]> {
+export interface ThumbRenderer {
+  count: number;
+  /** Queue page `index` for a preview; `done` gets an object URL. Returns a cancel function. */
+  request: (index: number, done: (url: string) => void) => () => void;
+  /** Stops rendering and frees every preview URL. */
+  destroy: () => void;
+}
+
+/**
+ * Small page previews drawn on demand, one at a time, so a long PDF shows its page grid at
+ * once and only renders the pages that scroll into view.
+ */
+export async function openThumbs(file: Blob, width = 160): Promise<ThumbRenderer> {
   const doc = await openForRender(file);
-  const out: string[] = [];
-  try {
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
-      out.push(canvas.toDataURL('image/jpeg', 0.7));
-      page.cleanup();
+  const cache = new Map<number, string>();
+  const queue: { index: number; done: (url: string) => void }[] = [];
+  let pumping = false;
+  let dead = false;
+
+  const render = async (index: number) => {
+    const page = await doc.getPage(index + 1);
+    const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    page.cleanup();
+    return URL.createObjectURL(await canvasBlob(canvas, 'image/jpeg', 0.7));
+  };
+
+  const pump = async () => {
+    if (pumping) return;
+    pumping = true;
+    while (queue.length && !dead) {
+      const job = queue.shift()!;
+      try {
+        let url = cache.get(job.index);
+        if (!url) {
+          url = await render(job.index);
+          if (dead) {
+            URL.revokeObjectURL(url);
+            break;
+          }
+          cache.set(job.index, url);
+        }
+        job.done(url);
+      } catch {
+        // A page that can't be drawn just keeps its placeholder.
+      }
     }
-  } finally {
-    await doc.destroy();
-  }
-  return out;
+    pumping = false;
+  };
+
+  return {
+    count: doc.numPages,
+    request(index, done) {
+      const hit = cache.get(index);
+      if (hit) {
+        done(hit);
+        return () => {};
+      }
+      const job = { index, done };
+      queue.push(job);
+      void pump();
+      return () => {
+        const at = queue.indexOf(job);
+        if (at >= 0) queue.splice(at, 1);
+      };
+    },
+    destroy() {
+      dead = true;
+      queue.length = 0;
+      cache.forEach((url) => URL.revokeObjectURL(url));
+      cache.clear();
+      void doc.destroy();
+    },
+  };
 }
 
 /**
@@ -114,6 +175,18 @@ export function parseRanges(input: string, total: number): number[][] {
   }
   if (!groups.length) throw new Error('Enter at least one page range');
   return groups;
+}
+
+/** 0-based indexes → compact 1-based ranges, e.g. [0, 1, 2, 4] → "1-3, 5". */
+export function formatRanges(indexes: Iterable<number>): string {
+  const sorted = [...new Set(indexes)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const from = sorted[i]!;
+    while (sorted[i + 1] === sorted[i]! + 1) i++;
+    parts.push(from === sorted[i] ? `${from + 1}` : `${from + 1}-${sorted[i]! + 1}`);
+  }
+  return parts.join(', ');
 }
 
 export async function pageCount(file: Blob): Promise<number> {
@@ -168,6 +241,15 @@ export async function burstPdf(file: File): Promise<OutFile[]> {
   for (const i of src.getPageIndices())
     out.push({ name: `${stem}-p${i + 1}.pdf`, blob: pdfBlob(await pickPages(src, [i])) });
   return out;
+}
+
+/** Drop the given 0-based pages; at least one page must stay. */
+export async function removePages(file: Blob, remove: Iterable<number>): Promise<Blob> {
+  const src = await openForEdit(file);
+  const drop = new Set(remove);
+  const keep = src.getPageIndices().filter((i) => !drop.has(i));
+  if (!keep.length) throw new Error('At least one page has to stay in the PDF');
+  return pdfBlob(await pickPages(src, keep));
 }
 
 export interface PagePlan {

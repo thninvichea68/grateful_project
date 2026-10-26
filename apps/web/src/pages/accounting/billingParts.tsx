@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { BillingStage } from '@gs/shared';
+import { useAuth } from '../../auth/AuthProvider';
 import { ui } from '../../components/ui';
+import { useToast } from '../../components/Toast';
 import { printInPlace } from '../../lib/printInPlace';
 import { monthName, PACK_PARTS, shiftMonth, STAGE, type PackPart } from './billingUi';
 import b from './Billing.module.css';
@@ -71,6 +73,21 @@ export function PackPrintMenu({
     setOpen(false);
     printInPlace(`/print/billing/${clientId}?month=${month}&parts=${parts.join(',')}`);
   };
+  const [exporting, setExporting] = useState(false);
+  const { user } = useAuth();
+  const toast = useToast();
+  const excel = async () => {
+    setExporting(true);
+    try {
+      const { exportPackExcel } = await import('./packExport');
+      await exportPackExcel({ clientId, month, parts, preparedBy: user?.fullName ?? '' });
+      setOpen(false);
+    } catch (e) {
+      toast(e instanceof Error && e.message.startsWith('Nothing') ? e.message : 'Export failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <div className={b.packMenu} ref={box}>
       <button
@@ -98,6 +115,15 @@ export function PackPrintMenu({
             onClick={print}
           >
             Print / Save as PDF
+          </button>
+          {/* The same parts as one workbook, sheet for sheet like the monthly Excel. */}
+          <button
+            type="button"
+            className={`filter-btn ${b.packGo}`}
+            disabled={!parts.length || exporting}
+            onClick={() => void excel()}
+          >
+            {exporting ? 'Exporting…' : 'Export Excel'}
           </button>
         </div>
       )}

@@ -76,7 +76,7 @@ export const receiptListQuerySchema = paginationQuerySchema.extend({
   /** Month of the receipt date. */
   month: month.optional(),
   status: z.enum(BILLING_DOC_STATUSES).optional(),
-  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(50),
 });
 
 export interface OfficialReceipt {

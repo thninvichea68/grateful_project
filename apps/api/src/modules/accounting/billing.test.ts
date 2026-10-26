@@ -328,14 +328,18 @@ describe('client billing: a client month', () => {
       dnNo: 'JR2609001',
     });
 
-    // The pack has the issued documents in full, each shipment's three together.
+    // The pack has every document in full, drafts included, each shipment's three together.
     const pack = (await acc('get', `/billing/${b.jr.id}/pack`, { query: { month: '2026-09' } }))
       .body;
-    expect(pack.docs.map((d: { number: string }) => d.number)).toEqual([
-      'GS26-002',
-      'DIS002',
-      'JR2609001',
-      'GS26-003',
+    expect(
+      pack.docs.map((d: { number: string; status: string }) => `${d.number} ${d.status}`),
+    ).toEqual([
+      'GS26-002 ISSUED',
+      'DIS002 ISSUED',
+      'JR2609001 ISSUED',
+      'GS26-003 ISSUED',
+      'DIS003 DRAFT',
+      'JR2609002 DRAFT',
     ]);
     expect(pack.docs[2].lines).toHaveLength(9);
   });

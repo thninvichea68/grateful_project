@@ -157,7 +157,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     declarations: d.declarations.length
       ? d.declarations.map((x) => ({
           id: x.id,
-          declareNo: x.declareNo,
+          declareNo: s(x.declareNo),
           declareDate: x.declareDate,
           portId: s(x.portId),
           notes: s(x.notes),

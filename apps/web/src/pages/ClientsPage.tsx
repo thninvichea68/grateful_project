@@ -24,7 +24,7 @@ export function ClientsPage() {
   const status = params.get('status') ?? '';
   const list = useClients({
     page,
-    pageSize: 25,
+    pageSize: Number(params.get('pageSize') ?? 25),
     q: q || undefined,
     status: status || undefined,
     sort: 'name',
@@ -137,7 +137,13 @@ export function ClientsPage() {
             </tbody>
           </table>
         </div>
-        {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
+        {list.data && (
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => set('page', String(p))}
+            onPageSize={(n) => set('pageSize', String(n))}
+          />
+        )}
       </div>
       {adding && (
         <ClientFormModal

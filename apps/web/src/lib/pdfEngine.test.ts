@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { degrees, PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { burstPdf, mergePdfs, organizePdf, parseRanges, splitPdf } from './pdfEngine';
+import {
+  burstPdf,
+  formatRanges,
+  mergePdfs,
+  organizePdf,
+  parseRanges,
+  removePages,
+  splitPdf,
+} from './pdfEngine';
 
 /** A PDF whose pages are 100, 200, … points wide, so pages can be told apart. */
 async function makePdf(pages: number, name = 'doc.pdf'): Promise<File> {
@@ -25,6 +33,11 @@ describe('parseRanges', () => {
     expect(() => parseRanges('0', 5)).toThrow();
   });
 
+  it('formats a selection back into ranges', () => {
+    expect(formatRanges([4, 0, 1, 2, 7, 1])).toBe('1-3, 5, 8');
+    expect(formatRanges([])).toBe('');
+  });
+
   it('rejects text that is not a range', () => {
     expect(() => parseRanges('a-b', 5)).toThrow(/not a page range/);
     expect(() => parseRanges(' , ', 5)).toThrow(/at least one/);
@@ -46,6 +59,12 @@ describe('page tools', () => {
     const single = await splitPdf(file, '5, 1', 'single');
     expect(await widths(single[0]!.blob)).toEqual([500, 100]);
     expect(await burstPdf(file)).toHaveLength(5);
+  });
+
+  it('removes pages and keeps at least one', async () => {
+    const file = await makePdf(5);
+    expect(await widths(await removePages(file, [0, 2, 3]))).toEqual([200, 500]);
+    await expect(removePages(file, [0, 1, 2, 3, 4])).rejects.toThrow(/At least one page/);
   });
 
   it('reorders, drops and rotates pages', async () => {

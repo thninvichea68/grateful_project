@@ -21,7 +21,7 @@ export function OperationsPage() {
   const [open, setOpen] = useState<DeclarationRegisterRow | null>(null);
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: 50,
+    pageSize: Number(params.get('pageSize') ?? 50),
     q: params.get('q') || undefined,
     month: params.get('month') || undefined,
     clientId: params.get('clientId') || undefined,
@@ -128,7 +128,7 @@ export function OperationsPage() {
                   onClick={() => setOpen(r)}
                   onKeyDown={(e) => e.key === 'Enter' && setOpen(r)}
                 >
-                  <td className="val-bold">{r.declareNo}</td>
+                  <td className="val-bold">{r.declareNo ?? 'Pending'}</td>
                   <td>{fmtDate(r.declareDate)}</td>
                   <td>{r.portCode ?? '-'}</td>
                   <td>
@@ -171,7 +171,13 @@ export function OperationsPage() {
             </tbody>
           </table>
         </div>
-        {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
+        {list.data && (
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => set('page', String(p))}
+            onPageSize={(n) => set('pageSize', String(n))}
+          />
+        )}
       </div>
       {open && (
         <DeclarationDocs
@@ -197,7 +203,7 @@ function DeclarationDocs({
   const [uploading, setUploading] = useState(false);
   return (
     <Modal
-      title={`${row.declareNo} · ${row.shipmentReference}`}
+      title={`${row.declareNo ?? 'Pending'} · ${row.shipmentReference}`}
       sub={`${row.clientCode} · ${row.direction} · declared ${fmtDate(row.declareDate)}`}
       width={900}
       onClose={onClose}

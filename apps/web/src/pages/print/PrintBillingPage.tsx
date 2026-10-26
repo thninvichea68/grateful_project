@@ -66,8 +66,8 @@ function Toolbar({ children }: { children?: ReactNode }) {
 /**
  * A client's month as one printable pack, replacing the Excel workbook: each shipment's tax
  * invoice, disbursement and debit note, the two account statements, the official receipts
- * and the handover checklist. Document sheets are the issued ones; the statements and receipts
- * also count drafts, printed marked DRAFT.
+ * and the handover checklist. Drafts are included, printed marked DRAFT; the checklist lists
+ * only issued originals.
  */
 export function PrintPackPage() {
   const { clientId = '' } = useParams();
@@ -132,6 +132,7 @@ export function PrintPackPage() {
     for (const doc of d.docs)
       sheets.push(
         <div className={sheetClass(doc.type)} key={doc.id}>
+          {doc.status === 'DRAFT' && <div className={s.stamp}>DRAFT</div>}
           {doc.type === 'debit-notes' ? (
             <DebitNote d={doc} c={c} />
           ) : (
@@ -175,8 +176,8 @@ export function PrintPackPage() {
       </Toolbar>
       {drafts > 0 && (
         <div className={p.hint}>
-          {drafts} draft{drafts === 1 ? ' is' : 's are'} on the statements and receipts marked
-          DRAFT; their own sheets print once issued in Client Billing.
+          {drafts} draft{drafts === 1 ? ' is' : 's are'} in this pack marked DRAFT. Issue{' '}
+          {drafts === 1 ? 'it' : 'them'} in Client Billing to make the pack final.
         </div>
       )}
       {sheets.length ? (
@@ -294,7 +295,7 @@ export function StatementSheet({
 }
 
 /** A receipt not recorded yet: printed in advance for a statement's balance, filled in by hand. */
-type ReceiptView = Omit<OfficialReceipt, 'paymentMethod'> & {
+export type ReceiptView = Omit<OfficialReceipt, 'paymentMethod'> & {
   paymentMethod: OfficialReceipt['paymentMethod'] | null;
   /** True for the advance copy: no number, method or signer yet. */
   pending?: boolean;
@@ -312,7 +313,11 @@ const monthEnd = (month: string) => {
  * A statement's receipts: those recorded (not void), then — while something is still due —
  * one for the balance, so it can be printed and handed over before the client pays.
  */
-function statementReceipts(d: BillingPack, month: string, kind: StatementKind): ReceiptView[] {
+export function statementReceipts(
+  d: BillingPack,
+  month: string,
+  kind: StatementKind,
+): ReceiptView[] {
   const st = d.statements[kind];
   const draft = st.drafts > 0;
   const list: ReceiptView[] = st.receipts
@@ -404,18 +409,8 @@ export function ReceiptBlock({ r, c }: { r: ReceiptView; c: CompanyInfo }) {
   );
 }
 
-/** "IMP & EXP SHIPMENT-CHECKING LIST": the originals handed to the client, to sign for. */
-export function ChecklistSheet({
-  pack,
-  month,
-  c,
-  preparedBy,
-}: {
-  pack: BillingPack;
-  month: string;
-  c: CompanyInfo;
-  preparedBy: string;
-}) {
+/** The checklist's rows (sheet and Excel): each shipment's issued documents, then the rest. */
+export function checklistRows(pack: BillingPack, month: string) {
   const issued = (list: { number: string | null; status: string }[]) =>
     list.filter((x) => x.status === 'ISSUED').map((x) => x.number ?? '');
   const rows: { doc: string; declare: string; date: string }[] = [];
@@ -443,6 +438,22 @@ export function ChecklistSheet({
   for (const r of [...pack.statements.INVOICE.receipts, ...pack.statements.DEBIT_NOTE.receipts])
     if (r.status === 'ISSUED')
       rows.push({ doc: `${r.receiptNo} (OFFICIAL RECEIPT)`, declare: '', date: r.receiptDate });
+  return rows;
+}
+
+/** "IMP & EXP SHIPMENT-CHECKING LIST": the originals handed to the client, to sign for. */
+export function ChecklistSheet({
+  pack,
+  month,
+  c,
+  preparedBy,
+}: {
+  pack: BillingPack;
+  month: string;
+  c: CompanyInfo;
+  preparedBy: string;
+}) {
+  const rows = checklistRows(pack, month);
   const clientName = (pack.client.legalName ?? pack.client.name).toUpperCase();
   return (
     <>

@@ -169,6 +169,10 @@
   margin-top: 4px;
   font-size: 9pt;
 }
+/* One blank line between the invoice no/date and the shipment details below them. */
+.shipGap {
+  margin-top: calc(4px + 1.55em);
+}
 
 /* ---------- Lines and totals (same fixed columns) ---------- */
 .lines,
@@ -289,7 +293,12 @@
   text-decoration: underline;
   text-underline-offset: 4px;
   /* Breathing space between the title and the customer / DN details below it. */
-  margin-bottom: 30px;
+  margin-bottom: 47px;
+}
+/* One blank line between the DN details and the charges table; never squeezed by the page column. */
+.dnMeta {
+  margin-bottom: calc(10px + 1.55em);
+  flex-shrink: 0;
 }
 .dnTable {
   width: 100%;

@@ -514,32 +514,30 @@ export async function issueDrafts(
 
 /**
  * The month plus every document in full, in the order the pack is printed: each shipment's
- * tax invoice, disbursement and debit note together, as the sheets were. A document whose
- * number was typed in the Monthly Ledger (made outside the system) prints from the ledger:
- * its number, date and amount, with the shipment's details, as the statement counts it.
+ * tax invoice, disbursement and debit note together, as the sheets were. Drafts are included
+ * (they print marked DRAFT), as on the statements. A document whose number was typed in the
+ * Monthly Ledger (made outside the system) and that has no document of its own here prints
+ * from the ledger: its number, date and amount, with the shipment's details, as the statement
+ * counts it.
  */
 export async function pack(
   clientId: string,
   month: string,
-  /** One shipment's row only: its documents, drafts included (they print marked DRAFT). */
+  /** One shipment's row only. */
   recordId?: string,
 ): Promise<BillingPack> {
   const m = await clientMonth(clientId, month);
-  const issued = (list: BillingDocSlot[]) =>
-    Promise.all(
-      list
-        .filter((d) => d.status === 'ISSUED' || (recordId && d.status === 'DRAFT'))
-        .map((d) => getDoc(d.type, d.id)),
-    );
+  const live = (list: BillingDocSlot[]) =>
+    Promise.all(list.filter((d) => d.status !== 'VOID').map((d) => getDoc(d.type, d.id)));
   const docs: BillingDoc[] = [];
   if (recordId) {
     for (const r of m.rows.filter((x) => x.recordId === recordId))
-      for (const t of BILLING_PACK_TYPES) docs.push(...(await issued(r.docs[t])));
+      for (const t of BILLING_PACK_TYPES) docs.push(...(await live(r.docs[t])));
     return { ...m, docs };
   }
   for (const r of m.rows)
     for (const t of BILLING_PACK_TYPES) {
-      const own = await issued(r.docs[t]);
+      const own = await live(r.docs[t]);
       if (own.length) docs.push(...own);
       else if (r.manual[t]) {
         const draft = (await prefill(t, r.recordId)) as Parameters<typeof previewDoc>[1];
@@ -556,7 +554,7 @@ export async function pack(
       }
     }
   for (const t of BILLING_PACK_TYPES)
-    docs.push(...(await issued(m.others.filter((d) => d.type === t))));
+    docs.push(...(await live(m.others.filter((d) => d.type === t))));
   return { ...m, docs };
 }
 

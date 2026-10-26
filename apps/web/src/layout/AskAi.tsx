@@ -292,12 +292,14 @@ export function AskAi() {
       <button
         type="button"
         className="ask-ai-btn"
+        aria-label="Ask AI"
+        title="Ask AI"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls="ask-ai-panel"
       >
         <GeminiLogo />
-        Ask AI
+        <span className="topbar-btn-label">Ask AI</span>
       </button>
 
       <aside

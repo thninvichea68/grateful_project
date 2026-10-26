@@ -1,4 +1,4 @@
-import { useId, type CSSProperties, type ReactNode } from 'react';
+import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { KpiResponse, MonthlyVolumeRow } from '@gs/shared';
@@ -112,64 +112,108 @@ function Bars({ rows }: { rows: { month: string; v: number }[] }) {
   );
 }
 
-/** Gradient-filled sparkline in the card's colour. */
-function Spark({ rows, color }: { rows: { month: string; v: number }[]; color: string }) {
-  const id = useId().replace(/:/g, '');
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={rows} margin={{ top: 4, right: 3, bottom: 2, left: 3 }}>
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        {monthTip}
-        <Area
-          type="monotone"
-          dataKey="v"
-          stroke={color}
-          strokeWidth={2}
-          fill={`url(#${id})`}
-          isAnimationActive={false}
-          dot={false}
-          activeDot={{ r: 3, strokeWidth: 0, fill: color }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
+type Point = { month: string; v: number };
 
-/** This period vs the one before as two horizontal bars, labelled with period and count. */
-function Compare({ rows }: { rows: { label: string; v: number }[] }) {
-  const max = Math.max(1, ...rows.map((r) => r.v));
+/**
+ * Bklit-style sparkline KPI card: the same header as the other cards, the figure with its
+ * change, then a full-width sparkline. Hovering a month drives the headline (that month's
+ * count and its change on the month before); leaving falls back to the period total.
+ */
+function SparkCard({
+  icon,
+  label,
+  value,
+  meta,
+  rows,
+  variant,
+  onOpen,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  meta: ReactNode;
+  rows: Point[];
+  /** Area: gradient fill. Line: stroke only, with a dot on the latest month. */
+  variant: 'area' | 'line';
+  onOpen: () => void;
+}) {
+  const id = useId().replace(/:/g, '');
+  const [hover, setHover] = useState<number | null>(null);
+  const shown = hover === null ? null : rows[hover];
+  const prev = hover ? rows[hover - 1] : undefined;
+  const ch = shown && prev ? changePct(shown.v, prev.v) : null;
+  const last = rows.length - 1;
+  const color = 'var(--accent-primary)';
   return (
-    <div className={s.compare}>
-      {rows.map((r, i) => (
-        <div key={r.label} className={s.compareRow} data-now={i === rows.length - 1 || undefined}>
-          <span className={s.compareLabel}>{r.label}</span>
-          <span className={s.compareTrack}>
-            <span style={{ width: `${Math.max(4, (r.v / max) * 100)}%` }} />
-          </span>
-          <span className={s.compareVal}>{r.v}</span>
+    <div className={s.card} data-tone="cyan">
+      <div className={s.top}>
+        <span className={s.chip}>{icon}</span>
+        <span className={s.label}>{label}</span>
+        <button type="button" className={s.open} aria-label={`View ${label}`} onClick={onOpen}>
+          {ICONS.arrow}
+        </button>
+      </div>
+      <div className={s.sparkFigures}>
+        <div className={s.value}>{(shown ? shown.v : value).toLocaleString()}</div>
+        <div className={s.meta}>
+          {shown ? (
+            <>
+              {ch && (
+                <span className={s.delta} data-up={ch.up}>
+                  {ch.text}
+                </span>
+              )}
+              <span className={s.sub}>in {monthLabel(shown.month)}</span>
+            </>
+          ) : (
+            meta
+          )}
         </div>
-      ))}
+      </div>
+      {rows.length > 1 && (
+        <div className={s.sparkChart}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={rows}
+              margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+              onMouseMove={(st) =>
+                setHover(typeof st?.activeTooltipIndex === 'number' ? st.activeTooltipIndex : null)
+              }
+              onMouseLeave={() => setHover(null)}
+            >
+              <defs>
+                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Tooltip
+                content={() => null}
+                cursor={{ stroke: 'var(--border-subtle)', strokeDasharray: '3 3' }}
+              />
+              <Area
+                type="monotone"
+                dataKey="v"
+                stroke={color}
+                strokeWidth={1.75}
+                fill={variant === 'area' ? `url(#${id})` : 'transparent'}
+                isAnimationActive={false}
+                dot={(d: { index: number; cx: number; cy: number }) =>
+                  variant === 'line' && d.index === last && hover === null ? (
+                    <circle key="end" cx={d.cx} cy={d.cy} r={2.5} fill={color} />
+                  ) : (
+                    <g key={d.index} />
+                  )
+                }
+                activeDot={{ r: 3, strokeWidth: 0, fill: color }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
-
-const monthTip = (
-  <Tooltip
-    cursor={false}
-    content={({ active, payload }) =>
-      active && payload?.[0] ? (
-        <div className={s.tip}>
-          {monthLabel(payload[0].payload.month)}: <b>{payload[0].value}</b>
-        </div>
-      ) : null
-    }
-  />
-);
 
 /** Ring showing the share of this month's shipments already cleared. */
 function Ring({ rate }: { rate: number }) {
@@ -211,11 +255,12 @@ export function KpiRow({
   const unit = fullYear ? 'year' : 'month';
   // The last six months up to the one shown (the year's months come zero-filled).
   const upTo = k.period.to.slice(0, 7);
-  const periodLabel = (p: { from: string }) =>
-    fullYear ? p.from.slice(0, 4) : monthLabel(p.from.slice(0, 7));
   const recent = monthly.filter((m) => m.month <= upTo).slice(-6);
-  const series = (key: 'total' | 'imports' | 'exports') =>
+  const series = (key: 'total') =>
     recent.map((m) => ({ month: m.month, v: m[key] }));
+  // The sparkline cards trace every month of the year so far.
+  const trend = (key: 'imports' | 'exports') =>
+    monthly.filter((m) => m.month <= upTo).map((m) => ({ month: m.month, v: m[key] }));
   const clearTotal = k.cleared + k.clearancePending;
   const rate = clearTotal ? Math.round((k.cleared / clearTotal) * 100) : 0;
 
@@ -230,29 +275,22 @@ export function KpiRow({
         chart={recent.length > 1 && <Bars rows={series('total')} />}
         onOpen={() => toPlans('sort=-eta')}
       />
-      <Card
-        tone="sky"
-        icon={ICONS.import}
+      <SparkCard
         label="Import Shipments"
+        icon={ICONS.import}
         value={k.imports}
         meta={<Change value={k.imports} prev={k.previous.imports} unit={unit} />}
-        chart={recent.length > 1 && <Spark rows={series('imports')} color="#22d3ee" />}
+        rows={trend('imports')}
+        variant="area"
         onOpen={() => toPlans('direction=IMPORT')}
       />
-      <Card
-        tone="blue"
-        icon={ICONS.export}
+      <SparkCard
         label="Export Shipments"
+        icon={ICONS.export}
         value={k.exports}
         meta={<Change value={k.exports} prev={k.previous.exports} unit={unit} />}
-        chart={
-          <Compare
-            rows={[
-              { label: periodLabel(k.previousPeriod), v: k.previous.exports },
-              { label: periodLabel(k.period), v: k.exports },
-            ]}
-          />
-        }
+        rows={trend('exports')}
+        variant="line"
         onOpen={() => toPlans('direction=EXPORT')}
       />
       <Card

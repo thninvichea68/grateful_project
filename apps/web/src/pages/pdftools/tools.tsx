@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ui } from '../../components/ui';
 import { fmtFileSize } from '../../lib/format';
 import {
@@ -6,13 +6,15 @@ import {
   burstPdf,
   COMPRESS_LEVELS,
   compressPdf,
+  formatRanges,
   imagesToPdf,
   mergePdfs,
   organizePdf,
   pageCount,
+  parseRanges,
   pdfToImages,
+  removePages,
   splitPdf,
-  thumbnails,
   type CompressLevel,
   type OutFile,
   type PagePlan,
@@ -23,9 +25,11 @@ import {
   DropZone,
   FileOrderList,
   IMAGE_ACCEPT,
+  LazyThumb,
   PDF_ACCEPT,
   Results,
   RunRow,
+  usePdfThumbs,
   useRun,
 } from './parts';
 import s from './PdfTools.module.css';
@@ -152,7 +156,6 @@ export function SplitTool() {
 
 interface PageCard extends PagePlan {
   key: number;
-  thumb: string;
 }
 
 export function OrganizeTool() {
@@ -161,24 +164,13 @@ export function OrganizeTool() {
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [out, setOut] = useState<OutFile[]>([]);
-  const load = useRun();
+  const thumbs = usePdfThumbs(file);
   const save = useRun();
 
   useEffect(() => {
-    setCards([]);
+    setCards(Array.from({ length: thumbs.count }, (_, i) => ({ key: i, index: i, rotate: 0 })));
     setOut([]);
-    if (!file) return;
-    let live = true;
-    void load.run(async () => {
-      load.setProgress('Reading pages…');
-      const thumbs = await thumbnails(file);
-      if (live) setCards(thumbs.map((thumb, i) => ({ key: i, index: i, rotate: 0, thumb })));
-    });
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only on a new file
-  }, [file]);
+  }, [file, thumbs.count]);
 
   if (!file)
     return (
@@ -214,8 +206,8 @@ export function OrganizeTool() {
         extra={pagesLabel(cards.length || null)}
         onClear={() => setFile(null)}
       />
-      {load.busy && <div className={s.note}>{load.progress}</div>}
-      {load.error && <div className={s.error}>{load.error}</div>}
+      {thumbs.loading && <div className={s.note}>Reading pages…</div>}
+      {thumbs.error && <div className={s.error}>{thumbs.error}</div>}
       {cards.length > 0 && (
         <>
           <div className={s.runRow}>
@@ -256,16 +248,15 @@ export function OrganizeTool() {
                   setOver(null);
                 }}
               >
-                <div className={s.thumbBox}>
-                  <img
-                    src={c.thumb}
-                    alt={`Page ${c.index + 1}`}
-                    style={{
-                      transform: `rotate(${c.rotate}deg) scale(${c.rotate % 180 ? 0.75 : 1})`,
-                    }}
-                    draggable={false}
-                  />
-                </div>
+                <LazyThumb
+                  index={c.index}
+                  url={thumbs.urls[c.index]}
+                  request={thumbs.request}
+                  alt={`Page ${c.index + 1}`}
+                  style={{
+                    transform: `rotate(${c.rotate}deg) scale(${c.rotate % 180 ? 0.75 : 1})`,
+                  }}
+                />
                 <div className={s.pageBar}>
                   <span>
                     {i + 1}
@@ -339,6 +330,179 @@ export function OrganizeTool() {
                 }),
             }}
           />
+          <Results files={out} />
+        </>
+      )}
+    </>
+  );
+}
+
+export function RemovePagesTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [marked, setMarked] = useState<Set<number>>(new Set());
+  const [text, setText] = useState('');
+  const [textError, setTextError] = useState('');
+  const [out, setOut] = useState<OutFile[]>([]);
+  const thumbs = usePdfThumbs(file);
+  const save = useRun();
+  const count = thumbs.count;
+  const pages = Array.from({ length: count }, (_, i) => i);
+  /** Last clicked page, the start of a shift-click range. */
+  const anchor = useRef<number | null>(null);
+
+  useEffect(() => {
+    anchor.current = null;
+    setMarked(new Set());
+    setText('');
+    setTextError('');
+    setOut([]);
+  }, [file]);
+
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to remove pages from"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+
+  const select = (next: Set<number>) => {
+    setMarked(next);
+    setText(formatRanges(next));
+    setTextError('');
+    setOut([]);
+  };
+  /** Plain click toggles a page; shift-click gives every page from the last click the same state. */
+  const toggle = (i: number, shift: boolean) => {
+    const next = new Set(marked);
+    const from = anchor.current;
+    if (shift && from !== null) {
+      const on = marked.has(from);
+      for (let p = Math.min(from, i); p <= Math.max(from, i); p++) {
+        if (on) next.add(p);
+        else next.delete(p);
+      }
+    } else if (next.has(i)) next.delete(i);
+    else next.add(i);
+    anchor.current = i;
+    select(next);
+  };
+  const typeRanges = (v: string) => {
+    setText(v);
+    setOut([]);
+    if (!v.trim()) {
+      setMarked(new Set());
+      setTextError('');
+      return;
+    }
+    try {
+      setMarked(new Set(parseRanges(v, count).flat()));
+      setTextError('');
+    } catch (e) {
+      setTextError(e instanceof Error ? e.message : 'Not a page range');
+    }
+  };
+  const left = count - marked.size;
+
+  return (
+    <>
+      <ChosenFile
+        file={file}
+        extra={pagesLabel(count || null)}
+        onClear={() => setFile(null)}
+      />
+      {thumbs.loading && <div className={s.note}>Reading pages…</div>}
+      {thumbs.error && <div className={s.error}>{thumbs.error}</div>}
+      {count > 0 && (
+        <>
+          <div className={s.options}>
+            <label className={s.option}>
+              Pages to remove
+              <input
+                className={ui.input}
+                value={text}
+                onChange={(e) => typeRanges(e.target.value)}
+                placeholder="e.g. 2, 5-7"
+                style={{ width: 220 }}
+              />
+            </label>
+            <div className={s.runRow} style={{ marginTop: 0 }}>
+              <button
+                type="button"
+                className={ui.ghostBtn}
+                onClick={() => select(new Set(pages.filter((i) => i % 2 === 1)))}
+              >
+                Even pages
+              </button>
+              <button
+                type="button"
+                className={ui.ghostBtn}
+                onClick={() => select(new Set(pages.filter((i) => i % 2 === 0)))}
+              >
+                Odd pages
+              </button>
+              <button
+                type="button"
+                className={ui.ghostBtn}
+                disabled={!marked.size}
+                onClick={() => select(new Set())}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          {textError ? (
+            <div className={s.error}>{textError}</div>
+          ) : (
+            <div className={s.note}>
+              Click pages to mark them for removal — hold Shift to mark a range.{' '}
+              {marked.size > 0 &&
+                `${marked.size} marked · ${left} page${left === 1 ? '' : 's'} will remain.`}
+            </div>
+          )}
+          <div className={s.pages}>
+            {pages.map((i) => {
+              const on = marked.has(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`${s.page} ${s.pagePick}${on ? ` ${s.pageRemoved}` : ''}`}
+                  onClick={(e) => toggle(i, e.shiftKey)}
+                  aria-pressed={on}
+                  aria-label={`${on ? 'Keep' : 'Remove'} page ${i + 1}`}
+                >
+                  <LazyThumb index={i} url={thumbs.urls[i]} request={thumbs.request}>
+                    {on && <span className={s.removeMark}>✕</span>}
+                  </LazyThumb>
+                  <div className={s.pageBar}>
+                    <span>{i + 1}</span>
+                    {on && <span className={s.removeLabel}>Remove</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <RunRow
+            label={
+              marked.size
+                ? `Remove ${marked.size} page${marked.size === 1 ? '' : 's'}`
+                : 'Remove pages'
+            }
+            disabled={!marked.size || !left || !!textError}
+            state={{
+              ...save,
+              onRun: () =>
+                save.run(async () => {
+                  const blob = await removePages(file, marked);
+                  setOut([{ name: `${baseName(file.name)}-removed.pdf`, blob }]);
+                }),
+            }}
+          />
+          {marked.size > 0 && !left && (
+            <div className={s.note}>At least one page has to stay in the PDF.</div>
+          )}
           <Results files={out} />
         </>
       )}

@@ -25,7 +25,7 @@ export function ReceiptsPage() {
   const [params, setParams] = useSearchParams();
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: 50,
+    pageSize: Number(params.get('pageSize') ?? 50),
     q: params.get('q') || undefined,
     clientId: params.get('clientId') || undefined,
     status: params.get('status') || undefined,
@@ -180,7 +180,13 @@ export function ReceiptsPage() {
             </tbody>
           </table>
         </div>
-        {list.data && <Pager {...list.data.meta} onPage={(p) => set('page', String(p))} />}
+        {list.data && (
+          <Pager
+            {...list.data.meta}
+            onPage={(p) => set('page', String(p))}
+            onPageSize={(n) => set('pageSize', String(n))}
+          />
+        )}
       </div>
     </section>
   );

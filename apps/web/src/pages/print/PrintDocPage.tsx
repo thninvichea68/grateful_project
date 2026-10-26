@@ -8,6 +8,7 @@ import cn from './creditNote.module.css';
 import rs from './recordSummary.module.css';
 import { DebitNote, sheetClass, TaxOrDisbursement } from './InvoicePrint';
 import { useAutoPrint } from './useAutoPrint';
+import { exportInvoiceExcel, INVOICE_EXCEL_TYPES } from '../accounting/invoiceExport';
 import './printFonts'; // Moul / Siemreap for the Record Summary letterhead
 
 export { DebitNote, sheetClass, TaxOrDisbursement };
@@ -38,6 +39,15 @@ export function PrintDocPage() {
         <button type="button" className={s.btn} onClick={() => window.close()}>
           Close
         </button>
+        {INVOICE_EXCEL_TYPES.includes(d.type) && (
+          <button
+            type="button"
+            className={s.btn}
+            onClick={() => void exportInvoiceExcel(d, c).catch(() => alert('Export failed.'))}
+          >
+            Excel
+          </button>
+        )}
         <button type="button" className={s.btnPrimary} onClick={() => window.print()}>
           Print / Save as PDF
         </button>
