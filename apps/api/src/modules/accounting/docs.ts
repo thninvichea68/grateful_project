@@ -327,6 +327,21 @@ async function ledgerNumbers(
   return { invNo: r?.invNo ?? null, disNo: r?.disNo ?? null, dnNo: r?.dnNo ?? null };
 }
 
+/**
+ * A record summary not linked to a ledger row (started from the shipping plan) takes its
+ * declaration's row once there is one, so its INV / DIS / DN numbers follow the ledger.
+ */
+async function linkSummary(tx: Tx, type: BillingDocType, input: Input): Promise<Input> {
+  const declareNo = String(input.declareNo ?? '').trim();
+  if (type !== 'record-summaries' || input.accountingRecordId || !declareNo) return input;
+  const [r] = await queryRows<{ id: string }>(
+    tx,
+    sql`SELECT a.id FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+        WHERE a.client_id = ${input.clientId} AND upper(d.declare_no) = upper(${declareNo}) LIMIT 1`,
+  );
+  return r ? { ...input, accountingRecordId: r.id } : input;
+}
+
 function headerValues(type: BillingDocType, input: Input) {
   const { lines: _l, ...rest } = input;
   const numberCol = CONFIG[type].numberCol;
@@ -360,10 +375,11 @@ async function writeLines(
   );
 }
 
-export async function createDoc(type: BillingDocType, input: Input, req: Request): Promise<string> {
+export async function createDoc(type: BillingDocType, typed: Input, req: Request): Promise<string> {
   const cfg = CONFIG[type];
   try {
     return await db.transaction(async (tx) => {
+      const input = await linkSummary(tx, type, typed);
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
@@ -428,13 +444,14 @@ const BILLING_LABEL: Record<BillingDocType, string> = {
 export async function updateDoc(
   type: BillingDocType,
   id: string,
-  input: Input,
+  typed: Input,
   req: Request,
 ): Promise<void> {
   const cfg = CONFIG[type];
   try {
     await db.transaction(async (tx) => {
       const before = await lockDoc(tx, type, id);
+      const input = await linkSummary(tx, type, typed);
       if (before.status !== 'DRAFT')
         throw conflict(
           `${BILLING_LABEL[type]} is ${before.status === 'VOID' ? 'cancelled' : String(before.status).toLowerCase()} and can no longer be edited. Cancel it and create a new one.`,
@@ -539,13 +556,19 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
 }
 
 /**
- * The Monthly Ledger row a credit note belongs to, found through its declare no. When the
- * declaration has no ledger row yet, one is created (amounts 0) so the clear fee has a home.
+ * The Monthly Ledger row a credit note or record summary belongs to, found through its declare
+ * no. When the declaration has no ledger row yet, one is created (amounts 0) so the clear fee
+ * or the summary's charges have a home.
  */
-async function ledgerRowForCreditNote(tx: Tx, doc: Row, req: Request): Promise<string> {
+async function ledgerRowByDeclareNo(
+  tx: Tx,
+  doc: Row,
+  req: Request,
+  what = 'credit note',
+): Promise<string> {
   const declareNo = String(doc.declareNo ?? '').trim();
   if (!declareNo)
-    throw businessRule('Enter the declare no. so the credit note can go into the Monthly Ledger');
+    throw businessRule(`Enter the declare no. so the ${what} can go into the Monthly Ledger`);
   const [d] = await queryRows<{ id: string; clientId: string; recordId: string | null }>(
     tx,
     sql`
@@ -1401,7 +1424,7 @@ export async function setCreditNoteReview(
     // Approved: the declaration goes into the Monthly Ledger with this clear fee.
     if (reviewStatus === 'CHECKED') {
       const recordId =
-        (doc.accountingRecordId as string | null) ?? (await ledgerRowForCreditNote(tx, doc, req));
+        (doc.accountingRecordId as string | null) ?? (await ledgerRowByDeclareNo(tx, doc, req));
       await tx
         .update(creditNotes)
         .set({ accountingRecordId: recordId })
@@ -1536,9 +1559,16 @@ export async function setRecordSummaryReview(
       );
     // Opened by accounting: only a summary nobody has looked at yet; nothing else changes.
     if (reviewStatus === 'REVIEWED' && doc.reviewStatus !== 'UNCHECKED') return;
-    const recordId = doc.accountingRecordId as string | null;
-    if (reviewStatus === 'CHECKED' && !recordId)
-      throw businessRule('This record summary has no Monthly Ledger entry to fill');
+    let recordId = doc.accountingRecordId as string | null;
+    // Started from the shipping plan before the shipment was in the Monthly Ledger: approving
+    // it puts the declaration there (as a checked credit note does), and the summary joins it.
+    if (reviewStatus === 'CHECKED' && !recordId) {
+      recordId = await ledgerRowByDeclareNo(tx, doc, req, 'record summary');
+      await tx
+        .update(recordSummaries)
+        .set({ accountingRecordId: recordId })
+        .where(eq(recordSummaries.id, id));
+    }
     await tx
       .update(recordSummaries)
       .set({

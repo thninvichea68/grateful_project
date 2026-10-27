@@ -761,6 +761,136 @@ describe('billing documents', () => {
     expect(await led()).toMatchObject({ invRevenue: '100.00', thc: '0.00', dnTotal: '0.00' });
   });
 
+  it('a record summary starts from the shipping plan and joins the Monthly Ledger row later', async () => {
+    const h = await as('ACCOUNTANT');
+    const declarationId = await declaration(b.jr.id, 'I 149461', '2026-08-21', 'IMPORT');
+    const picker = async () =>
+      (await request(app).get('/api/v1/accounting/eligible/record-summaries').set(h)).body;
+    // Not in the ledger yet, still listed.
+    expect(await picker()).toContainEqual(
+      expect.objectContaining({ declarationId, recordId: null, declareNo: 'I 149461' }),
+    );
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ declarationId })
+        .set(h)
+    ).body;
+    expect(pre).toMatchObject({
+      accountingRecordId: null,
+      clientId: b.jr.id,
+      declareNo: 'I 149461',
+      direction: 'IMPORT',
+      containerNo: 'MRKU8974303',
+      grossWeightKg: '8800',
+    });
+    expect(pre.summaryDate > '2026-08-21').toBe(true);
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send(pre)
+      .expect(201);
+    expect(rs.body.accountingRecordId).toBeNull();
+    expect((await picker()).map((r: { declarationId: string }) => r.declarationId)).not.toContain(
+      declarationId,
+    );
+
+    // The shipment reaches the ledger (here through its credit note): the summary joins the row
+    // and shows its numbers once the credit note is checked.
+    const cnPre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/credit-notes/prefill')
+        .query({ declarationId })
+        .set(h)
+    ).body;
+    const cn = await request(app)
+      .post('/api/v1/accounting/docs/credit-notes')
+      .set(h)
+      .send({ ...cnPre, lines: [{ ...cnPre.lines[0], unitPrice: '100' }] });
+    await request(app).post(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/issue`).set(h);
+    await request(app)
+      .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
+      .set(h)
+      .send({ reviewStatus: 'CHECKED' })
+      .expect(200);
+    const doc = (
+      await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h)
+    ).body;
+    expect(doc.accountingRecordId).toBeTruthy();
+    const led = (
+      await request(app).get(`/api/v1/accounting/ledger/${doc.accountingRecordId}`).set(h)
+    ).body;
+    expect(led.disNo).toBeTruthy();
+    expect(doc.header).toMatchObject({ invNo: led.invNo, disNo: led.disNo, dnNo: led.dnNo });
+  });
+
+  it('approving a record summary not in the ledger yet puts the shipment there', async () => {
+    const h = await as('ACCOUNTANT');
+    const declarationId = await declaration(b.jr.id, 'I 151809', '2026-08-21', 'IMPORT');
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ declarationId })
+        .set(h)
+    ).body;
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send({
+        ...pre,
+        lines: [
+          {
+            description: 'IMPORT PROCESSING FEE',
+            qty: '1',
+            unit: 'SHIP',
+            unitPrice: '100',
+            mark: 'VAT 10%',
+          },
+        ],
+      })
+      .expect(201);
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+      .set(h)
+      .expect(200);
+    const checked = await request(app)
+      .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
+      .set(h)
+      .send({ reviewStatus: 'CHECKED' });
+    // No INV / DIS / DN numbers yet, so no drafts yet.
+    expect(checked.body).toEqual({ numbered: [], drafts: 0 });
+    const summary = async () =>
+      (await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h))
+        .body;
+    const recordId = (await summary()).accountingRecordId;
+    expect(recordId).toBeTruthy();
+    expect(
+      (await request(app).get(`/api/v1/accounting/ledger/${recordId}`).set(h)).body,
+    ).toMatchObject({ invRevenue: '100.00' });
+
+    // Its Credit Noted checked later: numbers on the summary, and the tax invoice draft made.
+    const cnPre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/credit-notes/prefill')
+        .query({ declarationId })
+        .set(h)
+    ).body;
+    const cn = await request(app)
+      .post('/api/v1/accounting/docs/credit-notes')
+      .set(h)
+      .send({ ...cnPre, lines: [{ ...cnPre.lines[0], unitPrice: '100' }] });
+    await request(app).post(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/issue`).set(h);
+    await request(app)
+      .patch(`/api/v1/accounting/docs/credit-notes/${cn.body.id}/review`)
+      .set(h)
+      .send({ reviewStatus: 'CHECKED' })
+      .expect(200);
+    const invNo = (await summary()).header.invNo;
+    expect(invNo).toMatch(/^GS26-/);
+    const invoices = (await request(app).get('/api/v1/accounting/docs/tax-invoices').set(h)).body;
+    expect(invoices.data.map((d: { number: string }) => d.number)).toEqual([invNo]);
+  });
+
   it('record summaries have their own access: Operations work on them, not the rest of accounting', async () => {
     const rec = await ledgerRow();
     const op = await as('OPERATOR');

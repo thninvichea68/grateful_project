@@ -170,9 +170,9 @@ export function CreditNote({ d }: { d: BillingDoc }) {
           </tr>
         </thead>
         <tbody>
-          {d.lines.map((l) => (
+          {pricedLines(d).map((l, i) => (
             <tr key={l.id}>
-              <td className={cn.c}>{l.lineNo}</td>
+              <td className={cn.c}>{i + 1}</td>
               <td>{l.description}</td>
               <td className={cn.c}>{plain(l.qty)}</td>
               <td className={cn.c}>{l.unit}</td>
@@ -304,7 +304,7 @@ export function RecordSummary({ d, c }: { d: BillingDoc; c: CompanyInfo }) {
   );
 }
 
-/** A record summary's lines that have a price: an unpriced item stays off the sheet. */
+/** A record summary's or credit note's lines that have a price: an unpriced item stays off the sheet. */
 export const pricedLines = (d: BillingDoc) => d.lines.filter((l) => Number(l.unitPrice) > 0);
 
 /** SEA + FCL → "BY SEA: CY / CY", ROAD + LCL → "BY TRUCK: LCL", AIR → "BY AIR". */

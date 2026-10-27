@@ -4,7 +4,6 @@ import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
-  BILLING_DOC_SCHEMAS,
   CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
   RECORD_SUMMARY_ITEMS,
@@ -22,8 +21,8 @@ import {
   useCompany,
   useDoc,
   useDocAction,
-  useEligible,
   usePrefill,
+  useRecordSummaryShipments,
   useSetRecordSummaryReview,
 } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
@@ -34,7 +33,6 @@ import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
-import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
 import { moveInLines } from '../../lib/lineKeys';
 import { maskDeclareNo } from '../../lib/declareNo';
@@ -42,7 +40,7 @@ import { RecordSummary, transportLabel } from '../print/PrintDocPage';
 import { Preview, useFillWindow } from '../creditnoted/CreditNotedEditor';
 import { printCreditNote } from '../creditnoted/creditNoteExport';
 import { exportRecordSummaryExcel, recordSummaryFileName } from './recordSummaryExport';
-import { initialValues, type Values } from './DocEditorPage';
+import { initialValues, priceOrZeroResolver, type Values } from './DocEditorPage';
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { REVIEW, REVIEW_PILL, checkIcon } from './CreditNotesReview';
 import { SummaryReviseModal } from './ExpenseToClients';
@@ -70,19 +68,7 @@ const shipUnitOf = (v: Partial<Values>) =>
     containerSize: v.containerSize as string | undefined,
   });
 /** An empty price is saved as 0: the line stays on the summary, off the sheet until priced. */
-const baseResolver = formResolver(BILLING_DOC_SCHEMAS[TYPE]);
-const priceOrZero: typeof baseResolver = (values, ctx, options) =>
-  baseResolver(
-    {
-      ...values,
-      lines: (values.lines ?? []).map((l) => ({
-        ...l,
-        unitPrice: String(l.unitPrice ?? '').trim() || '0',
-      })),
-    },
-    ctx,
-    options,
-  );
+const priceOrZero = priceOrZeroResolver(TYPE);
 /** "306 ROLLS" → ["306", "ROLLS"]: a quantity is saved as that one text. */
 const splitQuantity = (t: string) => {
   const m = /^\s*([\d.,]*)\s*(.*?)\s*$/.exec(t);
@@ -100,15 +86,17 @@ const TRANSPORTS = [
 /**
  * A record summary from either list: /record-summary/:id (sidebar) or
  * /accounting/record-summaries/:id; "new" for a new one. A new summary picks its shipment
- * from the Declare No. box, which fills it in from the Monthly Ledger.
+ * from the Declare No. box, which fills it in from the shipping plan (and the Monthly Ledger
+ * once the shipment is there).
  */
 export function RecordSummaryRoute({ base }: { base: string }) {
   const { id = 'new' } = useParams();
   const [params] = useSearchParams();
   const docId = id === 'new' ? undefined : id;
   const recordId = docId ? null : params.get('recordId');
+  const declarationId = docId || recordId ? null : params.get('declarationId');
   const doc = useDoc(TYPE, docId);
-  const pre = usePrefill(TYPE, recordId);
+  const pre = usePrefill(TYPE, recordId, declarationId);
   const lookups = useLookups();
   if (doc.isLoading || pre.isLoading || lookups.isLoading)
     return (
@@ -124,7 +112,7 @@ export function RecordSummaryRoute({ base }: { base: string }) {
     );
   return (
     <RecordSummaryEditor
-      key={`${id}-${recordId ?? ''}`}
+      key={`${id}-${recordId ?? declarationId ?? ''}`}
       base={base}
       doc={doc.data}
       prefill={pre.data}
@@ -154,7 +142,7 @@ function RecordSummaryEditor({
   const action = useDocAction(TYPE);
   const editable = can('recordsummaries:write') && (!doc || doc.status === 'DRAFT');
   const fresh = !doc && !prefill;
-  const eligible = useEligible(TYPE);
+  const eligible = useRecordSummaryShipments();
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
     if (!doc && !prefill) v.lines = itemsFor(v.direction, shipUnitOf(v));
@@ -245,14 +233,20 @@ function RecordSummaryEditor({
     }
   };
 
-  /** A Declare No. of an approved shipment: reopen as that shipment's summary, filled in. */
+  /**
+   * A Declare No. on a shipping plan: reopen as that shipment's summary, filled in (from its
+   * Monthly Ledger row when it has one; it joins the row later otherwise).
+   */
   const pickDeclareNo = (typed: string) => {
     if (doc) return;
     const hit = eligible.data?.find(
       (e) => e.declareNo.toUpperCase() === typed.trim().toUpperCase(),
     );
-    if (hit && hit.recordId !== defaults.accountingRecordId)
-      navigate(`${base}/new?recordId=${hit.recordId}`, { replace: true });
+    if (!hit || hit.declareNo === prefill?.declareNo) return;
+    navigate(
+      `${base}/new?${hit.recordId ? `recordId=${hit.recordId}` : `declarationId=${hit.declarationId}`}`,
+      { replace: true },
+    );
   };
 
   // Live preview: the print layout fed with what's in the form right now.
@@ -624,7 +618,7 @@ function RecordSummaryEditor({
                   <select
                     className="form-select-box"
                     {...register('clientId')}
-                    disabled={!!defaults.accountingRecordId && !!defaults.clientId}
+                    disabled={(!!defaults.accountingRecordId || !!prefill) && !!defaults.clientId}
                     aria-invalid={!!err('clientId')}
                   >
                     <option value="">-- Select factory --</option>
@@ -766,15 +760,16 @@ function RecordSummaryEditor({
               </div>
               {fresh && editable && (
                 <p className={r.hint}>
-                  Type or pick the Declare No. of a Monthly Ledger shipment: its details fill in,
-                  and its invoice, DIS and debit note numbers follow the ledger once the accountant
-                  approves it.
+                  Type or pick the Declare No. of a shipment on the shipping plans: its details fill
+                  in, and its invoice, DIS and debit note numbers follow the Monthly Ledger once the
+                  accountant approves it.
                 </p>
               )}
               <datalist id="rs-declares">
                 {eligible.data?.map((e) => (
-                  <option key={e.recordId} value={e.declareNo}>
-                    {e.clientCode} · {e.number ?? 'awaiting approval'}
+                  <option key={e.declarationId} value={e.declareNo}>
+                    {e.clientCode} ·{' '}
+                    {e.number ?? (e.recordId ? 'awaiting approval' : 'not in the ledger yet')}
                   </option>
                 ))}
               </datalist>

@@ -11,13 +11,17 @@ import {
 } from '@gs/shared';
 import { db } from '../../db/client';
 import { badRequest, notFound } from '../../lib/errors';
+import { issueDateFor } from '../../lib/issueDate';
 import { queryRows } from '../../lib/listing';
 import { rateOn } from './ledger';
 
 interface Ctx {
-  recordId: string;
+  /** Null for a declaration not in the Monthly Ledger yet (record summaries only). */
+  recordId: string | null;
   clientId: string;
-  invDate: string;
+  /** Null without a ledger row. */
+  invDate: string | null;
+  declareDate: string;
   exchangeRate: string;
   invNo: string | null;
   disNo: string | null;
@@ -61,10 +65,14 @@ interface Ctx {
 const n = (v: string | null | undefined) =>
   v === null || v === undefined ? '' : String(Number(v));
 
-/** A ready-to-edit draft for a document type, built from a ledger row and its shipment. */
+/**
+ * A ready-to-edit draft for a document type, built from a ledger row and its shipment. A record
+ * summary can also start from a declaration not in the Monthly Ledger yet (`declarationId`).
+ */
 export async function prefill(
   type: BillingDocType,
-  recordId: string,
+  recordId: string | null,
+  declarationId: string | null = null,
 ): Promise<Record<string, unknown>> {
   if (type === 'credit-notes') {
     const [r] = await queryRows<{ declarationId: string }>(
@@ -74,10 +82,13 @@ export async function prefill(
     if (!r) throw notFound('Ledger entry');
     return creditNotePrefill(r.declarationId);
   }
+  if (!recordId && type !== 'record-summaries')
+    throw badRequest('Start this document from a ledger entry');
   const [c] = await queryRows<Ctx>(
     db,
     sql`
-    SELECT a.id AS "recordId", a.client_id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", a.exchange_rate::text AS "exchangeRate",
+    SELECT a.id AS "recordId", c.id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
+           to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", a.exchange_rate::text AS "exchangeRate",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM tax_invoices t WHERE upper(t.invoice_no) = upper(a.inv_no)) THEN a.inv_no END AS "freeInvNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM disbursements t WHERE upper(t.dis_no) = upper(a.dis_no) AND extract(year FROM t.dis_date) = extract(year FROM a.inv_date)) THEN a.dis_no END AS "freeDisNo",
@@ -93,13 +104,15 @@ export async function prefill(
            coalesce((SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS cbm,
            coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
            coalesce((SELECT sum(l.ctns) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS ctns
-    FROM accounting_records a
-    JOIN customs_declarations d ON d.id = a.declaration_id JOIN shipments s ON s.id = d.shipment_id JOIN clients c ON c.id = a.client_id
+    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id JOIN clients c ON c.id = coalesce(a.client_id, s.client_id)
     LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id) LEFT JOIN consignees cn ON cn.id = s.consignee_id
     LEFT JOIN countries oc ON oc.iso2 = s.origin_country_iso2 LEFT JOIN countries dc ON dc.iso2 = s.destination_country_iso2
-    WHERE a.id = ${recordId}`,
+    WHERE ${
+      recordId ? sql`a.id = ${recordId}` : sql`d.id = ${declarationId} AND s.deleted_at IS NULL`
+    }`,
   );
-  if (!c) throw notFound('Ledger entry');
+  if (!c) throw notFound(recordId ? 'Ledger entry' : 'Declaration');
 
   const isImport = c.direction === 'IMPORT';
   const ship = {
@@ -184,7 +197,8 @@ export async function prefill(
         forwarderId: c.forwarderId,
         portId: c.portId,
         declareNo: c.declareNo,
-        summaryDate: c.invDate,
+        // Not in the ledger yet: the issue date it will get (next working day after clearance).
+        summaryDate: c.invDate ?? (await issueDateFor(db, c.declareDate)),
         quantityText: ship.pkgs,
         blNo: c.hbl,
         containerNo: c.containers,

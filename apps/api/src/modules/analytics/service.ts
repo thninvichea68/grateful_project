@@ -421,12 +421,23 @@ export async function profit(
         SELECT ${prevDate} AS month, coalesce(sum(a.net_profit), 0)::text AS "netProfit" FROM accounting_records a
         WHERE to_char(a.inv_date, 'YYYY-MM') = ${prevDate} AND ${BILLED} ${cf}`,
       );
+  // January to the same day of the year before (29 Feb → 28 Feb); all of it for a past year.
+  const lyEnd = today.startsWith(String(year))
+    ? `${year - 1}${today.slice(4)}`.replace(/-02-29$/, '-02-28')
+    : `${year - 1}-12-31`;
+  const [ly] = await queryRows<{ netProfit: string }>(
+    db,
+    sql`
+    SELECT coalesce(sum(a.net_profit), 0)::text AS "netProfit" FROM accounting_records a
+    WHERE a.inv_date BETWEEN make_date(${year - 1}, 1, 1) AND ${lyEnd}::date AND ${BILLED} ${cf}`,
+  );
   const total = monthly.reduce((s, m) => s + Math.round(Number(m.netProfit) * 100), 0) / 100;
   return {
     year,
     total: total.toFixed(2),
     thisMonth: monthly.find((m) => m.month === thisKey)?.netProfit ?? '0',
     lastMonth: lm?.netProfit ?? '0',
+    lastYearToDate: ly?.netProfit ?? '0',
     monthly,
     byClient,
     currentMonth: thisKey.startsWith(String(year)) ? thisKey : `${year}-12`,

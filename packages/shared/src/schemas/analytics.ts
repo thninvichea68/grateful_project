@@ -121,6 +121,8 @@ export interface ProfitSummary {
   total: string;
   thisMonth: string;
   lastMonth: string;
+  /** The same stretch of the year before (January to the same day), for a whole-year view. */
+  lastYearToDate: string;
   monthly: { month: string; netProfit: string }[];
   byClient: { clientId: string; code: string; name: string; netProfit: string; pct: number }[];
   /** The month the card opens on (YYYY-MM): this month, or December for a past year. */

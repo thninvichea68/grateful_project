@@ -4,7 +4,6 @@ import { useFieldArray, useForm, useWatch, type Control } from 'react-hook-form'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
-  BILLING_DOC_SCHEMAS,
   CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
   chargeLineAmount,
@@ -32,10 +31,9 @@ import { useToast } from '../../components/Toast';
 import { api } from '../../lib/api';
 import { queryKeys } from '../../lib/queryKeys';
 import { fmtMoney } from '../../lib/format';
-import { formResolver } from '../../lib/zodForm';
 import { icons } from '../../layout/icons';
 import { moveInLines } from '../../lib/lineKeys';
-import { initialValues, type Values } from '../accounting/DocEditorPage';
+import { initialValues, priceOrZeroResolver, type Values } from '../accounting/DocEditorPage';
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
 import { REVIEW, REVIEW_PILL, ReviseModal, checkIcon } from '../accounting/CreditNotesReview';
 import { CreditNote } from '../print/PrintDocPage';
@@ -61,6 +59,7 @@ export function creditNoteShipUnit(containerNo: unknown): string {
   return m ? containerUnit(`${m[1]}${m[2]!.toUpperCase()}`) : 'SHIP';
 }
 const blankLine = (unit: string) => ({ description: '', qty: '1', unit, unitPrice: '', mark: '' });
+const priceOrZero = priceOrZeroResolver(TYPE);
 
 /** /credit-noted/:id (or /accounting/credit-notes/:id): loads the note or a fresh draft. */
 export function CreditNotedRoute({ base }: { base: string }) {
@@ -121,6 +120,8 @@ function CreditNotedEditor({
     if (!v.billTo && company.data?.nameEn) v.billTo = company.data.nameEn.toUpperCase();
     if (!v.address && company.data?.addressEn) v.address = company.data.addressEn;
     if (!v.refType) v.refType = 'HOUSE_BILL';
+    // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
+    v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
     return v;
   }, [doc, prefill, company.data]);
   const {
@@ -131,7 +132,8 @@ function CreditNotedEditor({
     getValues,
     formState: { errors },
   } = useForm<Values>({
-    resolver: formResolver(BILLING_DOC_SCHEMAS[TYPE]) as never,
+    // An empty price is saved as 0: the item stays on the note, off the voucher until priced.
+    resolver: priceOrZero as never,
     defaultValues: defaults,
   });
   const lines = useFieldArray({

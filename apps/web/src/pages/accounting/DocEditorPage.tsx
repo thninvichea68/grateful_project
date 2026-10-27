@@ -139,6 +139,28 @@ function Loader({
   return <Editor type={type} doc={doc.data} prefill={pre.data} />;
 }
 
+/**
+ * The form resolver for documents with a standard list of items to price (Record Summary,
+ * Credit Noted): an empty price is saved as 0, so the line stays in the editor but off the
+ * sheet until priced (see pricedLines).
+ */
+export function priceOrZeroResolver(type: BillingDocType) {
+  const base = formResolver(BILLING_DOC_SCHEMAS[type]);
+  const resolver: typeof base = (values, ctx, options) =>
+    base(
+      {
+        ...values,
+        lines: (values.lines ?? []).map((l) => ({
+          ...l,
+          unitPrice: String(l.unitPrice ?? '').trim() || '0',
+        })),
+      },
+      ctx,
+      options,
+    );
+  return resolver;
+}
+
 const str = (v: unknown) => (v === null || v === undefined ? '' : String(v));
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(Number(v)));
 

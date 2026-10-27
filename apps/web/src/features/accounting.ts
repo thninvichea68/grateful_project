@@ -19,6 +19,7 @@ import type {
   Paginated,
   RecordSummaryMessage,
   RecordSummaryReviewRow,
+  RecordSummaryShipment,
   ReleasedInvoiceSet,
 } from '@gs/shared';
 import { api } from '../lib/api';
@@ -64,13 +65,19 @@ export function useDeclarationOptions(q: string, enabled: boolean) {
   });
 }
 
-/** Shipments ready for a tax invoice, DIS, debit note or record summary (the Declare No. picker). */
-export function useEligible(
-  type: 'tax-invoices' | 'disbursements' | 'debit-notes' | 'record-summaries',
-) {
+/** Shipments ready for a tax invoice, DIS or debit note (the Declare No. picker). */
+export function useEligible(type: 'tax-invoices' | 'disbursements' | 'debit-notes') {
   return useQuery({
     queryKey: [...KEY, 'eligible', type],
     queryFn: () => api<EligibleRecord[]>(`/accounting/eligible/${type}`),
+  });
+}
+
+/** Shipping-plan declarations a record summary can start from, in the ledger or not yet. */
+export function useRecordSummaryShipments() {
+  return useQuery({
+    queryKey: [...KEY, 'eligible', 'record-summaries'],
+    queryFn: () => api<RecordSummaryShipment[]>('/accounting/eligible/record-summaries'),
   });
 }
 
@@ -157,8 +164,9 @@ export function useDoc(type: BillingDocType, id: string | undefined) {
 }
 
 /**
- * A ready-to-edit draft from a ledger row (or, for credit notes, from a declaration; for a
- * document of no shipment, e.g. a monthly fee debit note, from a client and date).
+ * A ready-to-edit draft from a ledger row (or, for credit notes and record summaries, from a
+ * declaration; for a document of no shipment, e.g. a monthly fee debit note, from a client and
+ * date).
  */
 export function usePrefill(
   type: BillingDocType,

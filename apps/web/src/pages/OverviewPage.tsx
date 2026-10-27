@@ -97,7 +97,13 @@ export function OverviewPage() {
               error={summary.error}
             />
           )}
-          {profitShown && s?.profit && <ProfitCard key={s.month} profit={s.profit} />}
+          {profitShown && s?.profit && (
+            <ProfitCard
+              key={`${s.month}${s.fullYear ? '-year' : ''}`}
+              profit={s.profit}
+              fullYear={s.fullYear}
+            />
+          )}
           {clientsShown && (
             <ClientShareCard
               clients={clients.data ?? []}

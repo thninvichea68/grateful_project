@@ -446,12 +446,22 @@ const DOC_TABLE: Record<BillingPackType, string> = {
 /**
  * A record summary checked in Expense to Clients: the shipment's Tax Invoice, Disbursement and
  * Debit Note drafts are made for it, filled from the ledger and the summary's lines, so nobody
- * has to press "Create draft". A type the shipment already has (draft or issued), or one with
- * nothing to bill, is left alone.
+ * has to press "Create draft". A type the shipment already has (draft or issued), one with
+ * nothing to bill, or one whose number the ledger hasn't given yet (Chea payment not checked:
+ * its draft is made when it is) is left alone. Nothing without a checked record summary.
  */
 export async function autoDraftsFor(recordId: string, req: Request): Promise<string[]> {
   const made: string[] = [];
+  const [r] = await queryRows<{ summary: boolean } & Record<string, string | null>>(
+    db,
+    sql`SELECT a.inv_no AS "tax-invoices", a.dis_no AS disbursements, a.dn_no AS "debit-notes",
+               EXISTS (SELECT 1 FROM record_summaries s WHERE s.accounting_record_id = a.id
+                 AND s.status = 'ISSUED' AND s.review_status = 'CHECKED') AS summary
+        FROM accounting_records a WHERE a.id = ${recordId}`,
+  );
+  if (!r?.summary) return made;
   for (const type of BILLING_PACK_TYPES) {
+    if (!r[type]) continue;
     const [has] = await queryRows<{ n: number }>(
       db,
       sql`SELECT count(*)::int AS n FROM ${sql.raw(DOC_TABLE[type])}

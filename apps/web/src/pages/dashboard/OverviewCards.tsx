@@ -286,26 +286,69 @@ const MONTH_NAMES = [
 ];
 const monthName = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
 
+/** The Profit card's dropdown value for January to its last month (a whole-year Overview). */
+const YEAR_TO_DATE = 'ytd';
+
 /**
  * Net profit for one month (this month to start; the month dropdown changes it):
- * the figure, the change on the month before, and that month's split by client.
+ * the figure, the change on the month before, and that month's split by client. On a
+ * whole-year Overview it opens on January to date instead, against the same stretch of
+ * the year before.
  */
-export function ProfitCard({ profit }: { profit: ProfitSummary }) {
+export function ProfitCard({
+  profit,
+  fullYear = false,
+}: {
+  profit: ProfitSummary;
+  fullYear?: boolean;
+}) {
   const [picked, setPicked] = useState<{ year: number; month: string } | null>(null);
-  const month = picked?.year === profit.year ? picked.month : profit.currentMonth;
+  const month =
+    picked?.year === profit.year
+      ? picked.month
+      : fullYear
+        ? YEAR_TO_DATE
+        : profit.currentMonth;
+  const whole = month === YEAR_TO_DATE;
+  const toDate = (m: string) => m <= profit.currentMonth;
+  const inPeriod = (m: string) => (whole ? toDate(m) : m === month);
+  const lastShort = MONTHS[Number(profit.currentMonth.slice(5, 7)) - 1];
+  const periodName = whole ? `Jan – ${lastShort} ${profit.year}` : monthName(month);
+
   const idx = profit.monthly.findIndex((m) => m.month === month);
-  const value = Number(profit.monthly[idx]?.netProfit ?? 0);
+  const value = whole
+    ? profit.monthly
+        .filter((m) => toDate(m.month))
+        .reduce((t, m) => t + Math.round(Number(m.netProfit) * 100), 0) / 100
+    : Number(profit.monthly[idx]?.netProfit ?? 0);
   const prevMonth = idx > 0 ? profit.monthly[idx - 1]! : null;
   // January's "month before" is last December: only known for the current month.
-  const prevValue = prevMonth
-    ? Number(prevMonth.netProfit)
-    : month === profit.currentMonth
-      ? Number(profit.lastMonth)
-      : null;
+  const prevValue = whole
+    ? Number(profit.lastYearToDate)
+    : prevMonth
+      ? Number(prevMonth.netProfit)
+      : month === profit.currentMonth
+        ? Number(profit.lastMonth)
+        : null;
   const ch = prevValue === null ? null : changePct(value, prevValue);
-  const prevLabel = prevMonth ? MONTH_NAMES[Number(prevMonth.month.slice(5, 7)) - 1] : 'December';
+  const prevLabel = whole
+    ? `Jan – ${lastShort} ${profit.year - 1}`
+    : prevMonth
+      ? MONTH_NAMES[Number(prevMonth.month.slice(5, 7)) - 1]
+      : 'December';
 
-  const rows = profit.byClientMonthly.filter((c) => c.month === month);
+  // Each client's profit over the period (their months added up for January to date).
+  const rows = Object.values(
+    profit.byClientMonthly
+      .filter((c) => inPeriod(c.month))
+      .reduce<Record<string, ProfitSummary['byClientMonthly'][number]>>((acc, c) => {
+        const had = acc[c.clientId];
+        acc[c.clientId] = had
+          ? { ...had, netProfit: String(Number(had.netProfit) + Number(c.netProfit)) }
+          : c;
+        return acc;
+      }, {}),
+  ).sort((a, b) => Number(b.netProfit) - Number(a.netProfit));
   const sum = rows.reduce((t, c) => t + Number(c.netProfit), 0);
   const clients = rows.map((c) => ({
     ...c,
@@ -319,7 +362,13 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
   const [hoverId, setHover] = useState<string | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const hovered = clients.find((c) => c.clientId === hoverId) ?? null;
-  const unbilled = profit.unbilled.find((u) => u.month === month);
+  const unbilledRows = profit.unbilled.filter((u) => inPeriod(u.month));
+  const unbilled = unbilledRows.length
+    ? {
+        entries: unbilledRows.reduce((t, u) => t + u.entries, 0),
+        costs: unbilledRows.reduce((t, u) => t + Number(u.costs), 0),
+      }
+    : undefined;
   // Months still to come can't be picked (the viewer's clock).
   const today = new Date();
   const now = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -330,18 +379,22 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
         <div className="rc-header">
           <div className="rc-title">Total Net Profit</div>
           <div className="rc-subtitle">
-            {monthName(month)} · all clients · {profit.year} to date {fmtMoney(profit.total)}
+            {periodName} · all clients
+            {!whole && ` · ${profit.year} to date ${fmtMoney(profit.total)}`}
           </div>
         </div>
         <CardDropdown
           label="Month"
           value={month}
           onChange={(m) => setPicked({ year: profit.year, month: m })}
-          options={profit.monthly.map((m) => ({
-            value: m.month,
-            label: MONTHS_LONG[Number(m.month.slice(5, 7)) - 1]!,
-            disabled: m.month > now,
-          }))}
+          options={[
+            ...(fullYear ? [{ value: YEAR_TO_DATE, label: `Jan – ${lastShort}` }] : []),
+            ...profit.monthly.map((m) => ({
+              value: m.month,
+              label: MONTHS_LONG[Number(m.month.slice(5, 7)) - 1]!,
+              disabled: m.month > now,
+            })),
+          ]}
         />
       </div>
       <div className="rc-top-hero">
@@ -436,7 +489,7 @@ export function ProfitCard({ profit }: { profit: ProfitSummary }) {
             </li>
           ))}
           {!clients.length && (
-            <span className={dash.mutedNote}>No ledger entries in {monthName(month)} yet.</span>
+            <span className={dash.mutedNote}>No ledger entries in {periodName} yet.</span>
           )}
         </ul>
         {hovered && tip && (

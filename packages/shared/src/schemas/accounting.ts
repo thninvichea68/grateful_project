@@ -185,6 +185,24 @@ export interface EligibleRecord {
   hbl: string | null;
 }
 
+/**
+ * A declaration on a shipping plan a record summary can start from, with or without a
+ * Monthly Ledger row yet (the summary links to the row once it exists).
+ */
+export interface RecordSummaryShipment {
+  /** Null until the shipment is in the Monthly Ledger. */
+  recordId: string | null;
+  declarationId: string;
+  declareNo: string;
+  declareDate: string;
+  clientId: string;
+  clientCode: string;
+  /** The invoice no., null until approved. */
+  number: string | null;
+  direction: 'IMPORT' | 'EXPORT';
+  hbl: string | null;
+}
+
 export interface DeclarationOption {
   id: string;
   declareNo: string;

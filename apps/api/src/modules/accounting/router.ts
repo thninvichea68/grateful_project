@@ -124,7 +124,11 @@ accountingRouter.get('/eligible/:type', async (req, res) => {
     }),
     req.params,
   );
-  res.json(await ledger.eligibleRecords(type, scopeClients(req)));
+  res.json(
+    type === 'record-summaries'
+      ? await ledger.recordSummaryShipments(scopeClients(req))
+      : await ledger.eligibleRecords(type, scopeClients(req)),
+  );
 });
 
 accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
@@ -321,7 +325,10 @@ accountingRouter.patch(
     }
     if (type !== 'credit-notes') throw notFound('Document');
     // The shipments numbered by this approval (none unless it was checked).
-    res.json({ numbered: await docs.setCreditNoteReview(id, reviewStatus, message, req) });
+    const numbered = await docs.setCreditNoteReview(id, reviewStatus, message, req);
+    // One whose record summary was approved first gets its drafts now it has its numbers.
+    for (const n of numbered) await billing.autoDraftsFor(n.recordId, req);
+    res.json({ numbered });
   },
 );
 
@@ -440,12 +447,19 @@ accountingRouter.get('/docs/:type', async (req, res) => {
 });
 accountingRouter.get('/docs/:type/prefill', async (req, res) => {
   const { type } = parse(typeParam, req.params);
-  if (type === 'credit-notes' && typeof req.query.declarationId === 'string') {
+  // Credit notes and record summaries can start from a shipping plan's declaration.
+  if (
+    (type === 'credit-notes' || type === 'record-summaries') &&
+    typeof req.query.declarationId === 'string'
+  ) {
     const { declarationId } = parse(
       z.object({ declarationId: z.string().uuid('Choose a declaration') }),
       req.query,
     );
-    const draft = await creditNotePrefill(declarationId);
+    const draft =
+      type === 'credit-notes'
+        ? await creditNotePrefill(declarationId)
+        : await prefill(type, null, declarationId);
     assertClientVisible(req, draft.clientId as string, 'Declaration');
     return void res.json(draft);
   }

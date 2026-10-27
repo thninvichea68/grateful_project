@@ -1,7 +1,7 @@
 import type { Workbook } from 'exceljs';
 import { isVatChargedLine, type BillingDoc } from '@gs/shared';
 import { saveBlob } from '../../lib/files';
-import { creditNoteHeader } from '../print/PrintDocPage';
+import { creditNoteHeader, pricedLines } from '../print/PrintDocPage';
 import { addPrintFonts } from '../print/printFonts';
 
 /*
@@ -239,7 +239,8 @@ function addCreditNoteSheet(
   r += 1;
 
   const first = r;
-  d.lines.forEach((l, i) => {
+  const lines = pricedLines(d);
+  lines.forEach((l, i) => {
     const row = r;
     ws.getCell(row, 1).value = i + 1;
     ws.getCell(row, 2).value = l.description;
@@ -273,7 +274,7 @@ function addCreditNoteSheet(
   // TOTAL row
   ws.mergeCells(r, 1, r, 5);
   ws.getCell(r, 1).value = 'TOTAL:';
-  ws.getCell(r, 6).value = d.lines.length
+  ws.getCell(r, 6).value = lines.length
     ? { formula: `SUM(F${first}:F${last})`, result: Number(d.totals.total) || 0 }
     : 0;
   ws.mergeCells(r, 7, r, 8);
