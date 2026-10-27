@@ -1582,8 +1582,9 @@ export async function setRecordSummaryReview(
       if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req);
       else if (doc.reviewStatus === 'CHECKED') await summaryOutOfLedger(tx, recordId);
     }
-    // Approved or Revised: Operations hear about it in their Record Summary inbox.
-    if (reviewStatus === 'CHECKED' || reviewStatus === 'REVISED')
+    // Revised: Operations hear about it in their Record Summary inbox. An approval needs no
+    // action from them, so it is not sent.
+    if (reviewStatus === 'REVISED')
       await tx.execute(sql`
         INSERT INTO record_summary_messages (record_summary_id, recipient_id, sender_id, kind, body)
         SELECT ${id}::uuid, u.id, ${req.auth?.userId ?? null}::uuid, ${reviewStatus}::credit_note_review, ${message ?? ''}
@@ -1677,6 +1678,8 @@ export async function creditNoteMessagesFor(id: string): Promise<CreditNoteMessa
 
 /* ---------- Operations' Record Summary inbox ---------- */
 
+// Only "Revised" messages: Approved ones sent before approvals stopped being sent are left out.
+
 export async function recordSummaryInbox(
   userId: string,
 ): Promise<{ data: RecordSummaryMessage[]; unread: number }> {
@@ -1693,12 +1696,13 @@ export async function recordSummaryInbox(
         JOIN clients cl ON cl.id = t.client_id
         LEFT JOIN users u ON u.id = m.sender_id
         LEFT JOIN ports po ON po.id = t.port_id
-        WHERE m.recipient_id = ${userId} ORDER BY m.created_at DESC LIMIT 50`,
+        WHERE m.recipient_id = ${userId} AND m.kind = 'REVISED'
+        ORDER BY m.created_at DESC LIMIT 50`,
   );
   const [r] = await queryRows<{ n: number }>(
     db,
     sql`SELECT count(*)::int AS n FROM record_summary_messages
-        WHERE recipient_id = ${userId} AND read_at IS NULL`,
+        WHERE recipient_id = ${userId} AND read_at IS NULL AND kind = 'REVISED'`,
   );
   return { data, unread: r?.n ?? 0 };
 }

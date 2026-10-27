@@ -145,11 +145,15 @@ export interface ClearFeePayment {
   createdByName: string | null;
 }
 
-/** A month's clear fee against what has been paid; balance < 0 means overpaid. */
+/**
+ * A month's clear fee against what has been paid, plus credit overpaid in earlier months;
+ * balance < 0 means overpaid (carried into the next month).
+ */
 export interface ClearFeePaymentMonth {
   month: string;
   clearFee: string;
   paid: string;
+  carriedIn: string;
   balance: string;
   payments: ClearFeePayment[];
 }

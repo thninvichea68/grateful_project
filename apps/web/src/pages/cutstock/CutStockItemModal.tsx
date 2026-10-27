@@ -14,6 +14,7 @@ import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtNum, fmtPct } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
+import g from './CutStockItemModal.module.css';
 
 /** View an item's balance and import history; edit or create it (cutstock:write). */
 export function CutStockItemModal({
@@ -96,11 +97,11 @@ export function CutStockItemModal({
   const input = (
     name: keyof CutStockItemInput,
     label: string,
-    span?: number,
+    span?: 2 | 3,
     /** A number field (digits only, shown with commas) with at most this many decimals. */
     decimals?: number,
   ) => (
-    <div className="form-field-group" style={span ? { gridColumn: `span ${span}` } : undefined}>
+    <div className={`form-field-group ${span ? g[`span${span}`] : ''}`}>
       <label htmlFor={`cs-${name}`}>{label}</label>
       {decimals !== undefined ? (
         <NumberInput
@@ -146,9 +147,10 @@ export function CutStockItemModal({
     >
       <ErrorBanner error={item.error ?? save.error ?? del.error} />
       <form onSubmit={(e) => void onSubmit(e)} noValidate>
-        <div className="form-fields-grid">
+        <div className="form-section-title">Item</div>
+        <div className={g.grid}>
           {input('declareRef', 'Declare No. (e.g. I-12)')}
-          <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
+          <div className={`form-field-group ${g.span2}`}>
             <label htmlFor="cs-category">Category</label>
             <select
               id="cs-category"
@@ -166,9 +168,14 @@ export function CutStockItemModal({
           {input('newOrUsed', 'New / Used')}
           {input('name', 'Item', 3)}
           {input('unit', 'Unit')}
+        </div>
+        <div className="form-section-title" style={{ marginTop: 16 }}>
+          Quantity &amp; value
+        </div>
+        <div className={g.grid}>
           {input('qty', 'Licensed quantity', undefined, 3)}
-          {input('unitPrice', 'Unit price (USD)', undefined, 4)}
           {input('openingImportedQty', 'Imported before this system', undefined, 3)}
+          {input('unitPrice', 'Unit price (USD)', undefined, 4)}
           {input('remarks', 'Remarks')}
         </div>
         {editable && (

@@ -53,17 +53,25 @@ export async function exportPackExcel(opts: {
   month: string;
   parts: readonly PackPart[];
   preparedBy: string;
+  /** One shipment's row: its tax invoice, disbursement and debit note only. */
+  record?: { id: string; label: string };
 }) {
   const [pack, company, logo, { default: ExcelJS }] = await Promise.all([
-    api<BillingPack>(`/accounting/billing/${opts.clientId}/pack`, { query: { month: opts.month } }),
+    api<BillingPack>(`/accounting/billing/${opts.clientId}/pack`, {
+      query: { month: opts.month, recordId: opts.record?.id },
+    }),
     api<CompanyInfo>('/meta/company'),
     logoDataUrl(),
     import('exceljs'),
   ]);
   const wb = new ExcelJS.Workbook();
-  buildPackWorkbook(wb, pack, company, logo, opts.month, opts.parts, opts.preparedBy, todayIso());
+  const parts = opts.record ? (['docs'] as const) : opts.parts;
+  buildPackWorkbook(wb, pack, company, logo, opts.month, parts, opts.preparedBy, todayIso());
   if (!wb.worksheets.length) throw new Error('Nothing to export for these choices yet.');
-  saveBlob(await workbookBlob(wb), `${packFileName(pack.client.code, opts.month)}.xlsx`);
+  const name = opts.record
+    ? `${pack.client.code}_${opts.record.label}`.replace(/[^A-Za-z0-9._-]+/g, '_')
+    : packFileName(pack.client.code, opts.month);
+  saveBlob(await workbookBlob(wb), `${name}.xlsx`);
 }
 
 export function buildPackWorkbook(

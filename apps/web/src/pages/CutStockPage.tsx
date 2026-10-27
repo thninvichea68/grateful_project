@@ -11,6 +11,7 @@ import { downloadFile } from '../lib/files';
 import { fmtMoney, fmtNum, fmtPct } from '../lib/format';
 import { CutStockItemModal } from './cutstock/CutStockItemModal';
 import { ImportModal } from './cutstock/ImportModal';
+import { PlansMoreMenu } from './plans/PlansMoreMenu';
 
 const COND_STYLE = {
   OK: { color: 'var(--status-completed-fg)' },
@@ -18,12 +19,13 @@ const COND_STYLE = {
 } as const;
 
 export function CutStockPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const toast = useToast();
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
   const [openItem, setOpenItem] = useState<string | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const clients = useMemo(() => lookups.data?.clients ?? [], [lookups.data]);
   const clientId = params.get('clientId') ?? '';
@@ -100,32 +102,29 @@ export function CutStockPage() {
               <option value="CHECK">CHECK (balance under 50%)</option>
               <option value="OVER">Over-imported (below zero)</option>
             </select>
-            <button
-              type="button"
-              className="filter-btn"
-              disabled={!clientId}
-              onClick={() =>
-                downloadFile('/cut-stock/export.xlsx', { clientId }).catch(() =>
-                  toast('Export failed. Try again.'),
-                )
-              }
-            >
-              Export Excel
-            </button>
-            {can('cutstock:write') && clientId && (
-              <>
-                <button type="button" className="filter-btn" onClick={() => setImporting(true)}>
-                  Import Excel
-                </button>
-                <button
-                  type="button"
-                  className="new-shipment-btn"
-                  onClick={() => setOpenItem('new')}
-                >
-                  + Add Item
-                </button>
-              </>
+            {user?.role === 'ADMIN' && clientId && (
+              <button
+                type="button"
+                className="new-shipment-btn"
+                onClick={() => setOpenItem('new')}
+              >
+                + Add Item
+              </button>
             )}
+            <PlansMoreMenu
+              exporting={exporting || !clientId}
+              onExport={() => {
+                setExporting(true);
+                downloadFile('/cut-stock/export.xlsx', { clientId })
+                  .catch(() => toast('Export failed. Try again.'))
+                  .finally(() => setExporting(false));
+              }}
+              onImport={
+                can('cutstock:write') && clientId ? () => setImporting(true) : undefined
+              }
+              exportHint={`${client?.name ?? 'This client'}'s master list · .xlsx`}
+              importHint="CDC master list workbook · .xlsx"
+            />
           </div>
         </div>
         <div id="cutstockSummary">

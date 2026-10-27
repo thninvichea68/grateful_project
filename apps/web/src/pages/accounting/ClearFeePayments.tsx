@@ -67,6 +67,11 @@ export function ClearFeePayments({ month }: { month: string }) {
               {data.payments.length > 0 &&
                 ` · ${data.payments.length} payment${data.payments.length > 1 ? 's' : ''}`}
             </span>
+            {Number(data.carriedIn) > 0 && (
+              <span title="Overpaid in earlier months, deducted from this one">
+                Carried in <b>{m(data.carriedIn)}</b>
+              </span>
+            )}
             <span
               className={c.balance}
               data-tone={balance > 0 ? 'due' : balance < 0 ? 'over' : 'done'}
@@ -74,7 +79,7 @@ export function ClearFeePayments({ month }: { month: string }) {
               {balance > 0
                 ? `Should pay ${m(data.balance)}`
                 : balance < 0
-                  ? `Overpaid ${m(String(-balance))}`
+                  ? `Overpaid ${m(String(-balance))} · carried to next month`
                   : Number(data.clearFee) > 0
                     ? 'Paid in full'
                     : 'Nothing to pay'}
@@ -220,7 +225,7 @@ function PaymentRow({
 }) {
   const toast = useToast();
   const save = useSaveClearFeePayment(month);
-  const del = useDeleteClearFeePayment(month);
+  const del = useDeleteClearFeePayment();
   const [draft, setDraft] = useState<Draft | null>(null);
   const commit = () => {
     if (!draft?.amount || !draft.paidOn || save.isPending) return;

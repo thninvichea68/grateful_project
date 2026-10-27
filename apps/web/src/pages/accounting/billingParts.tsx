@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { BillingStage } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
@@ -37,21 +37,28 @@ export function BillingSections({ className }: { className?: string }) {
 
 /**
  * "Print month pack": pick the parts, then the print dialog opens on this page (no new tab).
+ * With `record`, one shipment row's documents instead: no parts to pick, the same two outputs.
  */
 export function PackPrintMenu({
   clientId,
   month,
+  record,
   className,
+  title,
   children,
 }: {
   clientId: string;
   month: string;
+  record?: { id: string; label: string };
   className?: string;
+  title?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [parts, setParts] = useState<PackPart[]>(PACK_PARTS.map(([k]) => k));
   const box = useRef<HTMLDivElement>(null);
+  // A row's menu sits in a scrolling table, so it is placed fixed under its button.
+  const [at, setAt] = useState<CSSProperties>();
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
@@ -60,18 +67,36 @@ export function PackPrintMenu({
       )
         setOpen(false);
     };
+    const shut = () => setOpen(false);
     document.addEventListener('mousedown', close);
     document.addEventListener('keydown', close);
+    if (record) {
+      window.addEventListener('scroll', shut, true);
+      window.addEventListener('resize', shut);
+    }
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', close);
+      window.removeEventListener('scroll', shut, true);
+      window.removeEventListener('resize', shut);
     };
-  }, [open]);
+  }, [open, record]);
+  const toggleOpen = () => {
+    if (record && !open && box.current) {
+      const r = box.current.getBoundingClientRect();
+      setAt({ position: 'fixed', top: r.bottom + 6, right: window.innerWidth - r.right });
+    }
+    setOpen((o) => !o);
+  };
   const toggle = (k: PackPart) =>
     setParts((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   const print = () => {
     setOpen(false);
-    printInPlace(`/print/billing/${clientId}?month=${month}&parts=${parts.join(',')}`);
+    printInPlace(
+      record
+        ? `/print/billing/${clientId}?month=${month}&record=${record.id}`
+        : `/print/billing/${clientId}?month=${month}&parts=${parts.join(',')}`,
+    );
   };
   const [exporting, setExporting] = useState(false);
   const { user } = useAuth();
@@ -80,7 +105,7 @@ export function PackPrintMenu({
     setExporting(true);
     try {
       const { exportPackExcel } = await import('./packExport');
-      await exportPackExcel({ clientId, month, parts, preparedBy: user?.fullName ?? '' });
+      await exportPackExcel({ clientId, month, parts, preparedBy: user?.fullName ?? '', record });
       setOpen(false);
     } catch (e) {
       toast(e instanceof Error && e.message.startsWith('Nothing') ? e.message : 'Export failed.');
@@ -95,19 +120,31 @@ export function PackPrintMenu({
         className={className}
         aria-expanded={open}
         aria-haspopup="dialog"
-        onClick={() => setOpen((o) => !o)}
+        title={title}
+        onClick={toggleOpen}
       >
         {children}
       </button>
       {open && (
-        <div className={b.packPanel} role="dialog" aria-label="Print month pack">
-          <div className={b.packTitle}>Include</div>
-          {PACK_PARTS.map(([k, label]) => (
-            <label key={k} className={b.packOption}>
-              <input type="checkbox" checked={parts.includes(k)} onChange={() => toggle(k)} />
-              {label}
-            </label>
-          ))}
+        <div
+          className={`${b.packPanel}${record ? ` ${b.rowPanel}` : ''}`}
+          style={at}
+          role="dialog"
+          aria-label={record ? `Print ${record.label}` : 'Print month pack'}
+        >
+          {record ? (
+            <div className={b.packTitle}>{record.label} · tax invoice, DIS & DN</div>
+          ) : (
+            <>
+              <div className={b.packTitle}>Include</div>
+              {PACK_PARTS.map(([k, label]) => (
+                <label key={k} className={b.packOption}>
+                  <input type="checkbox" checked={parts.includes(k)} onChange={() => toggle(k)} />
+                  {label}
+                </label>
+              ))}
+            </>
+          )}
           <button
             type="button"
             className={`new-shipment-btn ${b.packGo}`}

@@ -280,6 +280,52 @@ describe('clear fee payments to Chea', () => {
     ]);
   });
 
+  it('marks a month Paid once its payments (plus earlier overpayment) cover its clear fee', async () => {
+    const h = await as('ACCOUNTANT');
+    for (const [no, date, fee] of [
+      ['I 11', '2026-10-02', '300'],
+      ['I 12', '2026-10-05', '200'],
+      ['I 13', '2026-11-03', '400'],
+    ] as const)
+      await request(app)
+        .post('/api/v1/accounting/ledger')
+        .set(h)
+        .send({ declarationId: await declaration(b.jr.id, no, date), clearFee: fee });
+    const status = async (month: string) => {
+      const res = await request(app).get('/api/v1/accounting/ledger').query({ month }).set(h);
+      return {
+        rows: res.body.data.map((r: { cheaStatus: string }) => r.cheaStatus),
+        unpaid: res.body.totals.unpaid,
+      };
+    };
+    expect(await status('2026-10')).toEqual({ rows: ['UNPAID', 'UNPAID'], unpaid: 2 });
+
+    // Paid in two parts; the second overpays by 150, which is deducted from November.
+    await request(app)
+      .post(URL)
+      .set(h)
+      .send({ month: '2026-10', paidOn: '2026-10-20', amount: '250' });
+    expect((await status('2026-10')).unpaid).toBe(2);
+    await request(app)
+      .post(URL)
+      .set(h)
+      .send({ month: '2026-10', paidOn: '2026-11-02', amount: '400' });
+    expect(await status('2026-10')).toEqual({ rows: ['PAID', 'PAID'], unpaid: 0 });
+
+    const nov = await request(app).get(URL).query({ month: '2026-11' }).set(h);
+    expect(nov.body).toMatchObject({ carriedIn: '150.00', balance: '250.00' });
+    await request(app)
+      .post(URL)
+      .set(h)
+      .send({ month: '2026-11', paidOn: '2026-12-01', amount: '250' });
+    expect(await status('2026-11')).toEqual({ rows: ['PAID'], unpaid: 0 });
+    const unpaidOnly = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ month: '2026-11', cheaStatus: 'UNPAID' })
+      .set(h);
+    expect(unpaidOnly.body.data).toEqual([]);
+  });
+
   it('needs accounting:write to record a payment', async () => {
     const res = await request(app)
       .post(URL)
@@ -940,7 +986,7 @@ describe('billing documents', () => {
     ).toBe(403);
   });
 
-  it("accounting's Approved and Revised land in Operations' Record Summary inbox", async () => {
+  it("accounting's Revised lands in Operations' Record Summary inbox; Approved does not", async () => {
     const rec = await ledgerRow();
     const op = await as('OPERATOR');
     const h = await as('ACCOUNTANT');
@@ -980,19 +1026,19 @@ describe('billing documents', () => {
     await submit();
     await review('CHECKED');
     const box = await inbox();
-    expect(box.unread).toBe(2);
-    expect(box.data.map((m: { kind: string }) => m.kind)).toEqual(['CHECKED', 'REVISED']);
-    expect(box.data[1]).toMatchObject({ recordSummaryId: rs.body.id, body: 'THC should be 35.00' });
+    expect(box.unread).toBe(1);
+    expect(box.data.map((m: { kind: string }) => m.kind)).toEqual(['REVISED']);
+    expect(box.data[0]).toMatchObject({ recordSummaryId: rs.body.id, body: 'THC should be 35.00' });
     expect(
       (await request(app).get('/api/v1/meta/nav-counts').set(op)).body.recordSummaryInbox,
-    ).toBe(2);
+    ).toBe(1);
     await request(app)
       .post('/api/v1/accounting/record-summaries/inbox/read')
       .set(op)
       .send({ messageId: box.data[0].id })
       .expect(204);
-    expect((await inbox()).unread).toBe(1);
-    // The accountant who sent them gets nothing.
+    expect((await inbox()).unread).toBe(0);
+    // The accountant who sent it gets nothing.
     expect(
       (await request(app).get('/api/v1/accounting/record-summaries/inbox').set(h)).body.unread,
     ).toBe(0);

@@ -67,8 +67,13 @@ describe('Sidebar', () => {
       'Documents',
       'PDF Tools',
       'Follow Up',
-      'Accounting',
-      'Reports',
+      'Monthly Ledger',
+      'Client Billing',
+      'Chea Payments',
+      'Expense to Clients',
+      'Payroll',
+      'MIH',
+      'Import & Export',
       'Credit Noted',
       'Record Summary',
       'Quotations',
@@ -80,24 +85,27 @@ describe('Sidebar', () => {
 
   it('hides finance from Operators and admin pages from Viewers', () => {
     renderAs('OPERATOR');
-    expect(links()).not.toContain('Accounting');
-    expect(links()).not.toContain('Reports');
+    expect(screen.queryByRole('button', { name: 'Accounting' })).not.toBeInTheDocument();
+    expect(links()).not.toContain('Monthly Ledger');
+    expect(links()).not.toContain('Payroll');
     expect(links()).toContain('Shipping Plans');
   });
 
   it('shows Reports (payroll) to Accountants', () => {
     renderAs('ACCOUNTANT');
-    expect(links()).toContain('Reports');
+    expect(screen.getByRole('button', { name: 'Reports' })).toBeInTheDocument();
+    expect(links()).toContain('Payroll');
   });
 
   it('keeps Reports (payroll) from Viewers', () => {
     renderAs('VIEWER');
-    expect(links()).not.toContain('Reports');
+    expect(screen.queryByRole('button', { name: 'Reports' })).not.toBeInTheDocument();
+    expect(links()).not.toContain('Payroll');
   });
 
   it('leaves the Operations tools Credit Noted and Record Summary out for Accountants', () => {
     renderAs('ACCOUNTANT');
-    expect(links()).toContain('Accounting');
+    expect(links()).toContain('Chea Payments');
     expect(links()).not.toContain('Credit Noted');
     expect(links()).not.toContain('Record Summary');
   });
@@ -116,6 +124,18 @@ describe('Sidebar', () => {
   it('marks the current route active', () => {
     renderAs('MANAGER', '/plans');
     expect(screen.getByRole('link', { name: 'Shipping Plans' })).toHaveClass('menu-item', 'active');
+  });
+
+  it('makes Accounting a dropdown, open while inside it', async () => {
+    renderAs('ACCOUNTANT', '/accounting/tax-invoices');
+    const toggle = screen.getByRole('button', { name: 'Accounting' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('link', { name: 'Client Billing' })).toHaveClass('active');
+    toggle.click();
+    expect(await screen.findByRole('button', { name: 'Accounting' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('renders the follow-up badge from the API', async () => {

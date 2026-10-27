@@ -1,42 +1,42 @@
 /* Tax invoice / disbursement / debit note header: labelled sections (document, customer,
-   shipment), each with its fields in a roomy four-column grid. */
+   shipment), each with its fields in a compact four-column grid. */
 .card {
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 }
 .section {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 32px;
-  padding: 24px 0;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 24px;
+  padding: 14px 0;
 }
 .section + .section {
   border-top: 1px solid var(--border-subtle);
 }
 .sectionHead h4 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
 }
 .sectionHead p {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  line-height: 1.55;
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
 .fields {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px 20px;
+  gap: 10px 14px;
   align-content: start;
   align-items: start;
 }
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 .field[data-span='2'] {
@@ -53,11 +53,11 @@
    full label shows on hover if a narrow column cuts it. */
 .field > label {
   display: block;
-  height: 20px;
+  height: 16px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 16px;
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--text-primary);
@@ -66,13 +66,13 @@
 .field :global(.form-select-box) {
   width: 100%;
   box-sizing: border-box;
-  height: 44px;
+  height: 34px;
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 20px;
 }
 .field :global(.form-field-box) {
-  padding: 0 14px;
+  padding: 0 10px;
 }
 .field :global(.form-field-box[readonly]) {
   background: var(--bg-subtle);
@@ -82,11 +82,11 @@
 /* Long values (addresses) wrap onto a second line instead of being cut off. */
 .field .textarea {
   display: block;
-  height: 72px;
-  min-height: 72px;
-  padding: 11px 14px;
+  height: 54px;
+  min-height: 54px;
+  padding: 6px 10px;
   font-family: var(--font-main);
-  line-height: 22px;
+  line-height: 20px;
   resize: vertical;
 }
 .khmer {

@@ -150,7 +150,7 @@ export function GlobalSearch() {
       }));
     }
     const lower = typed.toLowerCase();
-    const pages: Option[] = NAV.flatMap((g) => g.items)
+    const pages: Option[] = NAV.flatMap((g) => g.items.flatMap((i) => i.children ?? [i]))
       .filter((i) => can(i.permission) && i.label.toLowerCase().includes(lower))
       .slice(0, 3)
       .map((i) => ({

@@ -97,7 +97,11 @@ export function TeamChat() {
         aria-controls="team-chat"
       >
         {icons.chat({})}
-        {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
+        {unread > 0 && (
+          <span key={unread} className="badge" aria-hidden="true">
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
       </button>
 
       {/* In <body>: the sticky top bar is its own stacking context, which would put the

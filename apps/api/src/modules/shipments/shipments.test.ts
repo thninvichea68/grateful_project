@@ -720,6 +720,28 @@ describe('cut stock and CDC lines', () => {
       .returning();
     return row!;
   }
+  it('only the administrator adds master-list items', async () => {
+    const body = {
+      clientId: basics.jr.id,
+      declareRef: 'I-7',
+      category: 'MACHINERY_EQUIPMENT',
+      name: 'SEWING MACHINE',
+      unit: 'SET',
+      qty: '10',
+      unitPrice: '100',
+    };
+    const op = await request(app)
+      .post('/api/v1/cut-stock')
+      .set(await as('OPERATOR'))
+      .send(body);
+    expect(op.status).toBe(403);
+    const admin = await request(app)
+      .post('/api/v1/cut-stock')
+      .set(await as('ADMIN'))
+      .send(body);
+    expect(admin.status).toBe(201);
+  });
+
   // The invoice item names the master-list item by its CDC No. (I-4, see item()).
   const importWith = (qty: string, extra: Record<string, unknown> = {}, declareNo = 'I 95001') =>
     exportShipment({

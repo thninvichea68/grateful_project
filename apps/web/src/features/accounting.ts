@@ -116,7 +116,7 @@ export function useClearFeePayments(month: string, enabled = true) {
 }
 
 export function useSaveClearFeePayment(month: string) {
-  const qc = useQueryClient();
+  const invalidate = useInvalidateAccounting();
   return useMutation({
     mutationFn: ({ id, body }: { id?: string; body: Omit<ClearFeePaymentInput, 'month'> }) =>
       id
@@ -125,16 +125,17 @@ export function useSaveClearFeePayment(month: string) {
             method: 'POST',
             json: { ...body, month },
           }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'clear-fee-payments', month] }),
+    // Payments settle months, so ledger rows' Chea status and later months' carry change too.
+    onSuccess: invalidate,
   });
 }
 
-export function useDeleteClearFeePayment(month: string) {
-  const qc = useQueryClient();
+export function useDeleteClearFeePayment() {
+  const invalidate = useInvalidateAccounting();
   return useMutation({
     mutationFn: (id: string) =>
       api<undefined>(`/accounting/clear-fee-payments/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, 'clear-fee-payments', month] }),
+    onSuccess: invalidate,
   });
 }
 

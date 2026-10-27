@@ -294,13 +294,15 @@ function Workspace({
                   <td className={b.actionCol}>
                     {/* The row's tax invoice, disbursement and debit note in one go. */}
                     {BILLING_PACK_TYPES.some((t) => r.docs[t].some((d) => d.status !== 'VOID')) && (
-                      <PrintLink
+                      <PackPrintMenu
+                        clientId={m.client.id}
+                        month={month}
+                        record={{ id: r.recordId, label: r.declareNo }}
                         className={`filter-btn ${b.rowPrint}`}
-                        href={`/print/billing/${m.client.id}?month=${month}&record=${r.recordId}`}
-                        title={`Print ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
+                        title={`Print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
                       >
                         Print
-                      </PrintLink>
+                      </PackPrintMenu>
                     )}
                   </td>
                 </tr>

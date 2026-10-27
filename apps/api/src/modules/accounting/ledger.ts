@@ -34,6 +34,7 @@ import {
 } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
 import { resequence } from './numbers';
+import { CHEA_JOIN, CHEA_STATUS } from './clearFeePayments';
 
 type LedgerInput = z.output<typeof ledgerInputSchema>;
 
@@ -56,7 +57,7 @@ const SELECT = sql`
          a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
          a.exchange_rate::text AS "exchangeRate", a.clear_fee::text AS "clearFee", a.thc::text AS thc, a.other_pay::text AS "otherPay",
          a.commission::text AS commission, a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.vat::text AS vat,
-         a.dn_total::text AS "dnTotal", a.net_profit::text AS "netProfit", a.chea_status AS "cheaStatus", a.mark,
+         a.dn_total::text AS "dnTotal", a.net_profit::text AS "netProfit", ${CHEA_STATUS} AS "cheaStatus", a.mark,
          (SELECT coalesce(json_agg(x ORDER BY x.type), '[]'::json) FROM (
             SELECT 'tax-invoices' AS type, id, invoice_no AS number, status::text AS status FROM tax_invoices WHERE accounting_record_id = a.id
             UNION ALL SELECT 'disbursements', id, dis_no, status::text FROM disbursements WHERE accounting_record_id = a.id
@@ -69,7 +70,8 @@ const FROM = sql`
   JOIN customs_declarations d ON d.id = a.declaration_id
   JOIN shipments s ON s.id = d.shipment_id
   JOIN clients c ON c.id = a.client_id
-  LEFT JOIN ports p ON p.id = a.port_id`;
+  LEFT JOIN ports p ON p.id = a.port_id
+  ${CHEA_JOIN}`;
 
 interface ListParams {
   page: number;
@@ -97,7 +99,7 @@ function where(p: ListParams) {
   if (p.clientId) c.push(sql`a.client_id = ${p.clientId}`);
   const scoped = clientCondition(sql`a.client_id`, p.clientIds);
   if (scoped) c.push(scoped);
-  if (p.cheaStatus) c.push(sql`a.chea_status = ${p.cheaStatus}`);
+  if (p.cheaStatus) c.push(sql`${CHEA_STATUS} = ${p.cheaStatus}`);
   if (p.q) {
     const like = likePattern(p.q);
     c.push(
@@ -124,7 +126,7 @@ export async function listLedger(
            coalesce(sum(a.clear_fee), 0)::text AS "clearFee", coalesce(sum(a.thc), 0)::text AS thc, coalesce(sum(a.other_pay), 0)::text AS "otherPay",
            coalesce(sum(a.commission), 0)::text AS commission, coalesce(sum(a.inv_revenue), 0)::text AS "invRevenue",
            coalesce(sum(a.dis_total), 0)::text AS "disTotal", coalesce(sum(a.vat), 0)::text AS vat, coalesce(sum(a.dn_total), 0)::text AS "dnTotal",
-           coalesce(sum(a.net_profit), 0)::text AS "netProfit", (count(*) FILTER (WHERE a.chea_status = 'UNPAID'))::int AS unpaid
+           coalesce(sum(a.net_profit), 0)::text AS "netProfit", (count(*) FILTER (WHERE ${CHEA_STATUS} = 'UNPAID'))::int AS unpaid
     ${FROM} ${where(p)}`,
   );
   return { ...toPaginated(rows, p.page, p.pageSize), totals: totals! };

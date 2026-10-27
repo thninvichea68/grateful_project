@@ -1,11 +1,9 @@
-import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { BillingOverviewRow } from '@gs/shared';
 import { useBillingOverview } from '../../features/billing';
 import { ErrorBanner, TableState } from '../../components/ui';
 import { StatTile, StatTiles } from '../../components/StatTiles';
 import { fmtMoney, fmtNum } from '../../lib/format';
-import { useAccountingLayout } from './AccountingLayout';
 import { BillingSections, MonthStepper, StagePill } from './billingParts';
 import { isMonth, monthName, thisMonth } from './billingUi';
 import b from './Billing.module.css';
@@ -20,7 +18,6 @@ export function BillingPage() {
   const asked = params.get('month');
   const month = isMonth(asked) ? asked : thisMonth();
   const overview = useBillingOverview(month);
-  const { tabsAside } = useAccountingLayout();
   const t = overview.data?.totals;
   const rows = overview.data?.rows ?? [];
   const open = (r: BillingOverviewRow) =>
@@ -28,16 +25,6 @@ export function BillingPage() {
 
   return (
     <section className="view active">
-      {tabsAside &&
-        createPortal(
-          <div>
-            <h3 className={b.title}>
-              Client Billing · <span className={b.period}>{monthName(month)}</span>
-            </h3>
-            <div className={b.sub}>Each client&apos;s invoices, statements and receipts.</div>
-          </div>,
-          tabsAside,
-        )}
       <div className="card">
         <div className={b.bar}>
           <MonthStepper

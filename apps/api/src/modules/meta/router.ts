@@ -25,7 +25,7 @@ metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
     WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL`);
   const rsInbox = await db.execute<{ n: string }>(sql`
     SELECT count(*) AS n FROM record_summary_messages
-    WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL`);
+    WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL AND kind = 'REVISED'`);
   const body: NavCounts = {
     openFollowUps: Number(row?.open ?? 0),
     overdueFollowUps: Number(row?.overdue ?? 0),

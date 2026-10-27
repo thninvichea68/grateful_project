@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { NAV } from './nav';
 import { icons } from './icons';
@@ -13,6 +14,9 @@ interface Props {
 export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
   const { user, can } = useAuth();
   const counts = useNavCounts();
+  const { pathname } = useLocation();
+  // Dropdowns the user opened or closed; untouched ones are open while you're inside them.
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
   if (!user) return null;
 
   return (
@@ -56,6 +60,44 @@ export function Sidebar({ open, onNavigate, onToggleCollapse }: Props) {
               <div className="menu-group" key={group.heading}>
                 <div className="menu-heading">{group.heading}</div>
                 {items.map((item) => {
+                  if (item.children) {
+                    const children = item.children.filter((c) => can(c.permission));
+                    const inside = pathname === item.to || pathname.startsWith(`${item.to}/`);
+                    const isOpen = openMenus[item.to] ?? inside;
+                    return (
+                      <div className={`menu-item-wrap${isOpen ? ' open' : ''}`} key={item.to}>
+                        <button
+                          type="button"
+                          className="menu-item"
+                          aria-expanded={isOpen}
+                          title={item.title}
+                          onClick={() => setOpenMenus((m) => ({ ...m, [item.to]: !isOpen }))}
+                        >
+                          {icons[item.icon]({})}
+                          {item.label}
+                          <span className="submenu-toggle">{icons.chevronDown({})}</span>
+                        </button>
+                        <div className="submenu acc-submenu">
+                          {children.map((c) => (
+                            <NavLink
+                              key={c.to}
+                              to={c.to}
+                              end={c.end}
+                              onClick={onNavigate}
+                              title={c.label}
+                              tabIndex={isOpen ? undefined : -1}
+                              className={({ isActive }) =>
+                                `submenu-item has-icon${isActive || c.alsoActive?.some((p) => pathname.startsWith(p)) ? ' active' : ''}`
+                              }
+                            >
+                              {icons[c.icon]({})}
+                              {c.label}
+                            </NavLink>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
                   const badge = item.badge && counts.data ? counts.data[item.badge] : 0;
                   return (
                     <div className="menu-item-wrap" key={item.to}>

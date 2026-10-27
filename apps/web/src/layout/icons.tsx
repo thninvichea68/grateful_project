@@ -79,6 +79,44 @@ export const icons = {
       <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" />
     </svg>
   ),
+  /** Open book: Accounting → Monthly Ledger. */
+  ledger: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z" />
+    </svg>
+  ),
+  /** Stacked invoices: Accounting → Client Billing. */
+  billing: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <rect x="4" y="5" width="13" height="17" rx="2" />
+      <path d="M8 2h10a2 2 0 0 1 2 2v14M8 11h5M8 15h5" />
+    </svg>
+  ),
+  /** Banknote: Reports → Payroll. */
+  payroll: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  ),
+  /** Factory: Reports → MIH. */
+  mih: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M2 21V10l6 4V10l6 4V4h8v17zM6 17h2M11 17h2M16 17h2" />
+    </svg>
+  ),
+  /** Two-way arrows: Reports → Import & Export. */
+  importExport: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M7 4v16M3 8l4-4 4 4M17 20V4M13 16l4 4 4-4" />
+    </svg>
+  ),
+  chevronDown: (p: IconProps) => (
+    <svg {...base} width={14} height={14} {...p}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  ),
   /** Clipboard with a bar chart: Reports (Payroll, MIH, Import & Export). */
   reports: (p: IconProps) => (
     <svg {...base} {...p}>
@@ -234,14 +272,16 @@ export const icons = {
   chat: (p: IconProps) => (
     <svg
       {...base}
-      strokeWidth={2}
+      strokeWidth={1.9}
       strokeLinecap="round"
       strokeLinejoin="round"
       width={18}
       height={18}
       {...p}
     >
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      {/* Team chat: one speech bubble with typing dots. */}
+      <path d="M3 7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-7l-4.5 3.5V18H6a3 3 0 0 1-3-3z" />
+      <path d="M8 11h.01M12 11h.01M16 11h.01" strokeWidth={2.6} />
     </svg>
   ),
   paperclip: (p: IconProps) => (

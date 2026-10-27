@@ -369,7 +369,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // Reports: Payroll and MIH (built), Import & Export (a later phase), as tabs.
+        // Reports: Payroll and MIH (built), Import & Export (a later phase): the sidebar dropdown.
         path: 'reports',
         element: guard('reports:read', <ReportsLayout />),
         children: [

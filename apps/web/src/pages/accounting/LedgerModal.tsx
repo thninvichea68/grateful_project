@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import {
@@ -16,7 +16,10 @@ import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { useToast } from '../../components/Toast';
+import { Pill } from '../../components/StatusPill';
+import { icons } from '../../layout/icons';
 import { fmtDate, fmtMoney } from '../../lib/format';
+import m from '../creditnoted/PackMenu.module.css';
 import { formResolver } from '../../lib/zodForm';
 
 const n = (v: string | null | undefined) =>
@@ -102,7 +105,15 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
   const onSubmit = handleSubmit(async (values) => {
     if (row) {
       // Numbers are given on approval and released by deleting the invoice, never typed.
-      const { declarationId: _d, invNo: _i, disNo: _s, dnNo: _n, ...patch } = values;
+      // The Chea payment status follows the month's clear fee payments.
+      const {
+        declarationId: _d,
+        invNo: _i,
+        disNo: _s,
+        dnNo: _n,
+        cheaStatus: _c,
+        ...patch
+      } = values;
       // Empty "auto" fields go back to their server defaults.
       for (const k of ['invDate', 'exchangeRate', 'commission'] as const)
         if (patch[k] === null || patch[k] === '') (patch as Record<string, unknown>)[k] = null;
@@ -245,16 +256,16 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           {money('disTotal', 'DIS (disbursement)')}
           {money('dnTotal', 'DN total')}
           <div className="form-field-group">
-            <label htmlFor="lg-cheaStatus">Chea payment</label>
-            <select
-              id="lg-cheaStatus"
-              className="form-select-box"
-              disabled={!editable}
-              {...register('cheaStatus')}
+            <label>Chea payment</label>
+            <div
+              className="form-field-box"
+              title="Set by the month's clear fee payments to Chea"
+              style={{ display: 'flex', alignItems: 'center' }}
             >
-              <option value="UNPAID">Unpaid</option>
-              <option value="PAID">Paid</option>
-            </select>
+              <Pill tone={row?.cheaStatus === 'PAID' ? 'completed' : 'pending'}>
+                {row?.cheaStatus === 'PAID' ? 'Paid' : 'Unpaid'}
+              </Pill>
+            </div>
           </div>
         </div>
         <div className="form-section-title" style={{ marginTop: 16 }}>
@@ -296,29 +307,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
         {row && (
           <div style={{ marginTop: 18 }}>
             <div className="form-section-title">Documents for this declaration</div>
-            <div className={ui.toolbar}>
-              {row.documents.map((d) => (
-                <Link
-                  key={d.id}
-                  to={`/accounting/${d.type}/${d.id}`}
-                  className="filter-btn"
-                  onClick={onClose}
-                >
-                  {BILLING_DOC_LABEL[d.type]} {d.number ?? ''} · {d.status.toLowerCase()}
-                </Link>
-              ))}
-              {editable &&
-                BILLING_DOC_TYPES.filter((t) => canStart(row, t)).map((t) => (
-                  <Link
-                    key={t}
-                    to={`/accounting/${t}/new?recordId=${row.id}`}
-                    className="cargo-btn"
-                    onClick={onClose}
-                  >
-                    + {BILLING_DOC_LABEL[t]}
-                  </Link>
-                ))}
-            </div>
+            <DocumentsMenu row={row} editable={editable} onPick={onClose} />
           </div>
         )}
         {editable && (
@@ -356,5 +345,101 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
         />
       )}
     </Modal>
+  );
+}
+
+const DOC_TONE = {
+  DRAFT: 'var(--status-pending-fg)',
+  ISSUED: 'var(--status-completed-fg)',
+  VOID: 'var(--status-exception-fg)',
+} as const;
+
+/** One button listing the declaration's documents to open and the ones that can be started. */
+function DocumentsMenu({
+  row,
+  editable,
+  onPick,
+}: {
+  row: LedgerRow;
+  editable: boolean;
+  onPick: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (
+        e instanceof KeyboardEvent ? e.key === 'Escape' : !box.current?.contains(e.target as Node)
+      )
+        setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+  const startable = editable ? BILLING_DOC_TYPES.filter((t) => canStart(row, t)) : [];
+
+  return (
+    <div className={m.wrap} ref={box} style={{ display: 'inline-block' }}>
+      <button
+        type="button"
+        className="filter-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+      >
+        Documents ({row.documents.length})
+        {icons.chevronDown({ width: 14, height: 14 })}
+      </button>
+      {open && (
+        // Opens upward: the section sits at the bottom of the modal.
+        <div
+          className={m.menu}
+          role="menu"
+          style={{ top: 'auto', bottom: 'calc(100% + 6px)', left: 0, right: 'auto', width: 300 }}
+        >
+          {row.documents.length > 0 && <div className={m.head}>Open</div>}
+          {row.documents.map((d) => (
+            <Link
+              key={d.id}
+              role="menuitem"
+              to={`/accounting/${d.type}/${d.id}`}
+              className={m.item}
+              onClick={onPick}
+              style={{ alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <b style={{ fontSize: 13 }}>
+                {BILLING_DOC_LABEL[d.type]} {d.number ?? ''}
+              </b>
+              <small style={{ color: DOC_TONE[d.status], fontWeight: 700 }}>
+                {d.status.toLowerCase()}
+              </small>
+            </Link>
+          ))}
+          {startable.length > 0 && <div className={m.head}>Create</div>}
+          {startable.map((t) => (
+            <Link
+              key={t}
+              role="menuitem"
+              to={`/accounting/${t}/new?recordId=${row.id}`}
+              className={m.item}
+              onClick={onPick}
+              style={{ alignItems: 'center' }}
+            >
+              {icons.plus({ width: 16, height: 16 })}
+              <b style={{ fontSize: 13 }}>{BILLING_DOC_LABEL[t]}</b>
+            </Link>
+          ))}
+          {row.documents.length === 0 && startable.length === 0 && (
+            <div className={m.head}>No documents yet</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

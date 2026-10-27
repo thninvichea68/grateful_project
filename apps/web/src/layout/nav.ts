@@ -15,6 +15,10 @@ export interface NavItem {
   hideFor?: RoleCode[];
   /** Exact match for NavLink active state. */
   end?: boolean;
+  /** Also lit on these paths (e.g. Client Billing on its register pages). */
+  alsoActive?: string[];
+  /** Makes the item a dropdown of these sub-items; `to` is then only the section's root. */
+  children?: NavItem[];
 }
 
 export interface NavGroup {
@@ -101,6 +105,45 @@ export const NAV: NavGroup[] = [
         title: 'Accounting',
         icon: 'accounting',
         permission: 'accounting:read',
+        children: [
+          {
+            to: '/accounting',
+            label: 'Monthly Ledger',
+            title: 'Accounting',
+            icon: 'ledger',
+            permission: 'accounting:read',
+            end: true,
+          },
+          {
+            // Client Billing holds the tax invoice, disbursement, debit note and receipt registers.
+            to: '/accounting/billing',
+            label: 'Client Billing',
+            title: 'Accounting',
+            icon: 'billing',
+            permission: 'accounting:read',
+            alsoActive: [
+              '/accounting/tax-invoices',
+              '/accounting/disbursements',
+              '/accounting/debit-notes',
+              '/accounting/receipts',
+            ],
+          },
+          {
+            to: '/accounting/credit-notes',
+            label: 'Chea Payments',
+            title: 'Chea Payments',
+            icon: 'creditnote',
+            permission: 'accounting:read',
+          },
+          {
+            // Accounting's check of Operations' record summaries (made in Record Summary below).
+            to: '/accounting/record-summaries',
+            label: 'Expense to Clients',
+            title: 'Record Summary',
+            icon: 'recordsummary',
+            permission: 'accounting:read',
+          },
+        ],
       },
       {
         to: '/reports',
@@ -108,6 +151,30 @@ export const NAV: NavGroup[] = [
         title: 'Reports',
         icon: 'reports',
         permission: 'reports:read',
+        children: [
+          {
+            to: '/reports',
+            label: 'Payroll',
+            title: 'Reports',
+            icon: 'payroll',
+            permission: 'reports:read',
+            end: true,
+          },
+          {
+            to: '/reports/mih',
+            label: 'MIH',
+            title: 'Reports',
+            icon: 'mih',
+            permission: 'reports:read',
+          },
+          {
+            to: '/reports/import-export',
+            label: 'Import & Export',
+            title: 'Reports',
+            icon: 'importExport',
+            permission: 'reports:read',
+          },
+        ],
       },
       {
         to: '/credit-noted',

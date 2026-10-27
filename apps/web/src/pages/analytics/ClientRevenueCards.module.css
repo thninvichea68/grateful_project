@@ -1,9 +1,29 @@
-/* Analytics: one card per client with the full ledger breakdown for the period. Two
-   cards per row; one accent colour, everything else neutral. */
+/* Analytics: one card per client with the full ledger breakdown for the period. One
+   card per row; one accent colour, everything else neutral. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+}
+
+/* Gray pill shared by "View All" and the card's "Open monthly" link. */
+.toggle,
+.open {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+}
+.toggle:hover,
+.open:hover {
+  background: var(--border-subtle);
+  color: var(--text-primary);
 }
 
 .card {
@@ -231,19 +251,8 @@
 }
 .open {
   margin-left: auto;
-  font-weight: 700;
-  color: var(--accent-primary);
-  text-decoration: none;
-}
-.open:hover {
-  text-decoration: underline;
 }
 
-@media (max-width: 1100px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
 @media (max-width: 640px) {
   .body,
   .cols {

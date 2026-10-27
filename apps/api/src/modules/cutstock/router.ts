@@ -8,6 +8,7 @@ import {
 } from '@gs/shared';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
+import { forbidden } from '../../lib/errors';
 import { attachmentName, excelUpload, requireFile } from '../../lib/http';
 import { db } from '../../db/client';
 import { clients } from '../../db/schema';
@@ -81,6 +82,8 @@ cutStockRouter.get('/:id', requirePermission('cutstock:read'), async (req, res) 
 });
 
 cutStockRouter.post('/', requirePermission('cutstock:write'), async (req, res) => {
+  // New master-list items are added by the IT administrator only; the rest import or edit.
+  if (req.auth!.role !== 'ADMIN') throw forbidden('Only an administrator can add items');
   const input = parse(cutStockItemInputSchema, req.body);
   assertClientAllowed(req, input.clientId);
   const id = await svc.createCutStockItem(input, req);

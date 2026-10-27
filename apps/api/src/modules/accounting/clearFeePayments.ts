@@ -17,7 +17,44 @@ import { notFound } from '../../lib/errors';
 import { queryRows } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
 
-/** A ledger month's clear fee total, the payments made to Chea against it and the balance. */
+/**
+ * The Chea payment status follows the payments: a month's ledger entries are all Paid once
+ * its payments, plus anything overpaid in earlier months, cover its clear fee total (all
+ * clients). Months before this one keep the status imported from the monthly workbooks,
+ * which predate payment tracking.
+ */
+export const CHEA_TRACKED_FROM = '2026-10-01';
+
+/** One row per month from CHEA_TRACKED_FROM: clear fee, paid, credit carried in, settled. */
+const CHEA_MONTHS = sql`
+  WITH RECURSIVE m AS (
+    SELECT g::date AS month, row_number() OVER (ORDER BY g) AS n,
+           (SELECT coalesce(sum(clear_fee), 0) FROM accounting_records
+             WHERE inv_date >= g::date AND inv_date < g::date + interval '1 month') AS fee,
+           (SELECT coalesce(sum(amount), 0) FROM clear_fee_payments WHERE period_month = g::date) AS paid
+    FROM generate_series(${CHEA_TRACKED_FROM}::date,
+      greatest(date_trunc('month', current_date), (SELECT max(inv_date) FROM accounting_records),
+               (SELECT max(period_month) FROM clear_fee_payments)),
+      interval '1 month') g
+  ), r AS (
+    SELECT n, month, fee, paid, 0::numeric AS carried FROM m WHERE n = 1
+    UNION ALL
+    SELECT m.n, m.month, m.fee, m.paid, greatest(r.carried + r.paid - r.fee, 0)
+    FROM r JOIN m ON m.n = r.n + 1
+  )
+  SELECT month, carried, paid + carried >= fee AS settled FROM r`;
+
+/** Joins each ledger row (alias a) to its month's settlement (alias cm). */
+export const CHEA_JOIN = sql`LEFT JOIN (${CHEA_MONTHS}) cm ON cm.month = date_trunc('month', a.inv_date)::date`;
+
+/** A ledger row's Chea payment status; needs CHEA_JOIN. */
+export const CHEA_STATUS = sql`(CASE WHEN a.inv_date < ${CHEA_TRACKED_FROM}::date THEN a.chea_status::text
+  WHEN cm.settled THEN 'PAID' ELSE 'UNPAID' END)`;
+
+/**
+ * A ledger month's clear fee total, the payments made to Chea against it, credit carried in
+ * from earlier overpayments and the balance.
+ */
 export async function clearFeeMonth(
   month: string,
   clientIds?: string[],
@@ -31,6 +68,11 @@ export async function clearFeeMonth(
     WHERE a.inv_date >= ${start}::date AND a.inv_date < (${start}::date + interval '1 month')
       ${scoped ? sql`AND ${scoped}` : sql``}`,
   );
+  const [carry] = await queryRows<{ carried: string }>(
+    db,
+    sql`SELECT carried::text AS carried FROM (${CHEA_MONTHS}) cm WHERE month = ${start}::date`,
+  );
+  const carriedC = toCents(carry?.carried ?? '0');
   const payments = await queryRows<ClearFeePayment>(
     db,
     sql`
@@ -45,7 +87,8 @@ export async function clearFeeMonth(
     month,
     clearFee: toMoneyString(fee!.total),
     paid: toMoneyString(fromCents(paidC)),
-    balance: toMoneyString(fromCents(toCents(fee!.total) - paidC)),
+    carriedIn: toMoneyString(fromCents(carriedC)),
+    balance: toMoneyString(fromCents(toCents(fee!.total) - paidC - carriedC)),
     payments,
   };
 }

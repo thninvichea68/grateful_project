@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { LedgerRow } from '@gs/shared';
 import { useLedger } from '../../features/accounting';
@@ -12,31 +11,9 @@ import { fmtDate, fmtNum } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { SearchBox } from '../../components/SearchBox';
 import { StatTile, StatTiles } from '../../components/StatTiles';
-import { useAccountingLayout } from './AccountingLayout';
 import { LedgerModal } from './LedgerModal';
 import { ClearFeePayments } from './ClearFeePayments';
 import l from './LedgerPage.module.css';
-
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-/** "2026-10" → "October 2026"; a year → "Jan – Dec 2026"; nothing → "All months". */
-function periodLabel(month: string, year: string | null) {
-  if (year) return `Jan – Dec ${year}`;
-  if (!month) return 'All months';
-  return `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
-}
 
 const thisMonth = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()).slice(0, 7);
@@ -106,24 +83,8 @@ export function LedgerPage() {
     setParams(next, { replace: true });
   };
 
-  const { tabsAside } = useAccountingLayout();
-
   return (
     <section className={`view active ${l.fill}`}>
-      {/* Title sits at the right end of the accounting tabs row, freeing height for rows. */}
-      {tabsAside &&
-        createPortal(
-          <div>
-            <h3 className={l.title}>
-              {year ? 'Yearly Ledger' : 'Monthly Ledger'} ·{' '}
-              <span className={l.period}>{periodLabel(month, year)}</span>
-            </h3>
-            <div className={l.sub}>
-              One row per declaration, added when its Chea payment is checked.
-            </div>
-          </div>,
-          tabsAside,
-        )}
       <div className="card">
         <div className={l.filters}>
           <select

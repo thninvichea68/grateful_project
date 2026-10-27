@@ -92,7 +92,7 @@ export function ExpenseToClients() {
   ];
 
   return (
-    <section className={`view active ${s.page}`}>
+    <section className={`view active ${s.page} ${s.fill}`}>
       <div className={`${s.stats} ${s.five}`} role="group" aria-label="Filter by status">
         {stats.map((k) => {
           const on = (q.review ?? '') === k.review;

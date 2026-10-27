@@ -1,7 +1,7 @@
 /* Design tokens ported verbatim from the prototype (index.html). Dark is the default theme. */
 :root {
-  --sidebar-w: 260px;
-  --topbar-h: 74px;
+  --sidebar-w: 220px;
+  --topbar-h: 52px;
 
   /* Cyan / Blue Primary Accents */
   --accent-primary: #06b6d4;

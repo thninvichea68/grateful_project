@@ -95,7 +95,11 @@ export function TopBar({ title, onToggleMenu }: Props) {
             aria-label={overdue ? `${overdue} overdue follow-ups` : 'No overdue follow-ups'}
           >
             {icons.bell({})}
-            {overdue > 0 && <span className="badge">{overdue}</span>}
+            {overdue > 0 && (
+              <span key={overdue} className="badge" aria-hidden="true">
+                {overdue > 99 ? '99+' : overdue}
+              </span>
+            )}
           </button>
         )}
 

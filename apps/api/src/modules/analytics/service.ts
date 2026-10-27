@@ -17,6 +17,7 @@ import { db } from '../../db/client';
 import { env } from '../../config/env';
 import { queryRows } from '../../lib/listing';
 import { periodDate } from '../../lib/shipmentDate';
+import { CHEA_JOIN, CHEA_STATUS } from '../accounting/clearFeePayments';
 
 export interface Filters {
   from?: string | undefined;
@@ -313,7 +314,7 @@ export async function clientRevenue(
     sql`
     SELECT c.id AS "clientId", c.code, c.name,
            (count(*) FILTER (WHERE ${BILLED}))::int AS entries,
-           (count(*) FILTER (WHERE ${BILLED} AND a.chea_status = 'UNPAID'))::int AS unpaid,
+           (count(*) FILTER (WHERE ${BILLED} AND ${CHEA_STATUS} = 'UNPAID'))::int AS unpaid,
            (count(*) FILTER (WHERE ${UNBILLED}))::int AS unbilled,
            round(coalesce(sum(a.clear_fee + a.thc + a.commission + a.other_pay) FILTER (WHERE ${UNBILLED}), 0), 2)::text AS "unbilledCosts",
            ${b(sql`a.inv_revenue`)}::text AS "invRevenue", ${b(sql`a.dis_total`)}::text AS "disTotal",
@@ -326,7 +327,7 @@ export async function clientRevenue(
            round(100.0 * ${b(sql`a.net_profit`)} / nullif(${b(sql`a.inv_revenue + a.dis_total + a.dn_total`)}, 0), 1)::float AS "marginPct",
            round(100.0 * ${b(sql`a.net_profit`)} / nullif(sum(${b(sql`a.net_profit`)}) OVER (), 0), 1)::float AS "sharePct",
            to_char(max(a.inv_date) FILTER (WHERE ${BILLED}), 'YYYY-MM-DD') AS "lastInvDate"
-    FROM accounting_records a JOIN clients c ON c.id = a.client_id ${where}
+    FROM accounting_records a JOIN clients c ON c.id = a.client_id ${CHEA_JOIN} ${where}
     GROUP BY c.id ORDER BY ${b(sql`a.net_profit`)} DESC, c.name`,
   );
   const monthly = await queryRows<{

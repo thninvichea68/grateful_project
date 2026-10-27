@@ -36,8 +36,9 @@ export function RecordSummaryInboxToggle({
 }
 
 /**
- * Accounting's Expense to Clients messages as table rows, as in the Credit Noted inbox.
- * Accepting a "Revised" remark opens the summary so Operations can update it.
+ * Accounting's Expense to Clients "Revise" messages as table rows, as in the Credit Noted
+ * inbox (approvals need no action, so they are not sent). Accepting one opens the summary so
+ * Operations can update it.
  */
 export function RecordSummaryInboxTable({
   base,
@@ -93,7 +94,7 @@ export function RecordSummaryInboxTable({
             <td colSpan={11} className={t.empty}>
               <span className={t.emptyIcon}>{inboxIcon(22)}</span>
               <b>{needle ? 'No messages for that declare no.' : 'Your inbox is empty'}</b>
-              <span>When accounting approves or returns a record summary, it shows up here.</span>
+              <span>When accounting returns a record summary to revise, it shows up here.</span>
             </td>
           </tr>
         )}

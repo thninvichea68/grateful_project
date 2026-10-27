@@ -85,15 +85,50 @@ export function FileOrderList({
   onChange: (files: File[]) => void;
   meta?: (f: File) => ReactNode;
 }) {
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
   const move = (i: number, d: number) => {
     const next = [...files];
     [next[i], next[i + d]] = [next[i + d]!, next[i]!];
     onChange(next);
   };
+  const moveTo = (from: number, to: number) => {
+    const next = [...files];
+    const [f] = next.splice(from, 1);
+    next.splice(to, 0, f!);
+    onChange(next);
+  };
+  const endDrag = () => {
+    setDragging(null);
+    setOver(null);
+  };
   return (
     <ul className={s.files}>
       {files.map((f, i) => (
-        <li className={s.fileRow} key={`${f.name}-${f.size}-${i}`}>
+        <li
+          className={`${s.fileRow} ${s.fileRowDrag}${dragging === i ? ` ${s.pageDragging}` : ''}${over === i && dragging !== null && dragging !== i ? ` ${s.pageOver}` : ''}`}
+          key={`${f.name}-${f.size}-${i}`}
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            setDragging(i);
+          }}
+          onDragOver={(e) => {
+            if (dragging === null) return;
+            e.preventDefault();
+            setOver(i);
+          }}
+          onDrop={(e) => {
+            if (dragging === null) return;
+            e.preventDefault();
+            if (dragging !== i) moveTo(dragging, i);
+            endDrag();
+          }}
+          onDragEnd={endDrag}
+        >
+          <span className={s.grip} aria-hidden>
+            ⠿
+          </span>
           <span className={s.fileMeta}>{i + 1}.</span>
           <span className={s.fileName} title={f.name}>
             {f.name}

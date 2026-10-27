@@ -2,16 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { icons } from '../../layout/icons';
 import m from '../creditnoted/PackMenu.module.css';
 
-/** Shipping Plans → ⋯: Export Excel (the list's filters) and Import Excel. */
+/** A toolbar's ⋯: Export Excel (the list's filters) and Import Excel (Shipping Plans, Cut Stock). */
 export function PlansMoreMenu({
   exporting,
   onExport,
   onImport,
+  exportHint = 'Shipments matching the current filters · .xlsx',
+  importHint = 'Shipping plan workbook · .xlsx',
 }: {
   exporting: boolean;
   onExport: () => void;
-  /** Omitted when the user can't write shipments. */
+  /** Omitted when the user can't import. */
   onImport?: (() => void) | undefined;
+  exportHint?: string;
+  importHint?: string;
 }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -55,7 +59,7 @@ export function PlansMoreMenu({
             {icons.download({ width: 16, height: 16 })}
             <span>
               <b>Export Excel</b>
-              <small>Shipments matching the current filters · .xlsx</small>
+              <small>{exportHint}</small>
             </span>
           </button>
           {onImport && (
@@ -63,7 +67,7 @@ export function PlansMoreMenu({
               {icons.upload({ width: 16, height: 16 })}
               <span>
                 <b>Import Excel</b>
-                <small>Shipping plan workbook · .xlsx</small>
+                <small>{importHint}</small>
               </span>
             </button>
           )}

@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { ClientRevenueRow } from '@gs/shared';
@@ -21,6 +21,9 @@ const COSTS = [
   { key: 'commission', label: 'Commission' },
   { key: 'otherPay', label: 'Other' },
 ] as const;
+
+/** Cards shown before "View All". */
+const COLLAPSED = 2;
 
 /** Ledger link for the card: a single month, a single year, or just the client. */
 function ledgerLink(clientId: string, from?: string, to?: string) {
@@ -183,7 +186,7 @@ function ClientCard({ r, link }: { r: ClientRevenueRow; link: string }) {
           </>
         )}
         <Link to={link} className={s.open}>
-          Open ledger →
+          Open monthly
         </Link>
       </footer>
     </article>
@@ -201,6 +204,8 @@ export function ClientRevenueCards({
   const q = useClientRevenue(filters, true);
   const rows = q.data ?? [];
   const ignored = filters.direction || filters.transportMode;
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? rows : rows.slice(0, COLLAPSED);
   return (
     <div className="card" style={{ marginBottom: 18 }}>
       <div className="an-section-title-row">
@@ -212,6 +217,11 @@ export function ClientRevenueCards({
             {ignored && ' · Import/export and transport filters don’t apply to the ledger.'}
           </div>
         </div>
+        {rows.length > COLLAPSED && (
+          <button type="button" className={s.toggle} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? 'Show less' : `View All (${rows.length})`}
+          </button>
+        )}
       </div>
       <ChartState
         loading={q.isLoading}
@@ -221,7 +231,7 @@ export function ClientRevenueCards({
         height={160}
       >
         <div className={s.grid}>
-          {rows.map((r) => (
+          {shown.map((r) => (
             <ClientCard
               key={r.clientId}
               r={r}
