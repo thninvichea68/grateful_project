@@ -286,12 +286,6 @@
   gap: 6px;
   padding-right: 12px;
 }
-.pillDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--tone);
-}
 
 /* Sidebar → Credit Noted (same page style) */
 .cn {

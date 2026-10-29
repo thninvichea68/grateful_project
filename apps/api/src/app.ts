@@ -20,6 +20,7 @@ import { clientsRouter } from './modules/clients/router';
 import { shipmentsRouter } from './modules/shipments/router';
 import { cutStockRouter } from './modules/cutstock/router';
 import { sealPlansRouter } from './modules/sealPlans/router';
+import { coRouter } from './modules/co/router';
 import { analyticsRouter, overviewRouter } from './modules/analytics/router';
 import { accountingRouter } from './modules/accounting/router';
 import { staffRouter } from './modules/staff/router';
@@ -98,6 +99,7 @@ export function createApp(): Express {
   v1.use('/shipments', shipmentsRouter);
   v1.use('/cut-stock', cutStockRouter);
   v1.use('/seal-plans', sealPlansRouter);
+  v1.use('/co', coRouter);
   v1.use('/analytics', analyticsRouter);
   v1.use('/overview', overviewRouter);
   v1.use('/accounting', accountingRouter);

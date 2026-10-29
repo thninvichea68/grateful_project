@@ -9,6 +9,8 @@ import {
   parseRanges,
   removePages,
   splitPdf,
+  textLines,
+  type TextRun,
 } from './pdfEngine';
 
 /** A PDF whose pages are 100, 200, … points wide, so pages can be told apart. */
@@ -75,5 +77,50 @@ describe('page tools', () => {
     const doc = await PDFDocument.load(await out.arrayBuffer());
     expect(doc.getPages().map((p) => p.getWidth())).toEqual([300, 100]);
     expect(doc.getPage(0).getRotation()).toEqual(degrees(90));
+  });
+});
+
+describe('textLines', () => {
+  const run = (str: string, x: number, y: number, width = str.length * 5): TextRun => ({
+    str,
+    x,
+    y,
+    width,
+    height: 10,
+  });
+
+  it('orders runs top to bottom, then left to right', () => {
+    const lines = textLines([run('second', 0, 688), run('world', 30, 700), run('Hello', 0, 700)]);
+    expect(lines).toEqual(['Hello world', 'second']);
+  });
+
+  it('keeps runs on a slightly uneven baseline on one line', () => {
+    expect(textLines([run('INV-001', 0, 700), run('USD', 40, 702)])).toEqual(['INV-001 USD']);
+  });
+
+  it('joins pieces of one word without a space', () => {
+    expect(textLines([run('Ship', 0, 700, 20), run('ment', 20, 700)])).toEqual(['Shipment']);
+  });
+
+  it('turns wide gaps into tabs, so columns paste into Excel', () => {
+    expect(textLines([run('Freight', 0, 700), run('120.00', 200, 700)])).toEqual(['Freight	120.00']);
+  });
+
+  it('leaves a blank line between paragraphs', () => {
+    expect(textLines([run('Dear client', 0, 700), run('Regards', 0, 640)])).toEqual([
+      'Dear client',
+      '',
+      'Regards',
+    ]);
+  });
+
+  it('sees a column gap drawn as one wide blank run', () => {
+    expect(
+      textLines([run('ROKA', 0, 700, 20), run(' ', 20, 700, 100), run('RECEIPT', 120, 700)]),
+    ).toEqual(['ROKA	RECEIPT']);
+  });
+
+  it('skips empty runs', () => {
+    expect(textLines([run('', 0, 700), run('A', 0, 690)])).toEqual(['A']);
   });
 });

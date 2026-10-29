@@ -24,7 +24,7 @@ export function ClientsPage() {
   const status = params.get('status') ?? '';
   const list = useClients({
     page,
-    pageSize: Number(params.get('pageSize') ?? 25),
+    pageSize: Number(params.get('pageSize') ?? 50),
     q: q || undefined,
     status: status || undefined,
     sort: 'name',

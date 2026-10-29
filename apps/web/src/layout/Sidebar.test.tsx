@@ -61,6 +61,8 @@ describe('Sidebar', () => {
       'Overview',
       'Shipping Plans',
       'Seal Plans',
+      'CO Plans',
+      'Breakdown',
       'Clients',
       'Analytics',
       'CDC Master List',

@@ -59,7 +59,7 @@ export function LedgerPage() {
     cheaStatus: params.get('chea') || undefined,
     q: params.get('q') || undefined,
     page: Number(params.get('page') ?? 1),
-    pageSize: Number(params.get('pageSize') ?? 100),
+    pageSize: Number(params.get('pageSize') ?? 50),
   };
   const list = useLedger(q);
   const t = list.data?.totals;

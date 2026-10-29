@@ -5,10 +5,7 @@ type Tone = 'completed' | 'progress' | 'pending' | 'exception';
 /** The prototype's `.status-tag` pill. */
 export function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <span className={`status-tag ${tone}`}>
-      <span className="dot" />
-      {children}
-    </span>
+    <span className={`status-tag ${tone}`}>{children}</span>
   );
 }
 

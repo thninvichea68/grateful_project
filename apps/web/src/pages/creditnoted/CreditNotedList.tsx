@@ -43,7 +43,7 @@ export function CreditNotedList() {
   const get = (k: string) => params.get(k) || undefined;
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: Number(params.get('pageSize') ?? 10),
+    pageSize: Number(params.get('pageSize') ?? 50),
     clientId: get('clientId'),
     direction: get('direction'),
     q: get('q'),
@@ -232,7 +232,6 @@ export function CreditNotedList() {
                     <td className={`${s.num} ${s.fee}`}>{fmtMoney(r.total)}</td>
                     <td>
                       <span className={`${s.statusPill} ${statusOf(r).cls}`}>
-                        <i className={s.pillDot} />
                         {statusOf(r).label}
                       </span>
                     </td>

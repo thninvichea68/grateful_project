@@ -102,8 +102,8 @@ const RecordSummaryRoute = lazy(() =>
 const ReportsLayout = lazy(() =>
   import('./pages/reports/ReportsLayout').then((m) => ({ default: m.ReportsLayout })),
 );
-const ReportComingSoon = lazy(() =>
-  import('./pages/reports/ReportsLayout').then((m) => ({ default: m.ReportComingSoon })),
+const ImportExportPage = lazy(() =>
+  import('./pages/reports/ImportExportPage').then((m) => ({ default: m.ImportExportPage })),
 );
 const PayrollPage = lazy(() =>
   import('./pages/reports/PayrollPage').then((m) => ({ default: m.PayrollPage })),
@@ -112,6 +112,23 @@ const MihPage = lazy(() => import('./pages/reports/MihPage').then((m) => ({ defa
 const PrintCapacityReportPage = lazy(() =>
   import('./pages/print/PrintCapacityReportPage').then((m) => ({
     default: m.PrintCapacityReportPage,
+  })),
+);
+const PrintCustomsReportPage = lazy(() =>
+  import('./pages/print/PrintCustomsReportPage').then((m) => ({
+    default: m.PrintCustomsReportPage,
+  })),
+);
+const CoLayout = lazy(() => import('./pages/co/CoLayout').then((m) => ({ default: m.CoLayout })));
+const CoPlansPage = lazy(() =>
+  import('./pages/co/CoPlansPage').then((m) => ({ default: m.CoPlansPage })),
+);
+const BreakdownPage = lazy(() =>
+  import('./pages/co/BreakdownPage').then((m) => ({ default: m.BreakdownPage })),
+);
+const PrintCoBreakdownPage = lazy(() =>
+  import('./pages/print/PrintCoBreakdownPage').then((m) => ({
+    default: m.PrintCoBreakdownPage,
   })),
 );
 const QuotationEditorPage = lazy(() =>
@@ -285,6 +302,32 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    // Reports → Import & Export → Print: the report left in session storage.
+    path: '/print/customs-report',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="reports:read">
+          <Suspense fallback={null}>
+            <PrintCustomsReportPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
+    // CO → Breakdown → Print: the sheet left in session storage.
+    path: '/print/co-breakdown',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="shipments:read">
+          <Suspense fallback={null}>
+            <PrintCoBreakdownPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
     // Printable documents: full page, no sidebar.
     path: '/print/:type/:id',
     element: (
@@ -307,6 +350,29 @@ export const router = createBrowserRouter([
       { path: 'plans/new', element: guard('shipments:write', <ShipmentFormPage />) },
       { path: 'plans/:id', element: guard('shipments:read', <ShipmentFormPage />) },
       { path: 'seal-plans', element: guard('sealplans:read', <SealPlansPage />) },
+      {
+        // CO: CO Plans and Breakdown, the sidebar dropdown.
+        path: 'co',
+        element: guard('shipments:read', <CoLayout />),
+        children: [
+          {
+            index: true,
+            element: (
+              <Suspense fallback={null}>
+                <CoPlansPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'breakdown',
+            element: (
+              <Suspense fallback={null}>
+                <BreakdownPage />
+              </Suspense>
+            ),
+          },
+        ],
+      },
       { path: 'clients', element: guard('clients:read', <ClientsPage />) },
       { path: 'clients/:id', element: guard('clients:read', <ClientDetailPage />) },
       { path: 'analytics', element: guard('dashboard:read', <AnalyticsPage />) },
@@ -369,7 +435,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        // Reports: Payroll and MIH (built), Import & Export (a later phase): the sidebar dropdown.
+        // Reports: Payroll, MIH and Import & Export: the sidebar dropdown.
         path: 'reports',
         element: guard('reports:read', <ReportsLayout />),
         children: [
@@ -393,7 +459,7 @@ export const router = createBrowserRouter([
             path: 'import-export',
             element: (
               <Suspense fallback={null}>
-                <ReportComingSoon name="IMPORT & EXPORT Reports" />
+                <ImportExportPage />
               </Suspense>
             ),
           },

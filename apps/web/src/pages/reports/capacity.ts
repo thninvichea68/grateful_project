@@ -12,7 +12,7 @@ import { CATEGORIES, type PayrollReport } from './payroll';
  * (points 10–11) and the saved setup (the rest). Shared by the screen, the print page and Excel.
  */
 
-const KH_MONTHS = [
+export const KH_MONTHS = [
   'មករា',
   'កុម្ភៈ',
   'មីនា',

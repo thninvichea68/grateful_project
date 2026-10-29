@@ -215,7 +215,6 @@ export function StagePill({ stage }: { stage: BillingStage }) {
       title={s.hint}
       style={{ whiteSpace: 'nowrap' }}
     >
-      <span className="dot" />
       {s.label}
     </span>
   );

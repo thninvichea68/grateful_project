@@ -6,6 +6,7 @@ import {
   burstPdf,
   COMPRESS_LEVELS,
   compressPdf,
+  extractText,
   formatRanges,
   imagesToPdf,
   mergePdfs,
@@ -13,6 +14,7 @@ import {
   pageCount,
   parseRanges,
   pdfToImages,
+  readPages,
   removePages,
   splitPdf,
   type CompressLevel,
@@ -20,6 +22,7 @@ import {
   type PagePlan,
 } from '../../lib/pdfEngine';
 import { addPageNumbers, addWatermark, type Corner } from '../../lib/pdfEdit';
+import { pagesToDocx, pagesToXlsx } from '../../lib/pdfConvert';
 import {
   ChosenFile,
   DropZone,
@@ -407,11 +410,7 @@ export function RemovePagesTool() {
 
   return (
     <>
-      <ChosenFile
-        file={file}
-        extra={pagesLabel(count || null)}
-        onClear={() => setFile(null)}
-      />
+      <ChosenFile file={file} extra={pagesLabel(count || null)} onClear={() => setFile(null)} />
       {thumbs.loading && <div className={s.note}>Reading pages…</div>}
       {thumbs.error && <div className={s.error}>{thumbs.error}</div>}
       {count > 0 && (
@@ -744,6 +743,191 @@ export function PdfToImagesTool() {
         }}
       />
       <Results files={out} />
+    </>
+  );
+}
+
+export function PdfToTextTool() {
+  const [file, setFile] = useState<File | null>(null);
+  const [ranges, setRanges] = useState('');
+  const [text, setText] = useState('');
+  const [blank, setBlank] = useState<number[]>([]);
+  const [copied, setCopied] = useState(false);
+  const pages = usePageCount(file);
+  const r = useRun();
+  const reset = () => (setText(''), setBlank([]), setCopied(false));
+  if (!file)
+    return (
+      <DropZone accept={PDF_ACCEPT} label="Choose a PDF to read" onFiles={([f]) => setFile(f!)} />
+    );
+  const out: OutFile[] = text
+    ? [{ name: `${baseName(file.name)}.txt`, blob: new Blob([text], { type: 'text/plain' }) }]
+    : [];
+  return (
+    <>
+      <ChosenFile file={file} extra={pagesLabel(pages)} onClear={() => (setFile(null), reset())} />
+      <div className={s.options}>
+        <label className={s.option}>
+          Pages
+          <input
+            className={ui.input}
+            value={ranges}
+            onChange={(e) => setRanges(e.target.value)}
+            placeholder="All pages, or e.g. 1-3, 5"
+            style={{ width: 220 }}
+          />
+        </label>
+      </div>
+      <RunRow
+        label="Get text"
+        disabled={pages === null}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              reset();
+              const wanted = ranges.trim() ? parseRanges(ranges, pages!).flat() : undefined;
+              const res = await extractText(file, wanted, (d, t) =>
+                r.setProgress(`Page ${d} of ${t}…`),
+              );
+              const empty = res.filter((p) => !p.text).map((p) => p.page);
+              if (empty.length === res.length)
+                throw new Error(
+                  'No text found — this looks like a scanned PDF, which has only pictures of text.',
+                );
+              setBlank(empty);
+              setText(
+                res.length === 1
+                  ? res[0]!.text
+                  : res.map((p) => `--- Page ${p.page + 1} ---\n${p.text}`).join('\n\n'),
+              );
+            }),
+        }}
+      />
+      {text && (
+        <>
+          <textarea
+            className={ui.input}
+            readOnly
+            value={text}
+            rows={16}
+            aria-label="Text from the PDF"
+            style={{ width: '100%', marginTop: 16, fontFamily: 'monospace', fontSize: 12.5 }}
+          />
+          <div className={s.runRow} style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className={ui.ghostBtn}
+              onClick={async () => {
+                await navigator.clipboard.writeText(text);
+                setCopied(true);
+              }}
+            >
+              {copied ? 'Copied' : 'Copy text'}
+            </button>
+          </div>
+          {blank.length > 0 && (
+            <div className={s.note}>
+              No text on page{blank.length === 1 ? '' : 's'} {formatRanges(blank)} — probably
+              scanned.
+            </div>
+          )}
+        </>
+      )}
+      <Results files={out} />
+    </>
+  );
+}
+
+/** PDF to Word or Excel: both rebuild the page from its text, so scans have nothing to give. */
+export function PdfConvertTool({ to }: { to: 'docx' | 'xlsx' }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [ranges, setRanges] = useState('');
+  const [oneSheet, setOneSheet] = useState(false);
+  const [blank, setBlank] = useState<number[]>([]);
+  const [out, setOut] = useState<OutFile[]>([]);
+  const pages = usePageCount(file);
+  const r = useRun();
+  const reset = () => (setOut([]), setBlank([]));
+  if (!file)
+    return (
+      <DropZone
+        accept={PDF_ACCEPT}
+        label="Choose a PDF to convert"
+        onFiles={([f]) => setFile(f!)}
+      />
+    );
+  return (
+    <>
+      <ChosenFile file={file} extra={pagesLabel(pages)} onClear={() => (setFile(null), reset())} />
+      <div className={s.options}>
+        <label className={s.option}>
+          Pages
+          <input
+            className={ui.input}
+            value={ranges}
+            onChange={(e) => setRanges(e.target.value)}
+            placeholder="All pages, or e.g. 1-3, 5"
+            style={{ width: 220 }}
+          />
+        </label>
+        {to === 'xlsx' && (
+          <div className={s.option}>
+            Sheets
+            <div className={s.radioRow}>
+              <label>
+                <input type="radio" checked={!oneSheet} onChange={() => setOneSheet(false)} />
+                One sheet per page
+              </label>
+              <label>
+                <input type="radio" checked={oneSheet} onChange={() => setOneSheet(true)} />
+                All pages on one sheet
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+      <RunRow
+        label={to === 'docx' ? 'Convert to Word' : 'Convert to Excel'}
+        disabled={pages === null}
+        state={{
+          ...r,
+          onRun: () =>
+            r.run(async () => {
+              reset();
+              const wanted = ranges.trim() ? parseRanges(ranges, pages!).flat() : undefined;
+              const read = await readPages(file, {
+                pages: wanted,
+                styles: to === 'docx',
+                onProgress: (d, t) => r.setProgress(`Reading page ${d} of ${t}…`),
+              });
+              const empty = read.filter((p) => !p.rows.length).map((p) => p.page);
+              if (empty.length === read.length)
+                throw new Error(
+                  'No text found — this looks like a scanned PDF, which has only pictures of text.',
+                );
+              r.setProgress('Building the file…');
+              const blob =
+                to === 'docx' ? await pagesToDocx(read) : await pagesToXlsx(read, oneSheet);
+              setBlank(empty);
+              setOut([{ name: `${baseName(file.name)}.${to}`, blob }]);
+            }),
+        }}
+      />
+      <Results
+        files={out}
+        summary={
+          blank.length > 0 &&
+          `No text on page${blank.length === 1 ? '' : 's'} ${formatRanges(blank)} — probably scanned, so ${blank.length === 1 ? 'it is' : 'they are'} empty in the file.`
+        }
+      />
+      {out.length > 0 && (
+        <div className={s.note}>
+          {to === 'docx'
+            ? 'Text keeps its place, size, bold and italics. Pictures, lines and boxes are not copied.'
+            : 'Amounts become numbers, so they add up. Check column alignment on complex tables.'}
+        </div>
+      )}
     </>
   );
 }

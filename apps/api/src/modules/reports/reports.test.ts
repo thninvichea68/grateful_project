@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import type { ProductionReportData, RoleCode } from '@gs/shared';
+import type { CustomsReportData, ProductionReportData, RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
 import { pool } from '../../db/client';
 import { createUser, resetDb, seedBasics, TEST_PASSWORD } from '../../test/helpers';
@@ -225,5 +225,96 @@ describe('saved payroll months', () => {
     expect((await del('OPERATOR')).status).toBe(403);
     expect((await del('ACCOUNTANT')).status).toBe(204);
     expect((await del('ACCOUNTANT')).status).toBe(404);
+  });
+});
+
+describe('import & export report', () => {
+  /** A JR shipment with one invoice and the given declarations. */
+  async function shipment(
+    direction: 'IMPORT' | 'EXPORT',
+    date: string,
+    declarations: string[],
+    lines: [description: string, pcs: number, nw: number, price: number][],
+  ) {
+    const res = await request(app)
+      .post('/api/v1/shipments')
+      .set(await as('OPERATOR'))
+      .send({
+        clientId: basics.jr.id,
+        direction,
+        transportMode: 'SEA',
+        loadType: 'FCL',
+        clearancePortId: basics.port.id,
+        destinationCountryIso2: direction === 'EXPORT' ? 'US' : 'KH',
+        originCountryIso2: direction === 'EXPORT' ? 'KH' : 'CN',
+        etd: date,
+        eta: date,
+        invoices: [
+          {
+            invoiceNo: `JR-CD-${++invoiceNo}`,
+            invoiceDate: date,
+            lines: lines.map(([description, pcs, nw, fobUnitPrice]) => ({
+              description,
+              pcs,
+              netWeightKg: nw,
+              grossWeightKg: nw + 1,
+              fobUnitPrice,
+            })),
+          },
+        ],
+        declarations: declarations.map((declareNo) => ({
+          declareNo,
+          declareDate: date,
+          portId: basics.port.id,
+        })),
+      });
+    if (res.status !== 201) throw new Error(JSON.stringify(res.body));
+  }
+  const get = async (direction: 'IMPORT' | 'EXPORT', from: string, to: string) =>
+    request(app)
+      .get('/api/v1/reports/customs')
+      .query({ clientId: basics.jr.id, direction, from, to })
+      .set(await as('ACCOUNTANT'));
+
+  it('lists each invoice line under its I/E declaration, by declaration date', async () => {
+    // The CO number kept as a second "declaration" is not a customs one.
+    await shipment(
+      'EXPORT',
+      '2026-09-25',
+      ['E 291340', 'LAT2026-00358'],
+      [
+        ['LADIES PANT KNITTED 95% POLYESTER 5% SPANDEX', 2416, 1283.5, 2.05],
+        ['LADIES PANT KNITTED 78% NYLON', 576, 324, 2],
+      ],
+    );
+    await shipment(
+      'EXPORT',
+      '2026-08-14',
+      ['E245477'],
+      [['LADIES 2PC PAJAMAS', 1284, 395.9, 1.325]],
+    );
+    await shipment('EXPORT', '2026-07-30', ['E 1'], [['OUT OF RANGE', 1, 1, 1]]);
+    await shipment('IMPORT', '2026-09-19', ['I 136252'], [['KNITTED FABRIC', 43579.5, 23993.3, 1]]);
+    // Invoiced in the period but not declared yet: listed apart.
+    await shipment('EXPORT', '2026-09-28', [], [['WAITING', 10, 1, 1]]);
+
+    const res = await get('EXPORT', '2026-08', '2026-09');
+    expect(res.status).toBe(200);
+    const body = res.body as CustomsReportData;
+    expect(body).toMatchObject({ companyName: expect.any(String), direction: 'EXPORT' });
+    expect(
+      body.lines.map((l) => [l.declareNo, l.declareDate, l.qty, l.netWeightKg, l.value]),
+    ).toEqual([
+      ['E 245477', '2026-08-14', 1284, 395.9, 1701.3],
+      ['E 291340', '2026-09-25', 2416, 1283.5, 4952.8],
+      ['E 291340', '2026-09-25', 576, 324, 1152],
+    ]);
+    expect(body.undeclared).toMatchObject([{ lines: 1, date: '2026-09-28' }]);
+
+    const imports = (await get('IMPORT', '2026-01', '2026-09')).body as CustomsReportData;
+    expect(imports.lines.map((l) => [l.declareNo, l.description, l.value])).toEqual([
+      ['I 136252', 'KNITTED FABRIC', 43579.5],
+    ]);
+    expect((await get('IMPORT', '2026-09', '2026-08')).status).toBe(400);
   });
 });

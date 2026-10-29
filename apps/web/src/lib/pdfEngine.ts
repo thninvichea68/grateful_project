@@ -330,6 +330,187 @@ export async function pdfToImages(
   return out;
 }
 
+/** A run of text on a page, positioned in PDF points (y grows upwards). */
+export interface TextRun {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+export interface TextSpan {
+  text: string;
+  /** Text height in points. */
+  size: number;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/** Text between two wide gaps on a line; `x` and `end` are its left and right edges. */
+export interface TextCell {
+  x: number;
+  end: number;
+  text: string;
+  spans: TextSpan[];
+}
+
+/** One visual line: `y` is its baseline, `size` its largest text height. */
+export interface TextRow {
+  y: number;
+  size: number;
+  cells: TextCell[];
+}
+
+/**
+ * Rebuild reading-order rows from positioned runs: top to bottom, then left to right.
+ * A small gap becomes a space and a wide gap starts a new cell (a table column).
+ */
+export function textRows(runs: TextRun[]): TextRow[] {
+  const rows: { y: number; h: number; runs: TextRun[] }[] = [];
+  for (const r of [...runs].sort((a, b) => b.y - a.y || a.x - b.x)) {
+    // Blank runs are skipped: some PDFs draw column gaps as one wide space, which would hide the gap.
+    if (!r.str.trim()) continue;
+    const row = rows.find((l) => Math.abs(l.y - r.y) <= Math.max(l.h, r.height, 1) * 0.5);
+    if (row) row.runs.push(r);
+    else rows.push({ y: r.y, h: r.height, runs: [r] });
+  }
+  return rows.map(({ y, h, runs: rs }) => {
+    rs.sort((a, b) => a.x - b.x);
+    const cells: TextCell[] = [];
+    let cell: TextCell | undefined;
+    for (const r of rs) {
+      const em = Math.max(r.height || h, 1);
+      const gap = cell ? r.x - cell.end : 0;
+      if (!cell || gap > em * 1.2) {
+        cell = { x: r.x, end: r.x, text: '', spans: [] };
+        cells.push(cell);
+      } else if (gap > em * 0.15 && !/\s$/.test(cell.text) && !/^\s/.test(r.str)) {
+        addSpan(cell, ' ', r);
+      }
+      addSpan(cell, cell.text ? r.str : r.str.trimStart(), r);
+      cell.end = Math.max(cell.end, r.x + r.width);
+    }
+    for (const c of cells) {
+      c.text = c.text.trimEnd();
+      const last = c.spans[c.spans.length - 1];
+      if (last) last.text = last.text.trimEnd();
+    }
+    return { y, size: Math.max(...rs.map((r) => r.height), 1), cells };
+  });
+}
+
+function addSpan(cell: TextCell, text: string, r: TextRun) {
+  cell.text += text;
+  const last = cell.spans[cell.spans.length - 1];
+  const size = Math.round(r.height * 2) / 2;
+  if (last && last.size === size && !!last.bold === !!r.bold && !!last.italic === !!r.italic)
+    last.text += text;
+  else cell.spans.push({ text, size, bold: r.bold, italic: r.italic });
+}
+
+/** Rows as plain lines: cells joined by tabs, a blank line between paragraphs. */
+export function rowsToLines(rows: TextRow[]): string[] {
+  const out: string[] = [];
+  rows.forEach((row, i) => {
+    // A gap of well over a line height starts a new paragraph.
+    const prev = rows[i - 1];
+    if (prev && prev.y - row.y > Math.max(prev.size, row.size) * 2) out.push('');
+    out.push(row.cells.map((c) => c.text).join('\t'));
+  });
+  return out;
+}
+
+/** Plain lines straight from runs; wide gaps become tabs, so table columns paste into Excel. */
+export const textLines = (runs: TextRun[]) => rowsToLines(textRows(runs));
+
+/** A page's text layout, in points from the page's top-left corner turned to y-up. */
+export interface PageText {
+  page: number;
+  width: number;
+  height: number;
+  rows: TextRow[];
+}
+
+/**
+ * Read the text layout of each chosen page (0-based indexes, default all); scanned pages have
+ * no rows. `styles` also looks up bold and italic, which costs a full parse of each page.
+ */
+export async function readPages(
+  file: Blob,
+  opts: { pages?: number[]; styles?: boolean; onProgress?: (done: number, total: number) => void },
+): Promise<PageText[]> {
+  const lib = await pdfjs();
+  const doc = await openForRender(file);
+  try {
+    const wanted = opts.pages ?? Array.from({ length: doc.numPages }, (_, i) => i);
+    const out: PageText[] = [];
+    for (const [n, i] of wanted.entries()) {
+      const page = await doc.getPage(i + 1);
+      const vp = page.getViewport({ scale: 1 });
+      const content = await page.getTextContent();
+      const font = opts.styles ? await fontLookup(page) : () => undefined;
+      const runs: TextRun[] = [];
+      for (const it of content.items) {
+        if (!('str' in it)) continue;
+        // Viewport space handles rotated pages and crop boxes that don't start at 0,0.
+        const m = lib.Util.transform(vp.transform, it.transform);
+        const f = font(it.fontName);
+        runs.push({
+          str: it.str,
+          x: m[4],
+          y: vp.height - m[5],
+          width: it.width,
+          height: Math.hypot(m[2], m[3]) || it.height,
+          bold: f?.bold,
+          italic: f?.italic,
+        });
+      }
+      out.push({ page: i, width: vp.width, height: vp.height, rows: textRows(runs) });
+      page.cleanup();
+      opts.onProgress?.(n + 1, wanted.length);
+    }
+    return out;
+  } finally {
+    await doc.destroy();
+  }
+}
+
+/** Bold / italic of a page's fonts, from pdf.js's flags or failing that the font's name. */
+async function fontLookup(page: import('pdfjs-dist').PDFPageProxy) {
+  try {
+    await page.getOperatorList(); // loads the page's fonts into commonObjs
+  } catch {
+    return () => undefined;
+  }
+  return (id: string) => {
+    try {
+      const f = page.commonObjs.get(id) as
+        { name?: string; bold?: boolean; black?: boolean; italic?: boolean } | undefined;
+      if (!f) return undefined;
+      const name = f.name ?? '';
+      return {
+        bold: !!(f.bold || f.black) || /bold|black|heavy|semibold|demi/i.test(name),
+        italic: !!f.italic || /italic|oblique/i.test(name),
+      };
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+/** Text of each chosen page (0-based indexes, default all); scanned pages come back empty. */
+export async function extractText(
+  file: Blob,
+  pages?: number[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ page: number; text: string }[]> {
+  const read = await readPages(file, { pages, onProgress });
+  return read.map((p) => ({ page: p.page, text: rowsToLines(p.rows).join('\n').trim() }));
+}
+
 export const COMPRESS_LEVELS = {
   low: { label: 'Light — best quality', dpi: 150, quality: 0.8 },
   medium: { label: 'Recommended', dpi: 110, quality: 0.65 },

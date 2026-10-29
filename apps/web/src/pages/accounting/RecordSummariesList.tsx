@@ -59,7 +59,7 @@ export function RecordSummariesList({ base }: { base: string }) {
   const q = {
     ...filters,
     page: Number(params.get('page') ?? 1),
-    pageSize: Number(params.get('pageSize') ?? 10),
+    pageSize: Number(params.get('pageSize') ?? 50),
     status: statusFilter?.status,
     review: statusFilter?.review,
   };
@@ -250,7 +250,6 @@ export function RecordSummariesList({ base }: { base: string }) {
                     <td className={`${s.num} ${s.fee}`}>{fmtMoney(d.total)}</td>
                     <td>
                       <span className={`${s.statusPill} ${statusOf(d).cls}`}>
-                        <i className={s.pillDot} />
                         {statusOf(d).label}
                       </span>
                     </td>

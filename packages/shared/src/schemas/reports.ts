@@ -251,3 +251,49 @@ export interface PayrollMonthDetail extends PayrollMonthRow {
   staff: PayrollStaffRow[];
   issues: z.output<typeof payrollIssueSchema>[];
 }
+
+/* ---------- Import & Export: the customs-declaration reports ---------- */
+
+const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM');
+
+/**
+ * Reports → Import & Export: a factory's import (or export) invoice lines whose customs
+ * declaration is dated from the first day of `from` to the last day of `to`.
+ */
+export const customsReportQuerySchema = z
+  .object({
+    clientId: z.string().uuid(),
+    direction: z.enum(['IMPORT', 'EXPORT']),
+    from: monthSchema,
+    to: monthSchema,
+  })
+  .refine((q) => q.from <= q.to, { message: 'From must not be after To', path: ['to'] });
+
+/** One row of the report: one commercial invoice line under its customs declaration. */
+export interface CustomsReportLine {
+  declareNo: string;
+  declareDate: string;
+  shipmentId: string;
+  reference: string;
+  invoiceNo: string;
+  description: string;
+  unit: string | null;
+  qty: number;
+  netWeightKg: number;
+  grossWeightKg: number;
+  /** The line's FOB amount: the customs value. */
+  value: number;
+}
+
+export interface CustomsReportData {
+  clientId: string;
+  direction: 'IMPORT' | 'EXPORT';
+  from: string;
+  to: string;
+  companyName: string;
+  /** VAT TIN ("អ.ត.ប"), e.g. L001-902501613. */
+  vattin: string;
+  lines: CustomsReportLine[];
+  /** Shipments of the period with invoices but no I/E declaration yet: left off the report. */
+  undeclared: { shipmentId: string; reference: string; date: string | null; lines: number }[];
+}

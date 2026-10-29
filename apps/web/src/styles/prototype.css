@@ -1194,6 +1194,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 @media (min-width: 900px) and (min-height: 600px) {
   #view-plans.view.active,
   #view-sealplans.view.active,
+  #view-co.view.active,
   #view-operations.view.active {
     display: flex;
     flex-direction: column;
@@ -1201,6 +1202,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   }
   #view-plans > .card,
   #view-sealplans > .card,
+  #view-co > .card,
   #view-operations > .card {
     display: flex;
     flex-direction: column;
@@ -1209,11 +1211,13 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   }
   #view-plans > .card > *,
   #view-sealplans > .card > *,
+  #view-co > .card > *,
   #view-operations > .card > * {
     flex-shrink: 0;
   }
   #view-plans > .card > .plans-table-scroll,
   #view-sealplans > .card > .plans-table-scroll,
+  #view-co > .card > .plans-table-scroll,
   #view-operations > .card > .plans-table-scroll {
     flex: 1 1 auto;
     min-height: 0;
@@ -4504,12 +4508,6 @@ th.frozen-col.frozen-col-edge {
   font-size: 11px;
   font-weight: 700;
 }
-.status-tag .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
 .status-tag.completed {
   background: var(--status-completed-bg);
   color: var(--status-completed-fg);
@@ -4574,6 +4572,19 @@ th.frozen-col.frozen-col-edge {
 .seal-plan-table tr.seal-plan-month td > span {
   position: sticky;
   left: 12px;
+}
+/* CO Plans: the Total row stays pinned under the rows while they scroll. */
+.co-plan-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  background: var(--bg-surface-elevated);
+  box-shadow: 0 -1px 0 0 var(--border-subtle);
+  font-weight: 800;
+}
+.co-plan-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .cutstock-table td:nth-child(2) {
   white-space: normal;

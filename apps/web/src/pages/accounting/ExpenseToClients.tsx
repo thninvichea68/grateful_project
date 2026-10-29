@@ -25,7 +25,7 @@ export function ExpenseToClients() {
   const get = (k: string) => params.get(k) || undefined;
   const q = {
     page: Number(params.get('page') ?? 1),
-    pageSize: Number(params.get('pageSize') ?? 10),
+    pageSize: Number(params.get('pageSize') ?? 50),
     clientId: get('clientId'),
     direction: get('direction'),
     q: get('q'),

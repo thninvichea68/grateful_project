@@ -6,8 +6,10 @@ import {
   ImagesToPdfTool,
   MergeTool,
   OrganizeTool,
+  PdfConvertTool,
   PageNumbersTool,
   PdfToImagesTool,
+  PdfToTextTool,
   RemovePagesTool,
   SplitTool,
   WatermarkTool,
@@ -142,6 +144,45 @@ const TOOLS: Tool[] = [
       </>,
     ),
     Panel: PdfToImagesTool,
+  },
+  {
+    id: 'pdf-to-text',
+    name: 'PDF to text',
+    desc: 'Copy out the text of a PDF, or save it as a .txt file. Scans have no text to copy.',
+    group: 'Convert',
+    icon: svg(
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6M8 13h8M8 17h5" />
+      </>,
+    ),
+    Panel: PdfToTextTool,
+  },
+  {
+    id: 'pdf-to-word',
+    name: 'PDF to Word',
+    desc: 'Turn a PDF into an editable Word file (.docx), keeping the text layout.',
+    group: 'Convert',
+    icon: svg(
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6M8 12l1.5 6 2.5-4.5 2.5 4.5 1.5-6" />
+      </>,
+    ),
+    Panel: () => <PdfConvertTool to="docx" />,
+  },
+  {
+    id: 'pdf-to-excel',
+    name: 'PDF to Excel',
+    desc: 'Pull tables out of a PDF into a spreadsheet (.xlsx), with amounts as numbers.',
+    group: 'Convert',
+    icon: svg(
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M3 9h18M3 15h18M9 3v18" />
+      </>,
+    ),
+    Panel: () => <PdfConvertTool to="xlsx" />,
   },
 ];
 

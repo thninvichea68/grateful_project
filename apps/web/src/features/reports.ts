@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  CustomsReportData,
   MihDraft,
   MihMonth,
   MihMonthInput,
@@ -108,3 +109,18 @@ export function useDeleteMihMonth() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reports', 'mih'] }),
   });
 }
+
+/* ---------- Import & Export ---------- */
+
+/** A factory's import or export invoice lines by customs declaration, `from`–`to` months. */
+export const useCustomsReport = (q: {
+  clientId: string | undefined;
+  direction: 'IMPORT' | 'EXPORT';
+  from: string;
+  to: string;
+}) =>
+  useQuery({
+    queryKey: ['reports', 'customs', q],
+    queryFn: () => api<CustomsReportData>('/reports/customs', { query: q }),
+    enabled: !!q.clientId && !!q.from && !!q.to && q.from <= q.to,
+  });

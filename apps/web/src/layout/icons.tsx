@@ -73,6 +73,27 @@ export const icons = {
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
     </svg>
   ),
+  /** Certificate with a seal ribbon: CO (certificates of origin). */
+  co: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M14 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M7 8h10M7 12h5" />
+      <circle cx="18" cy="16" r="3" />
+      <path d="M16.5 18.6 16 22l2-1 2 1-.5-3.4" />
+    </svg>
+  ),
+  /** Checked list: CO → CO Plans. */
+  coPlans: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="m3 6 2 2 3-3M3 13l2 2 3-3M3 20l2 2 3-3M11 6h10M11 13h10M11 20h10" />
+    </svg>
+  ),
+  /** Pie split: CO → Breakdown (the cost breakdown). */
+  breakdown: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M21.2 15.9A10 10 0 1 1 8 2.8" />
+      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+    </svg>
+  ),
   accounting: (p: IconProps) => (
     <svg {...base} {...p}>
       <circle cx="12" cy="12" r="10" />

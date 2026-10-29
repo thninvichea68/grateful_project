@@ -52,6 +52,32 @@ export const NAV: NavGroup[] = [
         permission: 'sealplans:read',
       },
       {
+        to: '/co',
+        label: 'CO',
+        title: 'CO — Certificates of Origin',
+        icon: 'co',
+        permission: 'shipments:read',
+        // The broker only looks shipments up; COs are the factory's paperwork.
+        hideFor: ['CUSTOMS_BROKER'],
+        children: [
+          {
+            to: '/co',
+            label: 'CO Plans',
+            title: 'CO Plans',
+            icon: 'coPlans',
+            permission: 'shipments:read',
+            end: true,
+          },
+          {
+            to: '/co/breakdown',
+            label: 'Breakdown',
+            title: 'CO Breakdown',
+            icon: 'breakdown',
+            permission: 'shipments:read',
+          },
+        ],
+      },
+      {
         to: '/clients',
         label: 'Clients',
         title: 'Clients',

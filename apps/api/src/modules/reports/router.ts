@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  customsReportQuerySchema,
   mihDraftQuerySchema,
   mihMonthInputSchema,
   mihYearQuerySchema,
@@ -11,6 +12,7 @@ import {
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { assertClientAllowed, assertClientVisible, scopeClients } from '../../lib/clientScope';
+import * as customs from './customs';
 import * as mih from './mih';
 import * as svc from './service';
 
@@ -63,6 +65,13 @@ reportsRouter.delete('/payroll/:id', requirePermission('reports:write'), async (
   assertClientVisible(req, month.clientId, 'Payroll month');
   await svc.deletePayrollMonth(id, req);
   res.status(204).end();
+});
+
+/** Import & Export: the factory's invoice lines by customs declaration, for a run of months. */
+reportsRouter.get('/customs', requirePermission('reports:read'), async (req, res) => {
+  const q = parse(customsReportQuerySchema, req.query);
+  assertClientVisible(req, q.clientId, 'Client');
+  res.json(await customs.customsReport(q));
 });
 
 /* ---------- MIH: the monthly report to the Ministry of Industry ---------- */

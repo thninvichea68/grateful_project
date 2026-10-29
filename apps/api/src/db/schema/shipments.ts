@@ -10,6 +10,7 @@ import {
   check,
   pgView,
   numeric,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
@@ -27,6 +28,7 @@ import {
   containerSizeEnum,
   cutStockCategoryEnum,
 } from './_common';
+import type { CoBreakdownInput, CoStatus } from '@gs/shared';
 import { users } from './auth';
 import { clients, consignees, forwarders, ports, countries } from './reference';
 
@@ -249,6 +251,32 @@ export const cargoInvoiceLines = pgTable(
       sql`(override_reason IS NULL) = (override_by_id IS NULL)`,
     ),
   ],
+);
+
+/**
+ * CO → CO Plans: the certificate of origin of an export invoice, and its GSP cost breakdown.
+ * The invoice's row (qty, amount, dates…) comes from the shipment; only what is typed on the
+ * CO pages is kept here. An invoice without a row shows the shipment's CO form as a draft.
+ */
+export const coRecords = pgTable(
+  'co_records',
+  {
+    id: id(),
+    invoiceId: uuid('invoice_id')
+      .notNull()
+      .unique()
+      .references(() => cargoInvoices.id, { onDelete: 'cascade' }),
+    /** CO form, e.g. CRF, AB, A. */
+    form: text('form'),
+    coNo: text('co_no'),
+    coDate: date('co_date'),
+    status: text('status').$type<CoStatus>().notNull().default('DRAFT'),
+    remark: text('remark'),
+    breakdown: jsonb('breakdown').$type<CoBreakdownInput>(),
+    updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [check('co_records_status', sql`status IN ('DRAFT', 'CONFIRM', 'ISSUED')`)],
 );
 
 /** A customs declaration (e.g. "I 122050"). One shipment can have several. */
