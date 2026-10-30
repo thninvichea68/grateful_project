@@ -15,9 +15,9 @@ import { PlansMoreMenu } from './plans/PlansMoreMenu';
 
 const PREFS = 'gs:plans-view';
 const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
-  expand
-    ? [...BASE_COLUMNS, ...EXPANDED_COLUMNS.filter((c) => direction === 'EXPORT' || !c.exportOnly)]
-    : BASE_COLUMNS;
+  [...BASE_COLUMNS, ...(expand ? EXPANDED_COLUMNS : [])].filter((c) =>
+    direction === 'EXPORT' ? !c.importOnly : !c.exportOnly,
+  );
 
 function readPrefs(): { expandAll: boolean; frozen: string[] } {
   try {
@@ -67,6 +67,8 @@ export function ShippingPlansPage() {
     () => columnsFor(prefs.expandAll, filters.direction),
     [prefs.expandAll, filters.direction],
   );
+  // Export rows end on ETD / ATD (leaving Cambodia) instead of Arrive FTY.
+  const isExport = filters.direction === 'EXPORT';
 
   const apply = (v: PlansFilterValue) => {
     const next = new URLSearchParams(params);
@@ -219,13 +221,20 @@ export function ShippingPlansPage() {
                     {c.label}
                   </th>
                 ))}
-                <th>Arrive FTY</th>
+                {isExport ? (
+                  <>
+                    <th>ETD</th>
+                    <th>ATD</th>
+                  </>
+                ) : (
+                  <th>Arrive FTY</th>
+                )}
                 <th>Shipment Status</th>
               </tr>
             </thead>
             <tbody>
               <TableState
-                cols={cols.length + 2}
+                cols={cols.length + (isExport ? 3 : 2)}
                 loading={list.isLoading}
                 error={list.error}
                 empty={list.data?.data.length === 0}
@@ -262,7 +271,14 @@ export function ShippingPlansPage() {
                       </td>
                     );
                   })}
-                  <td>{fmtDate(r.arriveFty)}</td>
+                  {isExport ? (
+                    <>
+                      <td>{fmtDate(r.etd)}</td>
+                      <td>{fmtDate(r.atd)}</td>
+                    </>
+                  ) : (
+                    <td>{fmtDate(r.arriveFty)}</td>
+                  )}
                   <td>
                     <ShipmentStatusPill status={r.status} />
                   </td>

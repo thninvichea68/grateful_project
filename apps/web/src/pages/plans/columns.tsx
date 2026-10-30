@@ -9,36 +9,96 @@ export interface PlanColumn {
   bold?: boolean;
   /** Export-side details (booking, seals, CO, PO/style…): left out of the Import list. */
   exportOnly?: boolean;
+  /** Import-side details (ETA at the port): left out of the Export list. */
+  importOnly?: boolean;
 }
 
 const dash = (v: ReactNode) => (v === null || v === undefined || v === '' ? '-' : v);
 const qty = (r: ShipmentListItem) =>
   r.quantity ? `${fmtNum(r.quantity)} ${r.quantityUnit ?? ''}`.trim() : '-';
 
+/** A list in one cell: the first `max` items, then "…" and how many more; all on hover. */
+function ListMore({ items, max, title }: { items: string[]; max: number; title?: string }) {
+  if (!items.length) return <>-</>;
+  if (items.length <= max) return <>{items.join(', ')}</>;
+  return (
+    <span title={title ?? items.join(', ')}>
+      {items.slice(0, max).join(', ')}, …{' '}
+      <span className="invoice-more">+{items.length - max}</span>
+    </span>
+  );
+}
+
+/** A shipment's invoice numbers: the first three, then "…" and how many more; all on hover. */
+export function InvoiceNos({ nos, max = 3 }: { nos: string[]; max?: number }) {
+  return <ListMore items={nos} max={max} />;
+}
+
+/** Every container as "No / size", for the hover on the Ctnr No and Size cells. */
+const ctnrList = (r: ShipmentListItem) =>
+  r.containers.map((c) => `${c.containerNo}${c.size ? ` / ${c.size}` : ''}`).join(', ');
+
+const declareNos = (r: ShipmentListItem) =>
+  dash(r.declarations.map((d) => d.declareNo ?? 'Pending').join(', '));
+
 /** Same columns, labels and order as the prototype's plansBaseColumns. */
 export const BASE_COLUMNS: PlanColumn[] = [
   {
     key: 'invoice',
     label: 'Invoice No.',
-    render: (r) => dash(r.invoiceNos.join(', ')),
+    render: (r) => <InvoiceNos nos={r.invoiceNos} />,
     bold: true,
+    importOnly: true,
+  },
+  // An export can carry many invoices: the first one only, the rest on hover.
+  {
+    key: 'invoice',
+    label: 'Invoice No.',
+    render: (r) => <InvoiceNos nos={r.invoiceNos} max={1} />,
+    bold: true,
+    exportOnly: true,
   },
   { key: 'qty', label: 'Quantity', render: qty },
-  { key: 'eta', label: 'ETA Port', render: (r) => fmtDate(r.eta) },
+  { key: 'eta', label: 'ETA Port', render: (r) => fmtDate(r.eta), importOnly: true },
+  { key: 'declareNo', label: 'Declare No.', render: declareNos, exportOnly: true },
   // Customs clearance (declaration) date: the order the plan is listed in by default.
   {
     key: 'clearanceDate',
     label: 'Clearance Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
-  { key: 'fwd', label: 'Forwarder', render: (r) => dash(r.forwarderName) },
-  { key: 'clearance', label: 'Clearance Port', render: (r) => dash(r.clearancePortName) },
+  { key: 'fwd', label: 'Forwarder', render: (r) => dash(r.forwarderName?.toUpperCase()) },
+  // The port's short name (SHV, KTI, OLAIR…), in capitals; the full name on hover.
+  {
+    key: 'clearance',
+    label: 'Clearance Port',
+    render: (r) =>
+      r.clearancePortName ? (
+        <span title={r.clearancePortName}>
+          {(r.clearancePortShortName || r.clearancePortName).toUpperCase()}
+        </span>
+      ) : (
+        '-'
+      ),
+  },
   { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },
+  // The first container, then "… +N"; every container (with its size) on hover.
   {
     key: 'ctnr',
     label: 'Ctnr No',
+    render: (r) => (
+      <ListMore items={r.containers.map((c) => c.containerNo)} max={1} title={ctnrList(r)} />
+    ),
+  },
+  {
+    key: 'ctnrSize',
+    label: 'Size',
     render: (r) =>
-      dash(r.containers.map((c) => `${c.containerNo}${c.size ? ` / ${c.size}` : ''}`).join(', ')),
+      r.containers.some((c) => c.size) ? (
+        <ListMore items={r.containers.map((c) => c.size ?? '-')} max={1} title={ctnrList(r)} />
+      ) : (
+        '-'
+      ),
   },
   {
     key: 'freight',
@@ -130,11 +190,8 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
     render: (r) => (r.firstLine?.fobUnitPrice ? `$${fmtNum(r.firstLine.fobUnitPrice, 4)}` : '-'),
   },
   { key: 'totalFob', label: 'Total FOB', render: (r) => fmtMoney(r.totals.fob) },
-  {
-    key: 'declareNo',
-    label: 'Declare No.',
-    render: (r) => dash(r.declarations.map((d) => d.declareNo ?? 'Pending').join(', ')),
-  },
+  // An Export lists it up front, before Clearance Date.
+  { key: 'declareNo', label: 'Declare No.', render: declareNos, importOnly: true },
   {
     key: 'declareDate',
     label: 'Declare Date',
@@ -142,6 +199,17 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   },
   { key: 'description', label: 'Description', render: (r) => dash(r.firstLine?.description) },
   { key: 'etdPort', label: 'ETD Port', render: (r) => dash(r.etdPort), exportOnly: true },
-  { key: 'atd', label: 'ATD Date', render: (r) => fmtDate(r.atd), exportOnly: true },
-  { key: 'remark', label: 'Remark', render: (r) => dash(r.remark) },
+  {
+    key: 'remark',
+    label: 'Remark',
+    // Cut at the column width with "…"; the whole remark on hover.
+    render: (r) =>
+      r.remark ? (
+        <span className="cell-ellipsis" title={r.remark}>
+          {r.remark}
+        </span>
+      ) : (
+        '-'
+      ),
+  },
 ];

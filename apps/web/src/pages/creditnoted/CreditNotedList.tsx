@@ -31,7 +31,7 @@ const statusOf = (r: CreditNoteReviewRow): { label: string; cls: string } =>
       ? REVIEW[r.reviewStatus]
       : STATUS[r.status];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
+const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'LAND', RAIL: 'RAIL' };
 
 /** Sidebar → Credit Noted: the broker's vouchers, drafts and submitted. */
 export function CreditNotedList() {

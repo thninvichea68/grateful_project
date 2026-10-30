@@ -4,6 +4,7 @@ import { useApiMutation, usePublicHolidays } from '../../features/admin';
 import { ErrorBanner } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { api, ApiError } from '../../lib/api';
+import { icons } from '../../layout/icons';
 import h from './PublicHolidays.module.css';
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -33,7 +34,7 @@ const todayIso = () =>
 const daysUntil = (iso: string) =>
   Math.round((Date.parse(`${iso}T00:00:00Z`) - Date.parse(`${todayIso()}T00:00:00Z`)) / 86_400_000);
 
-type Draft = { id?: string; holidayDate: string; name: string; note: string };
+type Draft = { id?: string; holidayDate: string; name: string; nameKh: string; note: string };
 const INVALIDATE = [['settings', 'holidays']];
 
 /**
@@ -111,7 +112,7 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
               className="new-shipment-btn"
               onClick={() => {
                 setError(null);
-                setEdit({ holidayDate: `${year}-01-01`, name: '', note: '' });
+                setEdit({ holidayDate: `${year}-01-01`, name: '', nameKh: '', note: '' });
               }}
             >
               + Add holiday
@@ -139,6 +140,16 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
               value={edit.name}
               placeholder="e.g. Khmer New Year"
               onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+            />
+          </label>
+          <label className={h.grow}>
+            Name in Khmer
+            <input
+              className="form-field-box"
+              lang="km"
+              value={edit.nameKh}
+              placeholder="e.g. ពិធីបុណ្យចូលឆ្នាំថ្មីប្រពៃណីជាតិ"
+              onChange={(e) => setEdit({ ...edit, nameKh: e.target.value })}
             />
           </label>
           <label className={h.grow}>
@@ -216,6 +227,11 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
                       {state === 'next' && <i className={h.tagNext}>Next</i>}
                       {isWeekend(r.holidayDate) && <i className={h.tag}>Weekend</i>}
                     </span>
+                    {r.nameKh && (
+                      <span className={h.nameKh} lang="km">
+                        {r.nameKh}
+                      </span>
+                    )}
                     <small>
                       {fmt(r.holidayDate)}
                       {r.note ? ` · ${r.note}` : ''}
@@ -225,20 +241,31 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
                     <span className={h.actions}>
                       <button
                         type="button"
+                        className={h.iconBtn}
+                        title="Edit"
+                        aria-label={`Edit ${r.name}`}
                         onClick={() => {
                           setError(null);
                           setEdit({
                             id: r.id,
                             holidayDate: r.holidayDate,
                             name: r.name,
+                            nameKh: r.nameKh ?? '',
                             note: r.note ?? '',
                           });
                         }}
                       >
-                        Edit
+                        {icons.edit({})}
                       </button>
-                      <button type="button" data-danger onClick={() => remove(r)}>
-                        Remove
+                      <button
+                        type="button"
+                        className={h.iconBtn}
+                        data-danger
+                        title="Remove"
+                        aria-label={`Remove ${r.name}`}
+                        onClick={() => remove(r)}
+                      >
+                        {icons.trash({})}
                       </button>
                     </span>
                   )}

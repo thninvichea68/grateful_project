@@ -9,7 +9,8 @@ export default defineConfig({
     host: true,
     port: 5173,
     // Allow your custom local domain
-    allowedHosts: ['www.grateful-solutions.com'],
+    // Plus ngrok tunnels, for sharing the dev app with remote testers.
+    allowedHosts: ['www.grateful-solutions.com', '.ngrok-free.app', '.ngrok-free.dev'],
     // Same-origin in development: the refresh cookie works without CORS.
     proxy: {
       '/api': {

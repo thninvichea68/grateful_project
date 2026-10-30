@@ -8,7 +8,7 @@ import t from './CreditNotesReview.module.css';
 import s from '../creditnoted/Inbox.module.css';
 
 // As in the Record Summary list.
-const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Truck', RAIL: 'Rail' };
+const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'TRUCK', RAIL: 'RAIL' };
 
 /** Toolbar button that switches the Record Summary table to the inbox (with the unread count). */
 export function RecordSummaryInboxToggle({

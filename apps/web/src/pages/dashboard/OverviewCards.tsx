@@ -43,6 +43,7 @@ import {
   monthLabel,
   niceMax,
 } from './parts';
+import { InvoiceNos } from '../plans/columns';
 import { WorldMap } from './WorldMap';
 import { SingleClientVolume } from './SingleClientVolume';
 import acc from './AccountsCard.module.css';
@@ -1166,7 +1167,9 @@ export function LiveConsignmentsCard() {
                 onClick={() => navigate(`/plans/${r.id}`)}
                 onKeyDown={(e) => e.key === 'Enter' && navigate(`/plans/${r.id}`)}
               >
-                <td className="val-bold">{r.invoiceNos.join(', ') || r.reference}</td>
+                <td className="val-bold">
+                  {r.invoiceNos.length ? <InvoiceNos nos={r.invoiceNos} /> : r.reference}
+                </td>
                 <td>{r.clientCode}</td>
                 <td>{r.direction}</td>
                 <td>{r.forwarderName ?? '-'}</td>

@@ -422,6 +422,12 @@ export type FuelPriceInput = z.input<typeof fuelPriceInputSchema>;
 export const publicHolidayInputSchema = z.object({
   holidayDate: isoDate,
   name: z.string().trim().min(2, 'Enter the holiday name').max(120),
+  nameKh: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((v) => v || null),
   note: z
     .string()
     .trim()
@@ -434,6 +440,7 @@ export interface PublicHoliday {
   id: string;
   holidayDate: string;
   name: string;
+  nameKh: string | null;
   note: string | null;
 }
 

@@ -38,7 +38,7 @@ export const MONTHS = [
   'Nov',
   'Dec',
 ];
-export const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
+export const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'LAND', RAIL: 'RAIL' };
 
 const svg = (children: ReactNode) => (
   <svg

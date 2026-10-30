@@ -204,6 +204,8 @@ export const publicHolidays = pgTable('public_holidays', {
   id: id(),
   holidayDate: date('holiday_date').notNull().unique(),
   name: text('name').notNull(),
+  /** The name in Khmer, as in the sub-decree. */
+  nameKh: text('name_kh'),
   /** e.g. "Provisional: check against the sub-decree". */
   note: text('note'),
   createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),

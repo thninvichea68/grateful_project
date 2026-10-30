@@ -34,7 +34,7 @@ const STATUS_FILTER: Record<string, { label: string; status: string; review?: st
   VOID: { label: 'Cancelled', status: 'VOID' },
 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Truck', RAIL: 'Rail' };
+const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'TRUCK', RAIL: 'RAIL' };
 
 /**
  * Sidebar → Record Summary (Operations), laid out like Credit Noted: one card with the

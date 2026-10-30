@@ -212,6 +212,7 @@ export const shipmentInputSchema = z
     eta: optDate,
     ata: optDate,
     arriveFty: optDate,
+    receivedDocumentDate: optDate,
     thcHblNo: optText(60),
     thcHblDate: optDate,
     thcHblAmount: decimal(2, { min: 0 }),
@@ -330,6 +331,8 @@ export interface ShipmentListItem {
   arriveFty: string | null;
   forwarderName: string | null;
   clearancePortName: string | null;
+  /** The port's short name (Settings → Ports, e.g. SHV, KTI): what the list shows. */
+  clearancePortShortName: string | null;
   etdPort: string | null;
   hblNo: string | null;
   bookingNo: string | null;
@@ -401,6 +404,7 @@ export interface ShipmentDetail {
   eta: string | null;
   ata: string | null;
   arriveFty: string | null;
+  receivedDocumentDate: string | null;
   thcHblNo: string | null;
   thcHblDate: string | null;
   thcHblAmount: string | null;

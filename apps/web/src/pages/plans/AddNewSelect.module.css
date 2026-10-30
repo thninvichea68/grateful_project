@@ -1,0 +1,11 @@
+/* AddNewSelect: the CountrySelect dropdown, without flags or capitals. */
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Doubled class to outrank CountrySelect's `.list li` whatever the stylesheet order. */
+li.add.add {
+  color: var(--accent-primary);
+  font-weight: 700;
+}

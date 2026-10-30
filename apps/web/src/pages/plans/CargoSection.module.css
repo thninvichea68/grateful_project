@@ -61,6 +61,32 @@
   color: var(--text-primary);
   white-space: nowrap;
 }
+/* Import: invoice no. and date on the head's line, each name beside its box. */
+.headFields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  min-width: 0;
+  margin-left: 14px;
+  cursor: default;
+}
+.headField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.headField .boxInput {
+  width: 190px;
+  height: 36px;
+}
+.headField input[type='date'] {
+  width: 160px;
+}
 .tags {
   display: flex;
   gap: 6px;
@@ -131,30 +157,35 @@
   grid-template-columns:
     minmax(130px, 1.3fr) minmax(140px, 1.3fr) minmax(110px, 1.1fr) repeat(5, minmax(84px, 1fr))
     minmax(150px, 1.6fr);
-  gap: 8px;
+  gap: 12px;
   padding: 0 14px 14px;
 }
-/* Light boxes: a faint tint and hairline border; typed fields get a soft fill. */
+/* Name above, box below, like the shipment form's fields (e.g. Invoice / THC No.). */
 .box {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+  gap: 7px;
   min-width: 0;
-  min-height: 64px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-inset) 45%, var(--bg-surface));
 }
 .box > span {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-primary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* Item totals: read-only, so a tinted box rather than a white field. */
 .box > b {
-  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-inset) 45%, var(--bg-surface));
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -164,22 +195,20 @@
 .boxInput {
   width: 100%;
   min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: var(--bg-inset);
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-primary);
   outline: none;
-}
-.boxInput:hover {
-  border-color: var(--border-subtle);
+  transition: border-color 0.15s ease;
 }
 .boxInput:focus {
   border-color: var(--accent-primary);
-  background: var(--bg-surface);
 }
 .boxInput[aria-invalid='true'] {
   border-color: var(--status-exception-fg);
@@ -187,26 +216,16 @@
 .strong {
   font-weight: 700;
 }
-.fobBox {
+/* The invoice amount: the accent-tinted box. */
+.fobBox > b {
   border-color: color-mix(in srgb, var(--accent-primary) 25%, var(--border-subtle));
   background: color-mix(in srgb, var(--status-progress-bg) 70%, var(--bg-surface));
-}
-.fobBox > span {
-  color: var(--text-secondary);
-}
-.fobBox > b {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent-primary);
 }
 .err {
   padding: 0 14px 10px;
-}
-/* Import: Invoice No. · Date · Quantity · NW · GW · Amount. */
-.boxes.boxesImport {
-  grid-template-columns:
-    minmax(150px, 1.6fr) minmax(140px, 1.3fr) repeat(3, minmax(90px, 1fr))
-    minmax(160px, 1.6fr);
 }
 
 /* ---------- Line table ---------- */
@@ -522,8 +541,5 @@ select.cell {
   }
   .fobBox {
     grid-column: span 2;
-  }
-  .boxes.boxesImport {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

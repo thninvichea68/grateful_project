@@ -188,6 +188,7 @@ export const FIELD_ICON: Partial<Record<string, FormIcon>> = {
   atd: 'calendar',
   eta: 'calendar',
   arriveFty: 'calendar',
+  receivedDocumentDate: 'calendar',
   vesselName: 'ship',
   voyageNo: 'hash',
   coForm: 'file',

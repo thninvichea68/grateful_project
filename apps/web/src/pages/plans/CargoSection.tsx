@@ -53,7 +53,7 @@ type MenuAction = {
  * A ⋯ button and its menu of actions. The menu is fixed to the viewport so a scroll box (the
  * line table's) can't clip it.
  */
-function DotsMenu({
+export function DotsMenu({
   label,
   actions,
   className = c.dotsBtn,
@@ -185,7 +185,8 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
     );
     watched?.forEach((inv) => inv.lines?.forEach((l) => add(l.cdcNo, -toNum(l.pcs))));
   }
-  const [openIdx, setOpenIdx] = useState<Set<number>>(() => new Set([0]));
+  // Every invoice starts folded: the user opens the one they need ("+ Add Invoice" opens the new one).
+  const [openIdx, setOpenIdx] = useState<Set<number>>(() => new Set());
   const [status, setStatus] = useState<{
     text: string;
     warnings: CargoExcelParseResult['warnings'];
@@ -309,14 +310,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
         <div className="cx-card-head">
           <div className="cx-title">
             <span className="cx-title-icon">{fi.dollar({ width: 18, height: 18 })}</span>
-            <div>
-              <h3>{isImport ? 'Cargo Invoices & CDC Items' : 'Cargo, Pricing & FOB'}</h3>
-              <p>
-                {isImport
-                  ? 'Add invoices, then open each one to enter its items as on the import schedule'
-                  : 'Add invoices, then open each one to enter its line items'}
-              </p>
-            </div>
+            <h3>{isImport ? 'Cargo Invoices & CDC Items' : 'Cargo, Pricing & FOB'}</h3>
           </div>
           <div className="cargo-actions">
             {status && (
@@ -523,12 +517,15 @@ function InvoiceHead({
   onToggle,
   onRemove,
   count,
+  fields,
 }: {
   gi: number;
   open: boolean;
   onToggle: () => void;
   onRemove: (() => void) | undefined;
   count: string;
+  /** Fields typed on the head's own line (Import: invoice no. and date). */
+  fields?: React.ReactNode;
 }) {
   return (
     <div
@@ -537,7 +534,7 @@ function InvoiceHead({
       tabIndex={0}
       aria-expanded={open}
       title={open ? 'Hide line items' : 'Show line items'}
-      onClick={(ev) => !(ev.target as HTMLElement).closest('button') && onToggle()}
+      onClick={(ev) => !(ev.target as HTMLElement).closest('button, label, input') && onToggle()}
       onKeyDown={(ev) => {
         if (ev.target !== ev.currentTarget || (ev.key !== 'Enter' && ev.key !== ' ')) return;
         ev.preventDefault();
@@ -549,6 +546,7 @@ function InvoiceHead({
       </span>
       <span className={c.headIcon}>{fi.file({})}</span>
       <b className={c.headTitle}>Invoice {gi + 1}</b>
+      {fields}
       <span className={c.tags}>
         <span className={c.tag}>{count}</span>
       </span>
@@ -800,11 +798,11 @@ function InvoiceCard({
           />
         </label>
         <div className={c.box}>
-          <span>Net Wt (kg)</span>
+          <span>N.W (KGS)</span>
           <b>{lineSum.nw ? fmtNum(lineSum.nw, 2) : '—'}</b>
         </div>
         <div className={c.box}>
-          <span>Gross Wt (kg)</span>
+          <span>G.W (KGS)</span>
           <b>{lineSum.gw ? fmtNum(lineSum.gw, 2) : '—'}</b>
         </div>
         <div className={c.box}>
@@ -944,15 +942,6 @@ function ImportInvoiceCard({
   const lines = useFieldArray({ control, name: `invoices.${gi}.lines` });
   const watchedLines = useWatch({ control, name: `invoices.${gi}.lines` });
   const e = errors as InvErrors;
-  const sum = (watchedLines ?? []).reduce(
-    (t, l) => ({
-      qty: t.qty + toNum(l.pcs),
-      nw: t.nw + toNum(l.netWeightKg),
-      gw: t.gw + toNum(l.grossWeightKg),
-      amount: t.amount + toNum(l.pcs) * toNum(l.fobUnitPrice),
-    }),
-    { qty: 0, nw: 0, gw: 0, amount: 0 },
-  );
   const lineErr = (li: number, f: string) =>
     e?.lines && !('message' in e.lines)
       ? (e.lines as Record<number, Record<string, { message?: string }>>)[li]?.[f]?.message
@@ -1013,48 +1002,33 @@ function ImportInvoiceCard({
         onToggle={onToggle}
         onRemove={onRemove}
         count={`${lines.fields.length} ${lines.fields.length === 1 ? 'item' : 'items'}`}
+        fields={
+          // Typed once per invoice, on the head's line; the totals are in Shipment Total.
+          <span className={c.headFields}>
+            <label className={c.headField}>
+              <span>Invoice No.</span>
+              <input
+                type="text"
+                className={`${c.boxInput} ${c.strong}`}
+                placeholder="e.g. CNQ26044"
+                {...register(`invoices.${gi}.invoiceNo`)}
+                aria-invalid={!!e?.invoiceNo}
+                title={e?.invoiceNo?.message}
+              />
+            </label>
+            <label className={c.headField}>
+              <span>Invoice Date</span>
+              <input
+                type="date"
+                className={c.boxInput}
+                {...register(`invoices.${gi}.invoiceDate`, {
+                  onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
+                })}
+              />
+            </label>
+          </span>
+        }
       />
-
-      {/* Summary boxes: what is typed once per invoice, then the item totals. */}
-      <div className={`${c.boxes} ${c.boxesImport}`}>
-        <label className={c.box}>
-          <span>Invoice No.</span>
-          <input
-            type="text"
-            className={`${c.boxInput} ${c.strong}`}
-            placeholder="e.g. CNQ26044"
-            {...register(`invoices.${gi}.invoiceNo`)}
-            aria-invalid={!!e?.invoiceNo}
-            title={e?.invoiceNo?.message}
-          />
-        </label>
-        <label className={c.box}>
-          <span>Invoice Date</span>
-          <input
-            type="date"
-            className={c.boxInput}
-            {...register(`invoices.${gi}.invoiceDate`, {
-              onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
-            })}
-          />
-        </label>
-        <div className={c.box}>
-          <span>Quantity</span>
-          <b>{sum.qty ? fmtNum(sum.qty, 2) : '—'}</b>
-        </div>
-        <div className={c.box}>
-          <span>NW (kg)</span>
-          <b>{sum.nw ? fmtNum(sum.nw, 2) : '—'}</b>
-        </div>
-        <div className={c.box}>
-          <span>GW (kg)</span>
-          <b>{sum.gw ? fmtNum(sum.gw, 2) : '—'}</b>
-        </div>
-        <div className={`${c.box} ${c.fobBox}`}>
-          <span>Amount</span>
-          <b>{sum.amount ? `${money(sum.amount)} USD` : '—'}</b>
-        </div>
-      </div>
       {e?.invoiceNo?.message && (
         <div className={c.err}>
           <FieldError message={e.invoiceNo.message} />

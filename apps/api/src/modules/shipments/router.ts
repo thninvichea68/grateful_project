@@ -40,7 +40,7 @@ shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (
   const ws = wb.addWorksheet('Shipping Plans', {
     views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }],
   });
-  const cols: [string, number, (r: (typeof rows)[number]) => string | number | null][] = [
+  const allCols: [string, number, (r: (typeof rows)[number]) => string | number | null][] = [
     ['Reference', 14, (r) => r.reference],
     ['Invoice No.', 22, (r) => r.invoiceNos.join(', ')],
     ['Client', 8, (r) => r.clientCode],
@@ -104,6 +104,8 @@ shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (
     ['ATD', 12, (r) => r.atd],
     ['Remark', 30, (r) => r.remark],
   ];
+  // ETA at the port is an import detail: an Export download leaves it out.
+  const cols = filters.direction === 'EXPORT' ? allCols.filter(([h]) => h !== 'ETA Port') : allCols;
   ws.columns = cols.map(([header, width]) => ({ header, width }));
   ws.getRow(1).font = { bold: true };
   for (const r of rows) ws.addRow(cols.map(([, , get]) => get(r)));

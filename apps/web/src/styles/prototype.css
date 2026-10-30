@@ -4651,6 +4651,25 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   font-weight: 700;
   color: var(--text-primary);
 }
+/* Long free text in a table cell (e.g. a shipment's remark): one line, cut with "…". */
+.cell-ellipsis {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* "+2": the invoices left out after the first three (all of them on hover). */
+.invoice-more {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  cursor: help;
+}
 
 /* Scrollable wrapper used when Shipping Plans table is Expanded (sticky header, horizontal scroll) */
 .plans-table-scroll {

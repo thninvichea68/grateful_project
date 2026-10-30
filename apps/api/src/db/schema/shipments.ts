@@ -82,6 +82,8 @@ export const shipments = pgTable(
     /** Actual arrival — used for forwarder on-time %. */
     ata: date('ata'),
     arriveFty: date('arrive_fty'),
+    /** Import: the day the shipping documents (INV, PL…) were received. */
+    receivedDocumentDate: date('received_document_date'),
 
     // Invoice / THC (shown as "INVOICE / THC No.")
     thcHblNo: text('thc_hbl_no'),

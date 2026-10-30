@@ -31,7 +31,7 @@ export const inboxIcon = (size?: number) =>
     </>,
     size,
   );
-const MODE: Record<string, string> = { SEA: 'Sea', AIR: 'Air', ROAD: 'Land', RAIL: 'Rail' };
+const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'LAND', RAIL: 'RAIL' };
 
 /** "just now", "5 min ago", "3 h ago", "2 d ago", then the date. */
 export function timeAgo(iso: string): string {

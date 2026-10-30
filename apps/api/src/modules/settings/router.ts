@@ -275,7 +275,7 @@ settingsRouter.post('/fuel-prices', manage, async (req, res) => {
 
 /* ---------- Public holidays: document issue dates skip them ---------- */
 
-const holidayColumns = sql`id, to_char(holiday_date, 'YYYY-MM-DD') AS "holidayDate", name, note`;
+const holidayColumns = sql`id, to_char(holiday_date, 'YYYY-MM-DD') AS "holidayDate", name, name_kh AS "nameKh", note`;
 
 /** A year's Cambodian public holidays (?year=2026; this year when absent), by date. */
 settingsRouter.get('/public-holidays', requirePermission('settings:read'), async (req, res) => {
@@ -302,7 +302,7 @@ settingsRouter.post('/public-holidays', manage, async (req, res) => {
     .values({ ...v, createdById: req.auth!.userId })
     .onConflictDoUpdate({
       target: publicHolidays.holidayDate,
-      set: { name: v.name, note: v.note },
+      set: { name: v.name, nameKh: v.nameKh, note: v.note },
     })
     .returning();
   await audit(

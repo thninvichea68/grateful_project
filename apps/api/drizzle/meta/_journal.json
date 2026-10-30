@@ -295,6 +295,27 @@
       "when": 1793336422906,
       "tag": "0041_all_countries",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793361400053,
+      "tag": "0042_holiday_name_kh",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793361732816,
+      "tag": "0043_holiday_drop_subdecree_note",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1793380411712,
+      "tag": "0044_shipment_received_document_date",
+      "breakpoints": true
     }
   ]
 }

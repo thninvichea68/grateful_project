@@ -33,15 +33,7 @@ export function DeclarationsSection({
       <div className="cx-card-head">
         <div className="cx-title">
           <span className="cx-title-icon">{fi.badge({ width: 18, height: 18 })}</span>
-          <div>
-            <h3>Customs Declarations</h3>
-            <p>
-              {isImport
-                ? 'Import declaration numbers and dates'
-                : 'Export declaration numbers and dates'}
-              {isAir && ' · air: the Declare No. can stay pending until customs issues it'}
-            </p>
-          </div>
+          <h3>Customs Declarations</h3>
         </div>
         <div className="cargo-actions">
           <button
