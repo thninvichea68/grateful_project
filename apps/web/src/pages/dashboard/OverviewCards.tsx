@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -906,38 +906,52 @@ function SingleAccount({
 /* ------------------------------ Port of discharge ------------------------------ */
 
 export function PortCard({ filters }: { filters: { from: string; to: string } }) {
-  const [flow, setFlow] = useState<'imports' | 'exports'>('imports');
   const [mode, setMode] = useState<'percentage' | 'shipment'>('percentage');
+  // Legend hover/focus spotlights one flow across every bar.
+  const [focusFlow, setFocusFlow] = useState<'imp' | 'exp' | null>(null);
   const q = usePorts(filters);
   const rows = useMemo(() => {
     const list = (q.data ?? [])
-      .map((p) => ({ name: p.shortName, v: p[flow] }))
+      .map((p) => ({ name: p.shortName, imp: p.imports, exp: p.exports, v: p.imports + p.exports }))
       .filter((p) => p.v > 0)
       .sort((a, b) => b.v - a.v);
     const top = list.slice(0, 3);
-    const others = list.slice(3).reduce((s, p) => s + p.v, 0);
-    return others ? [...top, { name: 'OTHERS', v: others }] : top;
-  }, [q.data, flow]);
+    const rest = list.slice(3);
+    if (!rest.length) return top;
+    const add = (k: 'imp' | 'exp' | 'v') => rest.reduce((s, p) => s + p[k], 0);
+    return [...top, { name: 'OTHERS', imp: add('imp'), exp: add('exp'), v: add('v') }];
+  }, [q.data]);
   const sum = rows.reduce((s, r) => s + r.v, 0);
+  const totals = rows.reduce((s, r) => ({ imp: s.imp + r.imp, exp: s.exp + r.exp }), {
+    imp: 0,
+    exp: 0,
+  });
   const values = rows.map((r) =>
     mode === 'percentage' ? Math.round((r.v / (sum || 1)) * 100) : r.v,
   );
+  const fmt = (v: number) => (mode === 'percentage' ? `${v}%` : v.toLocaleString());
+  const share = (n: number, of: number) => `${of ? Math.round((n / of) * 100) : 0}%`;
   const max = mode === 'percentage' ? 100 : niceMax(Math.max(1, ...values));
-  const ticks = Array.from({ length: 6 }, (_, i) => Math.round(max - (max / 5) * i));
+  const ticks = Array.from({ length: 6 }, (_, i) => Math.round((max / 5) * i));
+  const legend = (kind: 'imp' | 'exp', label: string, n: number) => (
+    <button
+      type="button"
+      className="port-legend-item"
+      data-kind={kind}
+      data-active={focusFlow === kind || undefined}
+      onMouseEnter={() => setFocusFlow(kind)}
+      onMouseLeave={() => setFocusFlow(null)}
+      onFocus={() => setFocusFlow(kind)}
+      onBlur={() => setFocusFlow(null)}
+    >
+      <i /> {label} <b>{n.toLocaleString()}</b>
+    </button>
+  );
   return (
     <div className="port-card ga-port">
       <div className="port-card-header">
         <h3>Port of Discharge</h3>
         <div className="port-card-controls">
-          <CardDropdown
-            label="Flow"
-            value={flow}
-            onChange={setFlow}
-            options={[
-              { value: 'imports', label: 'Import' },
-              { value: 'exports', label: 'Export' },
-            ]}
-          />
           <CardDropdown
             label="Measure"
             value={mode}
@@ -949,34 +963,71 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
           />
         </div>
       </div>
+      {rows.length > 0 && (
+        <div className="port-legend">
+          {legend('imp', 'Import', totals.imp)}
+          {legend('exp', 'Export', totals.exp)}
+        </div>
+      )}
       <ChartState loading={q.isLoading} error={q.error} empty={!rows.length} height={230}>
-        <div
-          className="port-chart-wrap"
-          role="img"
-          aria-label={rows
-            .map((r, i) => `${r.name} ${values[i]}${mode === 'percentage' ? '%' : ''}`)
-            .join(', ')}
-        >
-          <div className="port-chart-yaxis">
-            {ticks.map((t) => (
-              <span key={t}>{t}</span>
-            ))}
-          </div>
-          <div className="port-chart-plot">
-            {rows.map((r, i) => (
-              <div className="port-bar-col" key={r.name}>
-                <div className="port-bar-track">
-                  <div
-                    className="port-bar"
-                    style={{ height: `${Math.min(100, (values[i]! / max) * 100)}%` }}
-                  >
-                    <span className="port-bar-value">
-                      {mode === 'percentage' ? `${values[i]}%` : values[i]}
-                    </span>
+        <div className="port-chart-wrap">
+          <div className="port-chart-plot" data-focus={focusFlow ?? undefined}>
+            {rows.map((r, i) => {
+              const w = Math.min(100, (values[i]! / max) * 100);
+              return (
+                <div
+                  className="port-bar-row"
+                  key={r.name}
+                  tabIndex={0}
+                  style={{ '--i': i } as CSSProperties}
+                  aria-label={`${r.name}: ${fmt(values[i]!)} — ${r.imp} import, ${r.exp} export`}
+                >
+                  <span className="port-bar-label" title={r.name}>
+                    {r.name}
+                  </span>
+                  <div className="port-bar-track">
+                    <div
+                      className="port-bar"
+                      data-inside={w > 82 || undefined}
+                      style={{ width: `${w}%` }}
+                    >
+                      <div className="port-bar-fill">
+                        {r.imp > 0 && (
+                          <span className="port-seg" data-kind="imp" style={{ flexGrow: r.imp }} />
+                        )}
+                        {r.exp > 0 && (
+                          <span className="port-seg" data-kind="exp" style={{ flexGrow: r.exp }} />
+                        )}
+                      </div>
+                      <span className="port-bar-value">{fmt(values[i]!)}</span>
+                    </div>
+                    <div
+                      className="port-tip"
+                      role="presentation"
+                      style={{ left: `${Math.min(w, 58)}%` }}
+                    >
+                      <b className="port-tip-title">{r.name}</b>
+                      <span data-kind="imp">
+                        <i /> Import <b>{r.imp.toLocaleString()}</b>
+                        <small>{share(r.imp, r.v)}</small>
+                      </span>
+                      <span data-kind="exp">
+                        <i /> Export <b>{r.exp.toLocaleString()}</b>
+                        <small>{share(r.exp, r.v)}</small>
+                      </span>
+                      <span className="port-tip-total">
+                        Total <b>{r.v.toLocaleString()}</b>
+                        <small>{share(r.v, sum)} of all</small>
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <span className="port-bar-label">{r.name}</span>
-              </div>
+              );
+            })}
+          </div>
+          <div className="port-chart-xaxis">
+            {ticks.map((t) => (
+              <span key={t}>{t}</span>
             ))}
           </div>
         </div>

@@ -455,7 +455,7 @@ describe('billing documents', () => {
       pkgs: '978 CTNS',
       grossWeightKg: '8800',
       volumeCbm: '45.5',
-      pod: 'United States',
+      pod: 'UNITED STATES',
     });
     expect(pre.lines[0]).toMatchObject({
       description: expect.stringContaining('EXPORT PROCESSING FEE'),

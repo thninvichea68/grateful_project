@@ -41,7 +41,7 @@ export function ClientsPage() {
   };
 
   return (
-    <section className="view active">
+    <section className="view active view-fill">
       <div className="card">
         <div className="card-header-row">
           <h3>Registered Shipping Clients</h3>

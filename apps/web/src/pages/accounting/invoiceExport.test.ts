@@ -278,14 +278,24 @@ describe('Month pack Excel', () => {
       '2026-10-03',
     );
     expect(wb.worksheets.map((w) => w.name)).toEqual([
-      'GS26-360',
-      'DIS403',
+      'GS26-360 & DIS403',
       'JR2609001',
       'Statement INV',
       'Statement DN',
       'Receipts',
       'Checklist',
     ]);
+
+    // The tax invoice (A–H) and disbursement (I–P) side by side, their totals on one row.
+    const pair = wb.getWorksheet('GS26-360 & DIS403')!;
+    expect(pair.getCell('A9').value).toBe('TAX INVOICE');
+    expect(pair.getCell('I9').value).toBe('DISBURSEMENT');
+    expect(pair.getCell('I2').value).toBe(company.nameKm);
+    expect(pair.getCell('P23').value).toMatchObject({ formula: 'N23', result: 539 });
+    expect(pair.getCell('H25').value).toMatchObject({ formula: 'SUM(F22:F22)', result: 242 });
+    expect(pair.getCell('P25').value).toMatchObject({ formula: 'SUM(P22:P23)', result: 616 });
+    expect(pair.getCell('I38').value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកទិញ');
+    expect(pair.pageSetup.printArea).toBe('A1:P40');
 
     const st = wb.getWorksheet('Statement INV')!;
     expect(st.getCell('A2').value).toBe(company.nameKm); // the invoice's letterhead
@@ -296,12 +306,14 @@ describe('Month pack Excel', () => {
     expect(st.getCell('C16').value).toBe('GS26-360');
     expect(st.getCell('B16').numFmt).toBe('dd\\-mmm\\-yyyy');
     expect(st.getCell('G16').value).toMatchObject({
-      formula: "SUM('GS26-360'!H26,'DIS403'!H27)",
+      formula: "SUM('GS26-360 & DIS403'!H27,'GS26-360 & DIS403'!P27)",
       result: 882.2,
     });
     expect(text(st.getCell('B18').value)).toBe('BALANCE AS  SEP-2026');
     expect(st.getCell('G18').value).toMatchObject({ formula: 'SUM(G16:G17)', result: 882.2 });
     expect(st.getCell('A18').border?.bottom?.style).toBe('thick');
+    expect(st.pageSetup.printTitlesRow).toBe('14:14');
+    expect(st.views[0]).toMatchObject({ style: 'pageBreakPreview' });
 
     const sd = wb.getWorksheet('Statement DN')!;
     expect(sd.getCell('A3').value).toBe('Account Statement'); // no letterhead
@@ -326,6 +338,29 @@ describe('Month pack Excel', () => {
     expect(cl.getCell('B6').value).toBe('DOC NO');
     expect(cl.getCell('B7').value).toBe('GS26-360 · DIS403 · JR2609001');
     expect(cl.getCell('D7').numFmt).toBe('dd\\-mm\\-yyyy');
+  });
+
+  it('breaks the shared sheet into two pages', async () => {
+    const wb = new ExcelJS.Workbook();
+    buildPackWorkbook(wb, pack, company, null, '2026-09', ['docs'], '', '2026-10-03');
+    const { workbookBlob } = await import('./invoiceExport');
+    const blob = await workbookBlob(wb);
+    const buf = await new Promise<ArrayBuffer>((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result as ArrayBuffer);
+      fr.readAsArrayBuffer(blob);
+    });
+    const { default: JSZip } = await import('jszip');
+    const zip = await JSZip.loadAsync(buf);
+    const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');
+    expect(xml).toContain(
+      '<colBreaks count="1" manualBreakCount="1"><brk id="8" max="1048575" man="1"/></colBreaks>',
+    );
+    expect(await zip.file('xl/worksheets/sheet2.xml')!.async('string')).not.toContain('colBreaks');
+    // Still a workbook Excel can open.
+    const back = new ExcelJS.Workbook();
+    await back.xlsx.load(buf);
+    expect(back.worksheets[0]!.getCell('I9').value).toBe('DISBURSEMENT');
   });
 
   it('exports only the parts asked for', () => {

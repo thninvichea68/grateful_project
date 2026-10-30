@@ -1,28 +1,26 @@
-/* Back button: a clean flat circle with a chevron, beside the page title. */
+/* Back button: a flat circle with a chevron beside the page title, in the cyan of the
+   "+ New Shipment" button (same fill, ink and hover). */
 .back {
   display: grid;
   flex-shrink: 0;
   place-items: center;
   width: 34px;
   height: 34px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid transparent;
   border-radius: 50%;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
+  background: var(--accent-primary);
+  color: #041b2d;
+  transition: background 0.15s ease;
 }
 .back svg {
   width: 15px;
   height: 15px;
 }
 .back:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
+  background: var(--accent-lime-bright);
 }
 .back:active {
-  background: var(--border-subtle);
+  filter: brightness(0.95);
 }
 .back:focus-visible {
   outline: 2px solid var(--accent-primary);

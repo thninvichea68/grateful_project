@@ -19,9 +19,13 @@ export const icons = {
       <rect x="3" y="14" width="7" height="7" rx="2" />
     </svg>
   ),
+  // A schedule: a calendar with a clock in its corner.
   plans: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" />
+      <path d="M16 2v4M8 2v4M3 10h5" />
+      <circle cx="16" cy="16" r="6" />
+      <path d="M16 14v2.2l1.6 1" />
     </svg>
   ),
   clients: (p: IconProps) => (
@@ -100,7 +104,7 @@ export const icons = {
       <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" />
     </svg>
   ),
-  /** Open book: Accounting → Monthly Ledger. */
+  /** Open book: Accounting → Monthly. */
   ledger: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z" />

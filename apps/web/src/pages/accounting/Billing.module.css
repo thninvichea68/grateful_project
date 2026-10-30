@@ -715,3 +715,11 @@ a.chip:hover {
     font-size: 19px;
   }
 }
+
+/* A row opens its documents' preview (RowPreviewModal) when clicked outside its links. */
+.docTable tr[data-preview] {
+  cursor: pointer;
+}
+.docTable tr[data-active='true'] td {
+  background: var(--bg-subtle);
+}

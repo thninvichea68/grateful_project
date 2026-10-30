@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useFieldArray, useFormContext, useWatch, type Control } from 'react-hook-form';
 import {
   CUT_STOCK_CATEGORIES,
@@ -15,6 +16,7 @@ import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
 import { FieldError } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
+import { icons } from '../../layout/icons';
 import c from './CargoSection.module.css';
 import { fi } from './formIcons';
 import { blankInvoice, blankLine, toNum, type FormValues, type InvoiceValues } from './formModel';
@@ -37,6 +39,115 @@ const CHEVRON = (
 
 /** The invoice's HTS codes (one invoice = one code; more than one is flagged). */
 const htsCodesOf = (lines: InvoiceValues['lines'] | undefined) => invoiceHtsCodes(lines ?? []);
+
+type MenuAction = {
+  label: string;
+  icon: React.ReactNode;
+  onClick?: (() => void) | undefined;
+  disabled?: boolean;
+  title?: string | undefined;
+  danger?: boolean;
+};
+
+/**
+ * A ⋯ button and its menu of actions. The menu is fixed to the viewport so a scroll box (the
+ * line table's) can't clip it.
+ */
+function DotsMenu({
+  label,
+  actions,
+  className = c.dotsBtn,
+}: {
+  label: string;
+  actions: MenuAction[];
+  className?: string;
+}) {
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pos) return;
+    const inside = (t: EventTarget | null) =>
+      box.current?.contains(t as Node) || menu.current?.contains(t as Node);
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !inside(e.target)) setPos(null);
+    };
+    const shut = () => setPos(null);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    window.addEventListener('scroll', shut, true);
+    window.addEventListener('resize', shut);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+      window.removeEventListener('scroll', shut, true);
+      window.removeEventListener('resize', shut);
+    };
+  }, [pos]);
+  const toggle = (ev: React.MouseEvent<HTMLButtonElement>) => {
+    if (pos) return setPos(null);
+    const r = ev.currentTarget.getBoundingClientRect();
+    setPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+  };
+  const pick = (fn: () => void) => () => {
+    setPos(null);
+    fn();
+  };
+  return (
+    <div className={c.menuWrap} ref={box}>
+      <button
+        type="button"
+        className={className}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={!!pos}
+        onClick={toggle}
+      >
+        {icons.dots({ width: 16, height: 16 })}
+      </button>
+      {pos &&
+        createPortal(
+          <div ref={menu} className={c.menu} role="menu" style={{ top: pos.top, right: pos.right }}>
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                type="button"
+                role="menuitem"
+                className={a.danger ? `${c.menuItem} ${c.menuDanger}` : c.menuItem}
+                disabled={a.disabled || !a.onClick}
+                title={a.title}
+                onClick={a.onClick && pick(a.onClick)}
+              >
+                {a.icon}
+                {a.label}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+/** A description row's ⋯ menu: add a line to that description, or remove it with its lines. */
+function DescMenu({ onAddLine, onRemove }: { onAddLine: () => void; onRemove?: () => void }) {
+  return (
+    <DotsMenu
+      label="Description actions"
+      actions={[
+        { label: 'Add Line', icon: fi.plus({}), onClick: onAddLine },
+        {
+          label: 'Remove Description',
+          icon: fi.trash({}),
+          onClick: onRemove,
+          danger: true,
+          title: onRemove ? undefined : 'An invoice needs at least one description',
+        },
+      ]}
+    />
+  );
+}
 
 /** CDC numbers compare without case, spaces or dashes ("II-125" = "ii 125"), as on the server. */
 const cdcKey = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/[\s\-–—_]+/g, '');
@@ -216,33 +327,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
                 {status.text}
               </span>
             )}
-            {/* Imports have their own template, listing the client's CDC master list. */}
-            <button
-              type="button"
-              className="cargo-btn"
-              disabled={isImport && !clientId}
-              title={isImport && !clientId ? 'Choose the client first' : undefined}
-              onClick={() =>
-                void (
-                  isImport
-                    ? downloadFile('/shipments/import-cargo-template.xlsx', { clientId })
-                    : downloadFile('/shipments/cargo-template.xlsx')
-                ).catch(() =>
-                  setStatus({ text: 'The template could not be downloaded.', warnings: [] }),
-                )
-              }
-            >
-              ⇣ Download Template
-            </button>
-            <button
-              type="button"
-              className="cargo-btn"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading || (isImport && !clientId)}
-              title={isImport && !clientId ? 'Choose the client first' : undefined}
-            >
-              {uploading ? 'Reading…' : '⇪ Upload Excel Template'}
-            </button>
+            {uploading && <span className="cargo-status">Reading…</span>}
             <button
               type="button"
               className="cargo-btn"
@@ -262,6 +347,35 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
             >
               + Add Invoice
             </button>
+            {/* The Excel template: download it, fill it in, upload it. Imports have their own
+                template, listing the client's CDC master list. */}
+            <DotsMenu
+              label="Excel template"
+              className={`cargo-btn ${c.dotsToolbar}`}
+              actions={[
+                {
+                  label: 'Download Template',
+                  icon: icons.download({}),
+                  disabled: isImport && !clientId,
+                  title: isImport && !clientId ? 'Choose the client first' : undefined,
+                  onClick: () =>
+                    void (
+                      isImport
+                        ? downloadFile('/shipments/import-cargo-template.xlsx', { clientId })
+                        : downloadFile('/shipments/cargo-template.xlsx')
+                    ).catch(() =>
+                      setStatus({ text: 'The template could not be downloaded.', warnings: [] }),
+                    ),
+                },
+                {
+                  label: 'Upload Excel Template',
+                  icon: icons.upload({}),
+                  disabled: uploading || (isImport && !clientId),
+                  title: isImport && !clientId ? 'Choose the client first' : undefined,
+                  onClick: () => fileRef.current?.click(),
+                },
+              ]}
+            />
             <input
               ref={fileRef}
               type="file"
@@ -335,7 +449,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
         </div>
       </div>
       {isImport ? (
-        <div className="cargo-totals">
+        <div className="cargo-totals cargo-totals-import">
           <div className="cargo-totals-label">Shipment Total</div>
           <div className="cargo-total-item">
             <span>Quantity</span>
@@ -398,6 +512,60 @@ type InvErrors =
       lines?: { message?: string } | Record<number, Record<string, { message?: string }>>;
     }
   | undefined;
+
+/**
+ * An invoice card's head: the arrow, the invoice and how many lines it has. A click anywhere
+ * on it (but Remove) opens or closes its lines. Export and import invoices share it.
+ */
+function InvoiceHead({
+  gi,
+  open,
+  onToggle,
+  onRemove,
+  count,
+}: {
+  gi: number;
+  open: boolean;
+  onToggle: () => void;
+  onRemove: (() => void) | undefined;
+  count: string;
+}) {
+  return (
+    <div
+      className={c.head}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      title={open ? 'Hide line items' : 'Show line items'}
+      onClick={(ev) => !(ev.target as HTMLElement).closest('button') && onToggle()}
+      onKeyDown={(ev) => {
+        if (ev.target !== ev.currentTarget || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+        ev.preventDefault();
+        onToggle();
+      }}
+    >
+      <span className={c.toggle} aria-hidden="true">
+        {CHEVRON}
+      </span>
+      <span className={c.headIcon}>{fi.file({})}</span>
+      <b className={c.headTitle}>Invoice {gi + 1}</b>
+      <span className={c.tags}>
+        <span className={c.tag}>{count}</span>
+      </span>
+      {onRemove && (
+        <button
+          type="button"
+          className={c.removeBtn}
+          aria-label={`Remove invoice ${gi + 1}`}
+          onClick={onRemove}
+        >
+          {fi.trash({})}
+          Remove Invoice
+        </button>
+      )}
+    </div>
+  );
+}
 
 function InvoiceCard({
   gi,
@@ -467,6 +635,9 @@ function InvoiceCard({
     description,
   });
   const addLine = () => lines.append(blank(descOf(groups.at(-1)!)));
+  // A new line at the end of one description's group (the ⋯ menu on its row).
+  const addLineTo = (g: { start: number; idx: number[] }) =>
+    lines.insert(g.idx.at(-1)! + 1, blank(descOf(g)));
   const addDescription = () => {
     newGroup.current = true;
     lines.append(blank(''));
@@ -582,44 +753,15 @@ function InvoiceCard({
     );
   };
 
-  const firstLine = watchedLines?.[0];
-  const headDesc = descOf({ start: 0 });
   return (
     <div className={`cargo-inv ${c.inv}${open ? ' open' : ''}`}>
-      {/* Head: open / close, the invoice and its first description, a few tags. */}
-      <div className={c.head}>
-        <button
-          type="button"
-          className={c.toggle}
-          aria-expanded={open}
-          aria-label={open ? 'Hide line items' : 'Show line items'}
-          onClick={onToggle}
-        >
-          {CHEVRON}
-        </button>
-        <span className={c.headIcon}>{fi.shirt({})}</span>
-        <b className={c.headTitle}>Invoice {gi + 1}</b>
-        <span className={c.headDesc} title={headDesc || undefined}>
-          {headDesc || <i>No description yet</i>}
-        </span>
-        <span className={c.tags}>
-          {firstLine?.styleNo && <span className={c.tag}>Style: {firstLine.styleNo}</span>}
-          <span className={c.tag}>
-            {lines.fields.length} {lines.fields.length === 1 ? 'line' : 'lines'}
-          </span>
-        </span>
-        {onRemove && (
-          <button
-            type="button"
-            className={c.iconBtn}
-            title="Remove invoice"
-            aria-label={`Remove invoice ${gi + 1}`}
-            onClick={onRemove}
-          >
-            {fi.trash({})}
-          </button>
-        )}
-      </div>
+      <InvoiceHead
+        gi={gi}
+        open={open}
+        onToggle={onToggle}
+        onRemove={onRemove}
+        count={`${lines.fields.length} ${lines.fields.length === 1 ? 'line' : 'lines'}`}
+      />
 
       {/* Summary boxes: what is typed once per invoice, then the line totals. */}
       <div className={c.boxes}>
@@ -733,17 +875,10 @@ function InvoiceCard({
                               onChange={(ev) => setDesc(g, ev.target.value)}
                               autoFocus={focusId === id}
                             />
-                            {groups.length > 1 && (
-                              <button
-                                type="button"
-                                className={c.iconBtn}
-                                title="Remove this description and its lines"
-                                aria-label="Remove description"
-                                onClick={() => removeGroup(g)}
-                              >
-                                {fi.trash({})}
-                              </button>
-                            )}
+                            <DescMenu
+                              onAddLine={() => addLineTo(g)}
+                              onRemove={groups.length > 1 ? () => removeGroup(g) : undefined}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -822,7 +957,6 @@ function ImportInvoiceCard({
     e?.lines && !('message' in e.lines)
       ? (e.lines as Record<number, Record<string, { message?: string }>>)[li]?.[f]?.message
       : undefined;
-  const emp = (v: number) => (v ? '' : ' is-empty');
 
   // The item is chosen from the client's CDC master list; its CDC no., material and unit follow.
   const itemOf = (cdcNo: string | null | undefined) =>
@@ -840,143 +974,135 @@ function ImportInvoiceCard({
   };
   /** CDC no., material and unit come from the chosen item: shown, not typed. */
   const Auto = (li: number, field: 'cdcNo' | 'material' | 'unit', label: string) => (
-    <label className="cx-f">
-      <span className="cx-lbl">{label}</span>
+    <td>
       <input
         type="text"
-        className="cargo-cell cargo-cell-auto"
+        className={`${c.cell} ${c.auto}`}
         placeholder="—"
+        aria-label={label}
         readOnly
         tabIndex={-1}
         {...register(`invoices.${gi}.lines.${li}.${field}`)}
       />
-    </label>
+    </td>
   );
-
-  const F = (
+  const Num = (
     li: number,
-    field:
-      | 'material'
-      | 'description'
-      | 'unit'
-      | 'pcs'
-      | 'netWeightKg'
-      | 'grossWeightKg'
-      | 'fobUnitPrice',
+    field: 'pcs' | 'netWeightKg' | 'grossWeightKg' | 'fobUnitPrice',
     label: string,
     ph: string,
-    num = false,
   ) => (
-    <label className="cx-f">
-      <span className="cx-lbl">{label}</span>
-      {num ? (
-        <NumberInput
-          decimals={field === 'fobUnitPrice' ? 4 : 3}
-          className="cargo-cell cargo-cell-num"
-          placeholder={ph}
-          {...register(`invoices.${gi}.lines.${li}.${field}`)}
-          aria-invalid={!!lineErr(li, field)}
-          title={lineErr(li, field)}
-        />
-      ) : (
-        <input
-          type="text"
-          className="cargo-cell"
-          placeholder={ph}
-          {...register(`invoices.${gi}.lines.${li}.${field}`)}
-          aria-invalid={!!lineErr(li, field)}
-          title={lineErr(li, field)}
-        />
-      )}
-    </label>
+    <td>
+      <NumberInput
+        decimals={field === 'fobUnitPrice' ? 4 : 3}
+        className={`${c.cell} ${c.num}`}
+        placeholder={ph}
+        aria-label={label}
+        {...register(`invoices.${gi}.lines.${li}.${field}`)}
+        aria-invalid={!!lineErr(li, field)}
+        title={lineErr(li, field)}
+      />
+    </td>
   );
 
   return (
-    <div className={`cargo-inv${open ? ' open' : ''}`}>
-      <div className="cargo-inv-row cargo-inv-row-import">
-        <label className="cx-f">
-          <span className="cx-lbl">Invoice No.</span>
+    <div className={`cargo-inv ${c.inv}${open ? ' open' : ''}`}>
+      <InvoiceHead
+        gi={gi}
+        open={open}
+        onToggle={onToggle}
+        onRemove={onRemove}
+        count={`${lines.fields.length} ${lines.fields.length === 1 ? 'item' : 'items'}`}
+      />
+
+      {/* Summary boxes: what is typed once per invoice, then the item totals. */}
+      <div className={`${c.boxes} ${c.boxesImport}`}>
+        <label className={c.box}>
+          <span>Invoice No.</span>
           <input
             type="text"
-            className="cargo-cell cargo-cell-strong"
+            className={`${c.boxInput} ${c.strong}`}
             placeholder="e.g. CNQ26044"
             {...register(`invoices.${gi}.invoiceNo`)}
             aria-invalid={!!e?.invoiceNo}
             title={e?.invoiceNo?.message}
           />
         </label>
-        <label className="cx-f">
-          <span className="cx-lbl">Invoice Date</span>
+        <label className={c.box}>
+          <span>Invoice Date</span>
           <input
             type="date"
-            className="cargo-cell"
+            className={c.boxInput}
             {...register(`invoices.${gi}.invoiceDate`, {
               onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
             })}
           />
         </label>
-        <div className="cx-chips">
-          <div className="cx-chip">
-            <span className="cx-lbl">Quantity</span>
-            <div className={`cargo-sum${emp(sum.qty)}`}>{sum.qty ? fmtNum(sum.qty, 2) : '—'}</div>
-          </div>
-          <div className="cx-chip">
-            <span className="cx-lbl">NW (kg)</span>
-            <div className={`cargo-sum${emp(sum.nw)}`}>{sum.nw ? fmtNum(sum.nw, 2) : '—'}</div>
-          </div>
-          <div className="cx-chip">
-            <span className="cx-lbl">GW (kg)</span>
-            <div className={`cargo-sum${emp(sum.gw)}`}>{sum.gw ? fmtNum(sum.gw, 2) : '—'}</div>
-          </div>
-          <div className="cx-chip cx-chip-fob">
-            <span className="cx-lbl">Amount</span>
-            <div className={`cargo-sum cargo-sum-fob${emp(sum.amount)}`}>
-              {sum.amount ? `${money(sum.amount)} USD` : '—'}
-            </div>
-          </div>
+        <div className={c.box}>
+          <span>Quantity</span>
+          <b>{sum.qty ? fmtNum(sum.qty, 2) : '—'}</b>
         </div>
-        <button
-          type="button"
-          className="cargo-toggle"
-          aria-expanded={open}
-          aria-label="Show invoice items"
-          title="Show / hide items"
-          onClick={onToggle}
-        >
-          {CHEVRON}
-        </button>
+        <div className={c.box}>
+          <span>NW (kg)</span>
+          <b>{sum.nw ? fmtNum(sum.nw, 2) : '—'}</b>
+        </div>
+        <div className={c.box}>
+          <span>GW (kg)</span>
+          <b>{sum.gw ? fmtNum(sum.gw, 2) : '—'}</b>
+        </div>
+        <div className={`${c.box} ${c.fobBox}`}>
+          <span>Amount</span>
+          <b>{sum.amount ? `${money(sum.amount)} USD` : '—'}</b>
+        </div>
       </div>
       {e?.invoiceNo?.message && (
-        <div style={{ padding: '0 14px 8px' }}>
+        <div className={c.err}>
           <FieldError message={e.invoiceNo.message} />
         </div>
       )}
+
+      {/* Items, as on the import schedule: one row each. */}
       <div className="cargo-inv-details">
         <div className="cargo-inv-details-inner">
-          <div className="cargo-inv-panel">
-            <div className="cargo-panel-title">
-              Items{' '}
-              <small>
-                {lines.fields.length} {lines.fields.length === 1 ? 'item' : 'items'}
-              </small>
-            </div>
-            <div className="cargo-line-cards">
-              {lines.fields.map((f, li) => {
-                const l = watchedLines?.[li];
-                const amount =
-                  l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
-                const it = itemOf(l?.cdcNo);
-                const after = it ? remainingAfter.get(it.id) : undefined;
-                const over = after !== undefined && after < -1e-9;
-                return (
-                  <div className="cx-line cx-line-imp" key={f.id}>
-                    <div className="cx-line-group">
-                      <div className="cx-line-fields cx-g-item">
-                        <label className="cx-f">
-                          <span className="cx-lbl">Item</span>
+          <div className={c.panel}>
+            <div className={c.panelTitle}>Items</div>
+            <div className={c.tableWrap}>
+              <table className={`${c.table} ${c.tableImport}`}>
+                {/* Fixed widths, so the columns share the row evenly whatever the values. */}
+                <colgroup>
+                  {[20, 8, 14, 9, 7, 9, 9, 10, 10, 4].map((w, i) => (
+                    <col key={i} style={{ width: `${w}%` }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>CDC No.</th>
+                    <th>Material</th>
+                    <th className={c.r}>Quantity</th>
+                    <th>CDC Unit</th>
+                    <th className={c.r}>NW (kg)</th>
+                    <th className={c.r}>GW (kg)</th>
+                    <th className={c.r}>Unit Price (USD)</th>
+                    <th className={c.r}>Amount (USD)</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.fields.map((f, li) => {
+                    const l = watchedLines?.[li];
+                    const amount =
+                      l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
+                    const it = itemOf(l?.cdcNo);
+                    const after = it ? remainingAfter.get(it.id) : undefined;
+                    const over = after !== undefined && after < -1e-9;
+                    return [
+                      <tr key={f.id}>
+                        <td>
                           <select
-                            className="cargo-cell"
-                            value={itemOf(l?.cdcNo)?.declareRef ?? l?.cdcNo ?? ''}
+                            className={c.cell}
+                            aria-label="Item"
+                            value={it?.declareRef ?? l?.cdcNo ?? ''}
                             onChange={(ev) => pickItem(li, ev.target.value)}
                             aria-invalid={!!lineErr(li, 'cdcNo')}
                           >
@@ -984,16 +1110,16 @@ function ImportInvoiceCard({
                               {cdcItems.length ? 'Choose item…' : 'No CDC master list items'}
                             </option>
                             {/* A saved item no longer on the list stays shown as it was. */}
-                            {l?.cdcNo && !itemOf(l.cdcNo) && (
+                            {l?.cdcNo && !it && (
                               <option value={l.cdcNo}>{l.description || l.cdcNo}</option>
                             )}
                             {CUT_STOCK_CATEGORIES.map((cat) => {
-                              const items = cdcItems.filter((it) => it.category === cat);
+                              const items = cdcItems.filter((x) => x.category === cat);
                               return items.length ? (
                                 <optgroup key={cat} label={CUT_STOCK_CATEGORY_LABEL[cat]}>
-                                  {items.map((it) => (
-                                    <option key={it.id} value={it.declareRef}>
-                                      {it.name}
+                                  {items.map((x) => (
+                                    <option key={x.id} value={x.declareRef}>
+                                      {x.name}
                                     </option>
                                   ))}
                                 </optgroup>
@@ -1001,116 +1127,61 @@ function ImportInvoiceCard({
                             })}
                           </select>
                           {after !== undefined && (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: over ? 'var(--status-exception-fg)' : 'var(--text-tertiary)',
-                              }}
-                            >
+                            <span className={c.balance} data-over={over}>
                               Balance after saving: {fmtNum(after)} {it?.unit}
                             </span>
                           )}
-                        </label>
+                        </td>
                         {Auto(li, 'cdcNo', 'CDC No.')}
                         {Auto(li, 'material', 'Material')}
-                      </div>
-                    </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-fields cx-g2">
-                        {F(li, 'pcs', 'Quantity', '0', true)}
+                        {Num(li, 'pcs', 'Quantity', '0')}
                         {Auto(li, 'unit', 'CDC Unit')}
-                      </div>
-                    </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-fields cx-g2">
-                        {F(li, 'netWeightKg', 'NW (kg)', '0.00', true)}
-                        {F(li, 'grossWeightKg', 'GW (kg)', '0.00', true)}
-                      </div>
-                    </div>
-                    <div className="cx-line-group">
-                      <div className="cx-line-fields cx-g2">
-                        {F(li, 'fobUnitPrice', 'Unit Price (USD)', '0.00', true)}
-                        <div className="cx-line-total-box">
-                          <span className="cx-lbl">Amount</span>
-                          <div className="cargo-line-total">
-                            {amount !== null ? `${money(amount)} USD` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    {over && (
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        {can('cutstock:override') ? (
-                          <input
-                            type="text"
-                            className="cargo-cell"
-                            style={{ width: '100%' }}
-                            placeholder="Reason for importing over the balance (required)"
-                            {...register(`invoices.${gi}.lines.${li}.overrideReason`)}
-                          />
-                        ) : (
-                          <FieldError message="More than the remaining balance. A Manager must approve this item." />
-                        )}
-                      </div>
-                    )}
-                    {lines.fields.length > 1 && (
-                      <button
-                        type="button"
-                        className="cargo-row-del"
-                        title="Remove item"
-                        aria-label="Remove item"
-                        onClick={() => lines.remove(li)}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-              <div className="cx-line cx-line-imp cx-line-sum" aria-label="Invoice total">
-                <div className="cx-line-group">
-                  <div className="cx-sum-label">Invoice total</div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g2">
-                    <div className="cx-sum-cell">{fmtNum(sum.qty, 2)}</div>
-                    <div />
-                  </div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g2">
-                    <div className="cx-sum-cell">{fmtNum(sum.nw, 2)}</div>
-                    <div className="cx-sum-cell">{fmtNum(sum.gw, 2)}</div>
-                  </div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g2">
-                    <div />
-                    <div className="cx-sum-cell cx-sum-fob">{money(sum.amount)} USD</div>
-                  </div>
-                </div>
-              </div>
+                        {Num(li, 'netWeightKg', 'NW (kg)', '0.00')}
+                        {Num(li, 'grossWeightKg', 'GW (kg)', '0.00')}
+                        {Num(li, 'fobUnitPrice', 'Unit Price (USD)', '0.00')}
+                        <td className={c.lineTotal}>{amount !== null ? money(amount) : '—'}</td>
+                        <td className={c.act}>
+                          {lines.fields.length > 1 && (
+                            <button
+                              type="button"
+                              className={c.iconBtn}
+                              title="Remove item"
+                              aria-label="Remove item"
+                              onClick={() => lines.remove(li)}
+                            >
+                              {fi.trash({})}
+                            </button>
+                          )}
+                        </td>
+                      </tr>,
+                      over && (
+                        <tr key={`${f.id}-over`} className={c.overRow}>
+                          <td colSpan={10}>
+                            {can('cutstock:override') ? (
+                              <input
+                                type="text"
+                                className={c.cell}
+                                placeholder="Reason for importing over the balance (required)"
+                                aria-label="Reason for importing over the balance"
+                                {...register(`invoices.${gi}.lines.${li}.overrideReason`)}
+                              />
+                            ) : (
+                              <FieldError message="More than the remaining balance. A Manager must approve this item." />
+                            )}
+                          </td>
+                        </tr>
+                      ),
+                    ];
+                  })}
+                </tbody>
+                {/* No total row: the invoice's totals are in the summary boxes above. */}
+              </table>
             </div>
-            <div className="cargo-panel-foot">
-              <div className="cargo-foot-adds">
-                <button
-                  type="button"
-                  className="cargo-link-btn cargo-add-line"
-                  onClick={() => lines.append(blankLine())}
-                >
-                  + Add item
-                </button>
-              </div>
-              {onRemove && (
-                <button
-                  type="button"
-                  className="cargo-link-btn cargo-inv-remove"
-                  onClick={onRemove}
-                >
-                  Remove invoice
-                </button>
-              )}
+            <div className={c.foot}>
+              <button type="button" className={c.addBtn} onClick={() => lines.append(blankLine())}>
+                {fi.plus({})}
+                Add Item
+              </button>
             </div>
           </div>
         </div>

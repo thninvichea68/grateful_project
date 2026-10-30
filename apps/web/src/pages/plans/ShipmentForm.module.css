@@ -135,12 +135,18 @@
   height: 38px;
   padding: 0 14px;
   border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
+  /* A box like Export INV + PL beside it, in red. */
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-family: var(--font-main);
   font-size: 12.5px;
   font-weight: 700;
   color: var(--status-exception-fg);
   cursor: pointer;
+}
+.deleteBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .deleteBtn svg {
   width: 15px;
@@ -716,4 +722,12 @@ fieldset:disabled .typeTile span {
   .progress span:not(.dirty) {
     display: none;
   }
+}
+
+/* A multi-line field (the remark): grows with the text, resizable by height only. */
+.textarea {
+  display: block;
+  min-height: 112px;
+  line-height: 1.5;
+  resize: vertical;
 }

@@ -134,7 +134,7 @@ export const NAV: NavGroup[] = [
         children: [
           {
             to: '/accounting',
-            label: 'Monthly Ledger',
+            label: 'Monthly',
             title: 'Accounting',
             icon: 'ledger',
             permission: 'accounting:read',

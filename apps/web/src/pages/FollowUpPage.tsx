@@ -64,7 +64,7 @@ export function FollowUpPage() {
   const { can } = useAuth();
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<FollowUpRow | 'new' | null>(null);
-  const filter = params.get('filter') ?? 'active';
+  const filter = params.get('filter') ?? 'all';
   const q = {
     page: Number(params.get('page') ?? 1),
     pageSize: Number(params.get('pageSize') ?? 50),
@@ -95,23 +95,8 @@ export function FollowUpPage() {
         <div className="card-header-row">
           <h3>Pending Follow-Up Actions</h3>
           <div className={ui.toolbar}>
-            {overdueCount > 0 && <Pill tone="exception">{overdueCount} overdue</Pill>}
-            {[
-              ['active', 'Open'],
-              ['overdue', 'Overdue'],
-              ['done', 'Done'],
-              ['all', 'All'],
-            ].map(([v, l]) => (
-              <button
-                key={v}
-                type="button"
-                className={`filter-btn${filter === v ? ' active' : ''}`}
-                onClick={() => setFilter(v!)}
-              >
-                {l}
-              </button>
-            ))}
             <SearchBox
+              grow
               placeholder="Search…"
               defaultValue={q.q}
               aria-label="Search follow-ups"
@@ -127,6 +112,18 @@ export function FollowUpPage() {
                 )
               }
             />
+            {overdueCount > 0 && <Pill tone="exception">{overdueCount} overdue</Pill>}
+            <select
+              className={ui.input}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              aria-label="Filter follow-ups"
+            >
+              <option value="all">All</option>
+              <option value="active">Open</option>
+              <option value="overdue">Overdue</option>
+              <option value="done">Done</option>
+            </select>
             {can('followups:write') && (
               <button type="button" className="new-shipment-btn" onClick={() => setOpen('new')}>
                 + Add Follow-Up

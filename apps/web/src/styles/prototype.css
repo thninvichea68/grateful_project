@@ -1223,6 +1223,27 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
     min-height: 0;
     max-height: none;
   }
+  /* Same full-height card for any list page: add `view-fill` to the section. */
+  .view-fill.view.active {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--topbar-h) - 48px);
+  }
+  .view-fill > *,
+  .view-fill > .card > * {
+    flex-shrink: 0;
+  }
+  .view-fill > .card {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .view-fill > .card > .plans-table-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+  }
 }
 @keyframes viewFadeIn {
   from {
@@ -2589,79 +2610,250 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   align-items: center;
   gap: 8px;
 }
+/* Horizontal bars: label column on the left, value scale along the bottom. */
 .port-chart-wrap {
+  --port-label-w: 84px;
+  --port-gap: 12px;
   flex: 1;
   display: flex;
-  gap: 14px;
-  min-height: 230px;
-}
-.port-chart-yaxis {
-  display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 22px 0 28px;
-  flex-shrink: 0;
-  width: 32px;
-}
-.port-chart-yaxis span {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  text-align: right;
+  gap: 8px;
+  min-height: 230px;
 }
 .port-chart-plot {
   flex: 1;
   position: relative;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 22px 0 28px;
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 10px;
+  padding: 6px 0;
+}
+/* Vertical grid lines over the bar area only, faded at top and bottom. */
+.port-chart-plot::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 calc(var(--port-label-w) + var(--port-gap));
   background-image: repeating-linear-gradient(
-    to top,
+    to right,
     var(--border-subtle) 0,
     var(--border-subtle) 1px,
     transparent 1px,
     transparent calc(100% / 5)
   );
-  background-position: bottom;
+  border-right: 1px solid var(--border-subtle);
+  mask-image: linear-gradient(to bottom, transparent, #000 18%, #000 82%, transparent);
+  pointer-events: none;
 }
-.port-bar-col {
-  flex: 1;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
+.port-bar-row {
   position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--port-label-w) 1fr;
+  align-items: center;
+  gap: var(--port-gap);
+  min-height: 34px;
+  max-height: 48px;
+  outline: none;
+  cursor: default;
+  transition: opacity 0.2s ease;
+}
+/* Hovering a row spotlights it and dims the rest. */
+.port-chart-plot:hover .port-bar-row:not(:hover),
+.port-chart-plot:has(.port-bar-row:focus-visible) .port-bar-row:not(:focus-visible) {
+  opacity: 0.4;
+}
+.port-bar-row:focus-visible .port-bar-label {
+  color: var(--accent-primary);
+}
+.port-bar-row:hover .port-bar-label {
+  color: var(--text-primary);
+}
+
+/* Legend: Import / Export chips; hover/focus spotlights one flow in every bar. */
+.port-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -10px 0 10px -9px;
+}
+.port-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.port-legend-item b {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.port-legend-item:hover,
+.port-legend-item[data-active] {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.port-legend-item i,
+.port-tip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.port-legend-item[data-kind='imp'] i,
+.port-tip [data-kind='imp'] i,
+.port-seg[data-kind='imp'] {
+  background: linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%);
+}
+.port-legend-item[data-kind='exp'] i,
+.port-tip [data-kind='exp'] i,
+.port-seg[data-kind='exp'] {
+  background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+}
+
+.port-bar-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .port-bar-track {
-  width: 60px;
-  height: 100%;
-  background: var(--bg-subtle);
-  border-radius: 8px 8px 0 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
   position: relative;
-  overflow: visible;
+  height: 100%;
+  display: flex;
+  align-items: stretch;
 }
 
 .port-bar {
-  width: 100%;
-  min-height: 8px;
-  border-radius: 8px 8px 0 0;
-  background: linear-gradient(180deg, #38bdf8 0%, #06b6d4 100%);
+  min-width: 6px;
   position: relative;
-  transition: height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: port-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+@keyframes port-grow {
+  from {
+    width: 0;
+  }
+}
+.port-bar-fill {
+  display: flex;
+  height: 100%;
+  gap: 2px;
+  border-radius: 0 6px 6px 0;
+  overflow: hidden;
+  transform-origin: left center;
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    filter 0.25s ease;
+}
+.port-bar-row:hover .port-bar-fill,
+.port-bar-row:focus-visible .port-bar-fill {
+  transform: scaleY(1.12);
+  filter: brightness(1.08) saturate(1.1);
+  box-shadow: 0 6px 18px -6px rgba(14, 165, 233, 0.55);
+}
+.port-seg {
+  flex-basis: 0;
+  min-width: 3px;
+  transition: opacity 0.2s ease;
+}
+.port-chart-plot[data-focus='imp'] .port-seg[data-kind='exp'],
+.port-chart-plot[data-focus='exp'] .port-seg[data-kind='imp'] {
+  opacity: 0.18;
+}
+
+/* Hover card with the Import / Export breakdown for one port. */
+.port-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  min-width: 170px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-elevated);
+  box-shadow: 0 12px 28px -10px rgba(15, 23, 42, 0.35);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 6px) scale(0.96);
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.port-bar-row:hover .port-tip,
+.port-bar-row:focus-visible .port-tip {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+/* The top row opens its card downward so it never covers the card header. */
+.port-bar-row:first-child .port-tip {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+.port-tip-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.port-tip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.port-tip span b {
+  margin-left: auto;
+  color: var(--text-primary);
+}
+.port-tip small {
+  min-width: 34px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.port-tip-total {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+.port-tip-total small {
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .port-bar,
+  .port-bar-fill,
+  .port-tip {
+    animation: none;
+    transition: none;
+  }
 }
 
 .port-bar-value {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  left: calc(100% + 8px);
+  transform: translateY(-50%);
   font-size: 11px;
   font-weight: 700;
   color: var(--text-primary);
@@ -2672,16 +2864,33 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   white-space: nowrap;
   pointer-events: none;
 }
+/* Long bars keep their value inside the bar end so it never spills past the plot. */
+.port-bar[data-inside] .port-bar-value {
+  left: auto;
+  right: 8px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.18);
+  border-color: transparent;
+}
 
-.port-bar-label {
-  position: absolute;
-  bottom: -22px;
+.port-chart-xaxis {
+  display: flex;
+  justify-content: space-between;
+  margin-left: calc(var(--port-label-w) + var(--port-gap));
+}
+.port-chart-xaxis span {
+  width: 0;
+  display: flex;
+  justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.2px;
   color: var(--text-tertiary);
-  text-align: center;
-  white-space: nowrap;
+}
+.port-chart-xaxis span:first-child {
+  justify-content: flex-start;
+}
+.port-chart-xaxis span:last-child {
+  justify-content: flex-end;
 }
 
 /* Forwarder Statistics Card */
@@ -4080,8 +4289,16 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   font-size: 26px;
   color: var(--accent-primary);
 }
+/* Import has four totals before the amount (export has five): fill the row with them. */
+.cargo-totals.cargo-totals-import {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(240px, 1.6fr) !important;
+}
+.cargo-totals .cargo-total-fob span:last-child {
+  white-space: nowrap;
+}
 @media (max-width: 1000px) {
-  .cargo-totals {
+  .cargo-totals,
+  .cargo-totals.cargo-totals-import {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
   .cargo-totals .cargo-total-fob {

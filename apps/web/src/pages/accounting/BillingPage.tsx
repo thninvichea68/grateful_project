@@ -24,7 +24,7 @@ export function BillingPage() {
     navigate(`/accounting/billing/${r.clientId}?month=${month}`);
 
   return (
-    <section className="view active">
+    <section className="view active view-fill">
       <div className="card">
         <div className={b.bar}>
           <MonthStepper

@@ -116,8 +116,9 @@ export async function prefill(
 
   const isImport = c.direction === 'IMPORT';
   const ship = {
-    pol: isImport ? c.originName : c.portName,
-    pod: isImport ? c.portName : c.destinationName,
+    // POL / POD print in capitals (UNITED STATES, SHV PORT).
+    pol: (isImport ? c.originName : c.portName)?.toUpperCase() ?? null,
+    pod: (isImport ? c.portName : c.destinationName)?.toUpperCase() ?? null,
     containerNo: c.containers,
     volumeCbm: n(c.cbm),
     // Not a document field: lets a preview print "NON" as the volume by air.

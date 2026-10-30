@@ -55,7 +55,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
     setParams(next, { replace: true });
   };
   return (
-    <section className="view active">
+    <section className="view active view-fill">
       {BILLING_SECTION_PATHS.includes(base) && <BillingSections className={b.sectionsTop} />}
       <div className="card">
         <div className="card-header-row">

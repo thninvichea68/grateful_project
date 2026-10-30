@@ -49,7 +49,7 @@ export function ReceiptsPage() {
   };
 
   return (
-    <section className="view active">
+    <section className="view active view-fill">
       <BillingSections className={b.sectionsTop} />
       <div className="card">
         <div className="card-header-row">

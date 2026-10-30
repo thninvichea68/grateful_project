@@ -69,7 +69,7 @@ describe('Sidebar', () => {
       'Documents',
       'PDF Tools',
       'Follow Up',
-      'Monthly Ledger',
+      'Monthly',
       'Client Billing',
       'Chea Payments',
       'Expense to Clients',
@@ -88,7 +88,7 @@ describe('Sidebar', () => {
   it('hides finance from Operators and admin pages from Viewers', () => {
     renderAs('OPERATOR');
     expect(screen.queryByRole('button', { name: 'Accounting' })).not.toBeInTheDocument();
-    expect(links()).not.toContain('Monthly Ledger');
+    expect(links()).not.toContain('Monthly');
     expect(links()).not.toContain('Payroll');
     expect(links()).toContain('Shipping Plans');
   });

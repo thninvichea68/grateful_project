@@ -32,8 +32,31 @@ export const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsh
 
 /** The workbook as a file to save. */
 export async function workbookBlob(wb: Workbook): Promise<Blob> {
-  return new Blob([await wb.xlsx.writeBuffer()], { type: XLSX_TYPE });
+  const buf = await wb.xlsx.writeBuffer();
+  const breaks = wb.worksheets.filter((ws) => colBreaks.has(ws));
+  if (!breaks.length) return new Blob([buf], { type: XLSX_TYPE });
+  // ExcelJS writes no column breaks: add them to the sheets' XML, where the schema puts them
+  // (after any row breaks, before the drawing).
+  const { default: JSZip } = await import('jszip');
+  const zip = await JSZip.loadAsync(buf);
+  for (const ws of breaks) {
+    const path = `xl/worksheets/sheet${ws.id}.xml`;
+    const xml = await zip.file(path)!.async('string');
+    const cols = colBreaks.get(ws)!;
+    const tag =
+      `<colBreaks count="${cols.length}" manualBreakCount="${cols.length}">` +
+      cols.map((c) => `<brk id="${c}" max="1048575" man="1"/>`).join('') +
+      '</colBreaks>';
+    const at = xml.search(
+      /<(customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|picture|oleObjects|controls|tableParts|extLst)\b|<\/worksheet>/,
+    );
+    zip.file(path, xml.slice(0, at) + tag + xml.slice(at));
+  }
+  return new Blob([await zip.generateAsync({ type: 'arraybuffer' })], { type: XLSX_TYPE });
 }
+
+/** Manual column breaks (a page ends after each column number), written by workbookBlob. */
+const colBreaks = new WeakMap<Worksheet, number[]>();
 
 /** One document as its own workbook. */
 export async function exportInvoiceExcel(d: BillingDoc, c: CompanyInfo) {
@@ -57,11 +80,36 @@ export function addDocSheet(
     : taxOrDisbursement(wb, ws, d, c, logo, d.type === 'tax-invoices');
 }
 
+/**
+ * A shipment's tax invoice and disbursement on one sheet, side by side (A–H, I–P) as in the
+ * client's workbook, with a page break between them: two A4 pages. Returns both grand totals.
+ */
+export function addPairSheet(
+  wb: Workbook,
+  tax: BillingDoc,
+  dis: BillingDoc,
+  c: CompanyInfo,
+  logo: string | null,
+  name: string,
+): [string, string] {
+  const ws = a4Sheet(wb, name, { left: 8, right: 8, top: 10, bottom: 10 });
+  // Excel ignores manual breaks on a sheet scaled to fit, so a fixed scale that keeps each
+  // half on its page (the foot is pushed to A4_INVOICE_PT, which prints a little over A4).
+  Object.assign(ws.pageSetup, { fitToPage: false, scale: 95 });
+  const pair = { lines: Math.max(tax.lines.length, dis.lines.length) };
+  const refs: [string, string] = [
+    taxOrDisbursement(wb, ws, tax, c, logo, true, { ...pair, o: 0 }),
+    taxOrDisbursement(wb, ws, dis, c, logo, false, { ...pair, o: 8 }),
+  ];
+  colBreaks.set(ws, [8]);
+  return refs;
+}
+
 /* ------------------------------ Shared ------------------------------ */
 
 export const EN = 'Arial'; // the sheets' Helvetica
 export const KM = 'Khmer OS Siemreap';
-export const MUOL = 'Khmer OS Muol Light';
+export const MUOL = 'Khmer OS Muol';
 export const f = (name: string, size: number, extra: Partial<Font> = {}): Partial<Font> => ({
   name,
   size,
@@ -103,6 +151,7 @@ const MM = 1 / 25.4; // inches
 /**
  * An A4 portrait sheet with the printed sheet's padding as its margins (mm), one page wide;
  * `onePage`: also one page tall (a document's sheet shrinks a little rather than spill over).
+ * Opens in Page Break Preview, so the pages show as they print.
  */
 export function a4Sheet(
   wb: Workbook,
@@ -111,7 +160,7 @@ export function a4Sheet(
   onePage = false,
 ) {
   return wb.addWorksheet(sheetName(wb, name), {
-    views: [{ showGridLines: false }],
+    views: [{ showGridLines: false, style: 'pageBreakPreview', zoomScale: 100 }],
     pageSetup: {
       paperSize: 9,
       orientation: 'portrait',
@@ -156,6 +205,7 @@ export function logoImage(wb: Workbook, logo: string): number {
 
 type Value = string | number | Date | { formula: string; result?: number | string } | null;
 type Align = 'left' | 'center' | 'right';
+type PutRest = Parameters<typeof put> extends [unknown, unknown, unknown, ...infer T] ? T : never;
 /** Merge a row's span (when wider than one cell) and set its value and look. */
 export function put(
   ws: Worksheet,
@@ -244,8 +294,10 @@ export function masthead(
   logo: string | null,
   cols: number,
   row = 1,
+  /** Columns to the left of it (the second document on a shared sheet). */
+  col0 = 0,
 ): number {
-  const all: [number, number] = [1, cols];
+  const all: [number, number] = [1 + col0, cols + col0];
   put(ws, row, all, c.nameKm ?? '', f(MUOL, 13.5), 'center');
   put(ws, row + 1, all, c.nameEn ?? '', f(EN, 11.5, { bold: true }), 'center');
   put(
@@ -261,7 +313,7 @@ export function masthead(
   [26, 18, 17, 24, 14].forEach((pt, i) => height(ws, row + i, pt));
   if (logo)
     ws.addImage(logoImage(wb, logo), {
-      tl: { col: 0.25, row: row - 1 },
+      tl: { col: col0 + 0.25, row: row - 1 },
       ext: { width: 120, height: 120 },
     });
   return row + 5;
@@ -276,23 +328,41 @@ function taxOrDisbursement(
   c: CompanyInfo,
   logo: string | null,
   tax: boolean,
+  /** Beside another document (see addPairSheet): its first column less one, and the line
+   * rows both lay out, so their totals and signatures fall on the same rows. */
+  pair: { o: number; lines: number } = { o: 0, lines: 0 },
 ): string {
+  const { o } = pair;
+  const P = (row: number, [c1, c2]: [number, number], ...rest: PutRest) =>
+    put(ws, row, [c1 + o, c2 + o], ...rest);
+  const RL = (row: number, [c1, c2]: [number, number], side: keyof Borders, e: Borders['top']) =>
+    rule(ws, row, [c1 + o, c2 + o], side, e);
+  // A row keeps the taller of the two documents' heights.
+  const ht = (row: number, pt: number) =>
+    height(ws, row, Math.max(pt, (o && ws.getRow(row).height) || 0));
+  const [C, E, F, G, H] = [3, 5, 6, 7, 8].map((n) => ws.getColumn(n + o).letter) as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   // The sheet's columns (px): No, Description, Quantity, Unit, Unit Price, Sub Total, VAT, Amount.
-  ws.columns = px(32, 313, 55, 48, 70, 75, 65, 75);
+  px(32, 313, 55, 48, 70, 75, 65, 75).forEach((w, i) => (ws.getColumn(i + 1 + o).width = w.width));
   const ALL: [number, number] = [1, 8];
   // Row 1: room for the DRAFT / CANCELLED mark.
-  stamp(ws, 1, 8, d.status);
-  height(ws, 1, 14);
-  let r = masthead(wb, ws, c, logo, 8, 2);
+  stamp(ws, 1, 8 + o, d.status);
+  ht(1, 14);
+  let r = masthead(wb, ws, c, logo, 8, 2, o);
 
   // Title between the heavy rule and the details.
-  height(ws, r, 12);
-  rule(ws, r + 1, ALL, 'top', THICK);
-  put(ws, r + 1, ALL, tax ? 'វិក្កយបត្រអាករ' : 'វិក្កយបត្របង់ជំនួស', f(MUOL, 14), 'center');
-  height(ws, r + 1, 28);
-  put(ws, r + 2, ALL, tax ? 'TAX INVOICE' : 'DISBURSEMENT', f(EN, 13, { bold: true }), 'center');
-  height(ws, r + 2, 19);
-  height(ws, r + 3, 12);
+  ht(r, 12);
+  RL(r + 1, ALL, 'top', THICK);
+  P(r + 1, ALL, tax ? 'វិក្កយបត្រអាករ' : 'វិក្កយបត្របង់ជំនួស', f(MUOL, 14), 'center');
+  ht(r + 1, 28);
+  P(r + 2, ALL, tax ? 'TAX INVOICE' : 'DISBURSEMENT', f(EN, 13, { bold: true }), 'center');
+  ht(r + 2, 19);
+  ht(r + 3, 12);
   r += 4;
 
   // Customer on the left (A–D), document and shipment on the right (E–H), right-aligned.
@@ -339,8 +409,8 @@ function taxOrDisbursement(
     `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
     `VOLUME: ${volume(d)}`,
     `Container No: ${h(d, 'containerNo')}`,
-    `POL: ${h(d, 'pol')}`,
-    `POD: ${h(d, 'pod')}`,
+    `POL: ${h(d, 'pol').toUpperCase()}`,
+    `POD: ${h(d, 'pod').toUpperCase()}`,
     `Exchange Rate: 1USD = ${Math.round(num(h(d, 'exchangeRate'))).toLocaleString('en-US')} KHR`,
   ];
   const text = (v: Part[] | string) => (typeof v === 'string' ? v : v.map((p) => p.text).join(''));
@@ -348,14 +418,14 @@ function taxOrDisbursement(
   for (let i = 0; i < Math.max(left.length, right.length); i++, r++) {
     const lv = left[i] ?? '';
     const rv = right[i] ?? '';
-    put(ws, r, L, null, ship, 'left', { wrap: true });
-    put(ws, r, R, null, ship, 'right', { wrap: true });
-    if (text(lv)) ws.getCell(r, 1).value = meta(lv) as never;
-    if (text(rv)) ws.getCell(r, 4).value = meta(rv) as never;
+    P(r, L, null, ship, 'left', { wrap: true });
+    P(r, R, null, ship, 'right', { wrap: true });
+    if (text(lv)) ws.getCell(r, o + 1).value = meta(lv) as never;
+    if (text(rv)) ws.getCell(r, o + 4).value = meta(rv) as never;
     const lines = Math.max(Math.ceil(text(lv).length / 68), Math.ceil(text(rv).length / 58), 1);
-    height(ws, r, (i === 3 ? 18 : 15) * lines);
+    ht(r, (i === 3 ? 18 : 15) * lines);
   }
-  height(ws, r, 10);
+  ht(r, 10);
   r += 1;
 
   // Lines: a 2px rule above and below the two-line headings.
@@ -370,7 +440,7 @@ function taxOrDisbursement(
     ['ថ្លៃទំនិញ', 'Amount', 'right'],
   ];
   heads.forEach(([k, e, align], i) => {
-    const cell = put(ws, r, [i + 1, i + 1], null, f(EN, 8, { bold: true }), align, { wrap: true });
+    const cell = P(r, [i + 1, i + 1], null, f(EN, 8, { bold: true }), align, { wrap: true });
     cell.value = {
       richText: [
         { text: `${k}\n`, font: f(KM, 8, { bold: true }) },
@@ -378,9 +448,9 @@ function taxOrDisbursement(
       ],
     };
   });
-  rule(ws, r, ALL, 'top', MEDIUM);
-  rule(ws, r, ALL, 'bottom', MEDIUM);
-  height(ws, r, 30);
+  RL(r, ALL, 'top', MEDIUM);
+  RL(r, ALL, 'bottom', MEDIUM);
+  ht(r, 30);
   r += 1;
 
   const first = r;
@@ -401,76 +471,80 @@ function taxOrDisbursement(
       num(l.qty),
       l.unit ?? '',
       num(l.unitPrice),
-      { formula: `ROUND(C${r}*E${r},2)`, result: num(l.subtotal) },
+      { formula: `ROUND(${C}${r}*${E}${r},2)`, result: num(l.subtotal) },
       // A line the system charges no VAT on keeps its 0; the rest are 10% of the sub total.
       tax && num(l.vat) !== 0
-        ? { formula: `ROUND(F${r}*0.1,2)`, result: num(l.vat) }
+        ? { formula: `ROUND(${F}${r}*0.1,2)`, result: num(l.vat) }
         : tax
           ? 0
           : '-',
-      { formula: tax ? `F${r}+G${r}` : `F${r}`, result: tax ? num(l.amount) : num(l.subtotal) },
+      {
+        formula: tax ? `${F}${r}+${G}${r}` : `${F}${r}`,
+        result: tax ? num(l.amount) : num(l.subtotal),
+      },
     ];
     values.forEach((v, i) =>
-      put(ws, r, [i + 1, i + 1], v, f(EN, 8, { bold: i === 7 }), align[i], {
+      P(r, [i + 1, i + 1], v, f(EN, 8, { bold: i === 7 }), align[i], {
         wrap: i === 1,
         numFmt: i === 2 || i >= 4 ? MONEY : undefined,
       }),
     );
-    height(ws, r, 22 * Math.max(1, Math.ceil(l.description.length / 50)));
+    ht(r, 22 * Math.max(1, Math.ceil(l.description.length / 50)));
     r += 1;
   }
   const last = r - 1;
+  r = Math.max(r, first + pair.lines); // blank rows to line up with the other document
   const sum = (col: string, result: number) =>
     d.lines.length ? { formula: `SUM(${col}${first}:${col}${last})`, result } : 0;
 
   // Totals between double rules: KHR and USD on the tax invoice, USD only on the disbursement.
-  height(ws, r, 3);
+  ht(r, 3);
   r += 1;
   const top = r;
   const bold = f(EN, 8.2, { bold: true });
   const label = (text: string) =>
-    put(ws, r, tax ? [1, 3] : [1, 6], text, f(KM, 8.2, { bold: true }), 'right', { indent: 1 });
+    P(r, tax ? [1, 3] : [1, 6], text, f(KM, 8.2, { bold: true }), 'right', { indent: 1 });
   if (tax) {
     const rate = num(h(d, 'exchangeRate'));
     const rows: [string, Value, number][] = [
-      ['សរុប SUB TOTAL', sum('F', num(d.totals.subtotal)), num(d.totals.subtotalKhr)],
-      ['អាករលើតម្លៃបន្ថែម (VAT 10%)', sum('G', num(d.totals.vat)), num(d.totals.vatKhr)],
+      ['សរុប SUB TOTAL', sum(F, num(d.totals.subtotal)), num(d.totals.subtotalKhr)],
+      ['អាករលើតម្លៃបន្ថែម (VAT 10%)', sum(G, num(d.totals.vat)), num(d.totals.vatKhr)],
       [
         'សរុបរួម GRAND TOTAL',
-        { formula: `H${top}+H${top + 1}`, result: num(d.totals.total) },
+        { formula: `${H}${top}+${H}${top + 1}`, result: num(d.totals.total) },
         num(d.totals.totalKhr),
       ],
     ];
     for (const [text, usd, khr] of rows) {
       label(text);
-      put(ws, r, [4, 4], 'KHR', bold, 'center');
-      put(ws, r, [6, 6], { formula: `ROUND(H${r}*${rate},0)`, result: khr }, bold, 'right', {
+      P(r, [4, 4], 'KHR', bold, 'center');
+      P(r, [6, 6], { formula: `ROUND(${H}${r}*${rate},0)`, result: khr }, bold, 'right', {
         numFmt: RIEL,
       });
-      put(ws, r, [7, 7], 'USD', bold, 'right');
-      put(ws, r, [8, 8], usd, bold, 'right', { numFmt: MONEY });
-      height(ws, r, 17);
+      P(r, [7, 7], 'USD', bold, 'right');
+      P(r, [8, 8], usd, bold, 'right', { numFmt: MONEY });
+      ht(r, 17);
       r += 1;
     }
   } else {
     const total = num(d.totals.total);
     const rows: [string, Value][] = [
-      ['សរុប SUB TOTAL', sum('H', total)],
+      ['សរុប SUB TOTAL', sum(H, total)],
       ['អាករលើតម្លៃបន្ថែម (VAT 0%)', '-'],
-      ['សរុបរួម GRAND TOTAL', { formula: `H${top}`, result: total }],
+      ['សរុបរួម GRAND TOTAL', { formula: `${H}${top}`, result: total }],
     ];
     for (const [text, usd] of rows) {
       label(text);
-      put(ws, r, [7, 7], 'USD', bold, 'right');
-      put(ws, r, [8, 8], usd, bold, 'right', { numFmt: MONEY });
-      height(ws, r, 17);
+      P(r, [7, 7], 'USD', bold, 'right');
+      P(r, [8, 8], usd, bold, 'right', { numFmt: MONEY });
+      ht(r, 17);
       r += 1;
     }
   }
-  rule(ws, top, ALL, 'top', DOUBLE);
-  rule(ws, r - 1, ALL, 'bottom', DOUBLE);
-  const grand = `'${ws.name}'!H${r - 1}`;
-  height(ws, r, 16);
+  RL(top, ALL, 'top', DOUBLE);
+  RL(r - 1, ALL, 'bottom', DOUBLE);
+  const grand = `'${ws.name}'!${H}${r - 1}`;
+  ht(r, 16);
   r += 1;
 
   // Payment note
@@ -482,37 +556,35 @@ function taxOrDisbursement(
     `AC/NAME: ${c.bankAccountName ?? ''}`,
     `AC/NO: ${c.bankAccountNo ?? ''}`,
   ]) {
-    put(ws, r, ALL, t, f(EN, 7.8));
-    height(ws, r, 11.5);
+    P(r, ALL, t, f(EN, 7.8));
+    ht(r, 11.5);
     r += 1;
   }
 
   // Signatures at the page foot: a 2px rule over each, buyer left, seller right.
   r = pushToFoot(ws, r, 24 + 18 + 12 + 12, A4_INVOICE_PT);
-  rule(ws, r, [1, 2], 'bottom', MEDIUM);
-  rule(ws, r, [6, 8], 'bottom', MEDIUM);
-  height(ws, r, 24);
-  put(ws, r + 1, [1, 3], 'ហត្ថលេខា និង ឈ្មោះអ្នកទិញ', f(KM, 10));
-  put(ws, r + 1, [6, 8], 'ហត្ថលេខា និង ឈ្មោះអ្នកលក់', f(KM, 10), 'right');
-  height(ws, r + 1, 18);
+  RL(r, [1, 2], 'bottom', MEDIUM);
+  RL(r, [6, 8], 'bottom', MEDIUM);
+  ht(r, 24);
+  P(r + 1, [1, 3], 'ហត្ថលេខា និង ឈ្មោះអ្នកទិញ', f(KM, 10));
+  P(r + 1, [6, 8], 'ហត្ថលេខា និង ឈ្មោះអ្នកលក់', f(KM, 10), 'right');
+  ht(r + 1, 18);
   const grey = { argb: 'FF444444' };
-  put(
-    ws,
+  P(
     r + 2,
     [1, 3],
     'សម្គាល់ច្បាប់ដើមសម្រាប់អ្នកទិញច្បាប់ចម្លងសម្រាប់អ្នកលក់',
     f(KM, 7.5, { color: grey }),
   );
-  put(
-    ws,
+  P(
     r + 3,
     [1, 3],
     'Note : Original invoice for customer, copies invoice for seller',
     f(EN, 7.5, { color: grey }),
   );
-  height(ws, r + 2, 12);
-  height(ws, r + 3, 12);
-  ws.pageSetup.printArea = `A1:H${r + 3}`;
+  ht(r + 2, 12);
+  ht(r + 3, 12);
+  ws.pageSetup.printArea = `A1:${H}${r + 3}`;
   return grand;
 }
 
@@ -563,8 +635,8 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
           `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
           `VOLUME: ${volume(d)}`,
           `Container No: ${h(d, 'containerNo')}`,
-          `POL: ${h(d, 'pol')}`,
-          `POD: ${h(d, 'pod')}`,
+          `POL: ${h(d, 'pol').toUpperCase()}`,
+          `POD: ${h(d, 'pod').toUpperCase()}`,
         ]
       : []),
   ];

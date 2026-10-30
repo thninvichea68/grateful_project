@@ -127,8 +127,8 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
           <div className={p.ship}>VOLUME: {volume(d)}</div>
           <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
-          <div className={p.ship}>POL: {h(d, 'pol')}</div>
-          <div className={p.ship}>POD: {h(d, 'pod')}</div>
+          <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
+          <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
           <div className={p.ship}>Exchange Rate: 1USD = {riel(h(d, 'exchangeRate'))} KHR</div>
         </div>
       </div>
@@ -345,8 +345,8 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
               <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
               <div className={p.ship}>VOLUME: {volume(d)}</div>
               <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
-              <div className={p.ship}>POL: {h(d, 'pol')}</div>
-              <div className={p.ship}>POD: {h(d, 'pod')}</div>
+              <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
+              <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
             </>
           )}
         </div>

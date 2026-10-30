@@ -644,6 +644,7 @@ function Field({
   placeholder,
   decimals,
   suffix,
+  rows,
 }: {
   name: keyof FormValues;
   label: string;
@@ -654,6 +655,8 @@ function Field({
   decimals?: number;
   /** A tag at the right end of the box, e.g. the quantity's unit. */
   suffix?: string;
+  /** A text box this many lines tall (e.g. the remark), instead of a one-line field. */
+  rows?: number;
 }) {
   const {
     register,
@@ -664,7 +667,16 @@ function Field({
     <div className="form-field-group" style={spanStyle(span)}>
       <FieldLabel name={name} label={label} />
       <div className={suffix ? f.affix : f.plain}>
-        {decimals !== undefined ? (
+        {rows ? (
+          <textarea
+            id={`f-${name}`}
+            rows={rows}
+            className={`form-field-box ${f.textarea}`}
+            placeholder={placeholder ?? label}
+            {...register(name)}
+            aria-invalid={!!err}
+          />
+        ) : decimals !== undefined ? (
           <NumberInput
             id={`f-${name}`}
             decimals={decimals}
@@ -1090,7 +1102,7 @@ function buildSteps(
       icon="message"
       cols={1}
     >
-      <Field name="remark" label="Remark" span="full" placeholder="Optional note" />
+      <Field name="remark" label="Remark" span="full" placeholder="Optional note" rows={5} />
     </Card>
   );
 

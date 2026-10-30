@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState, type MouseEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
@@ -31,6 +31,20 @@ import {
 import { DraftsModal, ReceiptModal } from './BillingDialogs';
 import b from './Billing.module.css';
 import { PrintLink } from '../../components/PrintLink';
+
+// The print layouts load only when a row's preview is first opened.
+const RowPreviewModal = lazy(() => import('./RowPreviewModal'));
+
+/**
+ * A click on a shipment row away from its declaration, documents and Print button: a click
+ * that selected text, or came through a portal (the Print menu), doesn't count either.
+ */
+function opensPreview(e: MouseEvent<HTMLTableRowElement>): boolean {
+  const t = e.target as HTMLElement;
+  if (!e.currentTarget.contains(t)) return false;
+  if (t.closest('a, button, input, [data-no-preview]')) return false;
+  return !window.getSelection()?.toString();
+}
 
 /**
  * One client's month, in the order the work is done: (1) each shipment's tax invoice,
@@ -78,6 +92,7 @@ function Workspace({
   const issue = useIssueDrafts(m.client.id);
   const [drafting, setDrafting] = useState(false);
   const [paying, setPaying] = useState<BillingStatement | null>(null);
+  const [preview, setPreview] = useState<BillingShipmentRow | null>(null);
   // The statements stay folded under their heading until opened.
   const [statementsOpen, setStatementsOpen] = useState(false);
   const s = m.summary;
@@ -266,9 +281,15 @@ function Workspace({
             </thead>
             <tbody>
               {m.rows.map((r) => (
-                <tr key={r.recordId}>
+                <tr
+                  key={r.recordId}
+                  data-preview
+                  data-active={preview?.recordId === r.recordId}
+                  title="Click to preview this shipment's documents"
+                  onClick={(e) => opensPreview(e) && setPreview(r)}
+                >
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.invDate)}</td>
-                  <td>
+                  <td data-no-preview>
                     <span className={b.declare}>{r.declareNo}</span>
                     <span className={b.small}>
                       {r.direction === 'IMPORT' ? 'Import' : 'Export'} ·{' '}
@@ -390,6 +411,17 @@ function Workspace({
           missing={s.missing}
           onClose={() => setDrafting(false)}
         />
+      )}
+      {preview && (
+        <Suspense fallback={null}>
+          <RowPreviewModal
+            clientId={m.client.id}
+            month={month}
+            row={preview}
+            back={back}
+            onClose={() => setPreview(null)}
+          />
+        </Suspense>
       )}
       {paying && (
         <ReceiptModal

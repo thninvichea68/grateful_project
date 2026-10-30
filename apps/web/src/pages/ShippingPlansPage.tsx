@@ -147,6 +147,7 @@ export function ShippingPlansPage() {
           </div>
           <div className={ui.toolbar}>
             <SearchBox
+              grow
               placeholder="Invoice, HBL, container, declare no…"
               defaultValue={filters.q}
               aria-label="Search shipments"

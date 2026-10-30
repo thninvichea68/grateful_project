@@ -13,6 +13,7 @@ import { periodCode, periodRange, type PackPart } from './billingUi';
 import {
   a4Sheet,
   addDocSheet,
+  addPairSheet,
   box,
   dateCell,
   EN,
@@ -36,7 +37,8 @@ import { logoDataUrl } from './recordSummaryExport';
 
 /*
  * A client's month as one workbook, laid out like the printed month pack
- * (print/PrintBillingPage.tsx + billingPrint.module.css): each document's sheet, the two
+ * (print/PrintBillingPage.tsx + billingPrint.module.css): each document's sheet (a shipment's
+ * tax invoice and disbursement side by side on one, a page each), the two
  * account statements (amounts linked to the document sheets), the official receipts (two A5
  * receipts to an A4 page) and the handover checklist. Same parts and documents as the print.
  */
@@ -88,7 +90,24 @@ export function buildPackWorkbook(
   // Each document's grand total cell, by number, for the statements' formulas.
   const totals = new Map<string, string>();
   if (on('docs'))
-    for (const d of pack.docs) {
+    for (let i = 0; i < pack.docs.length; i++) {
+      const d = pack.docs[i]!;
+      // A shipment's tax invoice and the disbursement after it share a sheet, as in the
+      // client's workbook.
+      const next = pack.docs[i + 1];
+      if (
+        d.type === 'tax-invoices' &&
+        next?.type === 'disbursements' &&
+        d.accountingRecordId &&
+        next.accountingRecordId === d.accountingRecordId
+      ) {
+        const name = `${invoiceFileName(d)} & ${invoiceFileName(next)}`;
+        const [a, b] = addPairSheet(wb, d, next, c, logo, name);
+        if (d.number) totals.set(d.number, a);
+        if (next.number) totals.set(next.number, b);
+        i += 1;
+        continue;
+      }
       const ref = addDocSheet(wb, d, c, logo, invoiceFileName(d));
       if (d.number) totals.set(d.number, ref);
     }
@@ -156,6 +175,7 @@ function statementSheet(
     Object.assign(put(ws, r, [i + 1, i + 1], t, cell, 'center'), { border: box() }),
   );
   height(ws, r, 15);
+  ws.pageSetup.printTitlesRow = `${r}:${r}`; // the headings again on each page
   const sides = (row: number) => {
     ws.getCell(row, 1).border = { ...ws.getCell(row, 1).border, left: THIN };
     ws.getCell(row, n).border = { ...ws.getCell(row, n).border, right: THIN };
@@ -428,6 +448,7 @@ function checklistSheet(
     }),
   );
   height(ws, r, 20);
+  ws.pageSetup.printTitlesRow = `${r}:${r}`; // the headings again on each page
   r += 1;
   const rows = checklistRows(pack, month);
   rows.forEach((x, i) => {
