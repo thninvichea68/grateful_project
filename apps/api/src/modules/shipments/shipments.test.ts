@@ -1064,4 +1064,17 @@ describe('lookups', () => {
     });
     expect(res.body.ports[0]).toMatchObject({ code: 'SHV11' });
   });
+
+  it('"+ Add New" CO form stores the code and shows it as "Form …"', async () => {
+    const h = await as('OPERATOR');
+    const add = (label: string, who = h) =>
+      request(app).post('/api/v1/lookups/co-forms').set(who).send({ label });
+    const created = await add(' form xyz ');
+    expect(created.status).toBe(201);
+    expect(created.body).toEqual({ value: 'XYZ', label: 'Form XYZ' });
+    expect((await add('XYZ')).status).toBe(200); // already there
+    const forms = (await request(app).get('/api/v1/lookups').set(h)).body.values.CO_FORM;
+    expect(forms.filter((f: { value: string }) => f.value === 'XYZ')).toHaveLength(1);
+    expect((await add('ABC', await as('VIEWER'))).status).toBe(403);
+  });
 });

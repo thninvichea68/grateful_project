@@ -4,7 +4,7 @@ import type { LedgerRow } from '@gs/shared';
 import { useLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
-import { Pill } from '../../components/StatusPill';
+import { CheaPill, Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtNum } from '../../lib/format';
@@ -243,9 +243,7 @@ export function LedgerPage() {
                   onKeyDown={(e) => e.key === 'Enter' && setOpen(r)}
                 >
                   <td>
-                    <Pill tone={r.cheaStatus === 'PAID' ? 'completed' : 'pending'}>
-                      {r.cheaStatus === 'PAID' ? 'Paid' : 'Unpaid'}
-                    </Pill>
+                    <CheaPill status={r.cheaStatus} />
                   </td>
                   <td>{r.portNo ?? '-'}</td>
                   <td>{r.portCode ?? '-'}</td>

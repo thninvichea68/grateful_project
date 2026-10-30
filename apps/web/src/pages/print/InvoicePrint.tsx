@@ -23,6 +23,9 @@ const longDate = (iso: string) => {
 const kgs = (v: string) => (v ? `${money(v)} KGS` : '');
 const cbm = (v: string) =>
   v ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 })} CBM` : '';
+/** The VOLUME line: always "NON" for a shipment by air (no CBM), import or export. */
+const volume = (d: BillingDoc) =>
+  h(d, 'transportMode') === 'AIR' ? 'NON' : cbm(h(d, 'volumeCbm'));
 /** 1 → "1", 3.3 → "3.3" (the debit note's Q'TY column). */
 const plain = (v: string | number) =>
   Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 });
@@ -122,7 +125,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
             <span className={p.metaVal}>{longDate(d.date)}</span>
           </div>
           <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
-          <div className={p.ship}>VOLUME: {cbm(h(d, 'volumeCbm'))}</div>
+          <div className={p.ship}>VOLUME: {volume(d)}</div>
           <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
           <div className={p.ship}>POL: {h(d, 'pol')}</div>
           <div className={p.ship}>POD: {h(d, 'pod')}</div>
@@ -340,7 +343,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
           {shipment && (
             <>
               <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
-              <div className={p.ship}>VOLUME: {cbm(h(d, 'volumeCbm'))}</div>
+              <div className={p.ship}>VOLUME: {volume(d)}</div>
               <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
               <div className={p.ship}>POL: {h(d, 'pol')}</div>
               <div className={p.ship}>POD: {h(d, 'pod')}</div>

@@ -158,14 +158,20 @@ lookupsRouter.post('/forwarders', requirePermission('shipments:write'), async (r
 /**
  * "+ Add New" in a credit note line's dropdowns: adds a charge description (Charge descriptions)
  * or a unit (Charge units) to its list in Settings → Dropdown lists; in a record summary's
- * Quantity, a unit (Quantity units). Stored in capitals; one that already exists is returned as is.
+ * Quantity, a unit (Quantity units); in a shipping plan's CO Form, a form (CO forms, stored by
+ * its code: "Form XYZ" or "XYZ" is kept as XYZ and shown as "Form XYZ"). Stored in capitals; one
+ * that already exists is returned as is.
  */
 const quickAdd = (
-  type: 'CHARGE' | 'CHARGE_UNIT' | 'QUANTITY_UNIT',
+  type: 'CHARGE' | 'CHARGE_UNIT' | 'QUANTITY_UNIT' | 'CO_FORM',
   path: string,
   permission: Permission,
   min: number,
   max: number,
+  toItem: (typed: string) => { value: string; label: string } = (typed) => {
+    const value = typed.toUpperCase();
+    return { value, label: value };
+  },
 ) =>
   lookupsRouter.post(
     path,
@@ -175,11 +181,11 @@ const quickAdd = (
         z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
         req.body,
       );
-      const value = label.toUpperCase();
+      const item = toItem(label);
       const row = await db.transaction(async (tx) => {
         const [created] = await tx
           .insert(lookupValues)
-          .values({ type, value, label: value, sortOrder: 999 })
+          .values({ type, ...item, sortOrder: 999 })
           .onConflictDoNothing()
           .returning();
         if (!created) return null;
@@ -190,9 +196,16 @@ const quickAdd = (
         );
         return created;
       });
-      res.status(row ? 201 : 200).json({ value, label: value });
+      res.status(row ? 201 : 200).json(item);
     },
   );
 quickAdd('CHARGE', '/charges', 'creditnotes:write', 2, 200);
 quickAdd('CHARGE_UNIT', '/charge-units', 'creditnotes:write', 1, 20);
 quickAdd('QUANTITY_UNIT', '/quantity-units', 'recordsummaries:write', 1, 20);
+quickAdd('CO_FORM', '/co-forms', 'shipments:write', 1, 30, (typed) => {
+  const value = typed
+    .toUpperCase()
+    .replace(/^FORM\s+/, '')
+    .trim();
+  return { value, label: `Form ${value}` };
+});

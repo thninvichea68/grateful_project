@@ -15,6 +15,8 @@ import { ApiError } from '../../lib/api';
 import { fmtNum } from '../../lib/format';
 import { FieldError } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
+import c from './CargoSection.module.css';
+import { fi } from './formIcons';
 import { blankInvoice, blankLine, toNum, type FormValues, type InvoiceValues } from './formModel';
 
 const CHEVRON = (
@@ -195,6 +197,7 @@ export function CargoSection({ shipmentId }: { shipmentId?: string | undefined }
       <div className="cx-card">
         <div className="cx-card-head">
           <div className="cx-title">
+            <span className="cx-title-icon">{fi.dollar({ width: 18, height: 18 })}</span>
             <div>
               <h3>{isImport ? 'Cargo Invoices & CDC Items' : 'Cargo, Pricing & FOB'}</h3>
               <p>
@@ -507,13 +510,12 @@ function InvoiceCard({
     e?.lines && !('message' in e.lines)
       ? (e.lines as Record<number, Record<string, { message?: string }>>)[li]?.[f]?.message
       : undefined;
-  const emp = (v: number) => (v ? '' : ' is-empty');
-  const F = (
+  // A line cell: a borderless box inside the table that shows its border on hover / focus.
+  const cell = (
     li: number,
     field:
       | 'poNo'
       | 'styleNo'
-      | 'htsCode'
       | 'pcs'
       | 'ctns'
       | 'netWeightKg'
@@ -524,13 +526,13 @@ function InvoiceCard({
     ph: string,
     num = false,
   ) => (
-    <label className="cx-f">
-      <span className="cx-lbl">{label}</span>
+    <td>
       {num ? (
         <NumberInput
           decimals={field === 'fobUnitPrice' ? 4 : 3}
-          className="cargo-cell cargo-cell-num"
+          className={`${c.cell} ${c.num}`}
           placeholder={ph}
+          aria-label={label}
           {...register(`invoices.${gi}.lines.${li}.${field}`)}
           aria-invalid={!!lineErr(li, field)}
           title={lineErr(li, field)}
@@ -538,98 +540,116 @@ function InvoiceCard({
       ) : (
         <input
           type="text"
-          className="cargo-cell"
+          className={c.cell}
           placeholder={ph}
+          aria-label={label}
           {...register(`invoices.${gi}.lines.${li}.${field}`)}
           aria-invalid={!!lineErr(li, field)}
           title={lineErr(li, field)}
         />
       )}
-    </label>
+    </td>
   );
 
   const renderLine = (li: number) => {
     const l = watchedLines?.[li];
     const total = l && l.pcs && l.fobUnitPrice ? toNum(l.pcs) * toNum(l.fobUnitPrice) : null;
     return (
-      <div className="cx-line" key={lines.fields[li]!.id}>
-        <div className="cx-line-group">
-          <div className="cx-line-group-title">Product</div>
-          <div className="cx-line-fields cx-g2">
-            {F(li, 'poNo', 'PO No.', 'PO No.')}
-            {F(li, 'styleNo', 'Style', 'Style No.')}
-          </div>
-        </div>
-        <div className="cx-line-group">
-          <div className="cx-line-group-title">Quantity</div>
-          <div className="cx-line-fields cx-g2">
-            {F(li, 'pcs', 'PCS', '0', true)}
-            {F(li, 'ctns', 'CTNS', '0', true)}
-          </div>
-        </div>
-        <div className="cx-line-group">
-          <div className="cx-line-group-title">Weight &amp; Volume</div>
-          <div className="cx-line-fields cx-g3">
-            {F(li, 'netWeightKg', 'Net Wt (kg)', '0.00', true)}
-            {F(li, 'grossWeightKg', 'Gross Wt (kg)', '0.00', true)}
-            {F(li, 'cbm', 'CBM', '0.00', true)}
-          </div>
-        </div>
-        <div className="cx-line-group">
-          <div className="cx-line-group-title">Price</div>
-          <div className="cx-line-fields cx-g2">
-            {F(li, 'fobUnitPrice', 'Unit (USD)', '0.00', true)}
-            <div className="cx-line-total-box">
-              <span className="cx-lbl">Line Total</span>
-              <div className="cargo-line-total">{total !== null ? `${money(total)} USD` : ''}</div>
-            </div>
-          </div>
-        </div>
-        {lines.fields.length > 1 && (
-          <button
-            type="button"
-            className="cargo-row-del"
-            title="Remove line"
-            aria-label="Remove line"
-            onClick={() => removeLine(li)}
-          >
-            ×
-          </button>
-        )}
-      </div>
+      <tr key={lines.fields[li]!.id}>
+        {cell(li, 'poNo', 'PO No.', 'PO No.')}
+        {cell(li, 'styleNo', 'Style', 'Style No.')}
+        {cell(li, 'pcs', 'PCS', '0', true)}
+        {cell(li, 'ctns', 'CTNS', '0', true)}
+        {cell(li, 'netWeightKg', 'Net Wt (kg)', '0.00', true)}
+        {cell(li, 'grossWeightKg', 'Gross Wt (kg)', '0.00', true)}
+        {cell(li, 'cbm', 'CBM', '0.00', true)}
+        {cell(li, 'fobUnitPrice', 'Unit price (USD)', '0.00', true)}
+        <td className={c.lineTotal}>{total !== null ? money(total) : '—'}</td>
+        <td className={c.act}>
+          {lines.fields.length > 1 && (
+            <button
+              type="button"
+              className={c.iconBtn}
+              title="Remove line"
+              aria-label="Remove line"
+              onClick={() => removeLine(li)}
+            >
+              {fi.trash({})}
+            </button>
+          )}
+        </td>
+      </tr>
     );
   };
 
+  const firstLine = watchedLines?.[0];
+  const headDesc = descOf({ start: 0 });
   return (
-    <div className={`cargo-inv${open ? ' open' : ''}`}>
-      <div className="cargo-inv-row">
-        <label className="cx-f">
-          <span className="cx-lbl">Invoice No.</span>
+    <div className={`cargo-inv ${c.inv}${open ? ' open' : ''}`}>
+      {/* Head: open / close, the invoice and its first description, a few tags. */}
+      <div className={c.head}>
+        <button
+          type="button"
+          className={c.toggle}
+          aria-expanded={open}
+          aria-label={open ? 'Hide line items' : 'Show line items'}
+          onClick={onToggle}
+        >
+          {CHEVRON}
+        </button>
+        <span className={c.headIcon}>{fi.shirt({})}</span>
+        <b className={c.headTitle}>Invoice {gi + 1}</b>
+        <span className={c.headDesc} title={headDesc || undefined}>
+          {headDesc || <i>No description yet</i>}
+        </span>
+        <span className={c.tags}>
+          {firstLine?.styleNo && <span className={c.tag}>Style: {firstLine.styleNo}</span>}
+          <span className={c.tag}>
+            {lines.fields.length} {lines.fields.length === 1 ? 'line' : 'lines'}
+          </span>
+        </span>
+        {onRemove && (
+          <button
+            type="button"
+            className={c.iconBtn}
+            title="Remove invoice"
+            aria-label={`Remove invoice ${gi + 1}`}
+            onClick={onRemove}
+          >
+            {fi.trash({})}
+          </button>
+        )}
+      </div>
+
+      {/* Summary boxes: what is typed once per invoice, then the line totals. */}
+      <div className={c.boxes}>
+        <label className={c.box}>
+          <span>Invoice No.</span>
           <input
             type="text"
-            className="cargo-cell cargo-cell-strong"
+            className={`${c.boxInput} ${c.strong}`}
             placeholder="Invoice No."
             {...register(`invoices.${gi}.invoiceNo`)}
             aria-invalid={!!e?.invoiceNo}
             title={e?.invoiceNo?.message}
           />
         </label>
-        <label className="cx-f">
-          <span className="cx-lbl">Invoice Date</span>
+        <label className={c.box}>
+          <span>Invoice Date</span>
           <input
             type="date"
-            className="cargo-cell"
+            className={c.boxInput}
             {...register(`invoices.${gi}.invoiceDate`, {
               onChange: (ev: React.ChangeEvent<HTMLInputElement>) => onDate(ev.target.value),
             })}
           />
         </label>
-        <label className="cx-f">
-          <span className="cx-lbl">HTS Code</span>
+        <label className={c.box}>
+          <span>HTS Code</span>
           {/* One invoice = one HTS code: shown once here and written to every line. */}
           <input
             type="text"
-            className="cargo-cell"
+            className={c.boxInput}
             placeholder={htsCodes.length > 1 ? 'Choose one' : 'HTS Code'}
             value={htsCodes.length === 1 ? htsCodes[0] : ''}
             onChange={(ev) => setHts(ev.target.value)}
@@ -637,153 +657,114 @@ function InvoiceCard({
             title={e?.htsCode?.message}
           />
         </label>
-        <div className="cx-chips">
-          <div className="cx-chip">
-            <span className="cx-lbl">Net Wt (kg)</span>
-            <div className={`cargo-sum${emp(lineSum.nw)}`}>
-              {lineSum.nw ? fmtNum(lineSum.nw, 2) : '—'}
-            </div>
-          </div>
-          <div className="cx-chip">
-            <span className="cx-lbl">Gross Wt (kg)</span>
-            <div className={`cargo-sum${emp(lineSum.gw)}`}>
-              {lineSum.gw ? fmtNum(lineSum.gw, 2) : '—'}
-            </div>
-          </div>
-          <div className="cx-chip">
-            <span className="cx-lbl">PCS</span>
-            <div className={`cargo-sum${emp(lineSum.pcs)}`}>
-              {lineSum.pcs ? fmtNum(lineSum.pcs) : '—'}
-            </div>
-          </div>
-          <div className="cx-chip">
-            <span className="cx-lbl">CTNS</span>
-            <div className={`cargo-sum${emp(lineSum.ctns)}`}>
-              {lineSum.ctns ? fmtNum(lineSum.ctns) : '—'}
-            </div>
-          </div>
-          <div className="cx-chip cx-chip-fob">
-            <span className="cx-lbl">Total FOB</span>
-            <div className={`cargo-sum cargo-sum-fob${emp(lineSum.fob)}`}>
-              {lineSum.fob ? `${money(lineSum.fob)} USD` : '—'}
-            </div>
-          </div>
+        <div className={c.box}>
+          <span>Net Wt (kg)</span>
+          <b>{lineSum.nw ? fmtNum(lineSum.nw, 2) : '—'}</b>
         </div>
-        <button
-          type="button"
-          className="cargo-toggle"
-          aria-expanded={open}
-          aria-label="Show invoice details"
-          title="Show / hide line items"
-          onClick={onToggle}
-        >
-          {CHEVRON}
-        </button>
+        <div className={c.box}>
+          <span>Gross Wt (kg)</span>
+          <b>{lineSum.gw ? fmtNum(lineSum.gw, 2) : '—'}</b>
+        </div>
+        <div className={c.box}>
+          <span>PCS</span>
+          <b>{lineSum.pcs ? fmtNum(lineSum.pcs) : '—'}</b>
+        </div>
+        <div className={c.box}>
+          <span>CTNS</span>
+          <b>{lineSum.ctns ? fmtNum(lineSum.ctns) : '—'}</b>
+        </div>
+        <div className={c.box}>
+          <span>CBM</span>
+          <b>{lineSum.cbm ? fmtNum(lineSum.cbm, 3) : '—'}</b>
+        </div>
+        <div className={`${c.box} ${c.fobBox}`}>
+          <span>Total FOB</span>
+          <b>{lineSum.fob ? `${money(lineSum.fob)} USD` : '—'}</b>
+        </div>
       </div>
       {e?.invoiceNo?.message && (
-        <div style={{ padding: '0 14px 8px' }}>
+        <div className={c.err}>
           <FieldError message={e.invoiceNo.message} />
         </div>
       )}
       {htsCodes.length > 1 && (
-        <div style={{ padding: '0 14px 8px' }}>
+        <div className={c.err}>
           <FieldError
             message={`The lines have different HTS codes (${htsCodes.join(', ')}). One invoice uses one HTS code — enter it above.`}
           />
         </div>
       )}
+
+      {/* Packaging / line items: one table, a description row above each group of lines. */}
       <div className="cargo-inv-details">
         <div className="cargo-inv-details-inner">
-          <div className="cargo-inv-panel">
-            <div className="cargo-panel-title">
-              Line items{' '}
-              <small>
-                {lines.fields.length} {lines.fields.length === 1 ? 'line' : 'lines'}
-              </small>
+          <div className={c.panel}>
+            <div className={c.panelTitle}>Packaging / line items</div>
+            <div className={c.tableWrap}>
+              <table className={c.table}>
+                <thead>
+                  <tr>
+                    <th>PO No.</th>
+                    <th>Style</th>
+                    <th className={c.r}>PCS</th>
+                    <th className={c.r}>CTNS</th>
+                    <th className={c.r}>Net Wt (kg)</th>
+                    <th className={c.r}>Gross Wt (kg)</th>
+                    <th className={c.r}>CBM</th>
+                    <th className={c.r}>Unit (USD)</th>
+                    <th className={c.r}>Line Total (USD)</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                {groups.map((g) => {
+                  const id = lines.fields[g.start]!.id;
+                  return (
+                    <tbody key={id}>
+                      <tr className={c.descRow}>
+                        <td colSpan={10}>
+                          <div className={c.descInner}>
+                            <span className={c.descLbl}>Description</span>
+                            <input
+                              type="text"
+                              className={c.cell}
+                              placeholder="e.g. Mens woven shorts 100 nylon"
+                              aria-label="Description"
+                              value={descOf(g)}
+                              onChange={(ev) => setDesc(g, ev.target.value)}
+                              autoFocus={focusId === id}
+                            />
+                            {groups.length > 1 && (
+                              <button
+                                type="button"
+                                className={c.iconBtn}
+                                title="Remove this description and its lines"
+                                aria-label="Remove description"
+                                onClick={() => removeGroup(g)}
+                              >
+                                {fi.trash({})}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {g.idx.map(renderLine)}
+                    </tbody>
+                  );
+                })}
+                {/* No total row: the invoice's totals are in the summary boxes above. */}
+              </table>
             </div>
-            <div className="cargo-line-cards">
-              {groups.map((g) => {
-                const id = lines.fields[g.start]!.id;
-                return (
-                  <div className="cx-desc-group" key={id}>
-                    <div className="cx-desc-row">
-                      <label className="cx-f">
-                        <span className="cx-lbl">Description</span>
-                        <input
-                          type="text"
-                          className="cargo-cell"
-                          placeholder="e.g. Mens woven shorts 100 nylon"
-                          value={descOf(g)}
-                          onChange={(ev) => setDesc(g, ev.target.value)}
-                          autoFocus={focusId === id}
-                        />
-                      </label>
-                      {groups.length > 1 && (
-                        <button
-                          type="button"
-                          className="cargo-row-del"
-                          title="Remove this description and its lines"
-                          aria-label="Remove description"
-                          onClick={() => removeGroup(g)}
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                    {g.idx.map(renderLine)}
-                  </div>
-                );
-              })}
-              {/* Invoice total, column-aligned with the line fields above. */}
-              <div className="cx-line cx-line-sum" aria-label="Invoice total">
-                <div className="cx-line-group">
-                  <div className="cx-sum-label">Invoice total</div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g2">
-                    <div className="cx-sum-cell">{fmtNum(lineSum.pcs)}</div>
-                    <div className="cx-sum-cell">{fmtNum(lineSum.ctns)}</div>
-                  </div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g3">
-                    <div className="cx-sum-cell">{fmtNum(lineSum.nw, 2)}</div>
-                    <div className="cx-sum-cell">{fmtNum(lineSum.gw, 2)}</div>
-                    <div className="cx-sum-cell">{fmtNum(lineSum.cbm, 3)}</div>
-                  </div>
-                </div>
-                <div className="cx-line-group">
-                  <div className="cx-line-fields cx-g2">
-                    <div />
-                    <div className="cx-sum-cell cx-sum-fob">{money(lineSum.fob)} USD</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="cargo-panel-foot">
-              <div className="cargo-foot-adds">
-                {/* New line under the latest description. */}
-                <button type="button" className="cargo-link-btn cargo-add-line" onClick={addLine}>
-                  + Add line
-                </button>
-                {/* New description box with its first line. */}
-                <button
-                  type="button"
-                  className="cargo-link-btn cargo-add-line"
-                  onClick={addDescription}
-                >
-                  + Add Description
-                </button>
-              </div>
-              {onRemove && (
-                <button
-                  type="button"
-                  className="cargo-link-btn cargo-inv-remove"
-                  onClick={onRemove}
-                >
-                  Remove invoice
-                </button>
-              )}
+            <div className={c.foot}>
+              {/* New line under the latest description. */}
+              <button type="button" className={c.addBtn} onClick={addLine}>
+                {fi.plus({})}
+                Add Line
+              </button>
+              {/* New description row with its first line. */}
+              <button type="button" className={c.addBtn} onClick={addDescription}>
+                {fi.plus({})}
+                Add Description
+              </button>
             </div>
           </div>
         </div>

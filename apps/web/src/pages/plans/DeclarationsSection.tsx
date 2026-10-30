@@ -2,6 +2,7 @@ import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { type LookupsResponse, type ShipmentDetail } from '@gs/shared';
 import { FieldError } from '../../components/ui';
 import { maskDeclareNo } from '../../lib/declareNo';
+import { fi } from './formIcons';
 import { blankDeclaration, type FormValues } from './formModel';
 
 /** Customs declarations (the CDC master list is drawn down by the import invoice items). */
@@ -31,6 +32,7 @@ export function DeclarationsSection({
     <div className="cx-card">
       <div className="cx-card-head">
         <div className="cx-title">
+          <span className="cx-title-icon">{fi.badge({ width: 18, height: 18 })}</span>
           <div>
             <h3>Customs Declarations</h3>
             <p>

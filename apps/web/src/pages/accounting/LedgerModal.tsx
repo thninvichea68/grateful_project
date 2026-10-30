@@ -16,7 +16,7 @@ import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { useToast } from '../../components/Toast';
-import { Pill } from '../../components/StatusPill';
+import { CheaPill } from '../../components/StatusPill';
 import { icons } from '../../layout/icons';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import m from '../creditnoted/PackMenu.module.css';
@@ -73,7 +73,8 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           invRevenue: n(row.invRevenue),
           disTotal: n(row.disTotal),
           dnTotal: n(row.dnTotal),
-          cheaStatus: row.cheaStatus,
+          // Shown only: the form keeps an enum value (N/A rows have no clear fee).
+          cheaStatus: row.cheaStatus === 'PAID' ? 'PAID' : 'UNPAID',
           mark: row.mark ?? '',
         }
       : {
@@ -262,9 +263,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
               title="Set by the month's clear fee payments to Chea"
               style={{ display: 'flex', alignItems: 'center' }}
             >
-              <Pill tone={row?.cheaStatus === 'PAID' ? 'completed' : 'pending'}>
-                {row?.cheaStatus === 'PAID' ? 'Paid' : 'Unpaid'}
-              </Pill>
+              <CheaPill status={row?.cheaStatus} />
             </div>
           </div>
         </div>

@@ -346,11 +346,14 @@ function headerValues(type: BillingDocType, input: Input) {
   const { lines: _l, ...rest } = input;
   const numberCol = CONFIG[type].numberCol;
   // An empty number means "allocate one"; a typed number is stored upper-case.
-  return Object.fromEntries(
+  const values = Object.fromEntries(
     Object.entries(rest)
       .filter(([k, v]) => !(k === numberCol && !v))
       .map(([k, v]) => [k, k === numberCol && typeof v === 'string' ? v.toUpperCase() : v]),
   ) as Row;
+  // An air shipment has no CBM: a record summary by air always shows "NON".
+  if (type === 'record-summaries' && values.transportMode === 'AIR') values.cbm = 'NON';
+  return values;
 }
 
 async function writeLines(
@@ -973,9 +976,11 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
     .where(eq(col(cfg.lines, cfg.fk), id))
     .orderBy(asc(col(cfg.lines, 'lineNo')))) as Row[];
   const [rec] = doc.accountingRecordId
-    ? await queryRows<{ declareNo: string }>(
+    ? await queryRows<{ declareNo: string; transportMode: string | null }>(
         db,
-        sql`SELECT d.declare_no AS "declareNo" FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id WHERE a.id = ${doc.accountingRecordId as string}`,
+        sql`SELECT d.declare_no AS "declareNo", s.transport_mode AS "transportMode"
+            FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
+            LEFT JOIN shipments s ON s.id = d.shipment_id WHERE a.id = ${doc.accountingRecordId as string}`,
       )
     : [];
   const skip = new Set([
@@ -998,6 +1003,8 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
       .filter(([k]) => !skip.has(k))
       .map(([k, v]) => [k, v === null || v === undefined ? null : String(v)]),
   );
+  // The shipment's mode, for printing: by air the volume shows "NON" (a record summary has its own).
+  if (!header.transportMode && rec?.transportMode) header.transportMode = rec.transportMode;
   // Live from the Monthly Ledger, so a number the accountant corrects there shows here too.
   if (type === 'record-summaries' && doc.accountingRecordId)
     Object.assign(header, await ledgerNumbers(db, doc.accountingRecordId as string));

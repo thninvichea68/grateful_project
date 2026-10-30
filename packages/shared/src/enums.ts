@@ -35,6 +35,8 @@ export type CutStockCategory = (typeof CUT_STOCK_CATEGORIES)[number];
 
 export const CHEA_STATUSES = ['UNPAID', 'PAID'] as const;
 export type CheaStatus = (typeof CHEA_STATUSES)[number];
+/** A ledger row's shown Chea status: NA when it has no clear fee (nothing owed to Chea). */
+export type CheaPaymentStatus = CheaStatus | 'NA';
 
 export const BILLING_DOC_STATUSES = ['DRAFT', 'ISSUED', 'VOID'] as const;
 export type BillingDocStatus = (typeof BILLING_DOC_STATUSES)[number];

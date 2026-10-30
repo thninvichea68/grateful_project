@@ -51,7 +51,20 @@ async function main() {
   );
   count(
     'countries',
-    (await db.insert(s.countries).values(COUNTRIES).onConflictDoNothing().returning()).length,
+    // Every country comes from migration 0041; these fill in the map coordinates if missing.
+    (
+      await db
+        .insert(s.countries)
+        .values(COUNTRIES)
+        .onConflictDoUpdate({
+          target: s.countries.iso2,
+          set: {
+            lat: sql`coalesce(${s.countries.lat}, excluded.lat)`,
+            lng: sql`coalesce(${s.countries.lng}, excluded.lng)`,
+          },
+        })
+        .returning()
+    ).length,
   );
   count(
     'ports',

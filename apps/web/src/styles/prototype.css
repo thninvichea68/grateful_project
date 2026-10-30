@@ -4524,6 +4524,10 @@ th.frozen-col.frozen-col-edge {
   background: var(--status-exception-bg);
   color: var(--status-exception-fg);
 }
+.status-tag.neutral {
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+}
 
 .cutstock-pill {
   display: inline-block;

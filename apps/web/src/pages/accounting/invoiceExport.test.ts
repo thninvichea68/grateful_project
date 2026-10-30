@@ -156,6 +156,15 @@ describe('Invoice Excel', () => {
     expect(ws.getRow(34).height).toBeGreaterThan(50);
   });
 
+  it('shows the volume as NON for a shipment by air', async () => {
+    await exportInvoiceExcel(tax, company);
+    const sea = (await load()).getWorksheet('GS26-360')!;
+    expect(sea.getCell('D15').value).toBe('VOLUME: 12 CBM');
+    await exportInvoiceExcel({ ...tax, header: { ...tax.header, transportMode: 'AIR' } }, company);
+    const ws = (await load()).getWorksheet('GS26-360')!;
+    expect(ws.getCell('D15').value).toBe('VOLUME: NON');
+  });
+
   it('exports a draft disbursement at VAT 0%, marked DRAFT', async () => {
     const draft = { ...dis, status: 'DRAFT', number: null } as BillingDoc;
     expect(invoiceFileName(draft)).toBe('Disbursement_JR_draft');

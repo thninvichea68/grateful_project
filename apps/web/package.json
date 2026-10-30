@@ -27,6 +27,7 @@
     "@visx/scale": "4.0.0",
     "@visx/shape": "4.0.0",
     "clsx": "2.1.1",
+    "country-flag-icons": "^1.6.20",
     "d3-array": "3.2.4",
     "d3-shape": "3.2.0",
     "docx-preview": "^0.4.1",

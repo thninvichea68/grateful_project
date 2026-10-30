@@ -95,6 +95,9 @@ const fixed2 = (v: string) =>
 const kgs = (v: string) => (v ? `${fixed2(v)} KGS` : '');
 const cbm = (v: string) =>
   v ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 })} CBM` : '';
+/** The VOLUME line: always "NON" for a shipment by air (no CBM), import or export. */
+const volume = (d: BillingDoc) =>
+  h(d, 'transportMode') === 'AIR' ? 'NON' : cbm(h(d, 'volumeCbm'));
 
 const MM = 1 / 25.4; // inches
 /**
@@ -334,7 +337,7 @@ function taxOrDisbursement(
     ],
     '', // one blank line before the shipment details, as on the sheet
     `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
-    `VOLUME: ${cbm(h(d, 'volumeCbm'))}`,
+    `VOLUME: ${volume(d)}`,
     `Container No: ${h(d, 'containerNo')}`,
     `POL: ${h(d, 'pol')}`,
     `POD: ${h(d, 'pod')}`,
@@ -558,7 +561,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
     ...(shipment
       ? [
           `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
-          `VOLUME: ${cbm(h(d, 'volumeCbm'))}`,
+          `VOLUME: ${volume(d)}`,
           `Container No: ${h(d, 'containerNo')}`,
           `POL: ${h(d, 'pol')}`,
           `POD: ${h(d, 'pod')}`,

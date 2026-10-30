@@ -161,7 +161,7 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     ['VAT 10%', 10, (r) => Number(r.vat)],
     ['DN Total', 11, (r) => Number(r.dnTotal)],
     ['Net Profit', 12, (r) => Number(r.netProfit)],
-    ['Chea', 9, (r) => r.cheaStatus],
+    ['Chea', 9, (r) => (r.cheaStatus === 'NA' ? 'N/A' : r.cheaStatus)],
     ['Mark', 18, (r) => r.mark],
   ];
   ws.columns = cols.map(([header, width]) => ({ header, width }));

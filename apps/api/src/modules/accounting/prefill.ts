@@ -120,6 +120,8 @@ export async function prefill(
     pod: isImport ? c.portName : c.destinationName,
     containerNo: c.containers,
     volumeCbm: n(c.cbm),
+    // Not a document field: lets a preview print "NON" as the volume by air.
+    transportMode: c.transportMode,
     grossWeightKg: n(c.gw),
     shipper: c.shipper,
     consignee: c.consignee,
@@ -204,7 +206,7 @@ export async function prefill(
         containerNo: c.containers,
         containerSize: c.containerSize,
         grossWeightKg: n(c.gw),
-        cbm: n(c.cbm),
+        cbm: c.transportMode === 'AIR' ? 'NON' : n(c.cbm),
         // The standard import / export breakdown; the processing fee starts at the ledger's
         // service fee (10% VAT goes on top), the rest are priced per shipment.
         lines: RECORD_SUMMARY_ITEMS[c.direction].map(([description, mark], i) => ({

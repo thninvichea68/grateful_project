@@ -3,6 +3,7 @@ import {
   FormProvider,
   useFieldArray,
   useForm,
+  useController,
   useFormContext,
   useWatch,
   type FieldErrors,
@@ -22,6 +23,7 @@ import {
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import {
+  useAddCoForm,
   useAddConsignee,
   useAddForwarder,
   useDeleteShipment,
@@ -29,6 +31,7 @@ import {
   useSaveShipment,
   useShipment,
 } from '../../features/hooks';
+import { CountrySelect } from '../../components/CountrySelect';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
@@ -47,6 +50,7 @@ import {
   type FormValues,
 } from './formModel';
 import f from './ShipmentForm.module.css';
+import { FIELD_ICON, fi, type FormIcon } from './formIcons';
 
 interface Step {
   label: string;
@@ -55,19 +59,20 @@ interface Step {
   render: () => ReactNode;
 }
 
-const FREIGHT = [
-  { value: 'SEA', label: 'Sea' },
-  { value: 'AIR', label: 'Air' },
-  { value: 'ROAD', label: 'Truck' },
+type Choice = { value: string; label: string; icon?: FormIcon };
+const FREIGHT: Choice[] = [
+  { value: 'SEA', label: 'Sea', icon: 'ship' },
+  { value: 'AIR', label: 'Air', icon: 'plane' },
+  { value: 'ROAD', label: 'Truck', icon: 'truck' },
 ];
-const TERMS = [
+const TERMS: Choice[] = [
   { value: 'FCL', label: 'CY / CY' },
   { value: 'LCL', label: 'CFS / CFS (LCL)' },
 ];
 const DIRECTIONS = [
-  { value: 'EXPORT', label: 'Export', sub: 'Goods shipped out of Cambodia', icon: '↗' },
-  { value: 'IMPORT', label: 'Import', sub: 'Goods arriving into Cambodia', icon: '↙' },
-];
+  { value: 'IMPORT', label: 'Import', sub: 'Goods arriving into Cambodia', icon: 'importBox' },
+  { value: 'EXPORT', label: 'Export', sub: 'Goods shipped out of Cambodia', icon: 'exportBox' },
+] as const;
 
 const TONE: Record<string, string> = {
   COMPLETED: 'done',
@@ -302,12 +307,16 @@ function ShipmentForm({
                   )}
                 </div>
                 <div className={f.meta}>
-                  <span>
+                  <span className={f.metaItem}>
+                    {fi.building({})}
                     <strong>{metaParts[0]}</strong>
-                    {metaParts.length > 1 ? ` · ${metaParts.slice(1).join(' · ')}` : ''}
                   </span>
+                  {metaParts.length > 1 && (
+                    <span className={f.metaItem}>{metaParts.slice(1).join(' • ')}</span>
+                  )}
                   {detail && (
-                    <span>
+                    <span className={f.metaItem}>
+                      {fi.clock({})}
                       Updated{' '}
                       {new Date(detail.updatedAt).toLocaleString('en-GB', {
                         timeZone: 'Asia/Phnom_Penh',
@@ -363,27 +372,31 @@ function ShipmentForm({
                 <div className={f.setupClient}>
                   <div className={f.setupField}>
                     <label className={f.cap} htmlFor="f-clientId">
+                      {fi.idCard({})}
                       Client
                     </label>
-                    <select
-                      id="f-clientId"
-                      className={`form-select-box ${f.clientSelect}`}
-                      {...register('clientId')}
-                      disabled={clientLocked}
-                      title={
-                        clientLocked
-                          ? 'Locked: a declaration of this shipment is already in the ledger'
-                          : undefined
-                      }
-                    >
-                      {lookups.clients
-                        .filter((c) => c.status !== 'INACTIVE' || c.id === detail?.clientId)
-                        .map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                    </select>
+                    <div className={f.inIcon}>
+                      {fi.building({})}
+                      <select
+                        id="f-clientId"
+                        className={`form-select-box ${f.clientSelect}`}
+                        {...register('clientId')}
+                        disabled={clientLocked}
+                        title={
+                          clientLocked
+                            ? 'Locked: a declaration of this shipment is already in the ledger'
+                            : undefined
+                        }
+                      >
+                        {lookups.clients
+                          .filter((c) => c.status !== 'INACTIVE' || c.id === detail?.clientId)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <div className={f.setupChoices}>
@@ -391,6 +404,8 @@ function ShipmentForm({
                   <Segmented
                     name="transportMode"
                     label="Freight"
+                    icon="ship"
+                    variant="pill"
                     options={FREIGHT}
                     // Switching away from Air: pick CY / CY so Sea and Truck have terms.
                     onChange={() => loadType === 'NONE' && setValue('loadType', 'FCL')}
@@ -398,6 +413,8 @@ function ShipmentForm({
                   <Segmented
                     name="loadType"
                     label="Terms"
+                    icon="file"
+                    variant="tile"
                     options={TERMS}
                     disabled={transportMode === 'AIR'}
                   />
@@ -478,7 +495,8 @@ function ShipmentForm({
                   className="btn-cancel-shipment"
                   onClick={() => setStep(current - 1)}
                 >
-                  ← Back
+                  {fi.arrowLeft({})}
+                  Back
                 </button>
               )}
               {!isLast && (detail || readOnly) && (
@@ -487,7 +505,8 @@ function ShipmentForm({
                   className={f.secondaryNext}
                   onClick={() => setStep(current + 1)}
                 >
-                  Next →
+                  Next
+                  {fi.arrowRight({})}
                 </button>
               )}
               {!readOnly && (
@@ -497,13 +516,17 @@ function ShipmentForm({
                   disabled={save.isPending}
                   onClick={() => (canSaveHere ? void submit() : setStep(current + 1))}
                 >
-                  {!canSaveHere
-                    ? 'Next →'
-                    : save.isPending
-                      ? 'Saving…'
-                      : detail
-                        ? 'Save changes'
-                        : 'Create shipment'}
+                  {!canSaveHere ? (
+                    <>
+                      Next
+                      {fi.arrowRight({})}
+                    </>
+                  ) : (
+                    <>
+                      {fi.save({})}
+                      {save.isPending ? 'Saving…' : detail ? 'Save changes' : 'Create shipment'}
+                    </>
+                  )}
                 </button>
               )}
             </div>
@@ -526,6 +549,7 @@ function DirectionTiles({ onChange }: { onChange: () => void }) {
   return (
     <fieldset className={f.setupField}>
       <legend className={f.cap} style={{ marginBottom: 8 }}>
+        {fi.box({})}
         Shipment type
       </legend>
       <div className={f.typeTiles}>
@@ -533,9 +557,12 @@ function DirectionTiles({ onChange }: { onChange: () => void }) {
           <label key={o.value} className={f.typeTile}>
             <input type="radio" value={o.value} {...register('direction', { onChange })} />
             <span>
-              <i aria-hidden="true">{o.icon}</i>
+              <i aria-hidden="true">{fi[o.icon]({})}</i>
               <b>{o.label}</b>
               <small>{o.sub}</small>
+              <em className={f.radio} aria-hidden="true">
+                {fi.check({})}
+              </em>
             </span>
           </label>
         ))}
@@ -544,16 +571,21 @@ function DirectionTiles({ onChange }: { onChange: () => void }) {
   );
 }
 
+/** Freight as pill buttons with icons; Terms as small tiles. */
 function Segmented({
   name,
   label,
+  icon,
+  variant,
   options,
   disabled,
   onChange,
 }: {
   name: 'direction' | 'transportMode' | 'loadType';
   label: string;
-  options: { value: string; label: string }[];
+  icon: FormIcon;
+  variant: 'pill' | 'tile';
+  options: Choice[];
   disabled?: boolean;
   onChange?: () => void;
 }) {
@@ -561,17 +593,46 @@ function Segmented({
   return (
     <fieldset className={f.setupField} disabled={disabled}>
       <legend className={f.cap} style={{ marginBottom: 8 }}>
+        {fi[icon]({})}
         {label}
       </legend>
-      <div className={f.segmented}>
+      <div className={f.segmented} data-variant={variant}>
         {options.map((o) => (
           <label key={o.value} className={f.segOpt}>
             <input type="radio" value={o.value} {...register(name, { onChange })} />
-            <span>{o.label}</span>
+            <span>
+              {o.icon && fi[o.icon]({})}
+              {o.label}
+            </span>
           </label>
         ))}
       </div>
     </fieldset>
+  );
+}
+
+/** Quantity, with its unit (CTNS…) shown as a tag inside the box. */
+function QuantityField() {
+  const unit = useWatch<FormValues, 'quantityUnit'>({ name: 'quantityUnit' });
+  return (
+    <Field
+      name="quantity"
+      label="Quantity"
+      placeholder="0"
+      decimals={3}
+      suffix={unit || undefined}
+    />
+  );
+}
+
+/** A field's label with its icon (FIELD_ICON), in the mockup's sentence case. */
+function FieldLabel({ name, label }: { name: string; label: string }) {
+  const icon = FIELD_ICON[name];
+  return (
+    <label htmlFor={`f-${name}`} className={f.label}>
+      {icon && fi[icon]({})}
+      {label}
+    </label>
   );
 }
 
@@ -582,6 +643,7 @@ function Field({
   span,
   placeholder,
   decimals,
+  suffix,
 }: {
   name: keyof FormValues;
   label: string;
@@ -590,6 +652,8 @@ function Field({
   placeholder?: string;
   /** A number field (digits only, shown with commas) with at most this many decimals. */
   decimals?: number;
+  /** A tag at the right end of the box, e.g. the quantity's unit. */
+  suffix?: string;
 }) {
   const {
     register,
@@ -598,27 +662,30 @@ function Field({
   const err = errors[name] as { message?: string } | undefined;
   return (
     <div className="form-field-group" style={spanStyle(span)}>
-      <label htmlFor={`f-${name}`}>{label}</label>
-      {decimals !== undefined ? (
-        <NumberInput
-          id={`f-${name}`}
-          decimals={decimals}
-          className="form-field-box"
-          placeholder={placeholder ?? label}
-          {...register(name)}
-          aria-invalid={!!err}
-        />
-      ) : (
-        <input
-          id={`f-${name}`}
-          type={type}
-          className="form-field-box"
-          placeholder={placeholder ?? label}
-          title={type === 'text' ? undefined : label}
-          {...register(name)}
-          aria-invalid={!!err}
-        />
-      )}
+      <FieldLabel name={name} label={label} />
+      <div className={suffix ? f.affix : f.plain}>
+        {decimals !== undefined ? (
+          <NumberInput
+            id={`f-${name}`}
+            decimals={decimals}
+            className="form-field-box"
+            placeholder={placeholder ?? label}
+            {...register(name)}
+            aria-invalid={!!err}
+          />
+        ) : (
+          <input
+            id={`f-${name}`}
+            type={type}
+            className="form-field-box"
+            placeholder={placeholder ?? label}
+            title={type === 'text' ? undefined : label}
+            {...register(name)}
+            aria-invalid={!!err}
+          />
+        )}
+        {suffix && <span className={f.suffix}>{suffix}</span>}
+      </div>
       <FieldError message={err?.message} />
     </div>
   );
@@ -640,18 +707,80 @@ function CoStatusSelect() {
   );
 }
 
+/**
+ * CO Form: the MoC CO system's form list ("Form AB"…, stored as the code AB), with "+ Add New"
+ * first. A code not in the list stays selectable until changed.
+ */
+function CoFormSelect({ lookups }: { lookups: LookupsResponse }) {
+  const { register } = useFormContext<FormValues>();
+  const { can } = useAuth();
+  const addCoForm = useAddCoForm();
+  const current = useWatch<FormValues, 'coForm'>({ name: 'coForm' }) ?? '';
+  const options = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
+  if (current && !options.some((o) => o.value === current))
+    options.push({ value: current, label: current });
+  return (
+    <div className="form-field-group">
+      <FieldLabel name="coForm" label="CO Form" />
+      <AddNewSelect
+        id="f-coForm"
+        label="CO Form"
+        placeholder="Select form"
+        addFirst
+        registration={register('coForm')}
+        options={options}
+        onCreate={
+          can('shipments:write')
+            ? async (label) => (await addCoForm.mutateAsync({ label })).value
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+/** A country, picked from every country in the world with its flag; type to search. */
+function CountryField({
+  name,
+  label,
+  countries,
+}: {
+  name: 'destinationCountryIso2' | 'originCountryIso2';
+  label: string;
+  countries: LookupsResponse['countries'];
+}) {
+  const { field, fieldState } = useController<FormValues, typeof name>({ name });
+  return (
+    <div className="form-field-group">
+      <FieldLabel name={name} label={label} />
+      <CountrySelect
+        id={`f-${name}`}
+        value={field.value}
+        onChange={field.onChange}
+        onBlur={field.onBlur}
+        countries={countries}
+        invalid={!!fieldState.error}
+      />
+      <FieldError message={fieldState.error?.message} />
+    </div>
+  );
+}
+
 function Select({
   name,
   label,
   options,
   placeholder,
   span,
+  inner,
 }: {
   name: keyof FormValues;
   label: string;
   options: { value: string; label: string }[];
   placeholder?: string;
   span?: Span;
+  /** An icon inside the box, before the chosen value. */
+  inner?: FormIcon;
 }) {
   const {
     register,
@@ -660,15 +789,23 @@ function Select({
   const err = errors[name] as { message?: string } | undefined;
   return (
     <div className="form-field-group" style={spanStyle(span)}>
-      <label htmlFor={`f-${name}`}>{label}</label>
-      <select id={`f-${name}`} className="form-select-box" {...register(name)} aria-invalid={!!err}>
-        {placeholder !== undefined && <option value="">{placeholder}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      <FieldLabel name={name} label={label} />
+      <div className={inner ? f.inIcon : f.plain}>
+        {inner && fi[inner]({})}
+        <select
+          id={`f-${name}`}
+          className="form-select-box"
+          {...register(name)}
+          aria-invalid={!!err}
+        >
+          {placeholder !== undefined && <option value="">{placeholder}</option>}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <FieldError message={err?.message} />
     </div>
   );
@@ -685,7 +822,7 @@ function ShipmentStatusField() {
   const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
   return (
     <div className="form-field-group">
-      <label>Shipment Status</label>
+      <FieldLabel name="shipmentStatus" label="Shipment Status" />
       <div>
         <span className={f.badge} data-tone={TONE[status]}>
           {SHIPMENT_STATUS_LABEL[status]}
@@ -706,7 +843,7 @@ function ClearanceStatusField() {
   const status = clearanceStatusOf({ declarations });
   return (
     <div className="form-field-group">
-      <label>Clearance Status</label>
+      <FieldLabel name="clearanceStatus" label="Clearance Status" />
       <div>
         <span className={f.badge} data-tone={TONE[status]}>
           {CLEARANCE_STATUS_LABEL[status]}
@@ -724,11 +861,13 @@ function ClearanceStatusField() {
 function Card({
   title,
   sub,
+  icon,
   cols = 4,
   children,
 }: {
   title: string;
   sub: string;
+  icon: FormIcon;
   cols?: number;
   children: ReactNode;
 }) {
@@ -736,6 +875,7 @@ function Card({
     <div className="cx-card">
       <div className="cx-card-head">
         <div className="cx-title">
+          <span className="cx-title-icon">{fi[icon]({ width: 18, height: 18 })}</span>
           <div>
             <h3>{title}</h3>
             <p>{sub}</p>
@@ -767,7 +907,7 @@ function PartiesFields({
     );
     return (
       <div className="form-field-group" style={spanStyle(2)}>
-        <label htmlFor="f-consigneeId">Consignee</label>
+        <FieldLabel name="consigneeId" label="Consignee" />
         <AddNewSelect
           id="f-consigneeId"
           label="Consignee"
@@ -785,7 +925,7 @@ function PartiesFields({
   }
   return (
     <div className="form-field-group" style={spanStyle(2)}>
-      <label htmlFor="f-forwarderId">Forwarder</label>
+      <FieldLabel name="forwarderId" label="Forwarder" />
       <AddNewSelect
         id="f-forwarderId"
         label="Forwarder"
@@ -815,14 +955,19 @@ function ContainersCard() {
     (Record<number, Record<string, { message?: string }>> & { message?: string }) | undefined;
   if (loadType !== 'FCL')
     return (
-      <Card title="Containers" sub="Container numbers and seals" cols={1}>
+      <Card title="Containers" sub="Container numbers and seals" icon="container" cols={1}>
         <p className={f.note}>
           Containers are recorded for CY / CY (FCL) shipments only. Change Terms above to add them.
         </p>
       </Card>
     );
   return (
-    <Card title="Containers" sub="Container numbers and seals loaded on this shipment" cols={1}>
+    <Card
+      title="Containers"
+      sub="Container numbers and seals loaded on this shipment"
+      icon="container"
+      cols={1}
+    >
       <div>
         {arr.fields.length > 0 && (
           <div className="cdc-lines-wrap">
@@ -912,27 +1057,39 @@ function buildSteps(
   lookups: LookupsResponse,
   detail: ShipmentDetail | undefined,
 ): Step[] {
-  const countries = lookups.countries.map((c) => ({ value: c.iso2, label: c.name }));
   const ports = lookups.ports.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }));
   const units = lookups.values.QUANTITY_UNIT.map((v) => ({ value: v.value, label: v.label }));
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
-  const coForms = lookups.values.CO_FORM.map((v) => ({ value: v.value, label: v.label }));
 
   const statusCard = (
-    <Card title="Status" sub="Where the shipment and its customs clearance stand" cols={2}>
+    <Card
+      title="Status"
+      sub="Where the shipment and its customs clearance stand"
+      icon="activity"
+      cols={2}
+    >
       <ShipmentStatusField />
       <ClearanceStatusField />
     </Card>
   );
   const thcCard = (
-    <Card title="Invoice / THC" sub="Terminal handling charge invoice for this shipment">
-      <Field name="thcHblNo" label="INVOICE / THC No." span={2} />
+    <Card
+      title="Invoice / THC"
+      sub="Terminal handling charge invoice for this shipment"
+      icon="receipt"
+    >
+      <Field name="thcHblNo" label="Invoice / THC No." span={2} />
       <Field name="thcHblDate" label="Invoice / THC Date" type="date" />
       <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" decimals={2} />
     </Card>
   );
   const remarkCard = (
-    <Card title="Remark" sub="Anything the team should know about this shipment" cols={1}>
+    <Card
+      title="Remark"
+      sub="Anything the team should know about this shipment"
+      icon="message"
+      cols={1}
+    >
       <Field name="remark" label="Remark" span="full" placeholder="Optional note" />
     </Card>
   );
@@ -952,24 +1109,34 @@ function buildSteps(
         ],
         render: () => (
           <>
-            <Card title="Parties & Destination" sub="Who receives the goods and who moves them">
+            <Card
+              title="Parties & Destination"
+              sub="Who receives the goods and who moves them"
+              icon="users"
+            >
               <PartiesFields lookups={lookups} which="consignee" />
               <PartiesFields lookups={lookups} which="forwarder" />
             </Card>
-            <Card title="Cargo" sub="What is shipped and where it goes">
-              <Select
+            <Card title="Cargo" sub="What is shipped and where it goes" icon="box">
+              <CountryField
                 name="destinationCountryIso2"
                 label="Destination Country"
-                options={countries}
-                placeholder="Select country"
+                countries={lookups.countries}
               />
-              <Field name="quantity" label="Quantity" placeholder="0" decimals={3} />
-              <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+              <QuantityField />
+              <Select
+                name="quantityUnit"
+                label="Unit"
+                options={units}
+                placeholder="Select unit"
+                inner="box"
+              />
               <Select
                 name="material"
                 label="Material"
                 options={materials}
                 placeholder="Select material"
+                inner="layers"
               />
             </Card>
             <CargoSection shipmentId={detail?.id} />
@@ -990,7 +1157,11 @@ function buildSteps(
         ],
         render: () => (
           <>
-            <Card title="Booking & Clearance" sub="Booking references and the clearance port">
+            <Card
+              title="Booking & Clearance"
+              sub="Booking references and the clearance port"
+              icon="file"
+            >
               <Field name="bookingNo" label="Booking / SO No." span={2} />
               <Field name="hblNo" label="HBL No." />
               <Field name="crd" label="CRD" type="date" />
@@ -1003,7 +1174,7 @@ function buildSteps(
               />
             </Card>
             {/* An export is dated by its departure: no ETA or ETD port. */}
-            <Card title="Schedule" sub="Departure dates" cols={2}>
+            <Card title="Schedule" sub="Departure dates" icon="calendar" cols={2}>
               <Field name="etd" label="ETD" type="date" />
               <Field name="atd" label="ATD (Actual Departure)" type="date" />
             </Card>
@@ -1031,10 +1202,11 @@ function buildSteps(
             <Card
               title="Vessel & Certificate of Origin"
               sub="Vessel details and the CO issued for this shipment"
+              icon="ship"
             >
               <Field name="vesselName" label="Vessel Name" span={2} />
               <Field name="voyageNo" label="Voyage No." span={2} />
-              <Select name="coForm" label="CO Form" options={coForms} placeholder="Select form" />
+              <CoFormSelect lookups={lookups} />
               <Field name="coNumber" label="CO Number" span={2} />
               <CoStatusSelect />
             </Card>
@@ -1062,20 +1234,29 @@ function buildSteps(
       ],
       render: () => (
         <>
-          <Card title="Parties" sub="Supplier, factory consignee and the agents handling it">
+          <Card
+            title="Parties"
+            sub="Supplier, factory consignee and the agents handling it"
+            icon="users"
+          >
             <Field name="shipperName" label="Shipper Name" span={2} placeholder="Supplier name" />
             <PartiesFields lookups={lookups} which="consignee" />
             <PartiesFields lookups={lookups} which="forwarder" />
             <Field name="broker" label="Broker" span={2} placeholder="Customs broker" />
           </Card>
-          <Card title="Cargo" sub="What is being imported and where it comes from">
-            <Field name="quantity" label="Quantity" placeholder="0" decimals={3} />
-            <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+          <Card title="Cargo" sub="What is being imported and where it comes from" icon="box">
+            <QuantityField />
             <Select
+              name="quantityUnit"
+              label="Unit"
+              options={units}
+              placeholder="Select unit"
+              inner="box"
+            />
+            <CountryField
               name="originCountryIso2"
               label="Origin Country"
-              options={countries}
-              placeholder="Select country"
+              countries={lookups.countries}
             />
           </Card>
         </>
@@ -1106,7 +1287,11 @@ function buildSteps(
       ],
       render: () => (
         <>
-          <Card title="Vessel & Clearance" sub="Vessel, house bill and where it clears customs">
+          <Card
+            title="Vessel & Clearance"
+            sub="Vessel, house bill and where it clears customs"
+            icon="ship"
+          >
             <Field name="vesselName" label="Vessel Name" span={2} />
             <Field name="voyageNo" label="Voyage No." />
             <Field name="hblNo" label="HBL No." />
@@ -1119,7 +1304,12 @@ function buildSteps(
             />
             <Field name="coNumber" label="CO Number" span={2} />
           </Card>
-          <Card title="Schedule" sub="Arrival at port and delivery to the factory" cols={2}>
+          <Card
+            title="Schedule"
+            sub="Arrival at port and delivery to the factory"
+            icon="calendar"
+            cols={2}
+          >
             <Field name="eta" label="ETA Port" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>

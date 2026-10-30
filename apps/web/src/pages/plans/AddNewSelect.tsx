@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import type { UseFormRegisterReturn } from 'react-hook-form';
 import { ErrorBanner } from '../../components/ui';
 
-/** A select with a "+ Add new…" option that opens the prototype's small add-new modal. */
+/**
+ * A select with a "+ Add new…" option that opens the prototype's small add-new modal. With
+ * `addFirst` it is the first row, "+ Add New", as in the MoC CO system's lists.
+ */
 export function AddNewSelect({
   id,
   label,
@@ -11,6 +14,7 @@ export function AddNewSelect({
   registration,
   onCreate,
   placeholder,
+  addFirst = false,
 }: {
   id: string;
   label: string;
@@ -18,6 +22,7 @@ export function AddNewSelect({
   registration: UseFormRegisterReturn;
   onCreate?: ((name: string) => Promise<string>) | undefined;
   placeholder: string;
+  addFirst?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -63,12 +68,13 @@ export function AddNewSelect({
         }}
       >
         <option value="">{placeholder}</option>
+        {onCreate && addFirst && <option value="__add__">+ Add New</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
-        {onCreate && <option value="__add__">+ Add new {label.toLowerCase()}…</option>}
+        {onCreate && !addFirst && <option value="__add__">+ Add new {label.toLowerCase()}…</option>}
       </select>
       {/* Portalled to <body> so the fixed overlay covers the screen (see Modal in ui.tsx). */}
       {createPortal(

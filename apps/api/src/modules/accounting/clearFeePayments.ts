@@ -25,14 +25,19 @@ import { clientCondition } from '../../lib/clientScope';
  */
 export const CHEA_TRACKED_FROM = '2026-10-01';
 
-/** One row per month from CHEA_TRACKED_FROM: clear fee, paid, credit carried in, settled. */
+/**
+ * One row per month: clear fee, paid, credit carried in, settled. It starts at
+ * CHEA_TRACKED_FROM, or earlier at the first month with a payment, so an overpayment
+ * recorded in an earlier month is still carried forward and deducted.
+ */
 const CHEA_MONTHS = sql`
   WITH RECURSIVE m AS (
     SELECT g::date AS month, row_number() OVER (ORDER BY g) AS n,
            (SELECT coalesce(sum(clear_fee), 0) FROM accounting_records
              WHERE inv_date >= g::date AND inv_date < g::date + interval '1 month') AS fee,
            (SELECT coalesce(sum(amount), 0) FROM clear_fee_payments WHERE period_month = g::date) AS paid
-    FROM generate_series(${CHEA_TRACKED_FROM}::date,
+    FROM generate_series(
+      least(${CHEA_TRACKED_FROM}::date, (SELECT min(period_month) FROM clear_fee_payments)),
       greatest(date_trunc('month', current_date), (SELECT max(inv_date) FROM accounting_records),
                (SELECT max(period_month) FROM clear_fee_payments)),
       interval '1 month') g
@@ -47,9 +52,16 @@ const CHEA_MONTHS = sql`
 /** Joins each ledger row (alias a) to its month's settlement (alias cm). */
 export const CHEA_JOIN = sql`LEFT JOIN (${CHEA_MONTHS}) cm ON cm.month = date_trunc('month', a.inv_date)::date`;
 
-/** A ledger row's Chea payment status; needs CHEA_JOIN. */
-export const CHEA_STATUS = sql`(CASE WHEN a.inv_date < ${CHEA_TRACKED_FROM}::date THEN a.chea_status::text
-  WHEN cm.settled THEN 'PAID' ELSE 'UNPAID' END)`;
+/**
+ * A ledger row's Chea payment status; needs CHEA_JOIN. A row with no clear fee owes Chea
+ * nothing: NA (not counted, not in the Unpaid filter). A month whose payments plus carried
+ * credit cover its clear fee is Paid; before CHEA_TRACKED_FROM an uncovered month keeps its
+ * imported status, so recorded payments can settle an old month but never unpay it.
+ */
+export const CHEA_STATUS = sql`(CASE WHEN coalesce(a.clear_fee, 0) = 0 THEN 'NA'
+  WHEN cm.settled THEN 'PAID'
+  WHEN a.inv_date < ${CHEA_TRACKED_FROM}::date THEN a.chea_status::text
+  ELSE 'UNPAID' END)`;
 
 /**
  * A ledger month's clear fee total, the payments made to Chea against it, credit carried in

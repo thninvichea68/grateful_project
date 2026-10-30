@@ -592,6 +592,9 @@ function RecordSummaryEditor({
                       const [mode, load] = e.target.value.split('|');
                       setValue('transportMode', mode, { shouldDirty: true });
                       setValue('loadType', load, { shouldDirty: true });
+                      // An air shipment has no CBM: "NON", and cleared again on leaving air.
+                      if (mode === 'AIR') setValue('cbm', 'NON', { shouldDirty: true });
+                      else if (values.cbm === 'NON') setValue('cbm', '', { shouldDirty: true });
                     }}
                   >
                     {!TRANSPORTS.some(([m, l]) => `${m}|${l}` === transport) && (
@@ -748,10 +751,12 @@ function RecordSummaryEditor({
                 )}
                 {item(
                   'CBM',
-                  // Usually a number, sometimes a note such as "NON".
+                  // Usually a number, sometimes a note such as "NON"; always "NON" by air.
                   <input
                     className="form-field-box"
                     placeholder="e.g. 61.5 or NON"
+                    readOnly={values.transportMode === 'AIR'}
+                    title={values.transportMode === 'AIR' ? 'Air shipments have no CBM' : undefined}
                     {...register('cbm')}
                     aria-invalid={!!err('cbm')}
                   />,

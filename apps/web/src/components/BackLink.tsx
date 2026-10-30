@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import s from './BackLink.module.css';
 
 /**
- * The back button: a small square chevron beside the page title. `label` ("Client Billing")
+ * The back button: a small round chevron beside the page title. `label` ("Client Billing")
  * is its tooltip and accessible name. Put `backRow` on the title block that holds it, so it
  * sits to the left of the title and subtitle, centred on them.
  */

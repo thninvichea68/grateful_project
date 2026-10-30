@@ -280,6 +280,74 @@ describe('clear fee payments to Chea', () => {
     ]);
   });
 
+  it('carries an overpayment forward from months before payment tracking', async () => {
+    const h = await as('ACCOUNTANT');
+    for (const [no, date, fee] of [
+      ['I 21', '2026-08-04', '900'],
+      ['I 22', '2026-09-07', '1200'],
+    ] as const)
+      await request(app)
+        .post('/api/v1/accounting/ledger')
+        .set(h)
+        .send({ declarationId: await declaration(b.jr.id, no, date), clearFee: fee });
+    for (const month of ['2026-08', '2026-09'])
+      await request(app)
+        .post(URL)
+        .set(h)
+        .send({ month, paidOn: `${month}-28`, amount: '1000' });
+
+    const aug = await request(app).get(URL).query({ month: '2026-08' }).set(h);
+    expect(aug.body).toMatchObject({ carriedIn: '0.00', balance: '-100.00' });
+    const sep = await request(app).get(URL).query({ month: '2026-09' }).set(h);
+    expect(sep.body).toMatchObject({ carriedIn: '100.00', balance: '100.00' });
+
+    // Payments settle an older month (Paid) but leave an uncovered one as imported.
+    const status = async (month: string) =>
+      (await request(app).get('/api/v1/accounting/ledger').query({ month }).set(h)).body.data.map(
+        (r: { cheaStatus: string }) => r.cheaStatus,
+      );
+    expect(await status('2026-08')).toEqual(['PAID']);
+    expect(await status('2026-09')).toEqual(['UNPAID']);
+    await request(app)
+      .post(URL)
+      .set(h)
+      .send({ month: '2026-09', paidOn: '2026-10-30', amount: '100' });
+    expect(await status('2026-09')).toEqual(['PAID']);
+  });
+
+  it('never counts a row with no clear fee as unpaid', async () => {
+    const h = await as('ACCOUNTANT');
+    for (const [no, fee] of [
+      ['I 31', '0'],
+      ['I 32', '250'],
+    ] as const)
+      await request(app)
+        .post('/api/v1/accounting/ledger')
+        .set(h)
+        .send({ declarationId: await declaration(b.jr.id, no, '2026-12-03'), clearFee: fee });
+    const res = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ month: '2026-12', cheaStatus: 'UNPAID' })
+      .set(h);
+    expect(res.body.totals.unpaid).toBe(1);
+    expect(res.body.data.map((r: { clearFee: string }) => Number(r.clearFee))).toEqual([250]);
+    const all = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ month: '2026-12' })
+      .set(h);
+    expect(
+      all.body.data.map((r: { clearFee: string; cheaStatus: string }) => [
+        Number(r.clearFee),
+        r.cheaStatus,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        [0, 'NA'],
+        [250, 'UNPAID'],
+      ]),
+    );
+  });
+
   it('marks a month Paid once its payments (plus earlier overpayment) cover its clear fee', async () => {
     const h = await as('ACCOUNTANT');
     for (const [no, date, fee] of [
@@ -417,6 +485,20 @@ describe('billing documents', () => {
       vat: '18.50',
       amount: '203.50',
     });
+    // The shipment's mode rides along for printing (by air the volume prints "NON").
+    expect(created.body.header.transportMode).toBe('SEA');
+    const shipMode = (mode: string) =>
+      pool.query(
+        `UPDATE shipments SET transport_mode = $1 WHERE id = (SELECT d.shipment_id FROM accounting_records a
+           JOIN customs_declarations d ON d.id = a.declaration_id WHERE a.id = $2)`,
+        [mode, rec.id],
+      );
+    await shipMode('AIR');
+    expect(
+      (await request(app).get(`/api/v1/accounting/docs/tax-invoices/${created.body.id}`).set(h))
+        .body.header.transportMode,
+    ).toBe('AIR');
+    await shipMode('SEA');
 
     // Change the fee while still a draft; then issue.
     const id = created.body.id;
@@ -605,6 +687,18 @@ describe('billing documents', () => {
       disNo: rs.body.header.disNo,
       dnNo: rs.body.header.dnNo,
     });
+    // By air there is no CBM: always "NON", whatever is typed.
+    await request(app)
+      .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
+      .set(h)
+      .send({ ...rsPre, transportMode: 'AIR', loadType: 'NONE', cbm: '12.5' })
+      .expect(200);
+    expect((await rsDoc()).header).toMatchObject({ transportMode: 'AIR', cbm: 'NON' });
+    await request(app)
+      .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
+      .set(h)
+      .send(rsPre)
+      .expect(200);
     await pool.query(`UPDATE accounting_records SET inv_no = 'GS26-999' WHERE id = $1`, [rec.id]);
     expect((await rsDoc()).header.invNo).toBe('GS26-999');
     expect(

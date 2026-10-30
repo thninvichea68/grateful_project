@@ -156,7 +156,14 @@ async function main() {
   log(`${roleRows.length} roles, ${userRows.length} users`);
 
   /* ---------- Reference data ---------- */
-  await db.insert(s.countries).values(COUNTRIES);
+  // Migration 0041 already lists every country: these add the map coordinates.
+  await db
+    .insert(s.countries)
+    .values(COUNTRIES)
+    .onConflictDoUpdate({
+      target: s.countries.iso2,
+      set: { name: sql`excluded.name`, lat: sql`excluded.lat`, lng: sql`excluded.lng` },
+    });
   const portRows = await db
     .insert(s.ports)
     .values(PORTS.map((p) => ({ ...p, countryIso2: 'KH' })))
@@ -186,7 +193,7 @@ async function main() {
       values.map((v, i) => ({
         type: type as (typeof s.lookupTypeEnum.enumValues)[number],
         value: v,
-        label: v,
+        label: type === 'CO_FORM' ? (v === 'CRF' ? 'CO Reference Form' : `Form ${v}`) : v,
         sortOrder: i,
       })),
     ),
@@ -542,7 +549,7 @@ async function main() {
                   )
                 : toMoneyString(rng.int(60, 120))
               : null,
-          coForm: direction === 'EXPORT' ? rng.pick(['FORM A', 'FORM D', 'GSP REX']) : null,
+          coForm: direction === 'EXPORT' ? rng.pick(['AB', 'CRF', 'A']) : null,
           coNumber:
             direction === 'EXPORT' ? `CO-${YY}${String(seqShipment).padStart(4, '0')}` : null,
           coStatus: direction === 'EXPORT' ? (status === 'COMPLETED' ? 'Active' : 'Pending') : null,

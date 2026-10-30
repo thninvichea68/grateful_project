@@ -60,6 +60,16 @@ export function useAddForwarder() {
   });
 }
 
+/** "+ Add New" in a shipping plan's CO Form: returns the stored code ("Form XYZ" → XYZ). */
+export function useAddCoForm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { label: string }) =>
+      api<{ value: string; label: string }>('/lookups/co-forms', { method: 'POST', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.lookups }),
+  });
+}
+
 /* ---------- Clients ---------- */
 export function useClients(query: Query) {
   return useQuery({

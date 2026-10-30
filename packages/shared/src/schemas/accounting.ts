@@ -9,7 +9,7 @@ import {
   LOAD_TYPES,
   TRANSPORT_MODES,
   type BillingDocStatus,
-  type CheaStatus,
+  type CheaPaymentStatus,
   type CreditNoteReviewStatus,
   type Direction,
   type TransportMode,
@@ -92,7 +92,7 @@ export interface LedgerRow {
   vat: string;
   dnTotal: string;
   netProfit: string;
-  cheaStatus: CheaStatus;
+  cheaStatus: CheaPaymentStatus;
   mark: string | null;
   documents: {
     type: BillingDocType;
