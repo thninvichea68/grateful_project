@@ -2740,7 +2740,8 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .port-bar {
   min-width: 6px;
   position: relative;
-  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Switching measure: the bars resize one after another, in step with their figures. */
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i, 0) * 50ms);
   animation: port-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--i, 0) * 80ms);
 }
@@ -2843,7 +2844,8 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 @media (prefers-reduced-motion: reduce) {
   .port-bar,
   .port-bar-fill,
-  .port-tip {
+  .port-tip,
+  .port-chart-xaxis {
     animation: none;
     transition: none;
   }
@@ -2877,6 +2879,14 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   display: flex;
   justify-content: space-between;
   margin-left: calc(var(--port-label-w) + var(--port-gap));
+  /* Re-mounted when the scale changes, so the new ticks fade in. */
+  animation: port-axis-in 0.4s ease both;
+}
+@keyframes port-axis-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
 }
 .port-chart-xaxis span {
   width: 0;

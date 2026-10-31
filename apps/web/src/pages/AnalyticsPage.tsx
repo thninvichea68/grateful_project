@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Bar,
@@ -31,6 +31,10 @@ import { useLookups } from '../features/hooks';
 import { AccountsBreakdown } from './analytics/AccountsBreakdown';
 import { ClientRevenueCards } from './analytics/ClientRevenueCards';
 import { ChartState, HBarList, changePct, dash, monthLabel } from './dashboard/parts';
+// Leaflet and its map tiles load only with the Analytics page.
+const ShipmentsMap = lazy(() =>
+  import('./analytics/ShipmentsMap').then((m) => ({ default: m.ShipmentsMap })),
+);
 
 const CLEARANCE_COLOR = {
   CLEARED: 'var(--status-completed-fg)',
@@ -472,7 +476,8 @@ export function AnalyticsPage() {
           <div>
             <h3>Shipments by {countryFlow === 'import' ? 'Origin' : 'Destination'} Country</h3>
             <div className="an-section-sub">
-              Imports by country of origin, exports by destination country.
+              Imports by country of origin, exports by destination country. Click a pin or a country
+              for its figures; nearby countries group into one bubble with their total.
             </div>
           </div>
           <div className="an-seg-control" role="tablist">
@@ -493,16 +498,11 @@ export function AnalyticsPage() {
           loading={countries.isLoading}
           error={countries.error}
           empty={!countries.data?.length}
-          height={120}
+          height={460}
         >
-          <HBarList
-            rows={(countries.data ?? []).map((c) => ({
-              key: c.iso2,
-              name: c.name,
-              value: c.count,
-              display: `${c.count} · ${c.pct}%`,
-            }))}
-          />
+          <Suspense fallback={<div className={dash.skeleton} style={{ minHeight: 460 }} />}>
+            <ShipmentsMap rows={countries.data ?? []} flow={countryFlow} />
+          </Suspense>
         </ChartState>
       </div>
 

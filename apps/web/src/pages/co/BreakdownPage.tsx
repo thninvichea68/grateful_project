@@ -163,7 +163,7 @@ function BreakdownEditor({ d }: { d: CoDetail }) {
   const off = Math.abs(figures.fob - b.targetFob) > 0.005;
   return (
     <div className={s.layout}>
-      <div className={s.form}>
+      <div className={`${s.form} ${s.formPinned}`}>
         <div className={`card ${s.actions}`}>
           <b>{d.invoiceNo}</b>
           {d.breakdown && !dirty && <span className={s.hint}>Saved</span>}

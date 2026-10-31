@@ -167,21 +167,11 @@
   background: color-mix(in srgb, var(--tone) 60%, transparent);
 }
 
-/* Sparkline cards (Import / Export): figure and change on one line, then a full-width
-   sparkline whose hovered month drives the figure. */
-.sparkFigures {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-}
-.sparkFigures .meta {
-  margin-top: 0;
-}
+/* Sparkline cards (Import / Export): a compact sparkline in the chart slot, a little wider
+   than the bars; its hovered month drives the figure. */
 .sparkChart {
-  flex: 1;
-  min-height: 44px;
-  margin: 0 -4px -6px;
+  flex-basis: 150px;
+  margin-right: -4px;
 }
 
 /* Clearance ring. */

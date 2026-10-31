@@ -102,6 +102,7 @@ export function OverviewPage() {
               key={`${s.month}${s.fullYear ? '-year' : ''}`}
               profit={s.profit}
               fullYear={s.fullYear}
+              lastYearShipments={s.fullYear ? s.kpis.previous.total : undefined}
             />
           )}
           {clientsShown && (

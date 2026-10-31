@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -33,11 +33,13 @@ import { ShipmentStatusPill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import {
   CardDropdown,
+  CardToggle,
   ChartState,
   CLIENT_COLORS,
   barGradient,
   changePct,
   dash,
+  MIN_YEAR_BASE,
   MONTHS,
   MONTHS_LONG,
   monthLabel,
@@ -47,6 +49,7 @@ import { InvoiceNos } from '../plans/columns';
 import { WorldMap } from './WorldMap';
 import { SingleClientVolume } from './SingleClientVolume';
 import acc from './AccountsCard.module.css';
+import { fi } from '../plans/formIcons';
 export { KpiRow } from './KpiRow';
 
 /* ------------------------------ Shipment Summary ------------------------------ */
@@ -287,29 +290,62 @@ const MONTH_NAMES = [
 ];
 const monthName = (m: string) => `${MONTH_NAMES[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
 
-/** The Profit card's dropdown value for January to its last month (a whole-year Overview). */
+/**
+ * Eases a figure from what it last showed (0 at first, unless `fromZero` is off) to
+ * `target` over `ms`; jumps straight there when the viewer asks for reduced motion.
+ */
+function useCountUp(target: number, ms = 800, fromZero = true) {
+  const still =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const [shown, setShown] = useState(still || !fromZero ? target : 0);
+  const from = useRef(shown);
+  useEffect(() => {
+    if (still) {
+      from.current = target;
+      setShown(target);
+      return;
+    }
+    const a = from.current;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / ms);
+      const v = a + (target - a) * (1 - (1 - p) ** 3);
+      from.current = v;
+      setShown(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms, still]);
+  return shown;
+}
+
+/** A number that eases from its last value to each new one (shows its first value as is). */
+function CountUp({ value, format }: { value: number; format: (v: number) => string }) {
+  return <>{format(useCountUp(value, 600, false))}</>;
+}
+
+/** The Profit card's period for January to its last month (a whole-year Overview). */
 const YEAR_TO_DATE = 'ytd';
 
 /**
- * Net profit for one month (this month to start; the month dropdown changes it):
- * the figure, the change on the month before, and that month's split by client. On a
- * whole-year Overview it opens on January to date instead, against the same stretch of
- * the year before.
+ * Net profit for the Overview's period: the figure, the change on the period before, and
+ * its split by client. A single month compares with the month before; a whole-year
+ * Overview shows January to date against the same stretch of the year before.
  */
 export function ProfitCard({
   profit,
   fullYear = false,
+  lastYearShipments,
 }: {
   profit: ProfitSummary;
   fullYear?: boolean;
+  /** Shipments over the same stretch last year: too few and January to date gets no change. */
+  lastYearShipments?: number;
 }) {
-  const [picked, setPicked] = useState<{ year: number; month: string } | null>(null);
-  const month =
-    picked?.year === profit.year
-      ? picked.month
-      : fullYear
-        ? YEAR_TO_DATE
-        : profit.currentMonth;
+  const month = fullYear ? YEAR_TO_DATE : profit.currentMonth;
   const whole = month === YEAR_TO_DATE;
   const toDate = (m: string) => m <= profit.currentMonth;
   const inPeriod = (m: string) => (whole ? toDate(m) : m === month);
@@ -331,7 +367,8 @@ export function ProfitCard({
       : month === profit.currentMonth
         ? Number(profit.lastMonth)
         : null;
-  const ch = prevValue === null ? null : changePct(value, prevValue);
+  const thinYear = whole && lastYearShipments !== undefined && lastYearShipments < MIN_YEAR_BASE;
+  const ch = prevValue === null || thinYear ? null : changePct(value, prevValue);
   const prevLabel = whole
     ? `Jan – ${lastShort} ${profit.year - 1}`
     : prevMonth
@@ -370,9 +407,17 @@ export function ProfitCard({
         costs: unbilledRows.reduce((t, u) => t + Number(u.costs), 0),
       }
     : undefined;
-  // Months still to come can't be picked (the viewer's clock).
-  const today = new Date();
-  const now = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+  // The year's months so far, as mini columns beside the figure (hover shows one).
+  const trend = profit.monthly.filter((m) => toDate(m.month));
+  const trendMax = Math.max(1, ...trend.map((m) => Math.abs(Number(m.netProfit))));
+  const [trendHover, setTrendHover] = useState<string | null>(null);
+  const trendShown = trend.find((m) => m.month === trendHover);
+  // The legend lists the top clients; the rest fold into one line.
+  const LEGEND_MAX = 4;
+  const shownClients = clients.slice(0, LEGEND_MAX);
+  const moreClients = clients.length - shownClients.length;
+  const counted = useCountUp(value);
 
   return (
     <div className={`rc-card ga-revenue ${dash.profitCard}`}>
@@ -384,43 +429,34 @@ export function ProfitCard({
             {!whole && ` · ${profit.year} to date ${fmtMoney(profit.total)}`}
           </div>
         </div>
-        <CardDropdown
-          label="Month"
-          value={month}
-          onChange={(m) => setPicked({ year: profit.year, month: m })}
-          options={[
-            ...(fullYear ? [{ value: YEAR_TO_DATE, label: `Jan – ${lastShort}` }] : []),
-            ...profit.monthly.map((m) => ({
-              value: m.month,
-              label: MONTHS_LONG[Number(m.month.slice(5, 7)) - 1]!,
-              disabled: m.month > now,
-            })),
-          ]}
-        />
       </div>
-      <div className="rc-top-hero">
+      <div className={`rc-top-hero ${dash.profitHero}`}>
         <div className="rc-metric-left">
           <div
             className="rc-total-amount"
             style={value < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
           >
-            {fmtMoney(value)}
+            {fmtMoney(Math.round(counted * 100) / 100)}
           </div>
           <div className="rc-trend-pill">
-            <span
-              className="rc-pill-badge"
-              style={
-                ch && !ch.up
-                  ? {
-                      background: 'var(--status-exception-bg)',
-                      color: 'var(--status-exception-fg)',
-                    }
-                  : undefined
-              }
-            >
-              {ch?.text ?? '—'}
+            {!thinYear && (
+              <span
+                className="rc-pill-badge"
+                style={
+                  ch && !ch.up
+                    ? {
+                        background: 'var(--status-exception-bg)',
+                        color: 'var(--status-exception-fg)',
+                      }
+                    : undefined
+                }
+              >
+                {ch?.text ?? '—'}
+              </span>
+            )}
+            <span className="rc-pill-text">
+              {thinYear ? `not enough data in ${profit.year - 1}` : `vs ${prevLabel}`}
             </span>
-            <span className="rc-pill-text">vs {prevLabel}</span>
           </div>
           {unbilled && (
             <div
@@ -432,6 +468,42 @@ export function ProfitCard({
             </div>
           )}
         </div>
+        {trend.length > 1 && (
+          <div className={dash.profitTrend} onMouseLeave={() => setTrendHover(null)}>
+            <div className={dash.profitTrendBars}>
+              {trend.map((m, i) => {
+                const v = Number(m.netProfit);
+                return (
+                  <span
+                    key={m.month}
+                    data-now={
+                      (whole ? m.month === profit.currentMonth : m.month === month) || undefined
+                    }
+                    data-neg={v < 0 || undefined}
+                    data-dim={(trendHover && trendHover !== m.month) || undefined}
+                    style={
+                      {
+                        '--h': `${Math.max(6, (Math.abs(v) / trendMax) * 100)}%`,
+                        '--d': `${i * 40}ms`,
+                      } as CSSProperties
+                    }
+                    onMouseEnter={() => setTrendHover(m.month)}
+                  />
+                );
+              })}
+            </div>
+            <div className={dash.profitTrendCap}>
+              {trendShown ? (
+                <>
+                  {MONTHS[Number(trendShown.month.slice(5, 7)) - 1]}{' '}
+                  <b>{fmtMoney(trendShown.netProfit)}</b>
+                </>
+              ) : (
+                `Jan – ${lastShort} by month`
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <div className={`rc-main-body ${dash.profitBody}`}>
         <div className={`rc-donut-wrapper ${dash.profitPie}`}>
@@ -441,13 +513,16 @@ export function ProfitCard({
                 <Pie
                   data={positive.map((c) => ({ name: c.code, v: Number(c.netProfit) }))}
                   dataKey="v"
-                  innerRadius={38}
-                  outerRadius={66}
+                  innerRadius={44}
+                  outerRadius={64}
+                  cornerRadius={3}
+                  paddingAngle={positive.length > 1 ? 2 : 0}
                   startAngle={90}
                   endAngle={-270}
-                  stroke="var(--bg-surface)"
-                  strokeWidth={2}
-                  isAnimationActive={false}
+                  stroke="none"
+                  animationBegin={100}
+                  animationDuration={800}
+                  animationEasing="ease-out"
                   activeIndex={hovered ? positive.indexOf(hovered) : undefined}
                   activeShape={(p: React.ComponentProps<typeof Sector>) => (
                     <Sector {...p} outerRadius={Number(p.outerRadius) + 5} />
@@ -472,23 +547,57 @@ export function ProfitCard({
               </PieChart>
             </ResponsiveContainer>
           ) : null}
-          <div className="rc-donut-center-text">
-            <span className="pct">{clients.length}</span>
-            <span className="tag">{clients.length === 1 ? 'Client' : 'Clients'}</span>
+          <div
+            className={`rc-donut-center-text ${dash.profitCenter}`}
+            key={hovered?.clientId ?? ''}
+          >
+            {hovered ? (
+              <>
+                <span className="pct">
+                  {hovered.pct}
+                  <small>%</small>
+                </span>
+                <span className="tag">{hovered.code}</span>
+              </>
+            ) : (
+              <>
+                <span className="pct">{clients.length}</span>
+                <span className="tag">{clients.length === 1 ? 'Client' : 'Clients'}</span>
+              </>
+            )}
           </div>
         </div>
         <ul className={dash.profitLegend}>
-          {clients.map((c) => (
+          {shownClients.map((c, i) => (
             <li
               key={c.clientId}
               data-dim={(hovered && hovered !== c) || undefined}
+              data-on={hovered === c || undefined}
+              style={
+                {
+                  '--c': colorOf(c),
+                  '--w': `${Math.max(0, c.pct)}%`,
+                  '--d': `${150 + i * 80}ms`,
+                } as CSSProperties
+              }
               onMouseEnter={() => setHover(c.clientId)}
               onMouseLeave={() => setHover(null)}
             >
-              <i style={{ background: colorOf(c) }} />
-              {c.name}
+              <div className={dash.profitLegendRow}>
+                <i />
+                <span className={dash.profitLegendName}>{c.name}</span>
+                <b data-neg={Number(c.netProfit) < 0 || undefined}>{fmtMoney(c.netProfit)}</b>
+              </div>
+              <div className={dash.profitLegendBar}>
+                <span />
+              </div>
             </li>
           ))}
+          {moreClients > 0 && (
+            <span className={dash.mutedNote}>
+              + {moreClients} more {moreClients === 1 ? 'client' : 'clients'}
+            </span>
+          )}
           {!clients.length && (
             <span className={dash.mutedNote}>No ledger entries in {periodName} yet.</span>
           )}
@@ -667,7 +776,7 @@ export function CountryMapCard({ filters }: { filters: { from: string; to: strin
                 : 'No shipments in this period'}
             </div>
           </div>
-          <CardDropdown
+          <CardToggle
             label="Flow"
             value={flow}
             onChange={setFlow}
@@ -732,7 +841,12 @@ export function AccountsCard({
   return (
     <div className="accounts-card ga-accounts">
       <div className="accounts-card-header">
-        <h3>Key Logistics Accounts</h3>
+        <h3 className={acc.title}>
+          <span className={acc.titleChip}>
+            <fi.users />
+          </span>
+          Key Logistics Accounts
+        </h3>
         {single ? (
           pick && (
             <div className={acc.controls}>
@@ -746,9 +860,10 @@ export function AccountsCard({
                 key={t}
                 role="tab"
                 aria-selected={type === t}
-                className={`accounts-seg-btn${type === t ? ' active' : ''}`}
+                className={`accounts-seg-btn ${acc.segBtn}${type === t ? ' active' : ''}`}
                 onClick={() => setType(t)}
               >
+                {t === 'import' ? <fi.importBox /> : t === 'export' ? <fi.exportBox /> : null}
                 {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
               </button>
             ))}
@@ -770,10 +885,21 @@ export function AccountsCard({
               <thead>
                 <tr>
                   <th>CLIENT NAME</th>
-                  <th style={{ textAlign: 'center' }}>Total</th>
-                  <th style={{ textAlign: 'center' }}>CY / CY</th>
-                  <th style={{ textAlign: 'center' }}>LCL</th>
-                  <th style={{ textAlign: 'center' }}>AIR</th>
+                  {(
+                    [
+                      ['Total', fi.hash],
+                      ['CY / CY', fi.container],
+                      ['LCL', fi.box],
+                      ['AIR', fi.plane],
+                    ] as const
+                  ).map(([label, Icon]) => (
+                    <th key={label} style={{ textAlign: 'center' }}>
+                      <span className={acc.th}>
+                        <Icon />
+                        {label}
+                      </span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -782,7 +908,13 @@ export function AccountsCard({
                   return (
                     <tr key={a.clientId}>
                       <td>
-                        <Link to={`/clients/${a.clientId}`} className="accounts-name">
+                        <Link
+                          to={`/clients/${a.clientId}`}
+                          className={`accounts-name ${acc.nameLink}`}
+                        >
+                          <span className={acc.nameChip}>
+                            <fi.building />
+                          </span>
                           {a.name}
                         </Link>
                       </td>
@@ -953,7 +1085,7 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
       <div className="port-card-header">
         <h3>Port of Discharge</h3>
         <div className="port-card-controls">
-          <CardDropdown
+          <CardToggle
             label="Measure"
             value={mode}
             onChange={setMode}
@@ -1000,7 +1132,9 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
                           <span className="port-seg" data-kind="exp" style={{ flexGrow: r.exp }} />
                         )}
                       </div>
-                      <span className="port-bar-value">{fmt(values[i]!)}</span>
+                      <span className="port-bar-value">
+                        <CountUp value={values[i]!} format={(v) => fmt(Math.round(v))} />
+                      </span>
                     </div>
                     <div
                       className="port-tip"
@@ -1026,7 +1160,7 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
               );
             })}
           </div>
-          <div className="port-chart-xaxis">
+          <div className="port-chart-xaxis" key={`${mode}-${max}`}>
             {ticks.map((t) => (
               <span key={t}>{t}</span>
             ))}
@@ -1055,7 +1189,7 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
           <span className="accent-bar" />
           <h3>Forwarder Statistics</h3>
         </div>
-        <CardDropdown
+        <CardToggle
           label="Measure"
           value={metric}
           onChange={setMetric}

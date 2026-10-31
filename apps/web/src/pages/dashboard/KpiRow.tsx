@@ -2,7 +2,7 @@ import { useId, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { KpiResponse, MonthlyVolumeRow } from '@gs/shared';
-import { changePct, monthLabel } from './parts';
+import { changePct, MIN_YEAR_BASE, monthLabel } from './parts';
 import s from './KpiRow.module.css';
 
 const svg = (children: ReactNode, size = 18, width = 1.8) => (
@@ -81,8 +81,23 @@ function Card({
   );
 }
 
-/** "↗ 22.2%" pill plus "vs last month" (or year), or a note when that had nothing. */
-function Change({ value, prev, unit }: { value: number; prev: number; unit: 'month' | 'year' }) {
+/**
+ * "↗ 22.2%" pill plus "vs last month" (or year), or a note when that had nothing. Against
+ * last year, `base` (its shipment count) must reach MIN_YEAR_BASE for a percentage.
+ */
+function Change({
+  value,
+  prev,
+  unit,
+  base,
+}: {
+  value: number;
+  prev: number;
+  unit: 'month' | 'year';
+  base: number;
+}) {
+  if (unit === 'year' && base > 0 && base < MIN_YEAR_BASE)
+    return <span className={s.sub}>not enough data last year</span>;
   const ch = changePct(value, prev);
   if (!ch) return <span className={s.sub}>no data last {unit}</span>;
   return (
@@ -115,8 +130,8 @@ function Bars({ rows }: { rows: { month: string; v: number }[] }) {
 type Point = { month: string; v: number };
 
 /**
- * Bklit-style sparkline KPI card: the same header as the other cards, the figure with its
- * change, then a full-width sparkline. Hovering a month drives the headline (that month's
+ * Bklit-style sparkline KPI card: laid out like the other cards (figure and change bottom
+ * left, a compact sparkline bottom right). Hovering a month drives the headline (that month's
  * count and its change on the month before); leaving falls back to the period total.
  */
 function SparkCard({
@@ -125,7 +140,7 @@ function SparkCard({
   value,
   meta,
   rows,
-  variant,
+  tone,
   onOpen,
 }: {
   icon: ReactNode;
@@ -133,8 +148,7 @@ function SparkCard({
   value: number;
   meta: ReactNode;
   rows: Point[];
-  /** Area: gradient fill. Line: stroke only, with a dot on the latest month. */
-  variant: 'area' | 'line';
+  tone: Tone;
   onOpen: () => void;
 }) {
   const id = useId().replace(/:/g, '');
@@ -142,10 +156,9 @@ function SparkCard({
   const shown = hover === null ? null : rows[hover];
   const prev = hover ? rows[hover - 1] : undefined;
   const ch = shown && prev ? changePct(shown.v, prev.v) : null;
-  const last = rows.length - 1;
-  const color = 'var(--accent-primary)';
+  const color = 'var(--tone)';
   return (
-    <div className={s.card} data-tone="cyan">
+    <div className={s.card} data-tone={tone}>
       <div className={s.top}>
         <span className={s.chip}>{icon}</span>
         <span className={s.label}>{label}</span>
@@ -153,64 +166,62 @@ function SparkCard({
           {ICONS.arrow}
         </button>
       </div>
-      <div className={s.sparkFigures}>
-        <div className={s.value}>{(shown ? shown.v : value).toLocaleString()}</div>
-        <div className={s.meta}>
-          {shown ? (
-            <>
-              {ch && (
-                <span className={s.delta} data-up={ch.up}>
-                  {ch.text}
-                </span>
-              )}
-              <span className={s.sub}>in {monthLabel(shown.month)}</span>
-            </>
-          ) : (
-            meta
-          )}
+      <div className={s.body}>
+        <div className={s.figures}>
+          <div className={s.value}>{(shown ? shown.v : value).toLocaleString()}</div>
+          <div className={s.meta}>
+            {shown ? (
+              <>
+                {ch && (
+                  <span className={s.delta} data-up={ch.up}>
+                    {ch.text}
+                  </span>
+                )}
+                <span className={s.sub}>in {monthLabel(shown.month)}</span>
+              </>
+            ) : (
+              meta
+            )}
+          </div>
         </div>
-      </div>
-      {rows.length > 1 && (
-        <div className={s.sparkChart}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={rows}
-              margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-              onMouseMove={(st) =>
-                setHover(typeof st?.activeTooltipIndex === 'number' ? st.activeTooltipIndex : null)
-              }
-              onMouseLeave={() => setHover(null)}
-            >
-              <defs>
-                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity={0.4} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Tooltip
-                content={() => null}
-                cursor={{ stroke: 'var(--border-subtle)', strokeDasharray: '3 3' }}
-              />
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke={color}
-                strokeWidth={1.75}
-                fill={variant === 'area' ? `url(#${id})` : 'transparent'}
-                isAnimationActive={false}
-                dot={(d: { index: number; cx: number; cy: number }) =>
-                  variant === 'line' && d.index === last && hover === null ? (
-                    <circle key="end" cx={d.cx} cy={d.cy} r={2.5} fill={color} />
-                  ) : (
-                    <g key={d.index} />
+        {rows.length > 1 && (
+          <div className={`${s.chart} ${s.sparkChart}`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={rows}
+                margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+                onMouseMove={(st) =>
+                  setHover(
+                    typeof st?.activeTooltipIndex === 'number' ? st.activeTooltipIndex : null,
                   )
                 }
-                activeDot={{ r: 3, strokeWidth: 0, fill: color }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+                onMouseLeave={() => setHover(null)}
+              >
+                <defs>
+                  <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Tooltip
+                  content={() => null}
+                  cursor={{ stroke: 'var(--border-subtle)', strokeDasharray: '3 3' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={color}
+                  strokeWidth={1.75}
+                  fill={`url(#${id})`}
+                  isAnimationActive={false}
+                  dot={false}
+                  activeDot={{ r: 3, strokeWidth: 0, fill: color }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -253,6 +264,8 @@ export function KpiRow({
   const navigate = useNavigate();
   const toPlans = (q: string) => navigate(`/plans?${q}`);
   const unit = fullYear ? 'year' : 'month';
+  // Last year's shipment count decides whether a year-on-year change is shown at all.
+  const base = k.previous.total;
   // The last six months up to the one shown (the year's months come zero-filled).
   const upTo = k.period.to.slice(0, 7);
   const recent = monthly.filter((m) => m.month <= upTo).slice(-6);
@@ -271,7 +284,7 @@ export function KpiRow({
         icon={ICONS.box}
         label={fullYear ? 'Total Shipments This Year' : 'Total Shipments This Month'}
         value={k.total}
-        meta={<Change value={k.total} prev={k.previous.total} unit={unit} />}
+        meta={<Change value={k.total} prev={k.previous.total} unit={unit} base={base} />}
         chart={recent.length > 1 && <Bars rows={series('total')} />}
         onOpen={() => toPlans('sort=-eta')}
       />
@@ -279,18 +292,18 @@ export function KpiRow({
         label="Import Shipments"
         icon={ICONS.import}
         value={k.imports}
-        meta={<Change value={k.imports} prev={k.previous.imports} unit={unit} />}
+        meta={<Change value={k.imports} prev={k.previous.imports} unit={unit} base={base} />}
         rows={trend('imports')}
-        variant="area"
+        tone="cyan"
         onOpen={() => toPlans('direction=IMPORT')}
       />
       <SparkCard
         label="Export Shipments"
         icon={ICONS.export}
         value={k.exports}
-        meta={<Change value={k.exports} prev={k.previous.exports} unit={unit} />}
+        meta={<Change value={k.exports} prev={k.previous.exports} unit={unit} base={base} />}
         rows={trend('exports')}
-        variant="line"
+        tone="blue"
         onOpen={() => toPlans('direction=EXPORT')}
       />
       <Card

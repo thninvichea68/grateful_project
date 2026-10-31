@@ -1,7 +1,13 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { ClientRevenueRow } from '@gs/shared';
+import { Bar } from '../../components/bklit/charts/bar';
+import { BarChart } from '../../components/bklit/charts/bar-chart';
+import { BarXAxis } from '../../components/bklit/charts/bar-x-axis';
+import { useChartHover, useChartStable } from '../../components/bklit/charts/chart-context';
+import { Grid } from '../../components/bklit/charts/grid';
+import { ChartTooltip } from '../../components/bklit/charts/tooltip/chart-tooltip';
+import '../../components/bklit/bklit.css';
 import type { AnalyticsFilters } from '../../features/analytics';
 import { useClientRevenue } from '../../features/analytics';
 import { fmtDate, fmtMoney } from '../../lib/format';
@@ -33,42 +39,67 @@ function ledgerLink(clientId: string, from?: string, to?: string) {
   return `/accounting/ledger?${q}`;
 }
 
-function Trend({ rows }: { rows: ClientRevenueRow['monthly'] }) {
-  const id = useId().replace(/:/g, '');
-  const data = rows.map((m) => ({ month: m.month, v: Number(m.netProfit) }));
+/** Net profit bars use the Shipment Summary's import cyan. */
+const TREND_FILL = '#22D3EE';
+
+/**
+ * A faint full-height slot behind every month's bar, as on the Shipment Summary. Placed before
+ * `<Bar>` so it draws underneath; the hovered month's slot darkens a little.
+ */
+function BarSlots() {
+  const { data, barScale, bandWidth, barXAccessor, innerHeight } = useChartStable();
+  const on = useChartHover().hoveredBarIndex ?? null;
+  if (!barScale || !bandWidth || !barXAccessor) return null;
   return (
-    <div className={s.trend}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 6, right: 4, bottom: 2, left: 4 }}>
-          <defs>
-            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <Tooltip
-            cursor={{ stroke: 'var(--border-strong)', strokeDasharray: '3 3' }}
-            content={({ active, payload }) =>
-              active && payload?.[0] ? (
-                <div className={s.tip}>
-                  {monthLabel(payload[0].payload.month)} {payload[0].payload.month.slice(0, 4)}:{' '}
-                  <b>{fmtMoney(payload[0].value as number)}</b>
-                </div>
-              ) : null
-            }
-          />
-          <Area
-            type="monotone"
-            dataKey="v"
-            stroke="var(--accent-primary)"
-            strokeWidth={1.8}
-            fill={`url(#${id})`}
-            isAnimationActive={false}
-            dot={false}
-            activeDot={{ r: 3, strokeWidth: 0, fill: 'var(--accent-primary)' }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+    <g aria-hidden="true">
+      {data.map((d, i) => (
+        <rect
+          key={i}
+          x={barScale(barXAccessor(d)) ?? 0}
+          y={0}
+          width={bandWidth}
+          height={innerHeight}
+          rx={3}
+          fill="var(--bg-subtle)"
+          fillOpacity={on === i ? 0.9 : 0.5}
+          style={{ transition: 'fill-opacity 0.15s ease-in-out' }}
+        />
+      ))}
+    </g>
+  );
+}
+
+/**
+ * Net profit month by month as Bklit bars: hovering a month fades the others and shows its
+ * profit and billed total. Months carry the year when the period spans more than one.
+ */
+function Trend({ rows }: { rows: ClientRevenueRow['monthly'] }) {
+  const years = new Set(rows.map((m) => m.month.slice(0, 4))).size;
+  const data = rows.map((m) => ({
+    month: years > 1 ? `${monthLabel(m.month)} ’${m.month.slice(2, 4)}` : monthLabel(m.month),
+    netProfit: Number(m.netProfit),
+    revenue: Number(m.revenue),
+  }));
+  return (
+    <div className={`bklit ${s.trend}`}>
+      <BarChart
+        data={data}
+        xDataKey="month"
+        aspectRatio="3.2 / 1"
+        barGap={0.3}
+        margin={{ top: 8, right: 0, bottom: 40, left: 0 }}
+      >
+        <Grid horizontal />
+        <BarSlots />
+        <Bar dataKey="netProfit" fill={TREND_FILL} lineCap={3} fadedOpacity={0.35} />
+        <BarXAxis showAllLabels />
+        <ChartTooltip
+          rows={(p) => [
+            { color: TREND_FILL, label: 'Net profit', value: fmtMoney(Number(p.netProfit)) },
+            { color: 'var(--text-tertiary)', label: 'Billed', value: fmtMoney(Number(p.revenue)) },
+          ]}
+        />
+      </BarChart>
     </div>
   );
 }

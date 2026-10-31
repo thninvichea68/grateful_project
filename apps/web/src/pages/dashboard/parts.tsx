@@ -136,7 +136,65 @@ export function CardDropdown<T extends string>({
   );
 }
 
+/**
+ * One button that steps to the next option on each click (Import → Export → Import…),
+ * styled like the dropdown trigger; the new label rolls in.
+ */
+export function CardToggle<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  triggerClass = '',
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  label: string;
+  triggerClass?: string;
+}) {
+  const i = Math.max(
+    0,
+    options.findIndex((o) => o.value === value),
+  );
+  const current = options[i]!;
+  const next = options[(i + 1) % options.length]!;
+  return (
+    <button
+      className={`card-dropdown-trigger ${s.toggle} ${triggerClass}`}
+      type="button"
+      aria-label={`${label}: ${current.label}. Switch to ${next.label}`}
+      title={`Switch to ${next.label}`}
+      onClick={() => onChange(next.value)}
+    >
+      <span key={current.value} className={s.toggleLabel}>
+        {current.label}
+      </span>
+      <svg
+        className={s.toggleIcon}
+        viewBox="0 0 24 24"
+        width="12"
+        height="12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" />
+      </svg>
+    </button>
+  );
+}
+
 /** "↗ 12.4%" vs a previous value; null when there is nothing to compare with. */
+/**
+ * Fewest shipments the year before for a year-on-year change to mean anything: the system
+ * holds next to no history before 2026, so a handful of stray records gave "↗ 15233%".
+ */
+export const MIN_YEAR_BASE = 10;
+
 export function changePct(cur: number, prev: number): { text: string; up: boolean } | null {
   if (!prev) return cur ? { text: 'new', up: true } : null;
   const pct = ((cur - prev) / prev) * 100;

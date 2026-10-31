@@ -52,6 +52,22 @@
   min-width: 0;
   align-self: stretch;
 }
+/* CO breakdown: the whole editor stays put while the sheet beside it scrolls; it scrolls
+   on its own only when taller than the window. */
+.formPinned {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: calc(100vh - var(--topbar-h) - 48px);
+  overflow-y: auto;
+}
+@media (max-width: 1250px) {
+  .formPinned {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
 /* The editor bar (Save / Print…) stays at the top of the page while scrolling. */
 .actions {
   display: flex;

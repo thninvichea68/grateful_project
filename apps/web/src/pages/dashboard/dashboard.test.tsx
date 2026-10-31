@@ -95,4 +95,24 @@ describe('KpiRow', () => {
     expect(screen.getByText('17')).toBeInTheDocument();
     expect(screen.getByText('still pending')).toBeInTheDocument();
   });
+  it('drops the year-on-year change when last year had too few shipments', () => {
+    const k: KpiResponse = {
+      period: { from: '2026-01-01', to: '2026-10-31' },
+      previousPeriod: { from: '2025-01-01', to: '2025-10-31' },
+      total: 460,
+      imports: 211,
+      exports: 249,
+      cleared: 452,
+      clearancePending: 8,
+      exceptions: 0,
+      previous: { total: 3, imports: 3, exports: 0, cleared: 3 },
+    };
+    render(
+      <MemoryRouter>
+        <KpiRow k={k} monthly={[]} fullYear />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText('not enough data last year')).toHaveLength(3);
+    expect(screen.queryByText(/15233/)).not.toBeInTheDocument();
+  });
 });
