@@ -154,7 +154,7 @@ export async function sealPlanShipment(id: string, req: Request): Promise<SealPl
     WHERE s.id = ${id} AND s.deleted_at IS NULL AND s.direction = 'EXPORT'`,
   );
   if (!s) throw notFound('Shipment');
-  assertClientVisible(req, s.clientId, 'Shipment');
+  assertClientVisible(req, s.clientId, 'Shipment', 'sealplans');
   const { clientId: _c, ...rest } = s;
   return { ...rest, rows: await selectRows([sql`r."shipmentId" = ${id}`]) };
 }
@@ -180,7 +180,7 @@ export async function saveSealPlan(
       .where(and(eq(shipments.id, shipmentId), isNull(shipments.deletedAt)))
       .for('update');
     if (!ship || ship.direction !== 'EXPORT') throw notFound('Shipment');
-    assertClientAllowed(req, ship.clientId);
+    assertClientAllowed(req, ship.clientId, 'sealplans');
     const [ctr] = await tx
       .select()
       .from(containers)
@@ -269,7 +269,7 @@ async function standalonePlan(tx: Tx, id: string, req: Request) {
     .where(and(eq(containerSealPlans.id, id), isNull(containerSealPlans.shipmentId)))
     .for('update');
   if (!row) throw notFound('Seal plan');
-  assertClientAllowed(req, row.clientId);
+  assertClientAllowed(req, row.clientId, 'sealplans');
   return row;
 }
 
@@ -278,7 +278,7 @@ export async function createStandalonePlan(
   input: SealPlanStandaloneValues,
   req: Request,
 ): Promise<{ id: string }> {
-  assertClientAllowed(req, input.clientId);
+  assertClientAllowed(req, input.clientId, 'sealplans');
   return db.transaction(async (tx) => {
     const [row] = await tx
       .insert(containerSealPlans)
@@ -298,7 +298,7 @@ export async function updateStandalonePlan(
   input: SealPlanStandaloneValues,
   req: Request,
 ): Promise<void> {
-  assertClientAllowed(req, input.clientId);
+  assertClientAllowed(req, input.clientId, 'sealplans');
   await db.transaction(async (tx) => {
     const before = await standalonePlan(tx, id, req);
     await tx
@@ -326,7 +326,7 @@ export async function deleteSealPlan(id: string, req: Request): Promise<void> {
       .where(eq(containerSealPlans.id, id))
       .for('update', { of: containerSealPlans });
     if (!before) throw notFound('Seal plan');
-    assertClientAllowed(req, before.plan.clientId ?? before.shipClientId);
+    assertClientAllowed(req, before.plan.clientId ?? before.shipClientId, 'sealplans');
     await tx.delete(containerSealPlans).where(eq(containerSealPlans.id, id));
     await audit(
       tx,

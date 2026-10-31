@@ -10,12 +10,13 @@ import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import { CoRecordModal } from './CoRecordModal';
 import { exportCoExcel } from './coExport';
 
-const COLS = 14;
+const COLS = 13;
 const thisMonth = () => new Date().toISOString().slice(0, 7);
-const TONE: Record<CoStatus, 'pending' | 'progress' | 'completed'> = {
+const TONE: Record<CoStatus, 'neutral' | 'pending' | 'progress' | 'completed'> = {
+  PENDING: 'neutral',
   DRAFT: 'pending',
-  CONFIRM: 'progress',
-  ISSUED: 'completed',
+  SUBMIT: 'progress',
+  APPROVE: 'completed',
 };
 /** "2026-07" → "07-2026", as the CO RECORD sheet shows the month. */
 export const sheetMonth = (m: string) => `${m.slice(5, 7)}-${m.slice(0, 4)}`;
@@ -161,7 +162,6 @@ export function CoPlansPage() {
                 <th className="num">Amount</th>
                 <th>ATD Date</th>
                 <th>Status</th>
-                <th aria-label="Breakdown" />
               </tr>
             </thead>
             <tbody>
@@ -227,15 +227,6 @@ export function CoPlansPage() {
                   <td>
                     <CoStatusPill status={r.status} />
                   </td>
-                  <td>
-                    <Link
-                      to={`/co/breakdown?invoice=${r.invoiceId}`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
-                    >
-                      {r.hasBreakdown ? 'Breakdown' : '+ Breakdown'}
-                    </Link>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -248,7 +239,7 @@ export function CoPlansPage() {
                   <td className="num">{fmtNum(totals.pcs, 0)}</td>
                   <td className="num">{fmtNum(totals.ctns, 0)}</td>
                   <td className="num">{fmtMoney(totals.amount)}</td>
-                  <td colSpan={3} />
+                  <td colSpan={2} />
                 </tr>
               </tfoot>
             )}

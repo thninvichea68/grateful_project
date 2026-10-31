@@ -13,6 +13,13 @@ import { round2, type CoBreakdownInput, type CoDetail } from '@gs/shared';
 
 export const AS_PER_INVOICE = 'As Per Invoice and Packing List.';
 
+/** The CO forms that need a breakdown; the others (A, CRF, …) are applied for without one. */
+export const BREAKDOWN_FORMS = ['AB', 'N', 'AJ', 'E', 'RCEP', 'D'];
+
+export function needsBreakdown(form: string | null | undefined) {
+  return !!form && BREAKDOWN_FORMS.includes(form.trim().toUpperCase());
+}
+
 /** A first breakdown: the workbook's own settings, the invoice's HTS code, date and FOB. */
 export function defaultBreakdown(d: CoDetail): CoBreakdownInput {
   return {

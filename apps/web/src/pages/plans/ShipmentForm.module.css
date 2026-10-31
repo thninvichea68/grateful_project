@@ -266,31 +266,68 @@ fieldset:disabled .typeTile span {
   height: 14px;
   color: var(--text-tertiary);
 }
+/* A label with a "!" note at the far end (e.g. the automatic statuses). */
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.infoTip {
+  position: relative;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--text-primary);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-primary);
+  cursor: help;
+}
+.infoTip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.infoText {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  z-index: 20;
+  width: 280px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.infoTip:hover .infoText,
+.infoTip:focus-visible .infoText {
+  opacity: 1;
+  transform: none;
+}
 .clientSelect {
   height: 44px;
   font-size: 13px !important;
   font-weight: 700 !important;
 }
 
-/* A box with an icon inside on the left (client, unit, material). */
+/* A Select's box wrapper: adds nothing to the layout. */
 .plain {
   display: contents;
-}
-.inIcon {
-  position: relative;
-}
-.inIcon > svg {
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  transform: translateY(-50%);
-  color: var(--text-secondary);
-  pointer-events: none;
-}
-.inIcon > select {
-  padding-left: 40px;
 }
 /* A box with a tag at its right end (Quantity's unit). */
 .affix {
@@ -743,9 +780,6 @@ fieldset:disabled .typeTile span {
 .clientHi {
   background-color: color-mix(in srgb, var(--status-pending-bg) 70%, var(--bg-surface)) !important;
   border-color: color-mix(in srgb, var(--status-pending-fg) 25%, transparent) !important;
-}
-.inIcon > input {
-  padding-left: 40px;
 }
 .refBox {
   height: 44px;

@@ -26,6 +26,7 @@ async function loadSessionUser(userId: string): Promise<SessionUser | null> {
       permissionsAdd: users.permissionsAdd,
       permissionsRemove: users.permissionsRemove,
       clientIds: users.clientIds,
+      clientScopes: users.clientScopes,
       jobTitle: staffProfiles.jobTitle,
     })
     .from(users)
@@ -43,6 +44,7 @@ async function loadSessionUser(userId: string): Promise<SessionUser | null> {
     role: row.role as RoleCode,
     permissions: effectivePermissions(row.permissions, row.permissionsAdd, row.permissionsRemove),
     clientIds: row.clientIds ?? null,
+    clientScopes: row.clientScopes ?? {},
   };
 }
 
@@ -73,7 +75,13 @@ async function issueSession(
     })
     .returning({ id: refreshTokens.id });
   return {
-    accessToken: signAccessToken(user.id, user.role, user.permissions, user.clientIds),
+    accessToken: signAccessToken(
+      user.id,
+      user.role,
+      user.permissions,
+      user.clientIds,
+      user.clientScopes,
+    ),
     expiresIn: env.ACCESS_TOKEN_TTL_SECONDS,
     refreshToken: token,
     refreshExpiresAt,

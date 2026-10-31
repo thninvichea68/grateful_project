@@ -316,6 +316,41 @@
       "when": 1793380411712,
       "tag": "0044_shipment_received_document_date",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793411612392,
+      "tag": "0045_co_status_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1793418101577,
+      "tag": "0046_shipment_air_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793419780585,
+      "tag": "0047_shipment_do_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793424607898,
+      "tag": "0048_user_client_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793437481792,
+      "tag": "0049_container_truck_no",
+      "breakpoints": true
     }
   ]
 }

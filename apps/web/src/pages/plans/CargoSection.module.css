@@ -176,8 +176,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Item totals: read-only, so a tinted box rather than a white field. */
+/* Item totals: read-only, so a tinted box rather than a white field, with a "can't edit" cursor. */
 .box > b {
+  cursor: not-allowed;
   display: flex;
   align-items: center;
   height: 40px;

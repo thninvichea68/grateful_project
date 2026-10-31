@@ -1,6 +1,13 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import { PERMISSIONS, ROLE_CODES, type Permission, type RoleCode } from '@gs/shared';
+import {
+  PERMISSIONS,
+  ROLE_CODES,
+  clientScopesSchema,
+  type ClientScopes,
+  type Permission,
+  type RoleCode,
+} from '@gs/shared';
 import { z } from 'zod';
 import { env } from '../../config/env';
 
@@ -13,6 +20,8 @@ const claimsSchema = z.object({
   perms: z.array(z.string()),
   /** Client ids the user may work with; null = every client. */
   clients: z.array(z.string().uuid()).nullable().default(null),
+  /** Sections with their own client access. */
+  scopes: clientScopesSchema.default({}),
 });
 
 export function signAccessToken(
@@ -20,8 +29,10 @@ export function signAccessToken(
   role: RoleCode,
   permissions: Permission[],
   clientIds: string[] | null = null,
+  clientScopes: ClientScopes = {},
 ): string {
-  return jwt.sign({ role, perms: permissions, clients: clientIds }, env.JWT_ACCESS_SECRET, {
+  const claims = { role, perms: permissions, clients: clientIds, scopes: clientScopes };
+  return jwt.sign(claims, env.JWT_ACCESS_SECRET, {
     subject: userId,
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -35,6 +46,7 @@ export function verifyAccessToken(token: string): {
   role: RoleCode;
   permissions: Permission[];
   clientIds: string[] | null;
+  clientScopes: ClientScopes;
 } {
   const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
     issuer: ISSUER,
@@ -48,6 +60,7 @@ export function verifyAccessToken(token: string): {
     role: claims.role,
     permissions: claims.perms.filter((p): p is Permission => known.has(p)),
     clientIds: claims.clients,
+    clientScopes: claims.scopes,
   };
 }
 

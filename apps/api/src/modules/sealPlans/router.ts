@@ -31,7 +31,7 @@ sealPlansRouter.get('/', requirePermission('sealplans:read'), async (req, res) =
       year: q.year,
       month: q.month,
       q: q.q,
-      clientIds: scopeClients(req, q.clientId),
+      clientIds: scopeClients(req, q.clientId, 'sealplans'),
     }),
   );
 });
@@ -44,7 +44,7 @@ sealPlansRouter.get('/export.xlsx', requirePermission('sealplans:read'), async (
     year: q.year,
     month: q.month,
     q: q.q,
-    clientIds: scopeClients(req, q.clientId),
+    clientIds: scopeClients(req, q.clientId, 'sealplans'),
   });
   const wb = sealPlanWorkbook(rows, q.year, q.month);
   const period = q.month ? `${q.year}-${String(q.month).padStart(2, '0')}` : String(q.year);
@@ -59,7 +59,9 @@ sealPlansRouter.get('/export.xlsx', requirePermission('sealplans:read'), async (
 
 sealPlansRouter.get('/shipments', requirePermission('sealplans:read'), async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(120).optional() }), req.query);
-  res.json(await svc.sealPlanShipmentOptions(q || undefined, scopeClients(req)));
+  res.json(
+    await svc.sealPlanShipmentOptions(q || undefined, scopeClients(req, undefined, 'sealplans')),
+  );
 });
 
 sealPlansRouter.get('/shipments/:id', requirePermission('sealplans:read'), async (req, res) => {

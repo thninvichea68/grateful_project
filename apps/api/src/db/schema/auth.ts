@@ -7,7 +7,9 @@ import {
   index,
   uniqueIndex,
   date,
+  jsonb,
 } from 'drizzle-orm/pg-core';
+import type { ClientScopes } from '@gs/shared';
 import { sql } from 'drizzle-orm';
 import { id, timestamps, softDelete, roleCodeEnum, staffStatusEnum } from './_common';
 
@@ -46,6 +48,8 @@ export const users = pgTable(
       .default(sql`'{}'::text[]`),
     /** Clients this user may work with; NULL = every client. */
     clientIds: uuid('client_ids').array(),
+    /** Sections with their own client access, replacing client_ids there (see CLIENT_SCOPE_AREAS). */
+    clientScopes: jsonb('client_scopes').$type<ClientScopes>().notNull().default({}),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
     ...timestamps,
     ...softDelete,

@@ -15,7 +15,14 @@ import {
   type QuotationStatus,
   type StaffStatus,
 } from '../enums';
-import { PERMISSIONS, ROLE_CODES, type Permission, type RoleCode } from '../permissions';
+import {
+  PERMISSIONS,
+  ROLE_CODES,
+  type ClientScopes,
+  type Permission,
+  type RoleCode,
+} from '../permissions';
+import { clientScopesSchema } from './auth';
 import { paginationQuerySchema } from './common';
 import { boolParam, decimal, optText, optUuid } from './fields';
 
@@ -59,6 +66,8 @@ export const staffInputSchema = z.object({
     .min(1, 'Choose at least one client, or allow all clients')
     .nullable()
     .default(null),
+  /** Sections with their own client access, replacing clientIds there. */
+  clientScopes: clientScopesSchema.default({}),
 });
 export const staffUpdateSchema = staffInputSchema.omit({ password: true, email: true }).partial();
 export const resetPasswordSchema = z.object({ password: passwordSchema });
@@ -82,6 +91,7 @@ export interface StaffMember {
   permissionsRemove: Permission[];
   /** null = every client. */
   clientIds: string[] | null;
+  clientScopes: ClientScopes;
 }
 
 export interface RoleInfo {

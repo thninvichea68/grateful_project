@@ -22,6 +22,7 @@ import {
   type Paginated,
   type StatementKind,
   type StatementLine,
+  type TransportMode,
   type receiptInputSchema,
 } from '@gs/shared';
 import type { Request } from 'express';
@@ -69,6 +70,7 @@ interface LedgerPart {
   shipmentId: string;
   shipmentReference: string;
   direction: 'IMPORT' | 'EXPORT';
+  transportMode: TransportMode;
   hbl: string | null;
   containers: string | null;
   quantity: string | null;
@@ -114,7 +116,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     db,
     sql`
     SELECT a.id AS "recordId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", d.declare_no AS "declareNo",
-           s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction, s.hbl_no AS hbl,
+           s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
+           s.transport_mode AS "transportMode", s.hbl_no AS hbl,
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.inv_revenue::text AS "invRevenue",
@@ -195,6 +198,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       containers: l.containers,
       quantity: l.quantity,
       quantityUnit: l.quantityUnit,
+      transportMode: l.transportMode,
       docs: docsByType,
       manual,
       _docs: own,

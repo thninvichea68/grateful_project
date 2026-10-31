@@ -6,13 +6,14 @@ import { boolParam, optDate, optText } from './fields';
  * workbook), and the GSP breakdown of each invoice's cost (the BREAKDOWN workbook).
  */
 
-/** Draft sent to the buyer → buyer confirmed → certificate issued (it has its CO no.). */
-export const CO_STATUSES = ['DRAFT', 'CONFIRM', 'ISSUED'] as const;
+/** Not started → draft made → submitted to the MoC → approved (it has its CO no.). */
+export const CO_STATUSES = ['PENDING', 'DRAFT', 'SUBMIT', 'APPROVE'] as const;
 export type CoStatus = (typeof CO_STATUSES)[number];
 export const CO_STATUS_LABEL: Record<CoStatus, string> = {
+  PENDING: 'Pending',
   DRAFT: 'Draft',
-  CONFIRM: 'Confirm',
-  ISSUED: 'Issued',
+  SUBMIT: 'Submit',
+  APPROVE: 'Approve',
 };
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM');

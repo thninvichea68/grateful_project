@@ -280,11 +280,16 @@
 .table select.status:hover:not(:disabled, :focus) {
   border-color: var(--tone);
 }
+/* The plain pill: a flat tag like the status tags elsewhere (CO Plans, shipments), no border. */
 .statusPill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding-right: 12px;
+  gap: 5px;
+  height: auto;
+  padding: 3px 9px;
+  border: 0;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* Sidebar → Credit Noted (same page style) */

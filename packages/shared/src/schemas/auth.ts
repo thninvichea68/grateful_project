@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import { ROLE_CODES, PERMISSIONS } from '../permissions';
 
+const scopeIds = z
+  .array(z.string().uuid())
+  .min(1, 'Choose at least one client, or allow all clients')
+  .nullable()
+  .optional();
+/** Per-section client access that replaces the main one there (see CLIENT_SCOPE_AREAS). */
+export const clientScopesSchema = z.object({
+  shipments: scopeIds,
+  sealplans: scopeIds,
+  clients: scopeIds,
+  cutstock: scopeIds,
+});
+
 export const loginInputSchema = z.object({
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
   password: z.string().min(1, 'Enter your password').max(200),
@@ -17,6 +30,7 @@ export const sessionUserSchema = z.object({
   permissions: z.array(z.enum(PERMISSIONS)),
   /** Clients this user may work with; null = every client. */
   clientIds: z.array(z.string().uuid()).nullable(),
+  clientScopes: clientScopesSchema,
 });
 export type SessionUser = z.infer<typeof sessionUserSchema>;
 

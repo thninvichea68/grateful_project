@@ -39,6 +39,7 @@ function renderAs(role: RoleCode, path = '/overview') {
     role,
     permissions: [...ROLE_DEFAULT_PERMISSIONS[role]],
     clientIds: null,
+    clientScopes: {},
   };
   return render(
     <QueryClientProvider client={new QueryClient()}>

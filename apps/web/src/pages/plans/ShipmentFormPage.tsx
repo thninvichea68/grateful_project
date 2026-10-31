@@ -45,6 +45,7 @@ import { DeclarationsSection } from './DeclarationsSection';
 import {
   blankContainer,
   cleanForSubmit,
+  DEFAULT_BROKER,
   emptyForm,
   fromDetail,
   type FormValues,
@@ -178,7 +179,28 @@ function ShipmentForm({
     setValue('consigneeId', own?.id ?? '', { shouldDirty: !!detail });
   }, [clientId, direction, detail, lookups.clients, lookups.consignees, methods, setValue]);
 
-  const steps = useMemo(() => buildSteps(direction, lookups, detail), [direction, lookups, detail]);
+  // An export's shipper is the client itself, by its legal name in English: set when the client
+  // or direction is picked, replacing one that was blank or filled in this way. A saved shipment
+  // is left as it was until its client is changed; an import's shipper is its supplier, typed.
+  const autoShipper = useRef<string | null>(null);
+  const firstShipperPick = useRef(true);
+  useEffect(() => {
+    const skip = firstShipperPick.current && !!detail;
+    firstShipperPick.current = false;
+    if (skip) return;
+    const now = methods.getValues('shipperName') ?? '';
+    const replaceable = !now.trim() || now === autoShipper.current;
+    if (!replaceable) return;
+    const client = lookups.clients.find((c) => c.id === clientId);
+    const legal = direction === 'EXPORT' ? client?.legalName?.trim() || client?.name || '' : '';
+    autoShipper.current = legal || null;
+    if (legal !== now) setValue('shipperName', legal, { shouldDirty: !!detail });
+  }, [clientId, direction, detail, lookups.clients, methods, setValue]);
+
+  const steps = useMemo(
+    () => buildSteps(direction, transportMode, lookups, detail),
+    [direction, transportMode, lookups, detail],
+  );
   const current = Math.min(step, steps.length - 1);
   const isLast = current === steps.length - 1;
 
@@ -417,8 +439,7 @@ function ShipmentForm({
             {fi.idCard({})}
             Client
           </label>
-          <div className={f.inIcon}>
-            {fi.building({})}
+          <div>
             <select
               id="f-clientId"
               className={`form-select-box ${f.clientSelect} ${f.clientHi}`}
@@ -445,8 +466,7 @@ function ShipmentForm({
             {fi.idCard({})}
             Shipment Number
           </label>
-          <div className={f.inIcon}>
-            {fi.file({})}
+          <div>
             <input
               id="f-reference"
               className={`form-field-box ${f.refBox}`}
@@ -559,49 +579,71 @@ function ShipmentForm({
   );
 }
 
+// By air both directions track the air waybills (MAWB in the booking no., HAWB in the HBL no.).
 const MILESTONES = {
   IMPORT: ['Received INV & PL', 'HBL', 'ETA Port', 'Clearance', 'Arrive Factory'],
   EXPORT: ['Received INV & PL', 'Booking', 'ETD', 'Clearance', 'Departed'],
+  AIR_IMPORT: ['Received INV & PL', 'MAWB / HAWB', 'ETA Port', 'Clearance', 'Arrive Factory'],
+  AIR_EXPORT: ['Received INV & PL', 'MAWB / HAWB', 'ETD', 'Clearance', 'Departed'],
 };
 
 /**
  * The shipment's progress, read from what has been filled in. Import: an invoice no., the HBL
  * no., the ETA Port date, a cleared declaration and the ETA Factory date. Export: an invoice
- * no., the booking / SO no., the ETD, a cleared declaration and the ATD. The first one still
- * missing is the current milestone.
+ * no., the booking / SO no., the ETD, a cleared declaration and the ATD. By air the second is
+ * a MAWB or HAWB no. The first one still missing is the current milestone.
  */
 function Milestones({ direction }: { direction: FormValues['direction'] }) {
   const { control } = useFormContext<FormValues>();
-  const [invoices, hblNo, eta, arriveFty, bookingNo, etd, atd, declarations] = useWatch({
+  const [invoices, hblNo, eta, arriveFty, bookingNo, etd, atd, declarations, mode] = useWatch({
     control,
-    name: ['invoices', 'hblNo', 'eta', 'arriveFty', 'bookingNo', 'etd', 'atd', 'declarations'],
+    name: [
+      'invoices',
+      'hblNo',
+      'eta',
+      'arriveFty',
+      'bookingNo',
+      'etd',
+      'atd',
+      'declarations',
+      'transportMode',
+    ],
   });
   const isExport = direction === 'EXPORT';
+  // An air export has no ATD field: it has departed once its flight date has come.
+  const departed =
+    !!atd || (mode === 'AIR' && !!etd && etd <= new Date().toISOString().slice(0, 10));
   const reached = [
     (invoices ?? []).some((i) => !!i.invoiceNo?.trim()),
-    isExport ? !!bookingNo?.trim() : !!hblNo?.trim(),
+    mode === 'AIR'
+      ? !!bookingNo?.trim() || !!hblNo?.trim()
+      : isExport
+        ? !!bookingNo?.trim()
+        : !!hblNo?.trim(),
     isExport ? !!etd : !!eta,
     clearanceStatusOf({ declarations }) === 'CLEARED',
-    isExport ? !!atd : !!arriveFty,
+    isExport ? departed : !!arriveFty,
   ];
   const next = reached.indexOf(false);
   return (
     <ol className={f.track} aria-label="Shipment progress">
-      {MILESTONES[isExport ? 'EXPORT' : 'IMPORT'].map((label, i) => {
-        const state = reached[i] ? 'done' : i === next ? 'current' : 'todo';
-        return (
-          <li
-            key={label}
-            className={f.mile}
-            data-state={state}
-            data-linked={!!reached[i] && !!reached[i + 1]}
-            aria-current={state === 'current' ? 'step' : undefined}
-          >
-            <span className={f.mileDot}>{state === 'done' ? fi.check({}) : i + 1}</span>
-            <span className={f.mileLabel}>{label}</span>
-          </li>
-        );
-      })}
+      {MILESTONES[`${mode === 'AIR' ? 'AIR_' : ''}${isExport ? 'EXPORT' : 'IMPORT'}`].map(
+        (label, i) => {
+          const state = reached[i] ? 'done' : i === next ? 'current' : 'todo';
+          return (
+            <li
+              key={label}
+              className={f.mile}
+              data-state={state}
+              data-linked={!!reached[i] && !!reached[i + 1]}
+              aria-current={state === 'current' ? 'step' : undefined}
+            >
+              <span className={f.mileDot}>{state === 'done' ? fi.check({}) : i + 1}</span>
+              <span className={f.mileLabel}>{label}</span>
+            </li>
+          );
+        },
+      )}
     </ol>
   );
 }
@@ -772,6 +814,55 @@ function Field({
   );
 }
 
+/** An export's Shipper: the client's legal name in English (an older value stays selectable). */
+function ExportShipperSelect({ lookups }: { lookups: LookupsResponse }) {
+  const [clientId, current] = useWatch<FormValues, ['clientId', 'shipperName']>({
+    name: ['clientId', 'shipperName'],
+  });
+  const client = lookups.clients.find((c) => c.id === clientId);
+  const legal = client?.legalName?.trim() || client?.name || '';
+  const names = [legal, current ?? ''].filter(
+    (v, i, all) => v.trim() && all.findIndex((x) => x === v) === i,
+  );
+  return (
+    <Select
+      name="shipperName"
+      label="Shipper"
+      options={names.map((v) => ({ value: v, label: v }))}
+      placeholder="Select shipper"
+      span={2}
+    />
+  );
+}
+
+/**
+ * Broker: us by default, or any broker already used on a shipment; "+ Add New" types another
+ * (it is kept as text on the shipment, so it joins the list once saved).
+ */
+function BrokerSelect({ lookups }: { lookups: LookupsResponse }) {
+  const { field } = useController<FormValues, 'broker'>({ name: 'broker' });
+  const current = field.value ?? '';
+  const names = [DEFAULT_BROKER, ...lookups.brokers, ...(current.trim() ? [current] : [])].filter(
+    (v, i, all) => all.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i,
+  );
+  return (
+    <div className="form-field-group" style={spanStyle(2)}>
+      <FieldLabel name="broker" label="Broker" />
+      <AddNewSelect
+        id="f-broker"
+        label="Broker"
+        placeholder="Select broker"
+        addFirst
+        value={field.value}
+        onChange={field.onChange}
+        onBlur={field.onBlur}
+        options={names.map((v) => ({ value: v, label: v }))}
+        onCreate={async (name) => name.trim()}
+      />
+    </div>
+  );
+}
+
 const CO_STATUSES = ['Pending', 'Draft', 'Submitted', 'Approved'];
 
 /** CO Status: one of the four stages; an older free-text value stays selectable until changed. */
@@ -855,15 +946,12 @@ function Select({
   options,
   placeholder,
   span,
-  inner,
 }: {
   name: keyof FormValues;
   label: string;
   options: { value: string; label: string }[];
   placeholder?: string;
   span?: Span;
-  /** An icon inside the box, before the chosen value. */
-  inner?: FormIcon;
 }) {
   const {
     register,
@@ -873,8 +961,7 @@ function Select({
   return (
     <div className="form-field-group" style={spanStyle(span)}>
       <FieldLabel name={name} label={label} />
-      <div className={inner ? f.inIcon : f.plain}>
-        {inner && fi[inner]({})}
+      <div className={f.plain}>
         <select
           id={`f-${name}`}
           className="form-select-box"
@@ -894,6 +981,17 @@ function Select({
   );
 }
 
+/** A "!" beside a label that shows its note on hover or keyboard focus. */
+function InfoTip({ children }: { children: ReactNode }) {
+  return (
+    <span className={f.infoTip} tabIndex={0}>
+      <span aria-hidden="true">!</span>
+      {/* Faded out rather than hidden, so screen readers still read it. */}
+      <span className={f.infoText}>{children}</span>
+    </span>
+  );
+}
+
 /** The shipment status is not chosen: it is shown as it follows from the shipment's data. */
 function ShipmentStatusField() {
   const { control } = useFormContext<FormValues>();
@@ -905,16 +1003,18 @@ function ShipmentStatusField() {
   const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
   return (
     <div className="form-field-group">
-      <FieldLabel name="shipmentStatus" label="Shipment Status" />
+      <div className={f.labelRow}>
+        <FieldLabel name="shipmentStatus" label="Shipment Status" />
+        <InfoTip>
+          Set automatically: Completed once {done} is filled in, In Progress once a customs
+          declaration is recorded, otherwise Pending.
+        </InfoTip>
+      </div>
       <div>
         <span className={f.badge} data-tone={TONE[status]}>
           {SHIPMENT_STATUS_LABEL[status]}
         </span>
       </div>
-      <p className={f.note}>
-        Set automatically: Completed once {done} is filled in, In Progress once a customs
-        declaration is recorded, otherwise Pending.
-      </p>
     </div>
   );
 }
@@ -926,16 +1026,18 @@ function ClearanceStatusField() {
   const status = clearanceStatusOf({ declarations });
   return (
     <div className="form-field-group">
-      <FieldLabel name="clearanceStatus" label="Clearance Status" />
+      <div className={f.labelRow}>
+        <FieldLabel name="clearanceStatus" label="Clearance Status" />
+        <InfoTip>
+          Set automatically: Customs Cleared once a declaration has its Declare No. and Declare
+          Date, In Progress once a Declare No. is entered, otherwise Pending Review.
+        </InfoTip>
+      </div>
       <div>
         <span className={f.badge} data-tone={TONE[status]}>
           {CLEARANCE_STATUS_LABEL[status]}
         </span>
       </div>
-      <p className={f.note}>
-        Set automatically: Customs Cleared once a declaration has its Declare No. and Declare Date,
-        In Progress once a Declare No. is entered, otherwise Pending Review.
-      </p>
     </div>
   );
 }
@@ -1026,6 +1128,32 @@ function PartiesFields({
   );
 }
 
+/**
+ * An export's schedule, dated by its departure (no ETA or ETD port). By air: the flight, its
+ * check-in and cut-off, and the flight date (kept as the ETD), with no containers.
+ */
+function ExportSchedule() {
+  const mode = useWatch<FormValues, 'transportMode'>({ name: 'transportMode' });
+  if (mode === 'AIR')
+    return (
+      <Card title="Schedule" icon="calendar" cols={2}>
+        <Field name="flightNo" label="Flight No." placeholder="e.g. CZ 3054" />
+        <Field name="checkInDate" label="Check-in Date" type="date" />
+        <Field name="cutOffDate" label="Cut-off" type="date" />
+        <Field name="etd" label="Flight Date" type="date" />
+      </Card>
+    );
+  return (
+    <>
+      <Card title="Schedule" icon="calendar" cols={2}>
+        <Field name="etd" label="ETD" type="date" />
+        <Field name="atd" label="ATD (Actual Departure)" type="date" />
+      </Card>
+      <ContainersCard />
+    </>
+  );
+}
+
 function ContainersCard() {
   const {
     control,
@@ -1034,6 +1162,7 @@ function ContainersCard() {
   } = useFormContext<FormValues>();
   const loadType = useWatch({ control, name: 'loadType' });
   const direction = useWatch({ control, name: 'direction' });
+  const byTruck = useWatch({ control, name: 'transportMode' }) === 'ROAD';
   const arr = useFieldArray({ control, name: 'containers' });
   const errs = errors.containers as unknown as
     (Record<number, Record<string, { message?: string }>> & { message?: string }) | undefined;
@@ -1057,6 +1186,7 @@ function ContainersCard() {
                   <th>Size</th>
                   {direction === 'EXPORT' && <th>Liner Seal</th>}
                   {direction === 'EXPORT' && <th>Customs Seal</th>}
+                  {byTruck && <th>Truck No.</th>}
                   <th />
                 </tr>
               </thead>
@@ -1100,6 +1230,15 @@ function ContainersCard() {
                         />
                       </td>
                     )}
+                    {byTruck && (
+                      <td>
+                        <input
+                          className="form-field-box"
+                          placeholder="e.g. 3A-1234"
+                          {...register(`containers.${i}.truckNo`)}
+                        />
+                      </td>
+                    )}
                     <td>
                       <button
                         type="button"
@@ -1133,6 +1272,7 @@ function ContainersCard() {
 
 function buildSteps(
   direction: FormValues['direction'],
+  mode: FormValues['transportMode'],
   lookups: LookupsResponse,
   detail: ShipmentDetail | undefined,
 ): Step[] {
@@ -1153,6 +1293,8 @@ function buildSteps(
       <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" decimals={2} />
     </Card>
   );
+  // By air there is no vessel, voyage or container, and the bills are air waybills.
+  const air = mode === 'AIR';
   const remarkCard = (
     <Card title="Remark" icon="message" cols={1}>
       <Field name="remark" label="Remark" span="full" placeholder="Optional note" rows={5} />
@@ -1167,8 +1309,10 @@ function buildSteps(
         label: 'Shipment Information',
         fields: [
           'clientId',
+          'shipperName',
           'consigneeId',
           'forwarderId',
+          'broker',
           'destinationCountryIso2',
           'quantity',
           'quantityUnit',
@@ -1177,8 +1321,10 @@ function buildSteps(
         render: () => (
           <>
             <Card title="Parties & Destination" icon="users">
+              <ExportShipperSelect lookups={lookups} />
               <PartiesFields lookups={lookups} which="consignee" />
               <PartiesFields lookups={lookups} which="forwarder" />
+              <BrokerSelect lookups={lookups} />
             </Card>
             <Card title="Cargo" icon="box">
               <CountryField
@@ -1187,19 +1333,12 @@ function buildSteps(
                 countries={lookups.countries}
               />
               <QuantityField />
-              <Select
-                name="quantityUnit"
-                label="Unit"
-                options={units}
-                placeholder="Select unit"
-                inner="box"
-              />
+              <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
               <Select
                 name="material"
                 label="Material"
                 options={materials}
                 placeholder="Select material"
-                inner="layers"
               />
             </Card>
           </>
@@ -1216,7 +1355,7 @@ function buildSteps(
         ),
       },
       {
-        label: 'Booking, Schedule & Vessel',
+        label: air ? 'Air Waybill & Schedule' : 'Booking, Schedule & Vessel',
         fields: [
           'bookingNo',
           'crd',
@@ -1224,6 +1363,9 @@ function buildSteps(
           'clearancePortId',
           'etd',
           'atd',
+          'flightNo',
+          'checkInDate',
+          'cutOffDate',
           'containers',
           'loadType',
           'vesselName',
@@ -1234,16 +1376,11 @@ function buildSteps(
         ],
         render: () => (
           <>
-            {/* An export is dated by its departure: no ETA or ETD port. */}
-            <Card title="Schedule" icon="calendar" cols={2}>
-              <Field name="etd" label="ETD" type="date" />
-              <Field name="atd" label="ATD (Actual Departure)" type="date" />
-            </Card>
-            <ContainersCard />
+            <ExportSchedule />
             <Card title="Booking & Clearance" icon="file">
-              <Field name="bookingNo" label="Booking / SO No." span={2} />
-              <Field name="hblNo" label="HBL No." />
-              <Field name="crd" label="CRD" type="date" />
+              <Field name="bookingNo" label={air ? 'MAWB No.' : 'Booking / SO No.'} span={2} />
+              <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} span={2} />
+              <Field name="crd" label="CRD" type="date" span={2} />
               <Select
                 name="clearancePortId"
                 label="Clearance Port"
@@ -1252,9 +1389,12 @@ function buildSteps(
                 span={2}
               />
             </Card>
-            <Card title="Vessel & Certificate of Origin" icon="ship">
-              <Field name="vesselName" label="Vessel Name" span={2} />
-              <Field name="voyageNo" label="Voyage No." span={2} />
+            <Card
+              title={air ? 'Certificate of Origin' : 'Vessel & Certificate of Origin'}
+              icon={air ? 'file' : 'ship'}
+            >
+              {!air && <Field name="vesselName" label="Vessel Name" span={2} />}
+              {!air && <Field name="voyageNo" label="Voyage No." span={2} />}
               <CoFormSelect lookups={lookups} />
               <Field name="coNumber" label="CO Number" span={2} />
               <CoStatusSelect />
@@ -1267,7 +1407,7 @@ function buildSteps(
         fields: ['declarations', 'remark'],
         render: () => (
           <>
-            <DeclarationsSection ports={lookups.ports} original={detail} />
+            <DeclarationsSection original={detail} />
             {statusCard}
             {remarkCard}
           </>
@@ -1296,17 +1436,11 @@ function buildSteps(
             <Field name="shipperName" label="Shipper Name" span={2} placeholder="Supplier name" />
             <PartiesFields lookups={lookups} which="consignee" />
             <PartiesFields lookups={lookups} which="forwarder" />
-            <Field name="broker" label="Broker" span={2} placeholder="Customs broker" />
+            <BrokerSelect lookups={lookups} />
           </Card>
           <Card title="Cargo" icon="box">
             <QuantityField />
-            <Select
-              name="quantityUnit"
-              label="Unit"
-              options={units}
-              placeholder="Select unit"
-              inner="box"
-            />
+            <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
             <CountryField
               name="originCountryIso2"
               label="Origin Country"
@@ -1328,9 +1462,11 @@ function buildSteps(
       ),
     },
     {
-      label: 'Origin, Destination & Vessel',
+      label: air ? 'Origin, Destination & Air Waybill' : 'Origin, Destination & Vessel',
       fields: [
+        'bookingNo',
         'hblNo',
+        'doDate',
         'clearancePortId',
         'eta',
         'arriveFty',
@@ -1346,11 +1482,19 @@ function buildSteps(
             <Field name="eta" label="ETA Port" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>
-          <ContainersCard />
-          <Card title="Vessel & Clearance" icon="ship">
-            <Field name="vesselName" label="Vessel Name" span={2} />
-            <Field name="voyageNo" label="Voyage No." />
-            <Field name="hblNo" label="HBL No." />
+          {!air && <ContainersCard />}
+          <Card
+            title={air ? 'Air Waybill & Delivery Order' : 'Bill of Lading & Delivery Order'}
+            icon={air ? 'plane' : 'file'}
+            cols={air ? 3 : 2}
+          >
+            {air && <Field name="bookingNo" label="MAWB No." />}
+            <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} />
+            <Field name="doDate" label="DO / EDO Date" type="date" />
+          </Card>
+          <Card title={air ? 'Clearance' : 'Vessel & Clearance'} icon={air ? 'anchor' : 'ship'}>
+            {!air && <Field name="vesselName" label="Vessel Name" span={2} />}
+            {!air && <Field name="voyageNo" label="Voyage No." span={2} />}
             <Select
               name="clearancePortId"
               label="Clearance Port"
@@ -1368,7 +1512,7 @@ function buildSteps(
       fields: ['declarations', 'remark'],
       render: () => (
         <>
-          <DeclarationsSection ports={lookups.ports} original={detail} />
+          <DeclarationsSection original={detail} />
           {statusCard}
           {remarkCard}
         </>

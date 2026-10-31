@@ -5,6 +5,7 @@ import {
   STATEMENT_KINDS,
   type BillingDocStatus,
   type Direction,
+  type TransportMode,
   type PaymentMethod,
   type StatementKind,
 } from '../enums';
@@ -118,6 +119,8 @@ export interface BillingShipmentRow {
   shipmentId: string;
   shipmentReference: string;
   direction: Direction;
+  /** SEA, AIR or ROAD (Truck). */
+  transportMode: TransportMode;
   hbl: string | null;
   containers: string | null;
   /** The shipment's package count and its unit (PKGS, CTNS, ROLLS…). */

@@ -33,6 +33,8 @@ export const containerInputSchema = z.object({
     .transform((v) => v ?? null),
   linerSeal: optText(40),
   customsSeal: optText(40),
+  /** Truck shipments: plate no. of the truck carrying the container. */
+  truckNo: optText(40),
 });
 
 export const cargoLineInputSchema = z.object({
@@ -112,7 +114,7 @@ function blankContainerRow(c: unknown): boolean {
   if (!c || typeof c !== 'object') return false;
   const x = c as Record<string, unknown>;
   const text = (v: unknown) => String(v ?? '').trim();
-  return !text(x.containerNo) && !text(x.linerSeal) && !text(x.customsSeal);
+  return !text(x.containerNo) && !text(x.linerSeal) && !text(x.customsSeal) && !text(x.truckNo);
 }
 /** An invoice row nothing was typed into (the form always offers one; its date may be preset). */
 function blankInvoiceRow(i: unknown): boolean {
@@ -213,6 +215,10 @@ export const shipmentInputSchema = z
     ata: optDate,
     arriveFty: optDate,
     receivedDocumentDate: optDate,
+    doDate: optDate,
+    flightNo: optText(40),
+    checkInDate: optDate,
+    cutOffDate: optDate,
     thcHblNo: optText(60),
     thcHblDate: optDate,
     thcHblAmount: decimal(2, { min: 0 }),
@@ -405,6 +411,10 @@ export interface ShipmentDetail {
   ata: string | null;
   arriveFty: string | null;
   receivedDocumentDate: string | null;
+  doDate: string | null;
+  flightNo: string | null;
+  checkInDate: string | null;
+  cutOffDate: string | null;
   thcHblNo: string | null;
   thcHblDate: string | null;
   thcHblAmount: string | null;
@@ -418,6 +428,7 @@ export interface ShipmentDetail {
     size: ContainerSize | null;
     linerSeal: string | null;
     customsSeal: string | null;
+    truckNo: string | null;
   }[];
   invoices: {
     id: string;

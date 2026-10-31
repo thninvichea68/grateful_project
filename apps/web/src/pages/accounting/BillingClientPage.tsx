@@ -175,15 +175,6 @@ function Workspace({
             {m.client.legalName ?? m.client.name}
             <StagePill stage={s.stage} />
           </div>
-          <div className={b.headSub}>
-            {[
-              m.client.legalNameKm,
-              m.client.vattin && `VATTIN ${m.client.vattin}`,
-              m.client.address,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
         </div>
         <div className={b.headActions}>
           <MonthStepper month={month} onChange={setMonth} />
@@ -230,10 +221,6 @@ function Workspace({
               <span className={b.sectionNum}>1</span>
               <h3>Shipment documents</h3>
             </div>
-            <div className={b.sectionDesc}>
-              One row per shipment in the Monthly Ledger. Click a document to open it, or + to
-              create it filled from the shipment.
-            </div>
           </div>
           {canWrite && (
             <div className={b.sectionActions}>
@@ -269,18 +256,20 @@ function Workspace({
           <table className={`data-table-clean ${b.docTable}`}>
             <thead>
               <tr>
-                <th>Date</th>
+                <th>No</th>
                 <th>Declaration</th>
+                <th>Freight</th>
                 <th>Quantity</th>
                 <th>HBL · Container</th>
                 {BILLING_PACK_TYPES.map((t) => (
                   <th key={t}>{PACK_LABEL[t]}</th>
                 ))}
+                <th>INV Date</th>
                 <th className={b.actionCol}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {m.rows.map((r) => (
+              {m.rows.map((r, i) => (
                 <tr
                   key={r.recordId}
                   data-preview
@@ -288,7 +277,7 @@ function Workspace({
                   title="Click to preview this shipment's documents"
                   onClick={(e) => opensPreview(e) && setPreview(r)}
                 >
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.invDate)}</td>
+                  <td>{i + 1}</td>
                   <td data-no-preview>
                     <span className={b.declare}>{r.declareNo}</span>
                     <span className={b.small}>
@@ -296,6 +285,7 @@ function Workspace({
                       <Link to={`/plans/${r.shipmentId}`}>{r.shipmentReference}</Link>
                     </span>
                   </td>
+                  <td>{FREIGHT_LABEL[r.transportMode] ?? r.transportMode}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {r.quantity ? `${fmtNum(r.quantity)} ${r.quantityUnit ?? ''}`.trim() : '—'}
                   </td>
@@ -312,6 +302,7 @@ function Workspace({
                       <DocCell row={r} type={t} back={back} canWrite={canWrite} />
                     </td>
                   ))}
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.invDate)}</td>
                   <td className={b.actionCol}>
                     {/* The row's tax invoice, disbursement and debit note in one go. */}
                     {BILLING_PACK_TYPES.some((t) => r.docs[t].some((d) => d.status !== 'VOID')) && (
@@ -319,10 +310,10 @@ function Workspace({
                         clientId={m.client.id}
                         month={month}
                         record={{ id: r.recordId, label: r.declareNo }}
-                        className={`filter-btn ${b.rowPrint}`}
+                        className={b.rowDots}
                         title={`Print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
                       >
-                        Print
+                        {icons.dots({ width: 16, height: 16 })}
                       </PackPrintMenu>
                     )}
                   </td>
@@ -330,7 +321,7 @@ function Workspace({
               ))}
               {m.rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className={ui.empty}>
+                  <td colSpan={10} className={ui.empty}>
                     No shipments in the Monthly Ledger for {monthName(month)}.
                   </td>
                 </tr>
@@ -368,11 +359,6 @@ function Workspace({
             <div className={b.sectionTitle}>
               <span className={b.sectionNum}>2</span>
               <h3>Account statements &amp; payments</h3>
-            </div>
-            <div className={b.sectionDesc}>
-              Built from the documents above; drafts are included, marked DRAFT, so the month can be
-              printed and checked before issuing. Record each payment against its statement to issue
-              the official receipt.
             </div>
           </div>
           <ExpandToggle
@@ -443,7 +429,14 @@ function shortContainers(list: string | null): string {
   return all.length > 1 ? `${all[0]} +${all.length - 1}` : list;
 }
 
-/** A document: number · amount · ✓ when issued, "Draft" when not. Opens the editor. */
+const FREIGHT_LABEL: Record<string, string> = {
+  SEA: 'SEA',
+  AIR: 'AIR',
+  ROAD: 'TRUCK',
+  RAIL: 'RAIL',
+};
+
+/** A document: number · amount · ✓ when issued; a draft is just yellow. Opens the editor. */
 function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
   const draft = d.status === 'DRAFT';
   const label = `${PACK_LABEL[d.type]} ${d.number ?? ''}, ${fmtMoney(d.total)}, ${draft ? 'draft (not issued yet)' : 'issued'}`;
@@ -457,7 +450,7 @@ function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
     >
       <b>{d.number ?? 'Draft'}</b>
       <span>{fmtMoney(d.total)}</span>
-      <em>{draft ? 'Draft' : '✓'}</em>
+      {!draft && <em>✓</em>}
     </Link>
   );
 }

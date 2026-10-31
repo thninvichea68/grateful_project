@@ -375,9 +375,23 @@
   text-align: center;
   white-space: nowrap;
 }
-.docTable .rowPrint {
-  display: inline-flex;
-  padding: 4px 12px;
+/* A row's ⋯: opens its print / export menu. */
+.docTable .rowDots {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.docTable .rowDots:hover,
+.docTable .rowDots[aria-expanded='true'] {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--accent-primary);
 }
 .docTable td {
   vertical-align: top;

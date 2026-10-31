@@ -1,4 +1,4 @@
-import type { Permission, RoleCode } from '@gs/shared';
+import type { ClientScopes, Permission, RoleCode } from '@gs/shared';
 
 declare global {
   namespace Express {
@@ -9,6 +9,8 @@ declare global {
         permissions: Permission[];
         /** Clients this user may work with; null = every client. */
         clientIds: string[] | null;
+        /** Sections with their own client access, replacing clientIds there. */
+        clientScopes: ClientScopes;
       };
     }
   }

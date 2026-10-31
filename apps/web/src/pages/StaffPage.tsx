@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import {
+  CLIENT_SCOPE_AREAS,
   PERMISSIONS,
   ROLE_CODES,
   ROLE_LABEL,
   STAFF_STATUSES,
   staffInputSchema,
   staffUpdateSchema,
+  type ClientScopeArea,
+  type ClientScopes,
   type Permission,
   type RoleCode,
   type StaffMember,
@@ -312,6 +315,33 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
   const [clientIds, setClientIds] = useState<string[] | null>(member?.clientIds ?? null);
   const toggleClient = (id: string) =>
     setClientIds((cur) => (cur?.includes(id) ? cur.filter((x) => x !== id) : [...(cur ?? []), id]));
+  // Sections with their own client access, replacing the main one there (a section left out
+  // follows it). Opened from the Clients button on the section's permission row.
+  const [scopes, setScopes] = useState<ClientScopes>(member?.clientScopes ?? {});
+  const [scopeOpen, setScopeOpen] = useState<ClientScopeArea | null>(null);
+  const setScope = (area: ClientScopeArea, ids: string[] | null | undefined) =>
+    setScopes((cur) => {
+      const next = { ...cur };
+      if (ids === undefined) delete next[area];
+      else next[area] = ids;
+      return next;
+    });
+  const toggleScopeClient = (area: ClientScopeArea, id: string) => {
+    const cur = scopes[area] ?? [];
+    setScope(area, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  };
+  const clientCode = (id: string) => lookups.data?.clients.find((c) => c.id === id)?.code ?? '?';
+  const scopeLabel = (area: ClientScopeArea) => {
+    if (!(area in scopes)) return 'Same as main';
+    const ids = scopes[area];
+    if (!ids) return 'All clients';
+    if (!ids.length) return 'None chosen';
+    const codes = ids.map(clientCode);
+    return codes.length > 2
+      ? `${codes.slice(0, 2).join(', ')} +${codes.length - 2}`
+      : codes.join(', ');
+  };
+  const emptyScope = CLIENT_SCOPE_AREAS.find((a) => scopes[a]?.length === 0);
   // Permissions: the role's set, plus extras, minus removals - for this person only.
   const role = useWatch({ control, name: 'role' }) as RoleCode | undefined;
   const rolePerms = useMemo(
@@ -340,8 +370,13 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
   const changes = permissionsAdd.length + permissionsRemove.length;
 
   const submit = handleSubmit(async (v) => {
-    if (noClients) return;
-    await save.mutateAsync(self ? v : { ...v, permissionsAdd, permissionsRemove, clientIds });
+    if (noClients || emptyScope) {
+      if (emptyScope) setScopeOpen(emptyScope);
+      return;
+    }
+    await save.mutateAsync(
+      self ? v : { ...v, permissionsAdd, permissionsRemove, clientIds, clientScopes: scopes },
+    );
     toast(
       member ? 'Staff member updated.' : 'Staff member added. Give them their temporary password.',
     );
@@ -483,7 +518,8 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
                   <h4 id="st-clients">Client access</h4>
                   <p>
                     They only see shipments, CDC items, documents, accounting and reports of these
-                    clients.
+                    clients. Shipments, Seal Plans, Clients and CDC Master List can have their own
+                    under Permissions.
                   </p>
                 </div>
                 <div className={st.segment} role="radiogroup" aria-label="Client access">
@@ -572,38 +608,132 @@ function StaffModal({ member, onClose }: { member: StaffMember | null; onClose: 
                 )}
               </header>
               <div className={st.permList}>
-                {PERM_GROUPS.map((g) => (
-                  <div key={g} className={st.permRow}>
-                    <div className={st.area}>
-                      <b>{AREAS[g]?.label ?? g}</b>
-                      <span>{AREAS[g]?.desc}</span>
+                {PERM_GROUPS.map((g) => {
+                  const scopeArea = CLIENT_SCOPE_AREAS.find((a) => a === g);
+                  return (
+                    <div key={g} className={st.permBlock}>
+                      <div className={st.permRow}>
+                        <div className={st.area}>
+                          <b>{AREAS[g]?.label ?? g}</b>
+                          <span>{AREAS[g]?.desc}</span>
+                        </div>
+                        <div className={st.toggles}>
+                          {scopeArea && (
+                            <button
+                              type="button"
+                              className={st.scopeBtn}
+                              data-own={scopeArea in scopes || undefined}
+                              aria-expanded={scopeOpen === scopeArea}
+                              onClick={() =>
+                                setScopeOpen(scopeOpen === scopeArea ? null : scopeArea)
+                              }
+                              title="Which clients they can work with here"
+                            >
+                              {ICONS.clients}
+                              {scopeLabel(scopeArea)}
+                              <span className={st.caret} aria-hidden="true">
+                                ▾
+                              </span>
+                            </button>
+                          )}
+                          {PERMISSIONS.filter((p) => p.startsWith(`${g}:`)).map((p) => {
+                            const custom = has(p) !== rolePerms.has(p);
+                            const action = p.split(':')[1]!;
+                            return (
+                              <label
+                                key={p}
+                                className={st.toggle}
+                                data-custom={custom || undefined}
+                                title={custom ? 'Changed for this person' : undefined}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={has(p)}
+                                  onChange={() => togglePerm(p)}
+                                />
+                                <span className={st.toggleTick} aria-hidden="true">
+                                  {ICONS.check}
+                                </span>
+                                {ACTIONS[action] ?? action}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {scopeArea && scopeOpen === scopeArea && (
+                        <div className={st.scopePanel}>
+                          <div className={st.scopeHead}>
+                            <span>Clients in {AREAS[g]?.label}</span>
+                            <div
+                              className={st.segment}
+                              role="radiogroup"
+                              aria-label={`Clients in ${AREAS[g]?.label}`}
+                            >
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={!(scopeArea in scopes)}
+                                onClick={() => setScope(scopeArea, undefined)}
+                              >
+                                Same as main
+                              </button>
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={scopeArea in scopes && scopes[scopeArea] === null}
+                                onClick={() => setScope(scopeArea, null)}
+                              >
+                                All clients
+                              </button>
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={!!scopes[scopeArea]}
+                                onClick={() => setScope(scopeArea, scopes[scopeArea] ?? [])}
+                              >
+                                Only these
+                              </button>
+                            </div>
+                          </div>
+                          {!(scopeArea in scopes) ? (
+                            <p className={st.allNote}>
+                              Follows Client access:{' '}
+                              {clientIds
+                                ? clientIds.map(clientCode).join(', ') || 'none'
+                                : 'all clients'}
+                              .
+                            </p>
+                          ) : scopes[scopeArea] === null ? (
+                            <p className={st.allNote}>
+                              Every client here, including clients added later, whatever Client
+                              access says.
+                            </p>
+                          ) : (
+                            <div className={st.clientGrid}>
+                              {lookups.data?.clients.map((c) => (
+                                <label key={c.id} className={st.clientCard}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!scopes[scopeArea]?.includes(c.id)}
+                                    onChange={() => toggleScopeClient(scopeArea, c.id)}
+                                  />
+                                  <span className={st.clientCode}>{c.code}</span>
+                                  <span className={st.clientName}>{c.name}</span>
+                                  <span className={st.tick} aria-hidden="true">
+                                    {ICONS.check}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          {scopes[scopeArea]?.length === 0 && (
+                            <FieldError message="Choose at least one client, or allow all clients." />
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className={st.toggles}>
-                      {PERMISSIONS.filter((p) => p.startsWith(`${g}:`)).map((p) => {
-                        const custom = has(p) !== rolePerms.has(p);
-                        const action = p.split(':')[1]!;
-                        return (
-                          <label
-                            key={p}
-                            className={st.toggle}
-                            data-custom={custom || undefined}
-                            title={custom ? 'Changed for this person' : undefined}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={has(p)}
-                              onChange={() => togglePerm(p)}
-                            />
-                            <span className={st.toggleTick} aria-hidden="true">
-                              {ICONS.check}
-                            </span>
-                            {ACTIONS[action] ?? action}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </fieldset>
           </div>

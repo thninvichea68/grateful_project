@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form';
+import { useController, useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 import {
   CO_STATUS_LABEL,
@@ -9,10 +9,13 @@ import {
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useSaveCoRecord } from '../../features/co';
+import { useAddCoForm, useLookups } from '../../features/hooks';
+import { AddNewSelect } from '../plans/AddNewSelect';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
+import { needsBreakdown } from './breakdown';
 
 /** CO Plans → a row: its CO form, number and date, status and remark (shipments:write). */
 export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => void }) {
@@ -20,8 +23,11 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
   const toast = useToast();
   const save = useSaveCoRecord();
   const editable = can('shipments:write');
+  const lookups = useLookups();
+  const addCoForm = useAddCoForm();
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<CoRecordInput>({
@@ -34,6 +40,16 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
       remark: row.remark ?? '',
     },
   });
+
+  // CO Form: the same list as a shipping plan's ("Form AB"…, stored as AB), "+ Add New" first.
+  const formField = useController({ control, name: 'form' });
+  const formValue = formField.field.value ?? '';
+  const formOptions = (lookups.data?.values.CO_FORM ?? []).map((v) => ({
+    value: v.value,
+    label: v.label,
+  }));
+  if (formValue && !formOptions.some((o) => o.value === formValue))
+    formOptions.push({ value: formValue, label: formValue });
 
   const onSubmit = handleSubmit(async (v) => {
     await save.mutateAsync({ invoiceId: row.invoiceId, body: v });
@@ -67,7 +83,7 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
   return (
     <Modal
       title={`CO · ${row.invoiceNo}`}
-      width={760}
+      width={900}
       onClose={onClose}
       sub={
         <>
@@ -89,9 +105,37 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
           The shipment’s CO numbers: {row.shipmentCoNo}. Type this invoice’s one below.
         </div>
       )}
-      <form onSubmit={(e) => void onSubmit(e)} noValidate>
+      {/* Tall enough for the CO Form list to open below its box without scrolling the dialog. */}
+      <form
+        onSubmit={(e) => void onSubmit(e)}
+        noValidate
+        style={{ display: 'flex', flexDirection: 'column', minHeight: 440 }}
+      >
         <div className="form-fields-grid">
-          {field('form', 'Form', { placeholder: 'e.g. CRF, AB' })}
+          <div className="form-field-group">
+            <label htmlFor="co-form">Form</label>
+            {editable ? (
+              <AddNewSelect
+                id="co-form"
+                label="CO Form"
+                placeholder="Select form"
+                addFirst
+                value={formValue}
+                onChange={formField.field.onChange}
+                onBlur={formField.field.onBlur}
+                options={formOptions}
+                onCreate={async (label) => (await addCoForm.mutateAsync({ label })).value}
+              />
+            ) : (
+              <input
+                id="co-form"
+                className="form-field-box"
+                value={formOptions.find((o) => o.value === formValue)?.label ?? formValue}
+                readOnly
+              />
+            )}
+            <FieldError message={errors.form?.message} />
+          </div>
           {field('coNo', 'CO no.', { span: 2, placeholder: 'e.g. KHUS2607019878' })}
           {field('coDate', 'Date CO', { type: 'date' })}
           <div className="form-field-group">
@@ -111,14 +155,18 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
           </div>
           {field('remark', 'Remark', { span: 3 })}
         </div>
-        <div className={ui.actions}>
-          <Link
-            to={`/co/breakdown?invoice=${row.invoiceId}`}
-            className="btn-cancel-shipment"
-            style={{ marginRight: 'auto', textDecoration: 'none' }}
-          >
-            {row.hasBreakdown ? 'Open breakdown' : 'Make breakdown'}
-          </Link>
+        <div className={ui.actions} style={{ marginTop: 'auto' }}>
+          {row.hasBreakdown || needsBreakdown(row.form) ? (
+            <Link
+              to={`/co/breakdown?invoice=${row.invoiceId}`}
+              className="btn-cancel-shipment"
+              style={{ marginRight: 'auto', textDecoration: 'none' }}
+            >
+              {row.hasBreakdown ? 'Open breakdown' : 'Make breakdown'}
+            </Link>
+          ) : (
+            <span style={{ marginRight: 'auto' }} />
+          )}
           <button type="button" className="btn-cancel-shipment" onClick={onClose}>
             {editable ? 'Cancel' : 'Close'}
           </button>

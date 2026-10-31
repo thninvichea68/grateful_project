@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import {
+  CLIENT_SCOPE_AREAS,
   PERMISSIONS,
   type Permission,
   type RoleCode,
@@ -20,7 +21,7 @@ import { hashToken } from '../auth/tokens';
 const SELECT = sql`
   SELECT u.id, u.email, u.full_name AS "fullName", u.avatar_url AS "avatarUrl", r.code AS role, p.job_title AS "jobTitle", p.department, p.phone,
          coalesce(p.status, 'ACTIVE') AS status, u.is_active AS "isActive",
-         u.permissions_add AS "permissionsAdd", u.permissions_remove AS "permissionsRemove", u.client_ids AS "clientIds", ${isoTs('u.last_login_at')} AS "lastLoginAt", ${isoTs('u.created_at')} AS "createdAt"
+         u.permissions_add AS "permissionsAdd", u.permissions_remove AS "permissionsRemove", u.client_ids AS "clientIds", u.client_scopes AS "clientScopes", ${isoTs('u.last_login_at')} AS "lastLoginAt", ${isoTs('u.created_at')} AS "createdAt"
   FROM users u JOIN roles r ON r.id = u.role_id LEFT JOIN staff_profiles p ON p.user_id = u.id`;
 
 export async function listStaff(): Promise<StaffMember[]> {
@@ -102,6 +103,7 @@ export async function createStaff(
     );
     if (dup) throw conflict(`${input.email} already has an account`);
     await assertClientsExist(tx, input.clientIds);
+    for (const ids of Object.values(input.clientScopes)) await assertClientsExist(tx, ids);
     const [u] = await tx
       .insert(users)
       .values({
@@ -113,6 +115,7 @@ export async function createStaff(
         permissionsAdd: input.permissionsAdd,
         permissionsRemove: input.permissionsRemove,
         clientIds: input.clientIds,
+        clientScopes: input.clientScopes,
       })
       .returning({ id: users.id });
     await tx.insert(staffProfiles).values({
@@ -158,7 +161,10 @@ export async function updateStaff(
       throw businessRule("You can't remove your own staff management. Ask another Admin.");
     if (self && input.clientIds !== undefined && input.clientIds !== null)
       throw businessRule("You can't limit your own client access. Ask another Admin.");
+    if (self && input.clientScopes && Object.values(input.clientScopes).some((v) => v != null))
+      throw businessRule("You can't limit your own client access. Ask another Admin.");
     await assertClientsExist(tx, input.clientIds);
+    for (const ids of Object.values(input.clientScopes ?? {})) await assertClientsExist(tx, ids);
     if (losingAdmin && (await activeAdmins(tx)) <= 1)
       throw businessRule('This is the last active Admin. Make someone else Admin first.');
 
@@ -169,6 +175,7 @@ export async function updateStaff(
     if (input.permissionsAdd) userPatch.permissionsAdd = input.permissionsAdd;
     if (input.permissionsRemove) userPatch.permissionsRemove = input.permissionsRemove;
     if (input.clientIds !== undefined) userPatch.clientIds = input.clientIds;
+    if (input.clientScopes !== undefined) userPatch.clientScopes = input.clientScopes;
     if (Object.keys(userPatch).length)
       await tx.update(users).set(userPatch).where(eq(users.id, id));
     const profile = Object.fromEntries(
@@ -193,7 +200,13 @@ export async function updateStaff(
     const accessChanged =
       !same(before.permissionsAdd, input.permissionsAdd) ||
       !same(before.permissionsRemove, input.permissionsRemove) ||
-      !same(before.clientIds, input.clientIds);
+      !same(before.clientIds, input.clientIds) ||
+      (input.clientScopes !== undefined &&
+        CLIENT_SCOPE_AREAS.some(
+          (k) =>
+            k in before.clientScopes !== k in input.clientScopes! ||
+            !same(before.clientScopes[k] ?? null, input.clientScopes![k] ?? null),
+        ));
     if (
       input.status === 'INACTIVE' ||
       (input.role && input.role !== before.role) ||

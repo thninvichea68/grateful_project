@@ -104,7 +104,7 @@ describe('CO', () => {
       ctns: 237,
       amount: 16912,
       atd: '2026-09-28',
-      status: 'DRAFT',
+      status: 'PENDING',
       saved: false,
       hasBreakdown: false,
     });
@@ -120,15 +120,15 @@ describe('CO', () => {
     const denied = await request(app)
       .put(url)
       .set(await as('VIEWER'))
-      .send({ status: 'CONFIRM' });
+      .send({ status: 'SUBMIT' });
     expect(denied.status).toBe(403);
 
     const put = await request(app)
       .put(url)
       .set(await as('OPERATOR'))
-      .send({ form: 'CRF', coNo: 'KHUS2610000001', coDate: '2026-09-30', status: 'ISSUED' });
+      .send({ form: 'CRF', coNo: 'KHUS2610000001', coDate: '2026-09-30', status: 'APPROVE' });
     expect(put.status).toBe(204);
-    expect((await list({ status: 'ISSUED' }))[0]).toMatchObject({
+    expect((await list({ status: 'APPROVE' }))[0]).toMatchObject({
       coNo: 'KHUS2610000001',
       coDate: '2026-09-30',
       saved: true,
@@ -154,7 +154,7 @@ describe('CO', () => {
       htsCode: '6104.69',
       netWeightKg: 2921.1,
       hasBreakdown: true,
-      status: 'ISSUED',
+      status: 'APPROVE',
       breakdown,
       template: null,
     });

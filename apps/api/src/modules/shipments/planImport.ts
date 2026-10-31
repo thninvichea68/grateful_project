@@ -1172,7 +1172,9 @@ export async function importPlan(
     }
   };
   const allDecl = built.flatMap((b) =>
-    (b.input.declarations ?? []).flatMap((d) => (d.declareNo ? [{ no: d.declareNo, ref: b.ref }] : [])),
+    (b.input.declarations ?? []).flatMap((d) =>
+      d.declareNo ? [{ no: d.declareNo, ref: b.ref }] : [],
+    ),
   );
   const allInv = built.flatMap((b) =>
     (b.input.invoices ?? []).map((i) => ({ no: i.invoiceNo, ref: b.ref })),

@@ -84,6 +84,12 @@ export const shipments = pgTable(
     arriveFty: date('arrive_fty'),
     /** Import: the day the shipping documents (INV, PL…) were received. */
     receivedDocumentDate: date('received_document_date'),
+    /** Import: the date of the delivery order (DO / EDO). */
+    doDate: date('do_date'),
+    // An export by air: its flight (the flight date is the ETD), check-in and cut-off.
+    flightNo: text('flight_no'),
+    checkInDate: date('check_in_date'),
+    cutOffDate: date('cut_off_date'),
 
     // Invoice / THC (shown as "INVOICE / THC No.")
     thcHblNo: text('thc_hbl_no'),
@@ -126,6 +132,8 @@ export const containers = pgTable(
     size: containerSizeEnum('size'),
     linerSeal: text('liner_seal'),
     customsSeal: text('customs_seal'),
+    /** Plate no. of the truck carrying the container (truck shipments). */
+    truckNo: text('truck_no'),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,
   },
@@ -272,13 +280,13 @@ export const coRecords = pgTable(
     form: text('form'),
     coNo: text('co_no'),
     coDate: date('co_date'),
-    status: text('status').$type<CoStatus>().notNull().default('DRAFT'),
+    status: text('status').$type<CoStatus>().notNull().default('PENDING'),
     remark: text('remark'),
     breakdown: jsonb('breakdown').$type<CoBreakdownInput>(),
     updatedById: uuid('updated_by_id').references(() => users.id, { onDelete: 'set null' }),
     ...timestamps,
   },
-  (t) => [check('co_records_status', sql`status IN ('DRAFT', 'CONFIRM', 'ISSUED')`)],
+  (t) => [check('co_records_status', sql`status IN ('PENDING', 'DRAFT', 'SUBMIT', 'APPROVE')`)],
 );
 
 /** A customs declaration (e.g. "I 122050"). One shipment can have several. */

@@ -104,6 +104,38 @@ describe('per-user client access and permission tweaks', () => {
     expect((await api('get', '/shipments').set(admin)).body.data).toHaveLength(2);
   });
 
+  it('a section with its own client access replaces the main one there', async () => {
+    const jrShip = await ship(b.jr.id);
+    const jyxShip = await ship(b.jyx.id);
+    // Main: JR only. Shipments: every client. Clients: JYX only.
+    const s = await jrOnlyOperator({ clientScopes: { shipments: null, clients: [b.jyx.id] } });
+    expect(
+      (await api('get', '/staff').set(admin)).body.find((m: { id: string }) => m.id === s.id),
+    ).toMatchObject({ clientScopes: { shipments: null, clients: [b.jyx.id] } });
+    const { res, h } = await login('thnin@gs.local', 'Temp-Pass-2026');
+    expect(res.body.user.clientScopes).toEqual({ shipments: null, clients: [b.jyx.id] });
+
+    const list = await api('get', '/shipments').set(h);
+    expect(list.body.data.map((x: { id: string }) => x.id).sort()).toEqual(
+      [jrShip.id, jyxShip.id].sort(),
+    );
+    expect((await api('get', `/shipments/${jyxShip.id}`).set(h)).status).toBe(200);
+    const clients = await api('get', '/clients').set(h);
+    expect(clients.body.data.map((c: { code: string }) => c.code)).toEqual(['JYX']);
+    expect((await api('get', `/clients/${b.jr.id}`).set(h)).status).toBe(404);
+    // The CDC Master List has no own setting, so it follows the main one (JR only).
+    expect((await api('get', '/cut-stock').query({ clientId: b.jyx.id }).set(h)).status).toBe(404);
+    // Pickers offer every client usable in some section.
+    const lookups = await api('get', '/lookups').set(h);
+    expect(lookups.body.clients.length).toBeGreaterThan(1);
+
+    // A section can't be set to an empty list.
+    const empty = await api('patch', `/staff/${s.id}`)
+      .set(admin)
+      .send({ clientScopes: { sealplans: [] } });
+    expect(empty.status).toBe(400);
+  });
+
   it('per-user permission tweaks add and remove permissions on top of the role', async () => {
     await jrOnlyOperator({
       permissionsAdd: ['accounting:read'],

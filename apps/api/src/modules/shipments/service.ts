@@ -263,6 +263,10 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     ata: r.ata,
     arriveFty: r.arriveFty,
     receivedDocumentDate: r.receivedDocumentDate,
+    doDate: r.doDate,
+    flightNo: r.flightNo,
+    checkInDate: r.checkInDate,
+    cutOffDate: r.cutOffDate,
     thcHblNo: r.thcHblNo,
     thcHblDate: r.thcHblDate,
     thcHblAmount: r.thcHblAmount,
@@ -276,6 +280,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
       size: c.size,
       linerSeal: c.linerSeal,
       customsSeal: c.customsSeal,
+      truckNo: c.truckNo,
     })),
     invoices: invs.map((i) => ({
       id: i.id,

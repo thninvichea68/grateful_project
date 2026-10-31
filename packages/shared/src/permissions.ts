@@ -108,6 +108,25 @@ export function effectivePermissions(
   return PERMISSIONS.filter((p) => (role.includes(p) || add.includes(p)) && !removed.has(p));
 }
 
+/**
+ * Sections whose client access can be set apart from the person's main client access. A
+ * section's own setting replaces the main one there: null = every client, a list = only those.
+ * A section left out follows the main setting.
+ */
+export const CLIENT_SCOPE_AREAS = ['shipments', 'sealplans', 'clients', 'cutstock'] as const;
+export type ClientScopeArea = (typeof CLIENT_SCOPE_AREAS)[number];
+export type ClientScopes = Partial<Record<ClientScopeArea, string[] | null>>;
+
+/** The clients a person may work with in a section (or overall); null = every client. */
+export function clientsFor(
+  main: string[] | null,
+  scopes: ClientScopes | null | undefined,
+  area?: ClientScopeArea,
+): string[] | null {
+  if (area && scopes && area in scopes) return scopes[area] ?? null;
+  return main;
+}
+
 export function hasPermission(granted: readonly string[], needed: Permission): boolean {
   return granted.includes(needed);
 }

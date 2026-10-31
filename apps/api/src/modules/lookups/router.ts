@@ -10,18 +10,26 @@ import {
   type Permission,
 } from '@gs/shared';
 import { db } from '../../db/client';
-import { clients, consignees, countries, forwarders, lookupValues, ports } from '../../db/schema';
+import {
+  clients,
+  consignees,
+  countries,
+  forwarders,
+  lookupValues,
+  ports,
+  shipments,
+} from '../../db/schema';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
-import { allowedClients, assertClientAllowed } from '../../lib/clientScope';
+import { anyAllowedClients, assertClientAllowed } from '../../lib/clientScope';
 
 export const lookupsRouter = Router();
 lookupsRouter.use(requireAuth);
 
 /** Everything the forms' dropdowns need, in one request. */
 lookupsRouter.get('/', async (req, res) => {
-  const [c, cn, f, p, co, v] = await Promise.all([
+  const [c, cn, f, p, co, v, br] = await Promise.all([
     db
       .select({
         id: clients.id,
@@ -70,19 +78,27 @@ lookupsRouter.get('/', async (req, res) => {
       .from(lookupValues)
       .where(eq(lookupValues.isActive, true))
       .orderBy(asc(lookupValues.type), asc(lookupValues.sortOrder)),
+    // Brokers are typed on shipments (no table of their own): every name used so far.
+    db
+      .selectDistinct({ name: sql<string>`trim(${shipments.broker})` })
+      .from(shipments)
+      .where(and(isNull(shipments.deletedAt), sql`trim(coalesce(${shipments.broker}, '')) <> ''`))
+      .orderBy(sql`trim(${shipments.broker})`),
   ]);
   const values = Object.fromEntries(
     LOOKUP_TYPES.map((t) => [t, [] as { value: string; label: string }[]]),
   ) as LookupsResponse['values'];
   for (const row of v) values[row.type as LookupType].push({ value: row.value, label: row.label });
-  // Users limited to some clients only get those clients (and their consignees).
-  const allowed = allowedClients(req);
+  // Users limited to some clients only get those clients (and their consignees): every client
+  // they may use in any section, since sections can have their own client access.
+  const allowed = anyAllowedClients(req);
   const body: LookupsResponse = {
     clients: allowed ? c.filter((x) => allowed.includes(x.id)) : c,
     consignees: allowed ? cn.filter((x) => !x.clientId || allowed.includes(x.clientId)) : cn,
     forwarders: f,
     ports: p,
     countries: co,
+    brokers: br.map((x) => x.name),
     values,
   };
   res.json(body);
@@ -90,7 +106,7 @@ lookupsRouter.get('/', async (req, res) => {
 
 lookupsRouter.post('/consignees', requirePermission('shipments:write'), async (req, res) => {
   const input = parse(consigneeInputSchema, req.body);
-  if (input.clientId) assertClientAllowed(req, input.clientId);
+  if (input.clientId) assertClientAllowed(req, input.clientId, 'shipments');
   const row = await db.transaction(async (tx) => {
     // A consignee deleted from Client Details (inactive) comes back instead of clashing on its name.
     const [inactive] = await tx
@@ -173,32 +189,28 @@ const quickAdd = (
     return { value, label: value };
   },
 ) =>
-  lookupsRouter.post(
-    path,
-    requirePermission(permission),
-    async (req, res) => {
-      const { label } = parse(
-        z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
-        req.body,
+  lookupsRouter.post(path, requirePermission(permission), async (req, res) => {
+    const { label } = parse(
+      z.object({ label: z.string().trim().min(min, 'Enter the item').max(max) }),
+      req.body,
+    );
+    const item = toItem(label);
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(lookupValues)
+        .values({ type, ...item, sortOrder: 999 })
+        .onConflictDoNothing()
+        .returning();
+      if (!created) return null;
+      await audit(
+        tx,
+        { action: 'CREATE', entity: 'lookup_value', entityId: created.id, after: created },
+        req,
       );
-      const item = toItem(label);
-      const row = await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(lookupValues)
-          .values({ type, ...item, sortOrder: 999 })
-          .onConflictDoNothing()
-          .returning();
-        if (!created) return null;
-        await audit(
-          tx,
-          { action: 'CREATE', entity: 'lookup_value', entityId: created.id, after: created },
-          req,
-        );
-        return created;
-      });
-      res.status(row ? 201 : 200).json(item);
-    },
-  );
+      return created;
+    });
+    res.status(row ? 201 : 200).json(item);
+  });
 quickAdd('CHARGE', '/charges', 'creditnotes:write', 2, 200);
 quickAdd('CHARGE_UNIT', '/charge-units', 'creditnotes:write', 1, 20);
 quickAdd('QUANTITY_UNIT', '/quantity-units', 'recordsummaries:write', 1, 20);

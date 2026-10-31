@@ -7,7 +7,7 @@ import { ErrorBanner, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import { BreakdownSheet, type BreakdownModel } from './BreakdownSheet';
-import { computeBreakdown, defaultBreakdown, startingBreakdown } from './breakdown';
+import { computeBreakdown, defaultBreakdown, needsBreakdown, startingBreakdown } from './breakdown';
 import { printBreakdown } from './breakdownPrint';
 import { CoStatusPill } from './CoPlansPage';
 import s from '../reports/Capacity.module.css';
@@ -33,7 +33,8 @@ export function BreakdownPage() {
 
   const list = useCoList({ from: `${year}-01`, to: `${year}-12` });
   const detail = useCoDetail(invoiceId || undefined);
-  const options = list.data ?? [];
+  // Only forms AB, N, AJ, E, RCEP and D need a breakdown (plus any already saved).
+  const options = (list.data ?? []).filter((o) => o.hasBreakdown || needsBreakdown(o.form));
 
   return (
     <>
@@ -92,6 +93,12 @@ export function BreakdownPage() {
         <ErrorBanner error={detail.error} />
       ) : !detail.data ? (
         <div className="card">Loading the invoice…</div>
+      ) : !detail.data.breakdown && !needsBreakdown(detail.data.form) ? (
+        <div className="card">
+          {detail.data.invoiceNo} is{' '}
+          {detail.data.form ? `Form ${detail.data.form}` : 'without a CO form'}, which needs no
+          breakdown. Only Forms AB, N, AJ, E, RCEP and D do.
+        </div>
       ) : (
         <BreakdownEditor key={detail.data.invoiceId} d={detail.data} />
       )}

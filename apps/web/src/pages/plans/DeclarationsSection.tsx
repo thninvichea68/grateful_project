@@ -1,18 +1,12 @@
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
-import { type LookupsResponse, type ShipmentDetail } from '@gs/shared';
+import { type ShipmentDetail } from '@gs/shared';
 import { FieldError } from '../../components/ui';
 import { maskDeclareNo } from '../../lib/declareNo';
 import { fi } from './formIcons';
 import { blankDeclaration, type FormValues } from './formModel';
 
 /** Customs declarations (the CDC master list is drawn down by the import invoice items). */
-export function DeclarationsSection({
-  ports,
-  original,
-}: {
-  ports: LookupsResponse['ports'];
-  original?: ShipmentDetail | undefined;
-}) {
+export function DeclarationsSection({ original }: { original?: ShipmentDetail | undefined }) {
   const {
     control,
     register,
@@ -95,24 +89,7 @@ export function DeclarationsSection({
                 />
                 <FieldError message={e?.declareDate?.message} />
               </div>
-              {/* An import's declarations take the Clearance Port from step 3 (set on save). */}
-              {!isImport && (
-                <div className="form-field-group">
-                  <label htmlFor={`d-${di}-port`}>Customs Port</label>
-                  <select
-                    id={`d-${di}-port`}
-                    className="form-select-box"
-                    {...register(`declarations.${di}.portId`)}
-                  >
-                    <option value="">Port</option>
-                    {ports.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code} · {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Declarations take the Clearance Port (Booking & Clearance / Vessel & Clearance), set on save. */}
               <div className="form-field-group" style={{ justifyContent: 'flex-end' }}>
                 {di === 0 ? null : ledger ? (
                   <span className="create-header-desc">

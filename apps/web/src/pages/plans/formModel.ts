@@ -5,6 +5,9 @@ export type InvoiceValues = NonNullable<FormValues['invoices']>[number];
 export type LineValues = InvoiceValues['lines'][number];
 export type DeclValues = NonNullable<FormValues['declarations']>[number];
 
+/** The customs broker: us. New shipments start with it; the Broker dropdown offers it. */
+export const DEFAULT_BROKER = 'GRATEFUL SOLUTIONS (CAMBODIA) CO., LTD';
+
 export const blankLine = (): LineValues => ({
   poNo: '',
   styleNo: '',
@@ -34,6 +37,7 @@ export const blankContainer = () => ({
   size: '40HQ' as const,
   linerSeal: '',
   customsSeal: '',
+  truckNo: '',
 });
 export const blankDeclaration = (portId = ''): DeclValues => ({
   id: '',
@@ -53,7 +57,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     shipperName: '',
     consigneeId: '',
     forwarderId: '',
-    broker: '',
+    broker: DEFAULT_BROKER,
     clearancePortId: '',
     originCountryIso2: '',
     destinationCountryIso2: '',
@@ -72,6 +76,10 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     ata: '',
     arriveFty: '',
     receivedDocumentDate: '',
+    flightNo: '',
+    checkInDate: '',
+    doDate: '',
+    cutOffDate: '',
     thcHblNo: '',
     thcHblDate: '',
     thcHblAmount: '',
@@ -117,6 +125,10 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     ata: s(d.ata),
     arriveFty: s(d.arriveFty),
     receivedDocumentDate: s(d.receivedDocumentDate),
+    flightNo: s(d.flightNo),
+    checkInDate: s(d.checkInDate),
+    doDate: s(d.doDate),
+    cutOffDate: s(d.cutOffDate),
     thcHblNo: s(d.thcHblNo),
     thcHblDate: s(d.thcHblDate),
     thcHblAmount: s(d.thcHblAmount),
@@ -130,6 +142,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
           size: c.size,
           linerSeal: s(c.linerSeal),
           customsSeal: s(c.customsSeal),
+          truckNo: s(c.truckNo),
         }))
       : [blankContainer()],
     invoices: d.invoices.length
@@ -181,14 +194,24 @@ export function cleanForSubmit(v: FormValues): FormValues {
     Object.values(l).some((x) => x !== '' && x !== null && x !== undefined);
   return {
     ...v,
-    containers: v.loadType === 'FCL' ? v.containers : [],
+    containers:
+      v.loadType === 'FCL' && v.transportMode !== 'AIR'
+        ? // Truck no. is only shown by truck: clear any left from when the shipment was by truck.
+          (v.containers ?? []).map((c) => (v.transportMode === 'ROAD' ? c : { ...c, truckNo: '' }))
+        : [],
+    // Air has no vessel or voyage: clear any left from when the shipment was by sea.
+    ...(v.transportMode === 'AIR' && { vesselName: '', voyageNo: '' }),
     invoices: (v.invoices ?? [])
       .filter((i) => i.invoiceNo || i.lines.some(lineFilled))
       .map((i) => ({ ...i, lines: i.lines.filter(lineFilled) })),
     declarations: (v.declarations ?? [])
       .filter((d) => d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim())
-      // An import has no port picker on its declarations: they clear at the Clearance Port.
-      .map((d) => (v.direction === 'IMPORT' ? { ...d, portId: v.clearancePortId ?? '' } : d)),
+      // Declarations have no port picker: they clear at the shipment's Clearance Port (an
+      // export without one keeps the port it had).
+      .map((d) => ({
+        ...d,
+        portId: v.clearancePortId || (v.direction === 'IMPORT' ? '' : d.portId),
+      })),
   };
 }
 

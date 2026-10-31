@@ -11,8 +11,8 @@ import { assertClientAllowed, assertClientVisible, clientCondition } from '../..
 /**
  * Every export invoice of a live shipment, with its CO. Until something is saved for an
  * invoice, its form is the shipment's and so is its CO no. when the shipment has only that
- * invoice (a shipment's CO numbers can't be told apart per invoice); it is "Issued" once the
- * shipment has a CO no., a draft otherwise. The country is the destination, "USA" for the US as on
+ * invoice (a shipment's CO numbers can't be told apart per invoice); its status is the shipment's
+ * CO Status, else "Approve" once the shipment has a CO no. and "Pending" before. The country is the destination, "USA" for the US as on
  * the sheet.
  */
 const ROWS = sql`(
@@ -28,7 +28,9 @@ const ROWS = sql`(
     coalesce(l.pcs, 0)::float8 AS pcs, coalesce(l.ctns, 0)::float8 AS ctns,
     coalesce(l.amount, 0)::float8 AS amount, coalesce(l.nw, 0)::float8 AS "netWeightKg",
     to_char(s.atd, 'YYYY-MM-DD') AS atd, to_char(s.etd, 'YYYY-MM-DD') AS etd,
-    coalesce(r.status, CASE WHEN s.co_number IS NOT NULL THEN 'ISSUED' ELSE 'DRAFT' END) AS status,
+    coalesce(r.status, CASE s.co_status WHEN 'Pending' THEN 'PENDING' WHEN 'Draft' THEN 'DRAFT'
+      WHEN 'Submitted' THEN 'SUBMIT' WHEN 'Approved' THEN 'APPROVE' END,
+      CASE WHEN s.co_number IS NOT NULL THEN 'APPROVE' ELSE 'PENDING' END) AS status,
     r.remark, r.id IS NOT NULL AS saved, r.breakdown IS NOT NULL AS "hasBreakdown",
     (r.id IS NOT NULL OR s.co_form IS NOT NULL OR s.co_number IS NOT NULL) AS "hasCo",
     i.sort_order AS ord

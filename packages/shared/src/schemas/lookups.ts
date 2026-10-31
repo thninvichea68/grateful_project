@@ -22,6 +22,8 @@ export interface LookupsResponse {
     customsPortNo: string | null;
   }[];
   countries: { iso2: string; name: string }[];
+  /** Broker names used on shipments so far (the Broker dropdown adds ours first). */
+  brokers: string[];
   values: Record<LookupType, { value: string; label: string }[]>;
 }
 
