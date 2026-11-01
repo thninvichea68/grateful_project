@@ -190,7 +190,7 @@ export async function forwarders(f: Filters): Promise<ForwarderRow[]> {
   return queryRows<ForwarderRow>(
     db,
     sql`
-    SELECT fw.id, fw.name,
+    SELECT fw.id, fw.code, fw.name,
            count(*)::int AS shipments,
            (count(*) FILTER (WHERE s.direction = 'IMPORT'))::int AS imports,
            (count(*) FILTER (WHERE s.direction = 'EXPORT'))::int AS exports,
@@ -202,7 +202,7 @@ export async function forwarders(f: Filters): Promise<ForwarderRow[]> {
            round(100.0 * count(*) FILTER (WHERE s.clearance_status = 'CLEARED') / count(*), 1)::float AS "clearedPct"
     FROM shipments s JOIN forwarders fw ON fw.id = s.forwarder_id
     ${shipWhere(f)}
-    GROUP BY fw.id, fw.name ORDER BY shipments DESC, fw.name`,
+    GROUP BY fw.id, fw.code, fw.name ORDER BY shipments DESC, fw.name`,
   );
 }
 

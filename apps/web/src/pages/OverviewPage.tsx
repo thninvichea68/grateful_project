@@ -137,7 +137,7 @@ export function OverviewPage() {
           <b>Every widget is switched off</b>
           <span>Pick the ones you want on your Overview.</span>
           <button type="button" className="btn-create-submit" onClick={openCustomize}>
-            Customize Overview
+            Edit widgets
           </button>
         </div>
       )}

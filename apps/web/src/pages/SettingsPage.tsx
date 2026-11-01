@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { LOOKUP_TYPES, PORT_KINDS, type LookupType, type SettingsBundle } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
 import { useApiMutation, useSettings } from '../features/admin';
@@ -18,11 +18,12 @@ import { useToast } from '../components/Toast';
 import { ApiError, api } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
 
+// The sidebar's Settings dropdown (layout/nav.ts) lists the same sections.
 const TABS = [
   ['profile', 'My profile'],
   ['company', 'Company'],
   ['rates', 'Rates'],
-  ['invoice', 'Invoice management'],
+  ['invoice', 'Tax management'],
   ['holidays', 'Public holidays'],
   ['ports', 'Ports'],
   ['forwarders', 'Forwarders'],
@@ -42,49 +43,41 @@ const LIST_LABEL: Record<LookupType, string> = {
 const INVALIDATE = [['settings'], queryKeys.lookups, ['meta', 'company']];
 
 /**
- * Settings. "My profile" is open to everyone (the sidebar's user card links to it); the
- * workspace tabs need settings:read.
+ * Settings, one section per path (/settings/<tab>), picked from the Settings dropdown in the
+ * sidebar. "My profile" is open to everyone (the sidebar's user card links to it); the
+ * workspace sections need settings:read.
  */
 export function SettingsPage() {
   const { can, logout } = useAuth();
   const canRead = can('settings:read');
-  const [params, setParams] = useSearchParams();
+  const { tab: pathTab } = useParams();
+  const [params] = useSearchParams();
   const tabs = canRead ? TABS : TABS.filter(([k]) => k === 'profile');
-  // "market" was the old Fuel & metals tab; it now lives under Rates.
-  const asked = params.get('tab') === 'market' ? 'rates' : params.get('tab');
-  // Opening Settings lands on the first tab, My profile.
+  // Old links used ?tab=…; "market" was the old Fuel & metals tab, now under Rates.
+  const raw = pathTab ?? params.get('tab');
+  const asked = raw === 'market' ? 'rates' : raw;
+  // Opening Settings lands on the first section, My profile.
   const tab: Tab = tabs.some(([k]) => k === asked) ? (asked as Tab) : 'profile';
-  const setTab = (k: Tab) => setParams({ tab: k }, { replace: true });
+  if (pathTab !== tab) return <Navigate to={`/settings/${tab}`} replace />;
   return (
-    // The list tabs fill the window so only their rows scroll.
+    // The list sections fill the window so only their rows scroll.
     <section
       className={`view active${tab !== 'company' && tab !== 'profile' ? ` ${st.fill}` : ''}`}
     >
-      <nav
-        style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}
-        aria-label="Settings sections"
-      >
-        {tabs.map(([k, l]) => (
+      {tab === 'profile' && (
+        // Here rather than in the sidebar; everyone reaches My profile.
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 18 }}>
           <button
-            key={k}
             type="button"
-            className={`filter-btn${tab === k ? ' active' : ''}`}
-            onClick={() => setTab(k)}
+            className={ui.dangerBtn}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={() => void logout()}
           >
-            {l}
+            {icons.signout({ width: 16, height: 16 })}
+            Sign Out
           </button>
-        ))}
-        {/* Here rather than in the sidebar; everyone reaches Settings (My profile). */}
-        <button
-          type="button"
-          className={ui.dangerBtn}
-          style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          onClick={() => void logout()}
-        >
-          {icons.signout({ width: 16, height: 16 })}
-          Sign Out
-        </button>
-      </nav>
+        </div>
+      )}
       {tab === 'profile' ? <MyProfile /> : <Workspace tab={tab} />}
     </section>
   );
@@ -830,12 +823,15 @@ function Lists({ manage }: { manage: boolean }) {
                     {manage && (
                       <button
                         type="button"
-                        className={ui.dangerBtn}
+                        className={`${r.icon} ${r.danger}`}
+                        title="Delete"
+                        aria-label={`Delete ${v.label}`}
+                        disabled={del.isPending}
                         onClick={() =>
                           window.confirm(`Delete “${v.label}”?`) && void del.mutateAsync(v.id)
                         }
                       >
-                        Delete
+                        {icons.trash({})}
                       </button>
                     )}
                   </td>

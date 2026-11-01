@@ -117,7 +117,17 @@ async function putSetting(key: string, value: unknown, req: Parameters<typeof au
 }
 
 settingsRouter.put('/company', manage, async (req, res) => {
-  const v = parse(companySchema, req.body);
+  const parsed = parse(companySchema, req.body);
+  // The first account is also stored in the legacy single-bank fields.
+  const first = parsed.banks?.[0];
+  const v = parsed.banks
+    ? {
+        ...parsed,
+        bankName: first?.bankName ?? null,
+        bankAccountName: first?.accountName ?? null,
+        bankAccountNo: first?.accountNo ?? null,
+      }
+    : parsed;
   await putSetting('company', v, req);
   res.json(v);
 });
@@ -349,7 +359,7 @@ settingsRouter.delete('/public-holidays/:id', manage, async (req, res) => {
   res.status(204).end();
 });
 
-/* ---------- Invoice management: VAT percent by effective date ---------- */
+/* ---------- Tax management: VAT percent by effective date ---------- */
 
 settingsRouter.get('/vat-rates', requirePermission('settings:read'), async (_req, res) => {
   res.json(await listVatRates());

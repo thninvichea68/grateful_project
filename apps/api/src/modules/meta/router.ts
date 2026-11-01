@@ -23,7 +23,7 @@ metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
   const row = result.rows[0];
   const inbox = await db.execute<{ n: string }>(sql`
     SELECT count(*) AS n FROM credit_note_messages
-    WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL`);
+    WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL AND kind = 'REVISED'`);
   const rsInbox = await db.execute<{ n: string }>(sql`
     SELECT count(*) AS n FROM record_summary_messages
     WHERE recipient_id = ${req.auth!.userId} AND read_at IS NULL AND kind = 'REVISED'`);
@@ -38,7 +38,7 @@ metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
 });
 
 /**
- * The dated VAT percents (Settings → Invoice Management), for every signed-in user: document
+ * The dated VAT percents (Settings → Tax Management), for every signed-in user: document
  * editors preview totals at the percent of the document's date.
  */
 metaRouter.get('/vat-rates', requireAuth, async (_req, res) => {

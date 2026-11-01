@@ -1588,7 +1588,9 @@ export async function setCreditNoteReview(
       .where(eq(creditNotes.id, id));
     // …and every approved shipment still waiting gets its INV / DIS / DN numbers.
     const numbered = reviewStatus === 'CHECKED' ? await numberEligible(tx, req) : [];
-    if (reviewStatus !== 'UNCHECKED')
+    // Revised: the broker hears about it in their Credit Noted inbox. An approval needs no
+    // action from them, so it is not sent.
+    if (reviewStatus === 'REVISED')
       await tx.execute(sql`
         INSERT INTO credit_note_messages (credit_note_id, recipient_id, sender_id, kind, body)
         SELECT ${id}::uuid, u.id, ${req.auth?.userId ?? null}::uuid, ${reviewStatus}::credit_note_review, ${message ?? ''}
@@ -1792,18 +1794,21 @@ const MESSAGE_FROM = sql`FROM credit_note_messages m
     ORDER BY d.created_at DESC LIMIT 1
   ) x ON true`;
 
+// Only "Revised" messages: Approved ones sent before approvals stopped being sent are left out.
+
 export async function creditNoteInbox(
   userId: string,
 ): Promise<{ data: CreditNoteMessage[]; unread: number }> {
   const data = await queryRows<CreditNoteMessage>(
     db,
     sql`SELECT ${MESSAGE_COLUMNS} ${MESSAGE_FROM}
-        WHERE m.recipient_id = ${userId} ORDER BY m.created_at DESC LIMIT 50`,
+        WHERE m.recipient_id = ${userId} AND m.kind = 'REVISED'
+        ORDER BY m.created_at DESC LIMIT 50`,
   );
   const [r] = await queryRows<{ n: number }>(
     db,
     sql`SELECT count(*)::int AS n FROM credit_note_messages
-        WHERE recipient_id = ${userId} AND read_at IS NULL`,
+        WHERE recipient_id = ${userId} AND read_at IS NULL AND kind = 'REVISED'`,
   );
   return { data, unread: r?.n ?? 0 };
 }

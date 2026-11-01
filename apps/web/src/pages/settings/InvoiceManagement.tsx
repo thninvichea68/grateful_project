@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_VAT_PERCENT, fmtVatPercent, vatPercentOn, type VatRate } from '@gs/shared';
 import { useApiMutation } from '../../features/admin';
 import { ErrorBanner } from '../../components/ui';
+import { InfoTip } from '../../components/InfoTip';
 import { useToast } from '../../components/Toast';
 import { api, ApiError } from '../../lib/api';
 import { icons } from '../../layout/icons';
@@ -26,7 +27,7 @@ const INVALIDATE = [
 ];
 
 /**
- * Settings → Invoice Management: the VAT percent by effective date. A document takes the
+ * Settings → Tax Management: the VAT percent by effective date. A document takes the
  * percent in force on its own date when it is made, and keeps it: a new rate never changes
  * tax invoices, record summaries, credit notes or Monthly Ledger rows already made.
  */
@@ -90,13 +91,15 @@ export function InvoiceManagement({ manage }: { manage: boolean }) {
     <div className="card">
       <div className={h.head}>
         <div>
-          <h3 className={h.title}>Invoice management · VAT</h3>
-          <p className={h.sub}>
-            The VAT percent on tax invoices, record summaries, credit notes (the processing fee) and
-            the Monthly Ledger. A new rate applies from its effective date to documents made from
-            then on. Documents already made keep the VAT they were made with, so past invoices never
-            change.
-          </p>
+          <h3 className={`${h.title} ${h.titleRow}`}>
+            Tax management · VAT
+            <InfoTip label="About VAT rates">
+              The VAT percent on tax invoices, record summaries, credit notes (the processing fee)
+              and the Monthly Ledger. A new rate applies from its effective date to documents made
+              from then on. Documents already made keep the VAT they were made with, so past
+              invoices never change.
+            </InfoTip>
+          </h3>
         </div>
         {manage && (
           <div className={h.tools}>

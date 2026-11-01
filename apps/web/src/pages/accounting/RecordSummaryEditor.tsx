@@ -190,7 +190,7 @@ function RecordSummaryEditor({
     });
   }, [shipUnit, editable, getValues, setValue]);
   // The processing fee carries VAT on top (see chargeLineAmount), at the percent in force on the
-  // summary's date (Settings → Invoice Management); a saved summary keeps its own while its
+  // summary's date (Settings → Tax Management); a saved summary keeps its own while its
   // date stays.
   const vatPercent = useDocVatPercent(
     values.summaryDate as string | undefined,

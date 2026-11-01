@@ -90,11 +90,6 @@ export function PublicHolidays({ manage }: { manage: boolean }) {
       <div className={h.head}>
         <div>
           <h3 className={h.title}>Public holidays</h3>
-          <p className={h.sub}>
-            Tax invoices, disbursements and debit notes are dated the next working day after the
-            declaration date, skipping weekends and these days. A change applies to documents dated
-            from now on.
-          </p>
         </div>
         <div className={h.tools}>
           <div className={h.year}>

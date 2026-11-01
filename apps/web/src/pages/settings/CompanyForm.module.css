@@ -79,6 +79,28 @@
 .section + .section {
   border-top: 1px solid var(--border-subtle);
 }
+/* Title row: the icon chip (shared .cx-title-icon) beside the heading. */
+.headTitle,
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.headTitle {
+  align-items: flex-start;
+  gap: 14px;
+}
+.headIcon {
+  width: 40px !important;
+  height: 40px !important;
+}
+.headIcon svg {
+  width: 20px;
+  height: 20px;
+}
+.sectionHead p {
+  padding-left: 46px;
+}
 .sectionHead h4 {
   margin: 0;
   font-size: 15px;
@@ -101,6 +123,125 @@
 }
 .fields[data-cols='3'] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* Bank accounts: stacked, each under an underlined "Account n" heading, Add button below. */
+.fields[data-cols='list'] {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+.bankHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  position: relative;
+}
+/* A short accent underline, as wide as the Bank column. */
+.bankHead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc((100% - 48px) / 3);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+}
+.bankNo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.bankTag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--status-completed-bg);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+.bankRemove {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.bankRemove:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--status-error, #dc2626);
+}
+/* Follows the locked fieldset rather than a section, so it draws its own divider. */
+.bankSection {
+  border-top: 1px solid var(--border-subtle);
+}
+/* Show all / Show less, top right of the first account. */
+.bankToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.bankToggle:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.bankToggle svg {
+  transition: transform 0.15s ease;
+}
+.chevronUp {
+  transform: rotate(180deg);
+}
+.bankToggle + .bankRemove {
+  margin-left: 0;
+}
+.bankFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+.addBank {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px dashed var(--accent-primary);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.addBank:hover {
+  background: var(--status-completed-bg);
+}
+.empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 .field {
   display: flex;
@@ -171,8 +312,12 @@
     grid-template-columns: 220px minmax(0, 1fr);
     gap: 28px;
   }
-  .fields[data-cols='3'] {
+  .fields[data-cols='3'],
+  .bankFields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bankHead::after {
+    width: calc((100% - 24px) / 2);
   }
 }
 @media (max-width: 900px) {
@@ -182,12 +327,17 @@
   }
   .sectionHead p {
     max-width: none;
+    padding-left: 0;
   }
 }
 @media (max-width: 600px) {
   .fields,
-  .fields[data-cols='3'] {
+  .fields[data-cols='3'],
+  .bankFields {
     grid-template-columns: 1fr;
+  }
+  .bankHead::after {
+    width: 120px;
   }
   .section,
   .head,

@@ -1,47 +1,30 @@
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import { CLEARANCE_STATUS_LABEL } from '@gs/shared';
-import {
   useAccounts,
   useByCountry,
   useClearanceStatus,
   useForwarders,
-  useKpis,
   useMonthlyVolume,
   usePorts,
   useTransportShare,
   type AnalyticsFilters,
 } from '../features/analytics';
 import { useAuth } from '../auth/AuthProvider';
-import { ExpandToggle } from '../components/ui';
+import { DirectionToggle } from '../components/DirectionToggle';
 import { useLookups } from '../features/hooks';
 import { AccountsBreakdown } from './analytics/AccountsBreakdown';
 import { ClientRevenueCards } from './analytics/ClientRevenueCards';
-import { ChartState, HBarList, changePct, dash, monthLabel } from './dashboard/parts';
+import { ClearanceCard, FlowShareCard } from './analytics/ShareCards';
+import { MonthlyVolumeCard } from './analytics/TrendCards';
+import { PortsCard } from './analytics/PortsCard';
+import { ForwarderFunnelCard } from './analytics/ForwarderFunnelCard';
+import { ChartState, HBarList, dash, monthLabel } from './dashboard/parts';
 // Leaflet and its map tiles load only with the Analytics page.
 const ShipmentsMap = lazy(() =>
   import('./analytics/ShipmentsMap').then((m) => ({ default: m.ShipmentsMap })),
 );
 
-const CLEARANCE_COLOR = {
-  CLEARED: 'var(--status-completed-fg)',
-  IN_PROGRESS: 'var(--status-progress-fg)',
-  PENDING: 'var(--status-pending-fg)',
-  EXCEPTION: 'var(--status-exception-fg)',
-} as const;
 const MODES = {
   '': { label: 'All transport', mode: undefined, load: undefined },
   FCL: { label: 'Sea CY/CY', mode: 'SEA', load: 'FCL' },
@@ -71,28 +54,6 @@ function presetRange(preset: string, today: string): { from: string; to: string 
     default:
       return { from: `${y}-01-01`, to: `${y}-12-31` };
   }
-}
-
-function PlainTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className={dash.tooltipPlain}>
-      <div style={{ marginBottom: 2 }}>{label}</div>
-      {payload.map((p) => (
-        <div key={p.name} style={{ color: p.color }}>
-          {p.name}: <b>{p.value}</b>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function AnalyticsPage() {
@@ -136,52 +97,15 @@ export function AnalyticsPage() {
     setParams(next, { replace: true });
   };
 
-  const kpis = useKpis(filters);
   const monthly = useMonthlyVolume(filters);
   const share = useTransportShare(filters);
   const clearance = useClearanceStatus(filters);
   const [countryFlow, setCountryFlow] = useState<'import' | 'export'>('import');
   const countries = useByCountry(filters, countryFlow);
   const fwd = useForwarders(filters);
-  // Forwarder ranking: the top 3 until "show all" is opened.
-  const [allForwarders, setAllForwarders] = useState(false);
   const ports = usePorts(filters);
   const accounts = useAccounts(filters);
 
-  const k = kpis.data;
-  const kpiCards = k
-    ? [
-        {
-          label: 'Total Shipments',
-          val: k.total,
-          prev: k.previous.total,
-          pct: 100,
-          color: 'var(--accent-primary)',
-        },
-        {
-          label: 'Import Shipments',
-          val: k.imports,
-          prev: k.previous.imports,
-          pct: k.total ? (k.imports / k.total) * 100 : 0,
-          color: 'var(--accent-cyan)',
-        },
-        {
-          label: 'Export Shipments',
-          val: k.exports,
-          prev: k.previous.exports,
-          pct: k.total ? (k.exports / k.total) * 100 : 0,
-          color: 'var(--accent-blue)',
-        },
-        {
-          label: 'Customs Cleared',
-          val: k.cleared,
-          prev: k.previous.cleared,
-          pct: k.total ? (k.cleared / k.total) * 100 : 0,
-          color: 'var(--accent-blue)',
-          note: `${k.clearancePending} still pending`,
-        },
-      ]
-    : [];
   const monthlyData = (monthly.data ?? []).map((m) => ({
     ...m,
     label:
@@ -189,13 +113,6 @@ export function AnalyticsPage() {
         ? `${monthLabel(m.month)} ${m.month.slice(2, 4)}`
         : monthLabel(m.month),
   }));
-  const shareData = share.data
-    ? [
-        { name: 'Import', value: share.data.imports, color: 'var(--accent-cyan)' },
-        { name: 'Export', value: share.data.exports, color: 'var(--accent-blue)' },
-      ]
-    : [];
-  const clearTotal = (clearance.data ?? []).reduce((s, r) => s + r.count, 0);
   const periodLabel = `${range.from} → ${range.to}`;
 
   return (
@@ -252,16 +169,7 @@ export function AnalyticsPage() {
               </option>
             ))}
           </select>
-          <select
-            className={dash.filterInput}
-            value={params.get('direction') ?? ''}
-            onChange={(e) => set('direction', e.target.value)}
-            aria-label="Import or export"
-          >
-            <option value="">Import &amp; export</option>
-            <option value="IMPORT">Import only</option>
-            <option value="EXPORT">Export only</option>
-          </select>
+          <DirectionToggle value={direction} onChange={(d) => set('direction', d)} />
           <select
             className={dash.filterInput}
             value={modeKey}
@@ -277,201 +185,69 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="an-kpi-row">
-        {kpis.isLoading &&
-          [0, 1, 2, 3].map((i) => (
-            <div key={i} className="an-kpi-card" style={{ minHeight: 110 }} />
-          ))}
-        {kpiCards.map((c) => {
-          const ch = changePct(c.val, c.prev);
-          return (
-            <div className="an-kpi-card" key={c.label}>
-              <div className="an-kpi-top">
-                <span className="an-kpi-label">{c.label}</span>
-                <span className="an-kpi-dot" style={{ background: c.color }} />
-              </div>
-              <div className="an-kpi-val">{c.val.toLocaleString()}</div>
-              <div className="an-kpi-meta">
-                <span
-                  className="meta-positive"
-                  style={ch && !ch.up ? { color: 'var(--accent-rose)' } : undefined}
-                >
-                  {c.note ??
-                    (ch ? `${ch.text} vs previous period` : 'No data in the previous period')}
-                </span>
-              </div>
-              <div className="an-mini-bar-track">
-                <div
-                  className="an-mini-bar-fill"
-                  style={{ width: `${c.pct}%`, background: c.color }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div className="an-section-title-row">
-          <div>
-            <h3>Monthly Shipment Volume — Import vs Export</h3>
-            <div className="an-section-sub">
-              Shipments per ETA month, split by flow direction. {periodLabel}
-            </div>
-          </div>
-        </div>
-        <ChartState
-          loading={monthly.isLoading}
-          error={monthly.error}
-          empty={!monthlyData.some((m) => m.total)}
-          height={240}
-        >
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart
-              data={monthlyData}
-              barGap={3}
-              margin={{ top: 10, right: 8, bottom: 0, left: -16 }}
-            >
-              <CartesianGrid vertical={false} stroke="var(--border-subtle)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="label"
-                tickLine={false}
-                axisLine={{ stroke: 'var(--border-subtle)' }}
-                tick={{ fontSize: 11, fontWeight: 700, fill: 'var(--text-tertiary)' }}
-              />
-              <YAxis
-                allowDecimals={false}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--text-tertiary)' }}
-              />
-              <Tooltip content={<PlainTooltip />} cursor={{ fill: 'var(--bg-subtle)' }} />
-              <Legend
-                iconType="square"
-                wrapperStyle={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}
-              />
-              <Bar
-                dataKey="imports"
-                name="Import"
-                fill="var(--accent-primary)"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={22}
-              />
-              <Bar
-                dataKey="exports"
-                name="Export"
-                fill="var(--accent-blue)"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={22}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartState>
-      </div>
+      <MonthlyVolumeCard
+        data={monthlyData}
+        loading={monthly.isLoading}
+        error={monthly.error}
+        periodLabel={periodLabel}
+      />
 
       <div className="an-grid-2col">
-        <div className="card">
-          <div className="an-section-title-row">
-            <div>
-              <h3>Import vs Export Share</h3>
-              <div className="an-section-sub">
-                Share of shipments in the selected period by flow direction.
-              </div>
-            </div>
-          </div>
-          <ChartState
-            loading={share.isLoading}
-            error={share.error}
-            empty={!share.data?.total}
-            height={150}
-          >
-            <div className="an-donut-wrap">
-              <div style={{ position: 'relative', width: 132, height: 132, flexShrink: 0 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={shareData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={50}
-                      outerRadius={66}
-                      startAngle={90}
-                      endAngle={-270}
-                      stroke="none"
-                    >
-                      {shareData.map((d) => (
-                        <Cell key={d.name} fill={d.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<PlainTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'grid',
-                    placeItems: 'center',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <div className="an-donut-center">
-                    <div className="val">{share.data?.total.toLocaleString()}</div>
-                    <div className="lbl">Total</div>
-                  </div>
-                </div>
-              </div>
-              <div className="an-donut-legend">
-                {shareData.map((d) => (
-                  <div className="an-donut-legend-row" key={d.name}>
-                    <span className="an-donut-legend-name">
-                      <span className="an-donut-legend-dot" style={{ background: d.color }} />
-                      {d.name}
-                    </span>
-                    <span className="an-donut-legend-val">
-                      {d.value.toLocaleString()} ·{' '}
-                      {share.data?.total ? ((d.value / share.data.total) * 100).toFixed(1) : 0}%
-                    </span>
-                  </div>
-                ))}
-                {share.data?.byMode.map((m) => (
-                  <div className="an-donut-legend-row" key={m.mode} style={{ opacity: 0.8 }}>
-                    <span className="an-donut-legend-name">{m.mode}</span>
-                    <span className="an-donut-legend-val">{m.count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </ChartState>
-        </div>
-        <div className="card">
-          <div className="an-section-title-row">
-            <div>
-              <h3>Customs Clearance Status</h3>
-              <div className="an-section-sub">Clearance stage of every shipment in the period.</div>
-            </div>
-          </div>
-          <ChartState
-            loading={clearance.isLoading}
-            error={clearance.error}
-            empty={!clearTotal}
-            height={150}
-          >
-            <HBarList
-              rows={(clearance.data ?? []).map((r) => ({
-                key: r.status,
-                name: CLEARANCE_STATUS_LABEL[r.status],
-                value: r.count,
-                max: clearTotal,
-                color: CLEARANCE_COLOR[r.status],
-                display: `${r.count.toLocaleString()} · ${((r.count / clearTotal) * 100).toFixed(1)}%`,
-              }))}
-            />
-          </ChartState>
-        </div>
+        <FlowShareCard data={share.data} loading={share.isLoading} error={share.error} />
+        <ClearanceCard
+          rows={clearance.data}
+          loading={clearance.isLoading}
+          error={clearance.error}
+        />
       </div>
 
-      <div className="card" style={{ marginBottom: 18 }}>
+      {can('accounting:read') && <ClientRevenueCards filters={filters} periodLabel={periodLabel} />}
+
+      <div className="an-grid-2col-rev">
+        <div className="card">
+          <div className="an-section-title-row">
+            <div>
+              <h3>Forwarder Performance Ranking</h3>
+              <div className="an-section-sub">
+                Ranked by shipments; on-time = arrived on or before ETA.
+              </div>
+            </div>
+          </div>
+          <ChartState
+            loading={fwd.isLoading}
+            error={fwd.error}
+            empty={!fwd.data?.length}
+            height={150}
+          >
+            {/* Every forwarder, scrolling inside the card's chart height. */}
+            <div className="an-scroll-list">
+              <HBarList
+                rows={(fwd.data ?? []).map((f) => ({
+                  key: f.id,
+                  name: f.name,
+                  value: f.shipments,
+                  display: `${f.shipments} shipments · ${f.onTimePct === null ? 'no arrivals yet' : `${f.onTimePct}% on time`}${f.avgDelayDays ? ` · ${f.avgDelayDays}d avg delay` : ''}`,
+                  color:
+                    f.onTimePct === null
+                      ? 'var(--text-tertiary)'
+                      : f.onTimePct >= 85
+                        ? 'var(--accent-emerald)'
+                        : f.onTimePct >= 70
+                          ? 'var(--accent-amber)'
+                          : 'var(--accent-rose)',
+                }))}
+              />
+            </div>
+          </ChartState>
+        </div>
+        <PortsCard rows={ports.data} loading={ports.isLoading} error={ports.error} />
+      </div>
+
+      <ForwarderFunnelCard rows={fwd.data} loading={fwd.isLoading} error={fwd.error} />
+
+      <AccountsBreakdown rows={accounts.data} loading={accounts.isLoading} error={accounts.error} />
+
+      <div className="card" style={{ marginTop: 18 }}>
         <div className="an-section-title-row">
           <div>
             <h3>Shipments by {countryFlow === 'import' ? 'Origin' : 'Destination'} Country</h3>
@@ -505,112 +281,6 @@ export function AnalyticsPage() {
           </Suspense>
         </ChartState>
       </div>
-
-      <div className="an-grid-2col-rev">
-        <div className="card">
-          <div className="an-section-title-row">
-            <div>
-              <h3>Forwarder Performance Ranking</h3>
-              <div className="an-section-sub">
-                Ranked by shipments; on-time = arrived on or before ETA.
-              </div>
-            </div>
-            {(fwd.data?.length ?? 0) > 3 && (
-              <ExpandToggle
-                open={allForwarders}
-                onToggle={() => setAllForwarders((o) => !o)}
-                label={`all ${fwd.data!.length} forwarders`}
-              />
-            )}
-          </div>
-          <ChartState
-            loading={fwd.isLoading}
-            error={fwd.error}
-            empty={!fwd.data?.length}
-            height={150}
-          >
-            <HBarList
-              rows={(allForwarders ? (fwd.data ?? []) : (fwd.data ?? []).slice(0, 3)).map((f) => ({
-                key: f.id,
-                name: f.name,
-                value: f.shipments,
-                display: `${f.shipments} shipments · ${f.onTimePct === null ? 'no arrivals yet' : `${f.onTimePct}% on time`}${f.avgDelayDays ? ` · ${f.avgDelayDays}d avg delay` : ''}`,
-                color:
-                  f.onTimePct === null
-                    ? 'var(--text-tertiary)'
-                    : f.onTimePct >= 85
-                      ? 'var(--accent-emerald)'
-                      : f.onTimePct >= 70
-                        ? 'var(--accent-amber)'
-                        : 'var(--accent-rose)',
-              }))}
-            />
-          </ChartState>
-        </div>
-        <div className="card">
-          <div className="an-section-title-row">
-            <div>
-              <h3>Port of Discharge — Import vs Export</h3>
-              <div className="an-section-sub">
-                Shipment volume per clearance port, compared across both flows.
-              </div>
-            </div>
-          </div>
-          <ChartState
-            loading={ports.isLoading}
-            error={ports.error}
-            empty={!ports.data?.length}
-            height={230}
-          >
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart
-                data={ports.data ?? []}
-                barGap={3}
-                margin={{ top: 10, right: 8, bottom: 0, left: -16 }}
-              >
-                <CartesianGrid
-                  vertical={false}
-                  stroke="var(--border-subtle)"
-                  strokeDasharray="3 3"
-                />
-                <XAxis
-                  dataKey="shortName"
-                  tickLine={false}
-                  interval={0}
-                  axisLine={{ stroke: 'var(--border-subtle)' }}
-                  tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--text-tertiary)' }}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--text-tertiary)' }}
-                />
-                <Tooltip content={<PlainTooltip />} cursor={{ fill: 'var(--bg-subtle)' }} />
-                <Legend iconType="square" wrapperStyle={{ fontSize: 12, fontWeight: 700 }} />
-                <Bar
-                  dataKey="imports"
-                  name="Import"
-                  fill="var(--accent-primary)"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={22}
-                />
-                <Bar
-                  dataKey="exports"
-                  name="Export"
-                  fill="var(--accent-blue)"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={22}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartState>
-        </div>
-      </div>
-
-      {can('accounting:read') && <ClientRevenueCards filters={filters} periodLabel={periodLabel} />}
-
-      <AccountsBreakdown rows={accounts.data} loading={accounts.isLoading} error={accounts.error} />
     </section>
   );
 }

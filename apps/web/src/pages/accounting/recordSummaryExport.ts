@@ -35,6 +35,36 @@ export async function exportRecordSummaryExcel(
   );
 }
 
+/** Record Summary → ⋯ → Excel Pack: one workbook, one sheet per summary (named by declare no.). */
+export async function exportRecordSummaryPackExcel(
+  summaries: { doc: BillingDoc; port: string | undefined; forwarder: string | undefined }[],
+  c: CompanyInfo,
+  fileName: string,
+) {
+  const [{ default: ExcelJS }, logo] = await Promise.all([import('exceljs'), logoDataUrl()]);
+  const wb = new ExcelJS.Workbook();
+  const used = new Set<string>();
+  for (const { doc, port, forwarder } of summaries) {
+    // Excel sheet names: at most 31 characters, none of : \ / ? * [ ], unique.
+    const base = (doc.header.declareNo || doc.clientCode || 'Record Summary')
+      .replace(/[:\\/?*[\]]/g, '-')
+      .slice(0, 31)
+      .trim();
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++)
+      name = `${base.slice(0, 31 - String(i).length - 1)} ${i}`;
+    used.add(name.toLowerCase());
+    addRecordSummarySheet(wb, doc, c, port, forwarder, logo, name);
+  }
+  const buffer = await wb.xlsx.writeBuffer();
+  saveBlob(
+    new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }),
+    fileName,
+  );
+}
+
 /** The letterhead logo as a data URL, or null when it can't be fetched (export goes on). */
 export async function logoDataUrl(): Promise<string | null> {
   try {
@@ -69,8 +99,9 @@ export function addRecordSummarySheet(
   port: string | undefined,
   forwarder: string | undefined,
   logo: string | null,
+  sheetName = 'Record Summary',
 ) {
-  const ws = wb.addWorksheet('Record Summary', {
+  const ws = wb.addWorksheet(sheetName, {
     views: [{ showGridLines: false }],
     pageSetup: {
       paperSize: 9, // A4

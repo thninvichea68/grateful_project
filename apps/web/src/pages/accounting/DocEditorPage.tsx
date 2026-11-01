@@ -245,7 +245,7 @@ function Editor({
   const watched = useWatch({ control, name: 'lines' });
   const rate = useWatch({ control, name: 'exchangeRate' }) as unknown as string | undefined;
   const docDate = useWatch({ control, name: cfg.dateField }) as unknown as string | undefined;
-  // The percent in force on the document's date (Settings → Invoice Management); a saved
+  // The percent in force on the document's date (Settings → Tax Management); a saved
   // document keeps its own while its date stays.
   const vatPercent = useDocVatPercent(
     docDate,

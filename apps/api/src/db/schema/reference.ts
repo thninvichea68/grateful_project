@@ -184,7 +184,7 @@ export const exchangeRates = pgTable('exchange_rates', {
 });
 
 /**
- * Settings → Invoice Management: the VAT percent in force from each date. A document takes the
+ * Settings → Tax Management: the VAT percent in force from each date. A document takes the
  * percent of its own date when it is made (stored in its vat_rate), so adding or changing a
  * rate here never alters documents already made.
  */

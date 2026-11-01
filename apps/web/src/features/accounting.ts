@@ -394,6 +394,7 @@ export interface CompanyInfo {
   bankName?: string;
   bankAccountName?: string;
   bankAccountNo?: string;
+  banks?: { bankName?: string | null; accountName?: string | null; accountNo?: string | null }[];
 }
 export function useCompany() {
   return useQuery({
@@ -403,7 +404,7 @@ export function useCompany() {
   });
 }
 
-/** The dated VAT percents (Settings → Invoice Management), for previewing a document's VAT. */
+/** The dated VAT percents (Settings → Tax Management), for previewing a document's VAT. */
 export function useVatRates() {
   return useQuery({
     queryKey: ['meta', 'vat-rates'],

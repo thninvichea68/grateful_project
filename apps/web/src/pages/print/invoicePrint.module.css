@@ -9,6 +9,12 @@
   padding: 10mm 8mm !important;
   color: #000;
 }
+/* Credit note and record summary: 5mm sides (about what a printer can reach), so the
+   tables run nearly edge to edge. */
+.sheetNarrow {
+  padding-left: 5mm !important;
+  padding-right: 5mm !important;
+}
 .sheetInvoice {
   display: flex;
   flex-direction: column;

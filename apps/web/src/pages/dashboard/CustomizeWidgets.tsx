@@ -22,7 +22,7 @@ export function CustomizeWidgets({
   const count = list.filter((w) => shown(w.id)).length;
   return (
     <Modal
-      title="Customize Overview"
+      title="Edit Overview widgets"
       sub={`${count} of ${list.length} widgets shown · saved for you on this browser`}
       onClose={onClose}
       width={520}

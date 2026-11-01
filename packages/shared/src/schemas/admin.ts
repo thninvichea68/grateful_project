@@ -288,6 +288,12 @@ export interface QuotationDetail extends Omit<QuotationRow, 'lineCount' | 'isLat
 
 /* ------------------------------ Settings ------------------------------ */
 
+export const companyBankSchema = z.object({
+  bankName: z.string().trim().min(1, 'Enter the bank').max(120),
+  accountName: optText(200),
+  accountNo: z.string().trim().min(1, 'Enter the account number').max(60),
+});
+
 export const companySchema = z.object({
   nameEn: z.string().trim().min(2).max(200),
   nameKm: optText(200),
@@ -295,11 +301,36 @@ export const companySchema = z.object({
   addressEn: optText(400),
   addressKm: optText(400),
   phone: optText(60),
+  /** Legacy single account, kept in step with banks[0] for older readers. */
   bankName: optText(120),
   bankAccountName: optText(200),
   bankAccountNo: optText(60),
+  /** Every account clients can pay into, in print order. */
+  banks: z.array(companyBankSchema).max(10).optional(),
 });
 export type CompanyInput = z.input<typeof companySchema>;
+
+/**
+ * The company's bank accounts, in print order: the `banks` list, or the one legacy account
+ * saved before the list existed.
+ */
+export function companyBanks(c: {
+  banks?: { bankName?: string | null; accountName?: string | null; accountNo?: string | null }[];
+  bankName?: string | null;
+  bankAccountName?: string | null;
+  bankAccountNo?: string | null;
+}): { bankName: string; accountName: string; accountNo: string }[] {
+  const list = c.banks?.length
+    ? c.banks
+    : [{ bankName: c.bankName, accountName: c.bankAccountName, accountNo: c.bankAccountNo }];
+  return list
+    .map((b) => ({
+      bankName: b.bankName ?? '',
+      accountName: b.accountName ?? '',
+      accountNo: b.accountNo ?? '',
+    }))
+    .filter((b) => b.bankName || b.accountName || b.accountNo);
+}
 
 export const exchangeRateInputSchema = z.object({
   effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date'),

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useForm, useWatch } from 'react-hook-form';
 import {
   CLIENT_SCOPE_AREAS,
@@ -83,7 +84,8 @@ const ICONS = {
 export function StaffPage() {
   const { can, user } = useAuth();
   const staff = useStaff();
-  const [tab, setTab] = useState<'members' | 'roles'>('members');
+  // Picked from the Staff Management dropdown in the sidebar: /staff/members or /staff/roles.
+  const tab = useParams().tab === 'roles' ? 'roles' : 'members';
   const [editing, setEditing] = useState<StaffMember | 'new' | null>(null);
   const manage = can('staff:manage');
   const lookups = useLookups();
@@ -103,22 +105,6 @@ export function StaffPage() {
   });
   return (
     <section className="view active">
-      <nav style={{ display: 'flex', gap: 8, marginBottom: 18 }} aria-label="Staff sections">
-        <button
-          type="button"
-          className={`filter-btn${tab === 'members' ? ' active' : ''}`}
-          onClick={() => setTab('members')}
-        >
-          Team members
-        </button>
-        <button
-          type="button"
-          className={`filter-btn${tab === 'roles' ? ' active' : ''}`}
-          onClick={() => setTab('roles')}
-        >
-          Roles &amp; permissions
-        </button>
-      </nav>
       {tab === 'members' ? (
         <div className="card">
           <div className="card-header-row">

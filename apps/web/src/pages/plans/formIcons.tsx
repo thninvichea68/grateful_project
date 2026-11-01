@@ -90,6 +90,7 @@ export const fi = {
     </>,
   ),
   hash: svg(<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />),
+  bank: svg(<path d="M3 21h18M3 10h18M5 6l7-3 7 3M5 10v11M9.5 10v11M14.5 10v11M19 10v11" />),
   layers: svg(
     <>
       <path d="m12.8 2.2a2 2 0 0 0-1.6 0L2.6 6.1a1 1 0 0 0 0 1.8l8.6 3.9a2 2 0 0 0 1.6 0l8.6-3.9a1 1 0 0 0 0-1.8Z" />

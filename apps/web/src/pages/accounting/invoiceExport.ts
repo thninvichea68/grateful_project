@@ -1,5 +1,6 @@
 import type { Borders, Font, Workbook, Worksheet } from 'exceljs';
 import {
+  companyBanks,
   DEFAULT_VAT_PERCENT,
   fmtVatPercent,
   type BillingDoc,
@@ -354,7 +355,7 @@ function taxOrDisbursement(
     string,
     string,
   ];
-  // The invoice's own VAT percent, as printed (10 unless Settings → Invoice Management changed it).
+  // The invoice's own VAT percent, as printed (10 unless Settings → Tax Management changed it).
   const vat = fmtVatPercent(d.header.vatRate ?? DEFAULT_VAT_PERCENT);
   // The sheet's columns (px): No, Description, Quantity, Unit, Unit Price, Sub Total, VAT, Amount.
   px(32, 313, 55, 48, 70, 75, 65, 75).forEach((w, i) => (ws.getColumn(i + 1 + o).width = w.width));
@@ -557,13 +558,12 @@ function taxOrDisbursement(
   r += 1;
 
   // Payment note
+  const banks = companyBanks(c);
   for (const t of [
     'Note: You can make payment by cross cheque to:',
-    c.bankAccountName ?? '',
+    banks[0]?.accountName ?? '',
     'or Deposit Cash/Cheque payment to bank as below:',
-    c.bankName ?? '',
-    `AC/NAME: ${c.bankAccountName ?? ''}`,
-    `AC/NO: ${c.bankAccountNo ?? ''}`,
+    ...banks.flatMap((b) => [b.bankName, `AC/NAME: ${b.accountName}`, `AC/NO: ${b.accountNo}`]),
   ]) {
     P(r, ALL, t, f(EN, 7.8));
     ht(r, 11.5);

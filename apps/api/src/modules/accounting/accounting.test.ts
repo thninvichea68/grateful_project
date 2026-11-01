@@ -1468,11 +1468,11 @@ describe('customs broker: Credit Noted only', () => {
     expect((await review().query({ review: 'UNCHECKED' })).body.data).toHaveLength(0);
     expect((await review().query({ q: 'I122050', direction: 'IMPORT' })).body.data).toHaveLength(1);
 
-    // "Checked" lands in the broker's inbox.
+    // An approval needs nothing from the broker: it doesn't reach their inbox.
     const inbox = async () => (await api('get', '/credit-notes/inbox')).body;
     let box = await inbox();
-    expect(box.unread).toBe(1);
-    expect(box.data[0]).toMatchObject({ kind: 'CHECKED', declareNo: 'I 122050', readAt: null });
+    expect(box.unread).toBe(0);
+    expect(box.data).toHaveLength(0);
 
     // "Revised" needs a message, sends the note back as a draft and takes the fee out.
     const revise = (body: object) =>
@@ -1491,8 +1491,13 @@ describe('customs broker: Credit Noted only', () => {
     expect((await review()).body.counts).toMatchObject({ total: 1, revised: 1 });
 
     box = await inbox();
-    expect(box.unread).toBe(2);
-    expect(box.data[0]).toMatchObject({ kind: 'REVISED', body: 'LOLO should be 62.70' });
+    expect(box.unread).toBe(1);
+    expect(box.data[0]).toMatchObject({
+      kind: 'REVISED',
+      body: 'LOLO should be 62.70',
+      declareNo: 'I 122050',
+      readAt: null,
+    });
     const msgs = (await api('get', `/docs/credit-notes/${cn.body.id}/messages`)).body;
     expect(msgs[0].kind).toBe('REVISED');
 
@@ -1522,11 +1527,9 @@ describe('customs broker: Credit Noted only', () => {
     // Its numbers stay the same.
     expect((await ledger()).body.data[0].invNo).toBe('GS26-001');
 
-    // Reading messages clears the badge.
-    // Checked, Revised, Checked again: three messages.
+    // Approved again: still just the one Revised message. Reading it clears the badge.
+    expect((await inbox()).unread).toBe(1);
     await api('post', '/credit-notes/inbox/read').send({ messageId: box.data[0].id });
-    expect((await inbox()).unread).toBe(2);
-    await api('post', '/credit-notes/inbox/read').send({});
     expect((await inbox()).unread).toBe(0);
   });
 

@@ -9,16 +9,15 @@
 }
 .title {
   margin: 0;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-primary);
 }
-.sub {
-  margin: 4px 0 0;
-  max-width: 620px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-tertiary);
+/* Title with an info "!" beside it (Tax management). */
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .tools {
   display: flex;

@@ -1,4 +1,6 @@
+import { Fragment } from 'react';
 import {
+  companyBanks,
   fmtVatPercent,
   DEFAULT_VAT_PERCENT,
   type BillingDoc,
@@ -41,7 +43,8 @@ const plain = (v: string | number) =>
 export function sheetClass(type: BillingDocType): string {
   if (type === 'tax-invoices' || type === 'disbursements') return `${s.sheet} ${p.sheetInvoice}`;
   if (type === 'debit-notes') return `${s.sheet} ${p.sheetDn}`;
-  return s.sheet ?? '';
+  // Credit notes and record summaries: narrow side margins.
+  return `${s.sheet} ${p.sheetNarrow}`;
 }
 
 /** Column widths shared by the line table and the totals under it. */
@@ -88,8 +91,9 @@ export function Masthead({ c, compact = false }: { c: CompanyInfo; compact?: boo
 }
 
 export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo; tax: boolean }) {
-  // The invoice's own VAT percent (kept with it; Settings → Invoice Management sets new ones).
+  // The invoice's own VAT percent (kept with it; Settings → Tax Management sets new ones).
   const vat = fmtVatPercent(d.header.vatRate ?? DEFAULT_VAT_PERCENT);
+  const banks = companyBanks(c);
   return (
     <>
       <Masthead c={c} />
@@ -245,15 +249,19 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
       <div className={p.note}>
         Note: You can make payment by cross cheque to:
         <br />
-        {c.bankAccountName}
+        {banks[0]?.accountName}
         <br />
         or Deposit Cash/Cheque payment to bank as below:
-        <br />
-        {c.bankName}
-        <br />
-        AC/NAME: {c.bankAccountName}
-        <br />
-        AC/NO: {c.bankAccountNo}
+        {banks.map((b, i) => (
+          <Fragment key={i}>
+            <br />
+            {b.bankName}
+            <br />
+            AC/NAME: {b.accountName}
+            <br />
+            AC/NO: {b.accountNo}
+          </Fragment>
+        ))}
       </div>
 
       <div className={p.signs}>

@@ -20,10 +20,10 @@ export function CustomizeOverviewButton() {
       className={`time-pill-btn ${s.btn}`}
       onClick={open}
       title="Add or remove Overview widgets"
-      aria-label="Customize Overview"
+      aria-label="Edit Overview widgets"
     >
       {icons.edit({ width: 15, height: 15 })}
-      <span className={s.long}>Customize</span>
+      <span className={s.long}>Edit widgets</span>
     </button>
   );
 }

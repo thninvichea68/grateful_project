@@ -81,9 +81,20 @@ describe('Sidebar', () => {
       'Record Summary',
       'Quotations',
       'Operations',
-      'Staff Management',
-      'Settings',
+      'Team members',
+      'Roles & permissions',
+      'My profile',
+      'Company',
+      'Rates',
+      'Tax management',
+      'Public holidays',
+      'Ports',
+      'Forwarders',
+      'Consignees',
+      'Dropdown lists',
     ]);
+    expect(screen.getByRole('button', { name: 'Staff Management' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
   });
 
   it('hides finance from Operators and admin pages from Viewers', () => {

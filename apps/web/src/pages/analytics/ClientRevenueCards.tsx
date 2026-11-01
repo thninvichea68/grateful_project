@@ -46,7 +46,7 @@ const TREND_FILL = '#22D3EE';
  * A faint full-height slot behind every month's bar, as on the Shipment Summary. Placed before
  * `<Bar>` so it draws underneath; the hovered month's slot darkens a little.
  */
-function BarSlots() {
+export function BarSlots() {
   const { data, barScale, bandWidth, barXAccessor, innerHeight } = useChartStable();
   const on = useChartHover().hoveredBarIndex ?? null;
   if (!barScale || !bandWidth || !barXAccessor) return null;

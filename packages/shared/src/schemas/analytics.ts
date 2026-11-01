@@ -77,6 +77,7 @@ export interface CountryRow {
 
 export interface ForwarderRow {
   id: string;
+  code: string;
   name: string;
   shipments: number;
   imports: number;

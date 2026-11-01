@@ -67,7 +67,7 @@ export function ProfileMenu() {
             <span className={s.email}>{user.jobTitle ?? ROLE_LABEL[user.role]}</span>
           </div>
           <Link
-            to="/settings?tab=profile"
+            to="/settings/profile"
             className={s.menuItem}
             role="menuitem"
             onClick={() => setOpen(false)}

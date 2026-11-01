@@ -147,6 +147,11 @@ const PrintCreditNotePackPage = lazy(() =>
     default: m.PrintCreditNotePackPage,
   })),
 );
+const PrintRecordSummaryPackPage = lazy(() =>
+  import('./pages/print/PrintRecordSummaryPackPage').then((m) => ({
+    default: m.PrintRecordSummaryPackPage,
+  })),
+);
 const PrintSealPlansPage = lazy(() =>
   import('./pages/print/PrintSealPlansPage').then((m) => ({ default: m.PrintSealPlansPage })),
 );
@@ -270,6 +275,19 @@ export const router = createBrowserRouter([
         <RequirePermission permission="creditnotes:read">
           <Suspense fallback={null}>
             <PrintCreditNotePackPage />
+          </Suspense>
+        </RequirePermission>
+      </RequireAuth>
+    ),
+  },
+  {
+    // Record Summary → ⋯ → PDF Pack: every record summary matching the list's filters.
+    path: '/print/record-summary-pack',
+    element: (
+      <RequireAuth>
+        <RequirePermission permission="recordsummaries:read">
+          <Suspense fallback={null}>
+            <PrintRecordSummaryPackPage />
           </Suspense>
         </RequirePermission>
       </RequireAuth>
@@ -503,10 +521,12 @@ export const router = createBrowserRouter([
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },
       { path: 'operations', element: guard('shipments:read', <OperationsPage />) },
-      { path: 'staff', element: guard('staff:read', <StaffPage />) },
+      { path: 'staff', element: <Navigate to="/staff/members" replace /> },
+      { path: 'staff/:tab', element: guard('staff:read', <StaffPage />) },
       {
-        // Everyone reaches My profile; the workspace tabs check settings:read themselves.
-        path: 'settings',
+        // Everyone reaches My profile; the workspace sections check settings:read themselves.
+        // /settings (and the old /settings?tab=…) lands on the section's own path.
+        path: 'settings/:tab?',
         element: (
           <Suspense fallback={<PageLoading />}>
             <SettingsPage />

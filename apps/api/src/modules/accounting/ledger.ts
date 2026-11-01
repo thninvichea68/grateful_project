@@ -53,7 +53,7 @@ export async function rateOn(tx: DbOrTx, date: string): Promise<string> {
 }
 
 /**
- * The VAT percent in force on a date (Settings → Invoice Management): the latest vat_rates row
+ * The VAT percent in force on a date (Settings → Tax Management): the latest vat_rates row
  * on/before it, else the standard 10%. Stored on each document, so later changes never alter it.
  */
 export async function vatRateOn(tx: DbOrTx, date: string): Promise<string> {

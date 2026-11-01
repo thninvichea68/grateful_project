@@ -5,6 +5,7 @@ import { useRecordSummaryReview, useSetRecordSummaryReview } from '../../feature
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Modal, Pager, ui } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
+import { DirectionToggle } from '../../components/DirectionToggle';
 import { useToast } from '../../components/Toast';
 import { fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
@@ -145,16 +146,7 @@ export function ExpenseToClients() {
               </option>
             ))}
           </select>
-          <select
-            className={s.select}
-            value={q.direction ?? ''}
-            onChange={(e) => set('direction', e.target.value)}
-            aria-label="Shipment"
-          >
-            <option value="">Import &amp; export</option>
-            <option value="IMPORT">Import</option>
-            <option value="EXPORT">Export</option>
-          </select>
+          <DirectionToggle value={q.direction} onChange={(d) => set('direction', d)} />
           <select
             className={s.select}
             value={q.month ?? ''}

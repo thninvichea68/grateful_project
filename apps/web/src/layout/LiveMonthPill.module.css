@@ -30,8 +30,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent-emerald);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-emerald) 22%, transparent);
+  background: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 22%, transparent);
 }
 .liveTag {
   color: var(--text-tertiary);

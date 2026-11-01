@@ -402,8 +402,8 @@ export const clearFeePayments = pgTable(
 );
 
 /**
- * Accounting → broker messages about a credit note ("Checked", or "Revised" with what to fix).
- * Shown in the broker's Credit Noted inbox.
+ * Accounting → broker messages about a credit note ("Revised" with what to fix; older rows may be
+ * "Checked", no longer sent). Shown in the broker's Credit Noted inbox.
  */
 export const creditNoteMessages = pgTable(
   'credit_note_messages',

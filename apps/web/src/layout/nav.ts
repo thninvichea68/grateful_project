@@ -248,6 +248,22 @@ export const NAV: NavGroup[] = [
         title: 'Staff Management',
         icon: 'staff',
         permission: 'staff:read',
+        children: [
+          {
+            to: '/staff/members',
+            label: 'Team members',
+            title: 'Staff Management',
+            icon: 'clients',
+            permission: 'staff:read',
+          },
+          {
+            to: '/staff/roles',
+            label: 'Roles & permissions',
+            title: 'Staff Management',
+            icon: 'roles',
+            permission: 'staff:read',
+          },
+        ],
       },
       {
         to: '/settings',
@@ -255,6 +271,26 @@ export const NAV: NavGroup[] = [
         title: 'Settings',
         icon: 'settings',
         permission: 'settings:read',
+        // One page per section (/settings/<tab>); SETTINGS_TABS in SettingsPage lists the same.
+        children: (
+          [
+            ['profile', 'My profile', 'profile'],
+            ['company', 'Company', 'company'],
+            ['rates', 'Rates', 'rates'],
+            ['invoice', 'Tax management', 'tax'],
+            ['holidays', 'Public holidays', 'holidays'],
+            ['ports', 'Ports', 'ports'],
+            ['forwarders', 'Forwarders', 'forwarders'],
+            ['consignees', 'Consignees', 'consignees'],
+            ['lists', 'Dropdown lists', 'lists'],
+          ] as const
+        ).map(([tab, label, icon]) => ({
+          to: `/settings/${tab}`,
+          label,
+          title: 'Settings',
+          icon,
+          permission: 'settings:read' as const,
+        })),
       },
     ],
   },

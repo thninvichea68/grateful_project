@@ -5,10 +5,13 @@ import { useDocs } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Pager } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
+import { DirectionToggle } from '../../components/DirectionToggle';
 import { fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { REVIEW } from './CreditNotesReview';
 import { RecordSummaryInboxTable, RecordSummaryInboxToggle } from './RecordSummaryInbox';
+import { RecordSummaryPackMenu } from './RecordSummaryPackMenu';
+import { packFilters, STATUS_FILTER } from './recordSummaryPack';
 // Same look as Credit Noted and Accounting → Chea Payments.
 import s from './CreditNotesReview.module.css';
 
@@ -24,15 +27,6 @@ const statusOf = (d: BillingDocListItem): { label: string; cls: string } =>
       : d.reviewStatus && d.reviewStatus !== 'UNCHECKED'
         ? REVIEW[d.reviewStatus]
         : { label: 'Submitted', cls: s.neutral! };
-/** The status filter, one option per pill above: its document status and accounting's check. */
-const STATUS_FILTER: Record<string, { label: string; status: string; review?: string }> = {
-  DRAFT: { label: 'Draft', status: 'DRAFT', review: 'UNCHECKED' },
-  REVISED: { label: 'Revised', status: 'DRAFT', review: 'REVISED' },
-  ISSUED: { label: 'Submitted', status: 'ISSUED', review: 'UNCHECKED' },
-  REVIEWED: { label: 'Reviewed', status: 'ISSUED', review: 'REVIEWED' },
-  CHECKED: { label: 'Approved', status: 'ISSUED', review: 'CHECKED' },
-  VOID: { label: 'Cancelled', status: 'VOID' },
-};
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'TRUCK', RAIL: 'RAIL' };
 
@@ -121,16 +115,7 @@ export function RecordSummariesList({ base }: { base: string }) {
                   </option>
                 ))}
               </select>
-              <select
-                className={s.select}
-                value={q.direction ?? ''}
-                onChange={(e) => set('direction', e.target.value)}
-                aria-label="Shipment"
-              >
-                <option value="">Import &amp; export</option>
-                <option value="IMPORT">Import</option>
-                <option value="EXPORT">Export</option>
-              </select>
+              <DirectionToggle value={q.direction} onChange={(d) => set('direction', d)} />
               <select
                 className={s.select}
                 value={q.monthOfYear ?? ''}
@@ -172,6 +157,12 @@ export function RecordSummariesList({ base }: { base: string }) {
             <button type="button" className={s.newBtn} onClick={() => navigate(`${base}/new`)}>
               {icons.plus({ width: 15, height: 15 })} New Record Summary
             </button>
+          )}
+          {!inboxView && (
+            <RecordSummaryPackMenu
+              filters={packFilters(params)}
+              count={list.data?.meta.total ?? 0}
+            />
           )}
         </div>
 

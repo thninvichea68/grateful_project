@@ -7,6 +7,7 @@ import { Pill } from '../../components/StatusPill';
 import { ErrorBanner, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
+import { icons } from '../../layout/icons';
 import { CLIENT_STATUS_PILL } from '../ClientsPage';
 import { ClientFormModal } from './ClientFormModal';
 import { PartiesCard } from './PartiesCard';
@@ -78,6 +79,27 @@ export function ClientDetailPage() {
               {CLIENT_STATUS_PILL[c.status].label}
             </Pill>
           </div>
+          {/* Where to go from here: the client's shipments and CDC master list. */}
+          <div className={s.quickLinks}>
+            <Link to={`/plans?clientId=${c.id}`} className={s.quickLink}>
+              {icons.plans({ width: 14, height: 14 })}
+              Shipping Plans
+            </Link>
+            {c.cutStockItems ? (
+              <Link to={`/cutstock?clientId=${c.id}`} className={s.quickLink}>
+                {icons.cutstock({ width: 14, height: 14 })}
+                CDC master list <span className={s.quickCount}>{c.cutStockItems}</span>
+              </Link>
+            ) : (
+              <span
+                className={`${s.quickLink} ${s.quickLinkOff}`}
+                title="Import one from the Cut Stock page"
+              >
+                {icons.cutstock({ width: 14, height: 14 })}
+                No CDC master list
+              </span>
+            )}
+          </div>
         </div>
         {can('clients:write') && (
           <div className={ui.toolbar}>
@@ -107,19 +129,20 @@ export function ClientDetailPage() {
       </div>
       <ErrorBanner error={save.error ?? del.error} />
 
+      {/* One strip; Imports and Exports open the client's shipments in Shipping Plans. */}
       <div className={s.stats}>
-        <div className={s.stat}>
-          <div className={s.statLabel}>Active runs</div>
+        <div className={s.stat} title="In progress or pending">
+          <div className={s.statLabel}>Active shipments</div>
           <div className={s.statValue}>{c.activeShipments}</div>
         </div>
-        <div className={s.stat}>
-          <div className={s.statLabel}>Imports</div>
+        <Link to={`/plans?clientId=${c.id}&direction=IMPORT`} className={`${s.stat} ${s.statLink}`}>
+          <div className={s.statLabel}>Imports →</div>
           <div className={s.statValue}>{c.importCount}</div>
-        </div>
-        <div className={s.stat}>
-          <div className={s.statLabel}>Exports</div>
+        </Link>
+        <Link to={`/plans?clientId=${c.id}&direction=EXPORT`} className={`${s.stat} ${s.statLink}`}>
+          <div className={s.statLabel}>Exports →</div>
           <div className={s.statValue}>{c.exportCount}</div>
-        </div>
+        </Link>
         {c.netProfitYtd !== undefined ? (
           <div className={s.stat}>
             <div className={s.statLabel}>Net profit this year</div>
@@ -138,9 +161,6 @@ export function ClientDetailPage() {
           <div className="card">
             <div className="card-header-row">
               <h3>Details</h3>
-              <Link to={`/plans?clientId=${c.id}`} className="filter-btn">
-                Shipments in Shipping Plans
-              </Link>
             </div>
             <dl className={s.facts}>
               <dt>Legal name</dt>
@@ -170,24 +190,6 @@ export function ClientDetailPage() {
               <dt>Client since</dt>
               <dd>{fmtDate(c.createdAt)}</dd>
             </dl>
-          </div>
-          <div className="card">
-            <div className="card-header-row">
-              <h3>CDC master list</h3>
-            </div>
-            {c.cutStockItems ? (
-              <Link
-                to={`/cutstock?clientId=${c.id}`}
-                className="filter-btn"
-                style={{ display: 'inline-flex' }}
-              >
-                Open {c.cutStockItems} items
-              </Link>
-            ) : (
-              <span className={s.muted}>
-                No master list loaded. Import one from the Cut Stock page.
-              </span>
-            )}
           </div>
         </div>
         <div className={s.column}>
