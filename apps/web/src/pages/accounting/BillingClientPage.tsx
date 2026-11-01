@@ -99,14 +99,12 @@ function Workspace({
   const here = `/accounting/billing/${m.client.id}?month=${month}`;
   const back = encodeURIComponent(here);
   const missingTotal = BILLING_PACK_TYPES.reduce((n, t) => n + s.missing[t], 0);
-  const statementsReady = s.drafts === 0 && s.missing['tax-invoices'] === 0;
-  const billed = Number(s.billed) > 0;
 
   const issueAll = async () => {
     if (
       !window.confirm(
         `Issue ${s.drafts} draft${s.drafts === 1 ? '' : 's'} for ${m.client.code} · ${monthName(month)}?\n\n` +
-          'Check their lines first: once issued they can no longer be edited, and their numbers and totals go into the Monthly Ledger. Drafts with a $0.00 total are skipped.',
+          'Check their lines first: once issued, their numbers and totals go into the Monthly Ledger and the number and date are fixed. Drafts with a $0.00 total are skipped.',
       )
     )
       return;
@@ -118,50 +116,6 @@ function Workspace({
           : ''),
     );
   };
-
-  const steps = [
-    {
-      id: 'documents',
-      title: 'Shipment documents',
-      state: statementsReady && s.issued > 0 ? 'done' : 'current',
-      meta: (
-        <>
-          <b>{s.issued}</b> issued · <b>{s.drafts}</b> draft{s.drafts === 1 ? '' : 's'}
-          {s.missing['tax-invoices'] > 0 && (
-            <>
-              {' '}
-              · <b style={{ color: 'var(--status-exception-fg)' }}>
-                {s.missing['tax-invoices']}
-              </b>{' '}
-              not invoiced
-            </>
-          )}
-        </>
-      ),
-    },
-    {
-      id: 'statements',
-      title: 'Account statements',
-      state: statementsReady && billed ? 'done' : 'todo',
-      meta: (
-        <>
-          <b>{fmtMoney(m.statements.INVOICE.total)}</b> invoices ·{' '}
-          <b>{fmtMoney(m.statements.DEBIT_NOTE.total)}</b> debit notes
-        </>
-      ),
-    },
-    {
-      id: 'statements',
-      title: 'Payments & receipts',
-      state:
-        billed && Number(s.balance) <= 0 ? 'done' : statementsReady && billed ? 'current' : 'todo',
-      meta: (
-        <>
-          <b>{fmtMoney(s.received)}</b> received · <b>{fmtMoney(s.balance)}</b> due
-        </>
-      ),
-    },
-  ] as const;
 
   return (
     <section className={`view active ${b.page}`}>
@@ -187,28 +141,6 @@ function Workspace({
             Print month pack
           </PackPrintMenu>
         </div>
-      </div>
-
-      <div className={b.steps}>
-        {steps.map((st, i) => (
-          <button
-            key={st.title}
-            type="button"
-            className={b.step}
-            data-state={st.state}
-            onClick={() => {
-              // The statements open when their steps are clicked.
-              if (st.id === 'statements') setStatementsOpen(true);
-              document.getElementById(st.id)?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          >
-            <span className={b.stepNum}>{st.state === 'done' ? '✓' : i + 1}</span>
-            <span>
-              <span className={b.stepTitle}>{st.title}</span>
-              <div className={b.stepMeta}>{st.meta}</div>
-            </span>
-          </button>
-        ))}
       </div>
 
       <ErrorBanner error={issue.error} />
@@ -354,7 +286,13 @@ function Workspace({
 
       {/* 2 · Statements, 3 · payments */}
       <div className="card" id="statements">
-        <div className={b.sectionHead}>
+        {/* The whole header opens and closes the section; the chevron button keeps keyboard use. */}
+        <div
+          className={`${b.sectionHead} ${b.clickableHead}`}
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest('button')) setStatementsOpen((o) => !o);
+          }}
+        >
           <div>
             <div className={b.sectionTitle}>
               <span className={b.sectionNum}>2</span>
@@ -367,12 +305,6 @@ function Workspace({
             label="the statements and payments"
           />
         </div>
-        {statementsOpen && s.drafts > 0 && (
-          <div className={ui.notice}>
-            {s.drafts} draft{s.drafts === 1 ? ' is' : 's are'} on the statements marked DRAFT. Issue{' '}
-            {s.drafts === 1 ? 'it' : 'them'} to make the statements and receipts final.
-          </div>
-        )}
         {statementsOpen && (
           <div className={b.statements}>
             {(['INVOICE', 'DEBIT_NOTE'] as const).map((k) => (
@@ -567,6 +499,7 @@ function StatementPanel({
                   <th>DN No</th>
                 )}
                 <th>Ref</th>
+                <th className={b.statusCol}>Status</th>
                 <th className={b.num}>Amount</th>
               </tr>
             </thead>
@@ -594,6 +527,8 @@ function StatementPanel({
                         ledger
                       </span>
                     )}
+                  </td>
+                  <td className={b.statusCol}>
                     {l.draft && (
                       <span className={b.draftTag} title="Not issued yet">
                         draft

@@ -7,6 +7,8 @@ import {
   CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
   RECORD_SUMMARY_ITEMS,
+  recordSummaryItems,
+  vatMark,
   chargeLineAmount,
   chargeLineUnit,
   computeChargeLinesTotal,
@@ -21,6 +23,7 @@ import {
   useCompany,
   useDoc,
   useDocAction,
+  useDocVatPercent,
   usePrefill,
   useRecordSummaryShipments,
   useSetRecordSummaryReview,
@@ -44,6 +47,9 @@ import { initialValues, priceOrZeroResolver, type Values } from './DocEditorPage
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { REVIEW, REVIEW_PILL, checkIcon } from './CreditNotesReview';
 import { SummaryReviseModal } from './ExpenseToClients';
+import { DotsMenu, type MenuAction } from '../plans/CargoSection';
+import { fi } from '../plans/formIcons';
+import { SupportDocumentsModal } from '../plans/SupportDocuments';
 import s from '../creditnoted/CreditNotedEditor.module.css';
 import r from './RecordSummaryEditor.module.css';
 
@@ -52,14 +58,16 @@ const blankLine = (unit: string) => ({ description: '', qty: '1', unit, unitPric
 /** The Unit dropdown's "+ Add New" choice. */
 const NEW_ITEM = '__new__';
 /** A blank summary starts with the standard import / export breakdown; prices to fill. */
-const itemsFor = (direction: unknown, shipUnit: string) =>
-  RECORD_SUMMARY_ITEMS[direction === 'EXPORT' ? 'EXPORT' : 'IMPORT'].map(([description, mark]) => ({
-    description,
-    qty: '1',
-    unit: chargeLineUnit(description, shipUnit),
-    unitPrice: '',
-    mark,
-  }));
+const itemsFor = (direction: unknown, shipUnit: string, vatPercent?: number) =>
+  recordSummaryItems(direction === 'EXPORT' ? 'EXPORT' : 'IMPORT', vatPercent).map(
+    ([description, mark]) => ({
+      description,
+      qty: '1',
+      unit: chargeLineUnit(description, shipUnit),
+      unitPrice: '',
+      mark,
+    }),
+  );
 /** The unit the summary's charges are billed in, from its transport type and container size. */
 const shipUnitOf = (v: Partial<Values>) =>
   shipmentChargeUnit({
@@ -140,7 +148,11 @@ function RecordSummaryEditor({
   const lookups = useLookups();
   const company = useCompany();
   const action = useDocAction(TYPE);
-  const editable = can('recordsummaries:write') && (!doc || doc.status === 'DRAFT');
+  // ⋯ → Revise reopens a submitted summary for editing until it is resubmitted (or cancelled).
+  const [reopened, setReopened] = useState(false);
+  const editable =
+    can('recordsummaries:write') &&
+    (!doc || doc.status === 'DRAFT' || (reopened && doc.status === 'ISSUED'));
   const fresh = !doc && !prefill;
   const eligible = useRecordSummaryShipments();
   const defaults = useMemo(() => {
@@ -156,6 +168,7 @@ function RecordSummaryEditor({
     handleSubmit,
     setValue,
     getValues,
+    reset,
     formState: { errors },
   } = useForm<Values>({
     resolver: priceOrZero as never,
@@ -176,8 +189,18 @@ function RecordSummaryEditor({
       if (l.unit !== unit) setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
     });
   }, [shipUnit, editable, getValues, setValue]);
-  // The processing fee carries 10% VAT on top (see chargeLineAmount).
-  const total = computeChargeLinesTotal(values.lines ?? []);
+  // The processing fee carries VAT on top (see chargeLineAmount), at the percent in force on the
+  // summary's date (Settings → Invoice Management); a saved summary keeps its own while its
+  // date stays.
+  const vatPercent = useDocVatPercent(
+    values.summaryDate as string | undefined,
+    doc
+      ? { date: doc.date, vatRate: doc.header.vatRate }
+      : prefill
+        ? { date: prefill.summaryDate as string, vatRate: prefill.vatRate as string }
+        : null,
+  );
+  const total = computeChargeLinesTotal(values.lines ?? [], vatPercent);
   const client = lookups.data?.clients.find((c) => c.id === values.clientId);
   const declareNo = String(values.declareNo ?? '') || doc?.declareNo || '';
 
@@ -261,11 +284,14 @@ function RecordSummaryEditor({
     clientName: client?.name ?? doc?.clientName ?? '',
     accountingRecordId: doc?.accountingRecordId ?? null,
     declareNo: declareNo || null,
-    header: Object.fromEntries(
-      Object.entries(values)
-        .filter(([k]) => k !== 'lines')
-        .map(([k, v]) => [k, v === undefined || v === null ? null : String(v)]),
-    ),
+    header: {
+      ...Object.fromEntries(
+        Object.entries(values)
+          .filter(([k]) => k !== 'lines')
+          .map(([k, v]) => [k, v === undefined || v === null ? null : String(v)]),
+      ),
+      vatRate: String(vatPercent),
+    },
     lines: (values.lines ?? []).map((l, i) => ({
       id: String(i),
       lineNo: i + 1,
@@ -273,8 +299,8 @@ function RecordSummaryEditor({
       qty: l.qty || '0',
       unit: l.unit,
       unitPrice: l.unitPrice || '0',
-      subtotal: chargeLineAmount(l),
-      mark: l.mark,
+      subtotal: chargeLineAmount(l, vatPercent),
+      mark: vatMark(l, vatPercent),
     })),
     totals: { subtotal: total, vat: '0', total },
     createdAt: doc?.createdAt ?? '',
@@ -307,6 +333,29 @@ function RecordSummaryEditor({
       await action.mutateAsync({ action: 'issue', id: saved.id });
       toast('Record summary submitted.');
     });
+  /**
+   * Revise → Resubmit: the changes are saved and the summary goes back to accounting as Request
+   * Revise. The Monthly Ledger keeps its approved amounts until accounting approves again.
+   */
+  const resubmit = () =>
+    handleSubmit(async (v) => {
+      if (!doc) return;
+      if (
+        !window.confirm(
+          `Resubmit the record summary for ${doc.declareNo ?? 'this shipment'} to accounting?\n\n` +
+            'It goes back as Request Revise. The Monthly Ledger keeps the approved INV, DIS and ' +
+            'DN amounts until accounting approves the revision.',
+        )
+      )
+        return;
+      await action.mutateAsync({ action: 'resubmit', id: doc.id, body: v });
+      setReopened(false);
+      toast('Record summary resubmitted to accounting (Request Revise).');
+    })();
+  const cancelRevise = () => {
+    reset(defaults);
+    setReopened(false);
+  };
   const voidDoc = async () => {
     if (!doc) return;
     const reason = window.prompt(
@@ -381,6 +430,55 @@ function RecordSummaryEditor({
       setExporting(false);
     }
   };
+
+  // ⋯: change it (Revise, support files), then print / export, then delete.
+  const [supportDocs, setSupportDocs] = useState(false);
+  const canWrite = can('recordsummaries:write');
+  const deleteAction: MenuAction | null =
+    !doc || !canWrite
+      ? null
+      : {
+          label: 'Delete',
+          icon: icons.trash({}),
+          // A submitted one is cancelled (out of the ledger, kept on record); others deleted.
+          onClick: () => void (doc.status === 'ISSUED' ? voidDoc() : remove()),
+          danger: true,
+        };
+  const menuActions: MenuAction[] = [
+    ...(doc?.status === 'ISSUED' && canWrite && !canDecide && !reopened
+      ? [{ label: 'Revise', icon: icons.edit({}), onClick: () => setReopened(true) }]
+      : []),
+    ...(doc && can('documents:read')
+      ? [
+          {
+            label: 'Upload support documents',
+            icon: icons.paperclip({}),
+            onClick: () => setSupportDocs(true),
+          },
+        ]
+      : []),
+    {
+      label: 'Print',
+      icon: icons.printer({}),
+      onClick: () => printSheet(document.title),
+      title: 'Print the record summary as shown on the right',
+      separated: true,
+    },
+    {
+      label: 'PDF file',
+      icon: fi.file({}),
+      onClick: () => printSheet(fileName),
+      title: `Choose "Save as PDF" in the print window (${fileName}.pdf)`,
+    },
+    {
+      label: exporting ? 'Exporting…' : 'Export Excel',
+      icon: icons.download({}),
+      onClick: () => void exportExcel(),
+      disabled: exporting,
+      title: `${fileName}.xlsx`,
+    },
+    ...(deleteAction ? [{ ...deleteAction, separated: true }] : []),
+  ];
 
   const err = (name: string) =>
     (errors as Record<string, { message?: string } | undefined>)[name]?.message;
@@ -461,19 +559,7 @@ function RecordSummaryEditor({
             <p>Live invoice numbers populate automatically from Monthly updates</p>
           </div>
           <div className={s.headActions}>
-            {editable && doc?.status === 'DRAFT' && (
-              <button
-                type="button"
-                className={s.headDelete}
-                disabled={action.isPending}
-                onClick={() => void remove()}
-                aria-label="Delete draft"
-                title="Delete draft"
-              >
-                {icons.trash({})}
-              </button>
-            )}
-            {editable && (
+            {editable && !reopened && (
               <button
                 type="button"
                 className="btn-cancel-shipment"
@@ -483,7 +569,7 @@ function RecordSummaryEditor({
                 Save draft
               </button>
             )}
-            {editable && (
+            {editable && !reopened && (
               <button
                 type="button"
                 className={s.submit}
@@ -492,6 +578,26 @@ function RecordSummaryEditor({
               >
                 {icons.send({ width: 15, height: 15 })} Submit to Monthly
               </button>
+            )}
+            {editable && reopened && (
+              <>
+                <button
+                  type="button"
+                  className="btn-cancel-shipment"
+                  disabled={action.isPending}
+                  onClick={cancelRevise}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={s.submit}
+                  disabled={action.isPending}
+                  onClick={() => void resubmit()}
+                >
+                  {icons.send({ width: 15, height: 15 })} Resubmit
+                </button>
+              </>
             )}
             {canDecide && doc && (
               <>
@@ -517,21 +623,7 @@ function RecordSummaryEditor({
                 )}
               </>
             )}
-            {can('recordsummaries:write') && doc?.status === 'ISSUED' && (
-              <button type="button" className="btn-delete-shipment" onClick={() => void voidDoc()}>
-                Cancel document
-              </button>
-            )}
-            {can('recordsummaries:write') && doc?.status === 'VOID' && (
-              <button
-                type="button"
-                className="btn-delete-shipment"
-                disabled={action.isPending}
-                onClick={() => void remove()}
-              >
-                {icons.trash({ width: 15, height: 15 })} Delete
-              </button>
-            )}
+            <DotsMenu label="More actions" className={s.headIcon} actions={menuActions} />
           </div>
         </header>
         {doc?.status === 'DRAFT' && doc.header.reviewStatus === 'REVISED' && (
@@ -543,7 +635,26 @@ function RecordSummaryEditor({
             <p className={s.bannerHint}>Make the changes, then press “Submit to Monthly” again.</p>
           </div>
         )}
+        {reopened && (
+          <div className={`${s.banner} ${s.bannerRevise}`} role="status">
+            <div className={s.bannerHead}>
+              <b>Revising a submitted record summary</b>
+            </div>
+            <p className={s.bannerHint}>
+              Make the changes, then press “Resubmit”. Accounting sees it as Request Revise; the
+              Monthly Ledger keeps the approved amounts until they approve it.
+            </p>
+          </div>
+        )}
         <ErrorBanner error={action.error ?? setReview.error} />
+        {supportDocs && doc && (
+          <SupportDocumentsModal
+            title={`Record summary ${doc.declareNo ?? ''}`.trim()}
+            link={{ recordSummaryId: doc.id }}
+            clientId={doc.clientId}
+            onClose={() => setSupportDocs(false)}
+          />
+        )}
         {revising && doc && (
           <SummaryReviseModal
             row={{
@@ -575,7 +686,7 @@ function RecordSummaryEditor({
                       // Still unpriced: switch to that direction's standard breakdown.
                       onChange: (e: { target: { value: string } }) => {
                         if (!(values.lines ?? []).some((l) => Number(l.unitPrice) > 0))
-                          lines.replace(itemsFor(e.target.value, shipUnit));
+                          lines.replace(itemsFor(e.target.value, shipUnit, vatPercent));
                       },
                     })}
                   >
@@ -664,6 +775,8 @@ function RecordSummaryEditor({
                     <input
                       className="form-field-box"
                       list={doc ? undefined : 'rs-declares'}
+                      // A revision stays on its declaration (its Monthly Ledger entry).
+                      readOnly={reopened}
                       placeholder={doc ? undefined : 'e.g. I 122050'}
                       title={doc ? undefined : 'Pick an approved shipment to fill in its numbers'}
                       {...reg}
@@ -890,40 +1003,14 @@ function RecordSummaryEditor({
                 {doc.status === 'DRAFT'
                   ? 'Read only for your role.'
                   : doc.status === 'ISSUED'
-                    ? 'Submitted; it can no longer be edited.'
+                    ? canWrite && !canDecide
+                      ? 'Submitted. To change it, use ⋯ → Revise.'
+                      : 'Submitted.'
                     : 'This record summary was cancelled.'}
               </p>
             )}
           </fieldset>
         </form>
-
-        <footer className={s.foot}>
-          <button
-            type="button"
-            className={s.footBtn}
-            onClick={() => printSheet(document.title)}
-            title="Print the record summary as shown on the right"
-          >
-            Print
-          </button>
-          <button
-            type="button"
-            className={`${s.footBtn} ${s.footPrimary}`}
-            onClick={() => printSheet(fileName)}
-            title={`Choose "Save as PDF" in the print window (${fileName}.pdf)`}
-          >
-            PDF File
-          </button>
-          <button
-            type="button"
-            className={`${s.footBtn} ${s.footExcel}`}
-            disabled={exporting}
-            title={`${recordSummaryFileName(preview)}.xlsx`}
-            onClick={() => void exportExcel()}
-          >
-            {exporting ? 'Exporting…' : 'Excel Export'}
-          </button>
-        </footer>
       </div>
 
       <Preview label="Record Summary preview">

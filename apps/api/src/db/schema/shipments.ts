@@ -67,6 +67,8 @@ export const shipments = pgTable(
     quantity: qty('quantity'),
     quantityUnit: text('quantity_unit'), // ROLLS, PKGS, CTNS…
     material: text('material'),
+    /** Incoterms 2020 rule (EXW, FOB, CIF…). */
+    incoterm: text('incoterm'),
 
     // Booking / BL / vessel
     bookingNo: text('booking_no'),
@@ -82,7 +84,7 @@ export const shipments = pgTable(
     /** Actual arrival — used for forwarder on-time %. */
     ata: date('ata'),
     arriveFty: date('arrive_fty'),
-    /** Import: the day the shipping documents (INV, PL…) were received. */
+    /** The day the shipping documents (INV, PL…) were received. */
     receivedDocumentDate: date('received_document_date'),
     /** Import: the date of the delivery order (DO / EDO). */
     doDate: date('do_date'),

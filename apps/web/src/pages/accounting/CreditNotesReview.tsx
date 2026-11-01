@@ -16,6 +16,7 @@ export const REVIEW: Record<CreditNoteReviewStatus, { label: string; cls: string
   UNCHECKED: { label: 'Unchecked', cls: s.unchecked! },
   REVIEWED: { label: 'Reviewed', cls: s.reviewed! },
   REVISED: { label: 'Revised', cls: s.revised! },
+  REVISION_REQUESTED: { label: 'Request Revise', cls: s.requested! },
 };
 /** The same statuses as header pills (inside a credit note or record summary). */
 export const REVIEW_PILL = {
@@ -23,6 +24,7 @@ export const REVIEW_PILL = {
   REVIEWED: 'progress',
   CHECKED: 'completed',
   REVISED: 'exception',
+  REVISION_REQUESTED: 'pending',
 } as const;
 export const MONTHS = [
   'Jan',
@@ -150,11 +152,19 @@ export function CreditNotesReview() {
       icon: icons.edit({ width: 17, height: 17 }),
       cls: s.revised!,
     },
+    // Revised by its maker after submitting, waiting for approval.
+    {
+      review: 'REVISION_REQUESTED',
+      label: 'Request Revise',
+      value: counts?.revisionRequested,
+      icon: icons.send({ width: 17, height: 17 }),
+      cls: s.requested!,
+    },
   ];
 
   return (
     <section className={`view active ${s.page} ${s.fill}`}>
-      <div className={`${s.stats} ${s.five}`} role="group" aria-label="Filter by status">
+      <div className={`${s.stats} ${s.six}`} role="group" aria-label="Filter by status">
         {stats.map((k) => {
           const on = (q.review ?? '') === k.review;
           return (

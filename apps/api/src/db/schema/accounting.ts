@@ -17,6 +17,7 @@ import {
   rate,
   qty,
   khr,
+  vatRate,
   cheaStatusEnum,
   billingDocStatusEnum,
   directionEnum,
@@ -54,6 +55,8 @@ export const accountingRecords = pgTable(
     dnNo: text('dn_no'),
     invDate: date('inv_date').notNull(),
     exchangeRate: rate('exchange_rate').notNull(),
+    /** VAT percent on INV revenue: the rate in force on inv_date. */
+    vatRate: vatRate(),
     clearFee: money('clear_fee').notNull().default('0'),
     thc: money('thc').notNull().default('0'),
     otherPay: money('other_pay').notNull().default('0'),
@@ -139,12 +142,13 @@ const docHeader = () => ({
   ...timestamps,
 });
 
-/** Bilingual Khmer/English tax invoice, VAT 10%. */
+/** Bilingual Khmer/English tax invoice, VAT at the rate in force on its date (10% by default). */
 export const taxInvoices = pgTable('tax_invoices', {
   ...docHeader(),
   invoiceNo: text('invoice_no').notNull().unique(),
   invoiceDate: date('invoice_date').notNull(),
   exchangeRate: rate('exchange_rate').notNull(),
+  vatRate: vatRate(),
   customerNameEn: text('customer_name_en').notNull(),
   customerNameKm: text('customer_name_km'),
   customerAddress: text('customer_address'),
@@ -152,12 +156,14 @@ export const taxInvoices = pgTable('tax_invoices', {
   pol: text('pol'),
   pod: text('pod'),
   containerNo: text('container_no'),
+  containerSize: containerSizeEnum('container_size'),
   volumeCbm: qty('volume_cbm'),
   grossWeightKg: qty('gross_weight_kg'),
   shipper: text('shipper'),
   consignee: text('consignee'),
   hbl: text('hbl'),
   pkgs: text('pkgs'),
+  pkgsUnit: text('pkgs_unit'),
   subtotal: money('subtotal').notNull().default('0'),
   vat: money('vat').notNull().default('0'),
   total: money('total').notNull().default('0'),
@@ -198,12 +204,14 @@ export const disbursements = pgTable(
     pol: text('pol'),
     pod: text('pod'),
     containerNo: text('container_no'),
+    containerSize: containerSizeEnum('container_size'),
     volumeCbm: qty('volume_cbm'),
     grossWeightKg: qty('gross_weight_kg'),
     shipper: text('shipper'),
     consignee: text('consignee'),
     hbl: text('hbl'),
     pkgs: text('pkgs'),
+    pkgsUnit: text('pkgs_unit'),
     total: money('total').notNull().default('0'),
     totalKhr: khr('total_khr').notNull().default('0'),
   },
@@ -236,12 +244,14 @@ export const debitNotes = pgTable('debit_notes', {
   pol: text('pol'),
   pod: text('pod'),
   containerNo: text('container_no'),
+  containerSize: containerSizeEnum('container_size'),
   volumeCbm: qty('volume_cbm'),
   grossWeightKg: qty('gross_weight_kg'),
   shipper: text('shipper'),
   consignee: text('consignee'),
   hbl: text('hbl'),
   pkgs: text('pkgs'),
+  pkgsUnit: text('pkgs_unit'),
   total: money('total').notNull().default('0'),
 });
 
@@ -272,6 +282,8 @@ export const creditNotes = pgTable('credit_notes', {
   grossWeightKg: qty('gross_weight_kg'),
   cbm: qty('cbm'),
   declareNo: text('declare_no'),
+  /** VAT percent on the processing fee line. */
+  vatRate: vatRate(),
   total: money('total').notNull().default('0'),
   /** Accounting's check of the submitted note (Accounting → Credit Noted). */
   reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),
@@ -309,6 +321,8 @@ export const recordSummaries = pgTable('record_summaries', {
   grossWeightKg: qty('gross_weight_kg'),
   /** Usually a number, sometimes a note such as "NON": kept as typed. */
   cbm: text('cbm'),
+  /** VAT percent on the processing fee line. */
+  vatRate: vatRate(),
   total: money('total').notNull().default('0'),
   /** Accounting's check of the submitted summary (Accounting → Expense to Clients). */
   reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),

@@ -20,6 +20,7 @@ import {
   ledgerInputSchema,
   ledgerListQuerySchema,
   ledgerUpdateSchema,
+  vatLabel,
   type BillingDocType,
 } from '@gs/shared';
 import { requireAuth, requirePermission } from '../../middleware/auth';
@@ -140,6 +141,9 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     clientIds: scopeClients(req),
     pageSize: 100_000,
   });
+  // "VAT 10%" when every row has the same percent; just "VAT" across a rate change.
+  const vatRates = new Set(data.map((r) => Number(r.vatRate)));
+  const vatHeader = vatRates.size === 1 ? vatLabel([...vatRates][0]) : 'VAT';
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(`Ledger ${period}`, {
     views: [{ state: 'frozen', ySplit: 1 }],
@@ -158,7 +162,7 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     ['CM', 8, (r) => Number(r.commission)],
     ['INV (Revenue)', 13, (r) => Number(r.invRevenue)],
     ['DIS', 10, (r) => Number(r.disTotal)],
-    ['VAT 10%', 10, (r) => Number(r.vat)],
+    [vatHeader, 10, (r) => Number(r.vat)],
     ['DN Total', 11, (r) => Number(r.dnTotal)],
     ['Net Profit', 12, (r) => Number(r.netProfit)],
     ['Chea', 9, (r) => (r.cheaStatus === 'NA' ? 'N/A' : r.cheaStatus)],
@@ -506,6 +510,21 @@ accountingRouter.put('/docs/:type/:id', docWrite, async (req, res) => {
   await docs.updateDoc(type, id, input, req);
   res.json(await docs.getDoc(type, id));
 });
+/**
+ * Revise → Resubmit: a submitted credit note or record summary saved with its changes and sent
+ * back to accounting as Request Revise (the Monthly Ledger keeps its approved amounts until then).
+ */
+accountingRouter.post('/docs/:type/:id/resubmit', docWrite, async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  const { id } = parse(idParam, req.params);
+  if (!docs.isRevisable(type))
+    throw badRequest('Only credit notes and record summaries can be revised');
+  const input = parse(BILLING_DOC_SCHEMAS[type] as z.ZodType, req.body) as Parameters<
+    typeof docs.updateDoc
+  >[2];
+  await docs.updateDoc(type, id, input, req, { resubmit: true });
+  res.json(await docs.getDoc(type, id));
+});
 accountingRouter.post('/docs/:type/:id/issue', docWrite, async (req, res) => {
   const { type } = parse(typeParam, req.params);
   const { id } = parse(idParam, req.params);
@@ -579,6 +598,7 @@ accountingRouter.get('/docs/:type/:id/export.xlsx', async (req, res) => {
       ws.addRow([k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()), v]);
   ws.addRow([]);
   const tax = type === 'tax-invoices';
+  const vat = vatLabel(d.header.vatRate ?? undefined);
   const head = ws.addRow([
     'No',
     'Description',
@@ -586,7 +606,7 @@ accountingRouter.get('/docs/:type/:id/export.xlsx', async (req, res) => {
     'Unit',
     'Unit Price',
     'Sub Total',
-    ...(tax ? ['VAT 10%', 'Amount'] : ['Mark']),
+    ...(tax ? [vat, 'Amount'] : ['Mark']),
   ]);
   head.font = { bold: true };
   d.lines.forEach((l) =>
@@ -612,7 +632,7 @@ accountingRouter.get('/docs/:type/:id/export.xlsx', async (req, res) => {
       'KHR',
       Number(d.totals.subtotalKhr),
     ]);
-    ws.addRow(['', 'VAT 10%', '', '', 'USD', Number(d.totals.vat), 'KHR', Number(d.totals.vatKhr)]);
+    ws.addRow(['', vat, '', '', 'USD', Number(d.totals.vat), 'KHR', Number(d.totals.vatKhr)]);
   }
   ws.addRow([
     '',

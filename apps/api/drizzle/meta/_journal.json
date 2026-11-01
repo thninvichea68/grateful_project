@@ -351,6 +351,41 @@
       "when": 1793437481792,
       "tag": "0049_container_truck_no",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793508228393,
+      "tag": "0050_shipment_incoterm",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793516359128,
+      "tag": "0051_review_revision_requested",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793516622034,
+      "tag": "0052_document_support_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793521807117,
+      "tag": "0053_billing_qty_unit_container_size",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793523540767,
+      "tag": "0054_vat_rates",
+      "breakpoints": true
     }
   ]
 }

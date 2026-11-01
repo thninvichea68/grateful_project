@@ -26,6 +26,10 @@
   --tone: #a78bfa;
   --tone-bg: rgba(139, 92, 246, 0.14);
 }
+.requested {
+  --tone: #fb923c;
+  --tone-bg: rgba(249, 115, 22, 0.14);
+}
 .void {
   --tone: var(--status-exception-fg);
   --tone-bg: var(--status-exception-bg);
@@ -38,6 +42,10 @@
   --tone: #7c3aed;
   --tone-bg: #ede9fe;
 }
+:global([data-theme='light']) .requested {
+  --tone: #c2410c;
+  --tone-bg: #ffedd5;
+}
 
 /* Status cards */
 .stats {
@@ -45,9 +53,12 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
-/* Chea Payments has a fifth card, Reviewed. */
+/* Chea Payments and Expense to Clients: Reviewed and Request Revise too. */
 .stats.five {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.stats.six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 .stat {
   display: flex;
@@ -330,9 +341,15 @@
   flex: 1;
 }
 
+@media (max-width: 1400px) {
+  .stats.six {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 @media (max-width: 1100px) {
   .stats,
-  .stats.five {
+  .stats.five,
+  .stats.six {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .toolbar {

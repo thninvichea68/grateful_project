@@ -95,6 +95,23 @@ describe('shipments', () => {
     expect(res.body.declarations[0]).toMatchObject({ declareNo: 'E 41001', hasLedgerEntry: false });
   });
 
+  it('keeps an Incoterms 2020 rule, or none, and refuses any other', async () => {
+    const h = await as('OPERATOR');
+    const fob = await request(app)
+      .post('/api/v1/shipments')
+      .set(h)
+      .send(exportShipment({ incoterm: 'FOB' }));
+    expect(fob.body.incoterm).toBe('FOB');
+    const update = (incoterm: string) =>
+      request(app)
+        .put(`/api/v1/shipments/${fob.body.id}`)
+        .set(h)
+        .send(exportShipment({ incoterm, declarations: [] }));
+    expect((await update('')).body.incoterm).toBeNull();
+    // DAT was replaced by DPU in Incoterms 2020.
+    expect((await update('DAT')).status).toBe(400);
+  });
+
   it('exports the invoice + packing list in the JR layout, one sheet per invoice', async () => {
     const h = await as('OPERATOR');
     await db.execute(sql`

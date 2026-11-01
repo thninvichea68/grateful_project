@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   BILLING_DOC_SCHEMAS,
@@ -7,11 +7,13 @@ import {
   computeLinesTotal,
   computeTaxDocument,
   computeTaxLine,
+  DEFAULT_VAT_PERCENT,
   ledgerInputSchema,
   lineAmount,
   recordSummaryLedger,
   toMoneyString,
   usdToKhr,
+  vatMark,
   type BillingDoc,
   type BillingDocListItem,
   type BillingDocType,
@@ -48,7 +50,7 @@ import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../l
 import { clientCondition } from '../../lib/clientScope';
 import { nextNumber } from '../../lib/numbering';
 import { issueDateFor } from '../../lib/issueDate';
-import { insertLedger, rateOn, recompute } from './ledger';
+import { insertLedger, rateOn, recompute, vatRateOn } from './ledger';
 import {
   assignNumbers,
   lockNumbering,
@@ -79,7 +81,7 @@ interface Config {
   /** Allocate the next number when the user didn't type one. */
   allocate: ((tx: Tx, date: string, clientCode: string) => Promise<string>) | null;
   kind: 'tax' | 'khr' | 'plain';
-  /** Credit notes and record summaries: the processing fee line carries 10% VAT on top. */
+  /** Credit notes and record summaries: the processing fee line carries VAT on top. */
   vatOnFee?: true;
   /** Issuing writes the number (when the ledger has a column for it) + total into the ledger. */
   ledger: {
@@ -168,6 +170,9 @@ const CONFIG: Record<BillingDocType, Config> = {
 
 const col = (t: PgTable, name: string) => (t as unknown as Record<string, PgColumn>)[name]!;
 
+/** Documents that charge VAT keep the percent of their date in vat_rate. */
+const hasVat = (cfg: Config) => cfg.kind === 'tax' || !!cfg.vatOnFee;
+
 /**
  * The numbering period a document's date falls in: debit notes run per client per month
  * (JR2610001), tax invoices (GS26-...), DIS and credit notes per year.
@@ -175,17 +180,19 @@ const col = (t: PgTable, name: string) => (t as unknown as Record<string, PgColu
 const numberPeriod = (type: BillingDocType, date: string) =>
   type === 'debit-notes' ? date.slice(0, 7) : date.slice(0, 4);
 
-/** Compute stored totals and line amounts with the shared formulas. */
+/** Compute stored totals and line amounts with the shared formulas, at the document's VAT percent. */
 function totals(
   kind: Config['kind'],
   lines: Input['lines'],
   rate: string | null,
   vatOnFee = false,
+  vatRate: string = String(DEFAULT_VAT_PERCENT),
 ) {
   if (kind === 'tax') {
     const t = computeTaxDocument(
       lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
       rate,
+      vatRate,
     );
     return {
       header: {
@@ -197,7 +204,7 @@ function totals(
         totalKhr: String(t.totalKhr),
       },
       lines: lines.map((l) => {
-        const lt = computeTaxLine({ qty: l.qty, unitPrice: l.unitPrice });
+        const lt = computeTaxLine({ qty: l.qty, unitPrice: l.unitPrice }, vatRate);
         return {
           subtotal: toMoneyString(lt.subtotal),
           vat: toMoneyString(lt.vat),
@@ -208,9 +215,9 @@ function totals(
     };
   }
   const amount = (l: Input['lines'][number]) =>
-    vatOnFee ? chargeLineAmount(l) : lineAmount(l.qty, l.unitPrice);
+    vatOnFee ? chargeLineAmount(l, vatRate) : lineAmount(l.qty, l.unitPrice);
   const total = vatOnFee
-    ? computeChargeLinesTotal(lines)
+    ? computeChargeLinesTotal(lines, vatRate)
     : computeLinesTotal(lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })));
   return {
     header:
@@ -263,9 +270,10 @@ const KIND: Record<IssueDatedType, NumberKind> = {
 const LEDGER_FIELD = { INV: 'invNo', DIS: 'disNo', DN: 'dnNo' } as const;
 
 /**
- * A shipment document's number, date and rate, from its Monthly Ledger entry: the number
+ * A shipment document's number, date and rates, from its Monthly Ledger entry: the number
  * given when its Chea payment was checked, the issue date (next working day after
- * clearance) and that day's exchange rate. One live document of each type per shipment.
+ * clearance), that day's exchange rate and the entry's VAT percent. One live document of each
+ * type per shipment.
  */
 async function fromLedger(
   tx: Tx,
@@ -278,13 +286,14 @@ async function fromLedger(
     declareNo: string;
     invDate: string;
     rate: string;
+    vatRate: string;
     invNo: string | null;
     disNo: string | null;
     dnNo: string | null;
   }>(
     tx,
     sql`SELECT d.declare_no AS "declareNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
-               a.exchange_rate::text AS rate, a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
+               a.exchange_rate::text AS rate, a.vat_rate::text AS "vatRate", a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
         FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
         WHERE a.id = ${recordId}`,
   );
@@ -306,6 +315,7 @@ async function fromLedger(
     [cfg.numberCol!]: number,
     [cfg.dateCol]: r.invDate,
     ...(cfg.kind !== 'plain' ? { exchangeRate: r.rate } : {}),
+    ...(hasVat(cfg) ? { vatRate: r.vatRate } : {}),
   };
 }
 
@@ -362,6 +372,7 @@ async function writeLines(
   docId: string,
   input: Input,
   lineTotals: Row[],
+  vatRate?: string,
 ) {
   const cfg = CONFIG[type];
   await tx.insert(cfg.lines).values(
@@ -372,7 +383,8 @@ async function writeLines(
       qty: l.qty,
       unit: l.unit,
       unitPrice: l.unitPrice,
-      mark: l.mark,
+      // The processing fee's "VAT 10%" Mark follows the document's percent.
+      mark: cfg.vatOnFee && vatRate ? vatMark(l, vatRate) : l.mark,
       ...lineTotals[i],
     })) as never,
   );
@@ -397,17 +409,20 @@ export async function createDoc(type: BillingDocType, typed: Input, req: Request
       const date = values[cfg.dateCol] as string;
       if (cfg.numberCol && !values[cfg.numberCol] && cfg.allocate)
         values[cfg.numberCol] = await cfg.allocate(tx, date, client.code);
+      // The VAT percent in force on the document's date (a shipment's: its ledger entry's).
+      if (hasVat(cfg)) values.vatRate ??= await vatRateOn(tx, date);
       const t = totals(
         cfg.kind,
         input.lines,
         (values.exchangeRate as string | undefined) ?? null,
         cfg.vatOnFee,
+        values.vatRate as string | undefined,
       );
       const [row] = (await tx
         .insert(cfg.table)
         .values({ ...values, ...t.header, status: 'DRAFT', createdById: req.auth!.userId } as never)
         .returning()) as Row[];
-      await writeLines(tx, type, row!.id as string, input, t.lines);
+      await writeLines(tx, type, row!.id as string, input, t.lines, values.vatRate as string);
       await audit(
         tx,
         {
@@ -444,21 +459,49 @@ const BILLING_LABEL: Record<BillingDocType, string> = {
   'record-summaries': 'Record summary',
 };
 
+/** Submitted credit notes and record summaries can be revised by their makers and resubmitted. */
+export const isRevisable = (type: BillingDocType) =>
+  type === 'credit-notes' || type === 'record-summaries';
+
+/**
+ * Save a document's changes. With `resubmit`, a submitted credit note or record summary is
+ * revised in place ("Revise" → "Resubmit"): it stays submitted, keeps its number, client,
+ * declaration and ledger entry, and goes back to accounting as Request Revise. The Monthly
+ * Ledger keeps its last approved amounts until accounting approves the revision.
+ */
 export async function updateDoc(
   type: BillingDocType,
   id: string,
   typed: Input,
   req: Request,
+  opts: { resubmit?: boolean } = {},
 ): Promise<void> {
   const cfg = CONFIG[type];
   try {
     await db.transaction(async (tx) => {
       const before = await lockDoc(tx, type, id);
-      const input = await linkSummary(tx, type, typed);
-      if (before.status !== 'DRAFT')
+      // An issued tax invoice, DIS or debit note stays editable: its lines and details can be
+      // fixed, while its number, date, rate, client and ledger entry stay as issued (the number
+      // and date change through a correction).
+      const issued = before.status === 'ISSUED' && isIssueDated(type);
+      const resubmit = !!opts.resubmit;
+      if (resubmit && (before.status !== 'ISSUED' || !isRevisable(type)))
+        throw conflict(`Only a submitted ${BILLING_LABEL[type].toLowerCase()} can be revised`);
+      if (before.status !== 'DRAFT' && !issued && !resubmit)
         throw conflict(
           `${BILLING_LABEL[type]} is ${before.status === 'VOID' ? 'cancelled' : String(before.status).toLowerCase()} and can no longer be edited. Cancel it and create a new one.`,
         );
+      const linkedInput = await linkSummary(tx, type, typed);
+      const input =
+        issued || resubmit
+          ? {
+              ...linkedInput,
+              clientId: before.clientId as string,
+              accountingRecordId: (before.accountingRecordId as string | null) ?? null,
+              // A revision stays on its declaration (the ledger entry it belongs to).
+              ...(resubmit ? { declareNo: before.declareNo as string | null } : {}),
+            }
+          : linkedInput;
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
@@ -466,8 +509,17 @@ export async function updateDoc(
       if (isIssueDated(type)) values[cfg.numberCol!] = undefined; // never typed
       if (type === 'record-summaries')
         Object.assign(values, await ledgerNumbers(tx, input.accountingRecordId ?? null));
-      if (linked) Object.assign(values, await fromLedger(tx, type, input.accountingRecordId!, id));
-      else {
+      if (issued)
+        Object.assign(values, {
+          [cfg.numberCol!]: before[cfg.numberCol!],
+          [cfg.dateCol]: before[cfg.dateCol],
+          ...(cfg.kind !== 'plain' ? { exchangeRate: before.exchangeRate } : {}),
+        });
+      else if (linked)
+        Object.assign(values, await fromLedger(tx, type, input.accountingRecordId!, id));
+      else if (resubmit) {
+        if (cfg.numberCol) values[cfg.numberCol] = before[cfg.numberCol]; // keeps its number
+      } else {
         if (cfg.numberCol && !values[cfg.numberCol]) values[cfg.numberCol] = before[cfg.numberCol]; // keep the allocated number
         // A draft whose date moves into another month (debit note) or year (the others) takes
         // that period's next number, unless the user typed a number of their own.
@@ -480,21 +532,46 @@ export async function updateDoc(
         )
           values[cfg.numberCol] = await cfg.allocate(tx, newDate, client.code);
       }
+      // The document keeps its VAT percent while its date stays; a new date takes that date's.
+      if (hasVat(cfg) && values.vatRate === undefined) {
+        const date = String(values[cfg.dateCol]);
+        values.vatRate =
+          date === String(before[cfg.dateCol])
+            ? (before.vatRate as string)
+            : await vatRateOn(tx, date);
+      }
       const t = totals(
         cfg.kind,
         input.lines,
         (values.exchangeRate as string | undefined) ?? null,
         cfg.vatOnFee,
+        values.vatRate as string,
       );
       await tx
         .update(cfg.table)
         .set({ ...values, ...t.header } as never)
         .where(eq(col(cfg.table, 'id'), id));
       await tx.delete(cfg.lines).where(eq(col(cfg.lines, cfg.fk), id));
-      await writeLines(tx, type, id, input, t.lines);
+      await writeLines(tx, type, id, input, t.lines, values.vatRate as string);
+      if (issued) await issuedToLedger(tx, cfg, await lockDoc(tx, type, id), req);
+      // Back to accounting; the ledger keeps the last approved amounts until they approve it.
+      if (resubmit)
+        await tx
+          .update(cfg.table)
+          .set({
+            reviewStatus: 'REVISION_REQUESTED',
+            ...(type === 'record-summaries' ? { reviewNote: null } : {}),
+          } as never)
+          .where(eq(col(cfg.table, 'id'), id));
       await audit(
         tx,
-        { action: 'UPDATE', entity: cfg.sqlTable, entityId: id, before, after: input },
+        {
+          action: 'UPDATE',
+          entity: cfg.sqlTable,
+          entityId: id,
+          before,
+          after: resubmit ? { ...input, reviewStatus: 'REVISION_REQUESTED' } : input,
+        },
         req,
       );
     });
@@ -528,22 +605,7 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       )
       .where(eq(col(cfg.table, 'id'), id));
     // A credit note reaches the Monthly Ledger when accounting checks it, not on submission.
-    if (cfg.ledger && doc.accountingRecordId && type !== 'credit-notes') {
-      const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
-      // A submitted record summary decides the amounts; the document then only gives its number.
-      const summary = await liveSummaryId(tx, doc.accountingRecordId as string);
-      await tx
-        .update(accountingRecords)
-        .set({
-          ...(cfg.ledger.numberCol
-            ? { [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null }
-            : {}),
-          ...(summary ? {} : { [cfg.ledger.totalCol]: total }),
-          updatedById: req.auth!.userId,
-        } as never)
-        .where(eq(accountingRecords.id, doc.accountingRecordId as string));
-      await recompute(tx, doc.accountingRecordId as string);
-    }
+    if (type !== 'credit-notes') await issuedToLedger(tx, cfg, doc, req);
     await audit(
       tx,
       {
@@ -556,6 +618,25 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       req,
     );
   });
+}
+
+/** An issued document's number and total into its Monthly Ledger row (on issue, and on later edits). */
+async function issuedToLedger(tx: Tx, cfg: Config, doc: Row, req: Request): Promise<void> {
+  if (!cfg.ledger || !doc.accountingRecordId) return;
+  const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
+  // A submitted record summary decides the amounts; the document then only gives its number.
+  const summary = await liveSummaryId(tx, doc.accountingRecordId as string);
+  await tx
+    .update(accountingRecords)
+    .set({
+      ...(cfg.ledger.numberCol
+        ? { [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null }
+        : {}),
+      ...(summary ? {} : { [cfg.ledger.totalCol]: total }),
+      updatedById: req.auth!.userId,
+    } as never)
+    .where(eq(accountingRecords.id, doc.accountingRecordId as string));
+  await recompute(tx, doc.accountingRecordId as string);
 }
 
 /**
@@ -588,7 +669,10 @@ async function ledgerRowByDeclareNo(
 }
 
 /** Undo what issuing wrote into the Monthly Ledger row (if that row still shows this document). */
-/** The shipment's checked record summary, which decides its INV, THC, REIM and DN. */
+/**
+ * The shipment's checked record summary, which decides its INV, THC, REIM and DN. One being
+ * revised (Request Revise) still counts: the ledger keeps its approved amounts meanwhile.
+ */
 async function liveSummaryId(tx: Tx, recordId: string): Promise<string | null> {
   const [r] = await tx
     .select({ id: recordSummaries.id })
@@ -597,7 +681,7 @@ async function liveSummaryId(tx: Tx, recordId: string): Promise<string | null> {
       and(
         eq(recordSummaries.accountingRecordId, recordId),
         eq(recordSummaries.status, 'ISSUED'),
-        eq(recordSummaries.reviewStatus, 'CHECKED'),
+        inArray(recordSummaries.reviewStatus, ['CHECKED', 'REVISION_REQUESTED']),
       ),
     )
     .limit(1);
@@ -684,6 +768,20 @@ async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
 }
 
 /**
+ * A credit note's Clear Fee out of its Monthly Ledger row. Under revision (Request Revise) the
+ * row still holds the last approved fee, no longer the note's total, so it goes by status.
+ */
+async function creditNoteOutOfLedger(tx: Tx, doc: Row): Promise<void> {
+  if (doc.reviewStatus !== 'REVISION_REQUESTED' || !doc.accountingRecordId)
+    return takeOutOfLedger(tx, CONFIG['credit-notes'], doc);
+  await tx
+    .update(accountingRecords)
+    .set({ clearFee: '0' })
+    .where(eq(accountingRecords.id, doc.accountingRecordId as string));
+  await recompute(tx, doc.accountingRecordId as string);
+}
+
+/**
  * Cancel (void): keeps the document and its number (never reused) and takes it back out of
  * the ledger; a shipment's entry then takes the next number for a replacement document.
  */
@@ -701,8 +799,15 @@ export async function voidDoc(
       .update(cfg.table)
       .set({ status: 'VOID' } as never)
       .where(eq(col(cfg.table, 'id'), id));
-    if (doc.status === 'ISSUED') await takeOutOfLedger(tx, cfg, doc);
-    if (type === 'record-summaries' && doc.reviewStatus === 'CHECKED' && doc.accountingRecordId)
+    if (doc.status === 'ISSUED')
+      await (type === 'credit-notes'
+        ? creditNoteOutOfLedger(tx, doc)
+        : takeOutOfLedger(tx, cfg, doc));
+    if (
+      type === 'record-summaries' &&
+      (doc.reviewStatus === 'CHECKED' || doc.reviewStatus === 'REVISION_REQUESTED') &&
+      doc.accountingRecordId
+    )
       await summaryOutOfLedger(tx, doc.accountingRecordId as string);
     // The cancelled document keeps its number, so the shipment takes the next one.
     if (isIssueDated(type) && doc.accountingRecordId) {
@@ -781,6 +886,7 @@ export async function applyClearanceDate(
   if (date === rec.invDate) return;
   const reason = `Declaration date changed to ${rec.declareDate}`;
   const rate = await rateOn(tx, date);
+  const vatRate = await vatRateOn(tx, date);
   await lockNumbering(tx);
   // Numbers whose period changes come off the entry, then the new period's are taken.
   const moved = ISSUE_DATED.map((type) => KIND[type]).filter((kind) => {
@@ -792,10 +898,12 @@ export async function applyClearanceDate(
     .set({
       invDate: date,
       exchangeRate: rate,
+      vatRate,
       ...Object.fromEntries(moved.map((k) => [LEDGER_FIELD[k], null])),
       updatedById: req.auth?.userId ?? null,
     })
     .where(eq(accountingRecords.id, rec.id));
+  await recompute(tx, rec.id);
   const assigned = moved.length ? await assignNumbers(tx, rec.id, req, moved) : null;
   await audit(
     tx,
@@ -832,12 +940,16 @@ export async function applyClearanceDate(
       const set: Row = {
         [cfg.dateCol]: date,
         ...(cfg.kind !== 'plain' ? { exchangeRate: rate } : {}),
+        ...(hasVat(cfg) ? { vatRate } : {}),
         ...(number ? { [cfg.numberCol!]: number } : {}),
       };
       await tx
         .update(cfg.table)
         .set(set as never)
         .where(eq(col(cfg.table, 'id'), d.id as string));
+      // Moved past a VAT change: the draft's amounts follow its new percent.
+      if (hasVat(cfg) && Number(d.vatRate) !== Number(vatRate))
+        await retotal(tx, type, d.id as string, rate, vatRate);
       await audit(
         tx,
         {
@@ -866,6 +978,32 @@ export async function applyClearanceDate(
   }
   // The new date may put the shipment before or after others in its runs.
   await resequence(tx, req);
+}
+
+/** Recalculate a saved document's line and header totals at the given rates. */
+async function retotal(
+  tx: Tx,
+  type: BillingDocType,
+  id: string,
+  rate: string | null,
+  vatRate: string,
+): Promise<void> {
+  const cfg = CONFIG[type];
+  const lines = (await tx
+    .select()
+    .from(cfg.lines)
+    .where(eq(col(cfg.lines, cfg.fk), id))
+    .orderBy(asc(col(cfg.lines, 'lineNo')))) as Row[];
+  const t = totals(cfg.kind, lines as Input['lines'], rate, cfg.vatOnFee, vatRate);
+  await tx
+    .update(cfg.table)
+    .set(t.header as never)
+    .where(eq(col(cfg.table, 'id'), id));
+  for (const [i, l] of lines.entries())
+    await tx
+      .update(cfg.lines)
+      .set(t.lines[i] as never)
+      .where(eq(col(cfg.lines, 'id'), l.id as string));
 }
 
 /**
@@ -1069,7 +1207,8 @@ export function previewDoc(
     unitPrice: String(l.unitPrice || '0'),
   }));
   const rate = values.exchangeRate == null ? null : String(values.exchangeRate);
-  const t = totals(cfg.kind, lines as Input['lines'], rate, cfg.vatOnFee);
+  const vatRate = values.vatRate == null ? undefined : String(values.vatRate);
+  const t = totals(cfg.kind, lines as Input['lines'], rate, cfg.vatOnFee, vatRate);
   const header: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(values))
     if (k !== 'lines' && !/Id$/.test(k))
@@ -1364,7 +1503,8 @@ export async function listCreditNoteReview(p: {
           (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
           (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
           (count(*) FILTER (WHERE t.review_status = 'REVIEWED'))::int AS reviewed,
-          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
+          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised,
+          (count(*) FILTER (WHERE t.review_status = 'REVISION_REQUESTED'))::int AS "revisionRequested"
         ${from} ${whereAll(c)}`,
   );
   if (p.review) c.push(sql`t.review_status = ${p.review}`);
@@ -1426,7 +1566,7 @@ export async function setCreditNoteReview(
     }
     if (reviewStatus === 'REVISED') {
       await tx.update(creditNotes).set({ status: 'DRAFT' }).where(eq(creditNotes.id, id));
-      await takeOutOfLedger(tx, CONFIG['credit-notes'], doc);
+      await creditNoteOutOfLedger(tx, doc);
     }
     // Approved: the declaration goes into the Monthly Ledger with this clear fee.
     if (reviewStatus === 'CHECKED') {
@@ -1524,7 +1664,8 @@ export async function listRecordSummaryReview(p: {
           (count(*) FILTER (WHERE t.review_status = 'CHECKED'))::int AS checked,
           (count(*) FILTER (WHERE t.review_status = 'UNCHECKED'))::int AS unchecked,
           (count(*) FILTER (WHERE t.review_status = 'REVIEWED'))::int AS reviewed,
-          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised
+          (count(*) FILTER (WHERE t.review_status = 'REVISED'))::int AS revised,
+          (count(*) FILTER (WHERE t.review_status = 'REVISION_REQUESTED'))::int AS "revisionRequested"
         ${from} ${whereAll(c)}`,
   );
   if (p.review) c.push(sql`t.review_status = ${p.review}`);
@@ -1587,7 +1728,8 @@ export async function setRecordSummaryReview(
       .where(eq(recordSummaries.id, id));
     if (recordId) {
       if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req);
-      else if (doc.reviewStatus === 'CHECKED') await summaryOutOfLedger(tx, recordId);
+      else if (doc.reviewStatus === 'CHECKED' || doc.reviewStatus === 'REVISION_REQUESTED')
+        await summaryOutOfLedger(tx, recordId);
     }
     // Revised: Operations hear about it in their Record Summary inbox. An approval needs no
     // action from them, so it is not sent.

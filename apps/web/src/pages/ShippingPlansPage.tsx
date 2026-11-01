@@ -12,6 +12,7 @@ import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
+import { CardToggle } from './dashboard/parts';
 
 const PREFS = 'gs:plans-view';
 const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
@@ -182,16 +183,17 @@ export function ShippingPlansPage() {
                 </option>
               ))}
             </select>
-            {/* Always Import or Export; the URL only carries Export. */}
-            <select
-              className={ui.input}
+            {/* Always Import or Export; the URL only carries Export. One click flips it,
+                like the Overview's Forwarder Statistics toggle. */}
+            <CardToggle
+              label="Import or Export"
               value={filters.direction}
-              onChange={(e) => setParam('direction', e.target.value === 'EXPORT' ? 'EXPORT' : '')}
-              aria-label="Import or Export"
-            >
-              <option value="IMPORT">Import</option>
-              <option value="EXPORT">Export</option>
-            </select>
+              onChange={(d) => setParam('direction', d === 'EXPORT' ? 'EXPORT' : '')}
+              options={[
+                { value: 'IMPORT', label: 'Import' },
+                { value: 'EXPORT', label: 'Export' },
+              ]}
+            />
             <PlansFilter
               value={filterValue}
               onApply={apply}
@@ -229,7 +231,7 @@ export function ShippingPlansPage() {
                 ) : (
                   <th>Arrive FTY</th>
                 )}
-                <th>Shipment Status</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>

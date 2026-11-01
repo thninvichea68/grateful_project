@@ -11,12 +11,14 @@ import {
   computeTaxLine,
   lineAmount,
   usdToKhr,
+  vatLabel,
   type BillingDoc,
   type BillingDocType,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import {
   useCompany,
+  useDocVatPercent,
   useDoc,
   useDocAction,
   useDocs,
@@ -33,6 +35,7 @@ import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
 import { NotFoundPage } from '../NotFoundPage';
+import { fi } from '../plans/formIcons';
 import { DOC_CONFIG, type FieldDef } from './docConfig';
 import { DOC_STATUS_PILL } from './DocsListPage';
 import { PrintLink } from '../../components/PrintLink';
@@ -220,7 +223,10 @@ function Editor({
   const lookups = useLookups();
   const action = useDocAction(type);
   const back = useBack(type);
-  const editable = can('accounting:write') && (!doc || doc.status === 'DRAFT');
+  // An issued tax invoice, DIS or debit note can still be fixed; its number and date stay
+  // (changed through "Correct number / date").
+  const issuedEdit = doc?.status === 'ISSUED' && isShipmentDoc(type);
+  const editable = can('accounting:write') && (!doc || doc.status === 'DRAFT' || issuedEdit);
   const defaults = useMemo(() => initialValues(type, doc, prefill), [type, doc, prefill]);
   const {
     register,
@@ -238,6 +244,15 @@ function Editor({
   });
   const watched = useWatch({ control, name: 'lines' });
   const rate = useWatch({ control, name: 'exchangeRate' }) as unknown as string | undefined;
+  const docDate = useWatch({ control, name: cfg.dateField }) as unknown as string | undefined;
+  // The percent in force on the document's date (Settings → Invoice Management); a saved
+  // document keeps its own while its date stays.
+  const vatPercent = useDocVatPercent(
+    docDate,
+    doc
+      ? { date: doc.date, vatRate: doc.header.vatRate }
+      : { date: str(prefill?.[cfg.dateField]), vatRate: str(prefill?.vatRate) || null },
+  );
   const clientId = useWatch({ control, name: 'clientId' });
   /** Most shipments repeat the same charges: start from an earlier document's lines. */
   const copyLines = (src: BillingDoc) => {
@@ -265,6 +280,7 @@ function Editor({
     ? computeTaxDocument(
         (watched ?? []).map((l) => ({ qty: l.qty, unitPrice: l.unitPrice })),
         rate,
+        vatPercent,
       )
     : (() => {
         const total = computeLinesTotal(
@@ -283,7 +299,11 @@ function Editor({
       ? await action.mutateAsync({ action: 'update', id: doc.id, body: values })
       : await action.mutateAsync({ action: 'create', body: values });
     toast(
-      doc ? 'Saved.' : `${cfg.title} ${(saved as BillingDoc).number ?? ''} created as a draft.`,
+      issuedEdit
+        ? `Saved. ${cfg.title} stays issued${doc?.accountingRecordId ? '; the Monthly Ledger has the new total' : ''}.`
+        : doc
+          ? 'Saved.'
+          : `${cfg.title} ${(saved as BillingDoc).number ?? ''} created as a draft.`,
     );
     if (!doc)
       navigate(`/accounting/${type}/${(saved as BillingDoc).id}${back.query}`, { replace: true });
@@ -293,7 +313,7 @@ function Editor({
     if (isDirty) return toast('Save your changes before issuing.');
     if (
       !window.confirm(
-        `Issue ${cfg.title} ${doc.number ?? ''}? It can no longer be edited${cfg.numberField && type !== 'credit-notes' ? ', and its number and total go into the Monthly Ledger' : ''}.`,
+        `Issue ${cfg.title} ${doc.number ?? ''}? ${isShipmentDoc(type) ? 'Its number and date are then fixed' : 'It can no longer be edited'}${cfg.numberField && type !== 'credit-notes' ? ', and its number and total go into the Monthly Ledger' : ''}.`,
       )
     )
       return;
@@ -354,12 +374,12 @@ function Editor({
   const renderField = (f: FieldDef) => {
     // Never typed: the number (and, for a shipment, its date and rate) come from the ledger.
     const locked =
-      (f.name === cfg.numberField && isShipmentDoc(type)) ||
-      (linked && (f.name === cfg.dateField || f.name === 'exchangeRate'));
+      (f.name === cfg.numberField && (isShipmentDoc(type) || issuedEdit)) ||
+      ((linked || issuedEdit) && (f.name === cfg.dateField || f.name === 'exchangeRate'));
     const placeholder =
       f.name === cfg.numberField && isShipmentDoc(type) ? 'Given automatically' : f.placeholder;
     return (
-      <div className={dh.field} data-span={f.span ?? 1} key={f.name}>
+      <div className={dh.field} data-half={f.half || undefined} key={f.name}>
         <label htmlFor={`d-${f.name}`} title={f.label}>
           {f.label}
         </label>
@@ -399,7 +419,13 @@ function Editor({
             type={f.type === 'date' ? 'date' : 'text'}
             placeholder={placeholder}
             readOnly={locked}
-            title={locked ? 'From the Monthly Ledger' : undefined}
+            title={
+              locked
+                ? issuedEdit
+                  ? 'Issued: use "Correct number / date" to change it'
+                  : 'From the Monthly Ledger'
+                : undefined
+            }
             {...register(f.name)}
             aria-invalid={!!err(f.name)}
           />
@@ -486,7 +512,7 @@ function Editor({
                 onClick={() => void save()}
                 disabled={action.isPending}
               >
-                {doc ? 'Save draft' : 'Create draft'}
+                {issuedEdit ? 'Save changes' : doc ? 'Save draft' : 'Create draft'}
               </button>
             )}
             {can('accounting:write') && doc?.status === 'DRAFT' && (
@@ -513,33 +539,27 @@ function Editor({
             <div className={`cx-card ${dh.card}`}>
               {(
                 [
-                  [
-                    'doc',
-                    `${cfg.title} details`,
-                    isShipmentDoc(type)
-                      ? 'Number, date and rate come from the Monthly Ledger.'
-                      : 'The client, number and date of this document.',
-                  ],
-                  [
-                    'customer',
-                    type === 'debit-notes' ? 'Bill to' : 'Customer',
-                    'Who is billed, as printed on the document.',
-                  ],
-                  ['ship', 'Shipment', 'The cargo this document is for.'],
+                  ['doc', `${cfg.title} details`, 'receipt'],
+                  ['customer', type === 'debit-notes' ? 'Bill to' : 'Customer', 'building'],
+                  ['ship', 'Shipment information', 'ship'],
                 ] as const
               )
-                .map(([group, title, hint]) => ({
+                .map(([group, title, icon]) => ({
                   group,
                   title,
-                  hint,
+                  icon,
                   fields: cfg.fields.filter((f) => (f.group ?? 'doc') === group),
                 }))
                 .filter((sec) => sec.group === 'doc' || sec.fields.length > 0)
                 .map((sec) => (
                   <section key={sec.group} className={dh.section}>
                     <div className={dh.sectionHead}>
-                      <h4>{sec.title}</h4>
-                      <p>{sec.hint}</p>
+                      <h4>
+                        <span className={`cx-title-icon ${dh.headIcon}`}>
+                          {fi[sec.icon]({ width: 16, height: 16 })}
+                        </span>
+                        {sec.title}
+                      </h4>
                     </div>
                     <div className={dh.fields}>
                       {sec.group === 'doc' && (
@@ -549,7 +569,7 @@ function Editor({
                             id="d-clientId"
                             className="form-select-box"
                             {...register('clientId')}
-                            disabled={!!defaults.accountingRecordId || !editable}
+                            disabled={!!defaults.accountingRecordId || !editable || issuedEdit}
                           >
                             <option value="">Choose…</option>
                             {lookups.data?.clients.map((c) => (
@@ -572,7 +592,11 @@ function Editor({
                 <div className="cx-title">
                   <div>
                     <h3>Line items</h3>
-                    <p>{cfg.tax ? 'VAT 10% is added per line' : 'No VAT on this document'}</p>
+                    <p>
+                      {cfg.tax
+                        ? `${vatLabel(vatPercent)} is added per line`
+                        : 'No VAT on this document'}
+                    </p>
                   </div>
                 </div>
                 {editable && (
@@ -596,7 +620,7 @@ function Editor({
                       {cfg.tax ? (
                         <>
                           <th className={dl.num}>Sub total</th>
-                          <th className={dl.num}>VAT 10%</th>
+                          <th className={dl.num}>{vatLabel(vatPercent)}</th>
                           <th className={dl.num}>Amount</th>
                         </>
                       ) : (
@@ -612,7 +636,7 @@ function Editor({
                     {lines.fields.map((f, i) => {
                       const l = watched?.[i];
                       const tl = cfg.tax
-                        ? computeTaxLine({ qty: l?.qty, unitPrice: l?.unitPrice })
+                        ? computeTaxLine({ qty: l?.qty, unitPrice: l?.unitPrice }, vatPercent)
                         : null;
                       return (
                         <tr key={f.id}>
@@ -731,7 +755,7 @@ function Editor({
                         <b>{fmtMoney(totals.subtotal)}</b>
                       </div>
                       <div>
-                        <span>VAT 10%</span>
+                        <span>{vatLabel(vatPercent)}</span>
                         <b>{fmtMoney(totals.vat)}</b>
                       </div>
                     </>

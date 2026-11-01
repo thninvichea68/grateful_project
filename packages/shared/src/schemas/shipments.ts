@@ -3,11 +3,13 @@ import {
   CLEARANCE_STATUSES,
   CONTAINER_SIZES,
   DIRECTIONS,
+  INCOTERMS,
   LOAD_TYPES,
   SHIPMENT_STATUSES,
   TRANSPORT_MODES,
   type ClearanceStatus,
   type ContainerSize,
+  type Incoterm,
   type Direction,
   type LoadType,
   type ShipmentStatus,
@@ -102,12 +104,15 @@ export const declarationInputSchema = z.object({
   notes: optText(300),
 });
 
-/** A declaration row left completely blank: the form always offers one to fill in later. */
+/**
+ * A declaration row left completely blank: the form always offers one to fill in later.
+ * A saved one cleared out counts too, so it is removed (ledger-linked ones are refused on save).
+ */
 function blankDeclarationRow(d: unknown): boolean {
   if (!d || typeof d !== 'object') return false;
   const x = d as Record<string, unknown>;
   const text = (v: unknown) => String(v ?? '').trim();
-  return !text(x.id) && !text(x.declareNo) && !text(x.declareDate) && !text(x.notes);
+  return !text(x.declareNo) && !text(x.declareDate) && !text(x.notes);
 }
 /** A container row with nothing typed in (the form always offers one; its size is preset). */
 function blankContainerRow(c: unknown): boolean {
@@ -192,6 +197,11 @@ export const shipmentInputSchema = z
     direction: z.enum(DIRECTIONS),
     transportMode: z.enum(TRANSPORT_MODES),
     loadType: z.enum(LOAD_TYPES),
+    incoterm: z
+      .enum(INCOTERMS)
+      .or(z.literal(''))
+      .nullish()
+      .transform((v) => v || null),
     clearanceStatus: z.enum(CLEARANCE_STATUSES).default('PENDING'),
     shipperName: optText(200),
     consigneeId: optUuid,
@@ -400,6 +410,7 @@ export interface ShipmentDetail {
   quantity: string | null;
   quantityUnit: string | null;
   material: string | null;
+  incoterm: Incoterm | null;
   bookingNo: string | null;
   hblNo: string | null;
   vesselName: string | null;

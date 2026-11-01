@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import {
   hasPermission,
+  type Incoterm,
   type OverImportViolation,
   type Paginated,
   type Permission,
@@ -252,6 +253,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     quantity: r.quantity,
     quantityUnit: r.quantityUnit,
     material: r.material,
+    incoterm: r.incoterm as Incoterm | null,
     bookingNo: r.bookingNo,
     hblNo: r.hblNo,
     vesselName: r.vesselName,

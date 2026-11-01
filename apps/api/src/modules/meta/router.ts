@@ -6,6 +6,7 @@ import { db } from '../../db/client';
 import { settings } from '../../db/schema';
 import { requireAuth } from '../../middleware/auth';
 import { clientCondition, scopeClients } from '../../lib/clientScope';
+import { listVatRates } from '../accounting/ledger';
 
 export const metaRouter = Router();
 
@@ -34,6 +35,14 @@ metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
     recordSummaryInbox: Number(rsInbox.rows[0]?.n ?? 0),
   };
   res.json(body);
+});
+
+/**
+ * The dated VAT percents (Settings → Invoice Management), for every signed-in user: document
+ * editors preview totals at the percent of the document's date.
+ */
+metaRouter.get('/vat-rates', requireAuth, async (_req, res) => {
+  res.json(await listVatRates());
 });
 
 /** Company details printed on invoices and vouchers (edited in Settings). */

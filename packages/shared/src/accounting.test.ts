@@ -11,6 +11,10 @@ import {
   chargeLineUnit,
   followShipmentUnit,
   shipmentChargeUnit,
+  vatPercentOn,
+  vatLabel,
+  vatMark,
+  recordSummaryItems,
 } from './accounting';
 import { computeCutStockBalance, wouldOverImport } from './cutstock';
 import { toMoneyString, sumMoney, round2 } from './money';
@@ -232,6 +236,53 @@ describe('credit note / record summary lines (processing fee + 10% VAT)', () => 
         { description: 'LOLO AT PORT', qty: 1, unitPrice: 45 },
       ]),
     ).toBe(265);
+  });
+});
+
+describe('VAT percent from Settings → Invoice Management', () => {
+  const rates = [
+    { effectiveDate: '2027-01-01', percent: '12.00' },
+    { effectiveDate: '2027-07-01', percent: '12.50' },
+  ];
+  it('takes the latest rate on or before the date, else the standard 10%', () => {
+    expect(vatPercentOn([], '2026-11-01')).toBe(10);
+    expect(vatPercentOn(rates, '2026-12-31')).toBe(10);
+    expect(vatPercentOn(rates, '2027-01-01')).toBe(12);
+    expect(vatPercentOn(rates, '2027-06-30')).toBe(12);
+    expect(vatPercentOn(rates, '2027-08-15')).toBe(12.5);
+  });
+  it('computes every VAT at the given percent (10% by default)', () => {
+    expect(computeTaxLine({ qty: 1, unitPrice: 185 }, 12).vat).toBe(22.2);
+    expect(computeTaxDocument([{ qty: 1, unitPrice: 200 }], 4000, 12.5)).toMatchObject({
+      vat: 25,
+      total: 225,
+      vatKhr: 100000,
+    });
+    const ledger = {
+      clearFee: 0,
+      thc: 0,
+      otherPay: 0,
+      commission: 0,
+      invRevenue: 300,
+      disTotal: 0,
+      dnTotal: 0,
+    };
+    expect(computeLedger(ledger).vat).toBe(30);
+    expect(computeLedger(ledger, 12).vat).toBe(36);
+    expect(computeLedger(ledger, 12).netProfit).toBe(300);
+    const fee = { description: 'IMPORT PROCESSING FEE', qty: 1, unitPrice: 200 };
+    expect(chargeLineAmount(fee, 12)).toBe(224);
+    expect(computeChargeLinesTotal([fee, { description: 'LOLO', qty: 1, unitPrice: 45 }], 12)).toBe(
+      269,
+    );
+  });
+  it('labels and marks follow the percent', () => {
+    expect(vatLabel()).toBe('VAT 10%');
+    expect(vatLabel('12.50')).toBe('VAT 12.5%');
+    expect(vatMark({ description: 'EXPORT PROCESSING FEE', mark: 'VAT 10%' }, 12)).toBe('VAT 12%');
+    expect(vatMark({ description: 'EXPORT PROCESSING FEE', mark: 'Paid' }, 12)).toBe('Paid');
+    expect(vatMark({ description: 'THC FEE', mark: 'VAT 10%' }, 12)).toBe('VAT 10%');
+    expect(recordSummaryItems('IMPORT', 12)[0]).toEqual(['IMPORT PROCESSING FEE', 'VAT 12%']);
   });
 });
 

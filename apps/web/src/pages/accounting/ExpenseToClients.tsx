@@ -89,11 +89,19 @@ export function ExpenseToClients() {
       icon: icons.edit({ width: 17, height: 17 }),
       cls: s.revised!,
     },
+    // Revised by its maker after submitting, waiting for approval.
+    {
+      review: 'REVISION_REQUESTED',
+      label: 'Request Revise',
+      value: counts?.revisionRequested,
+      icon: icons.send({ width: 17, height: 17 }),
+      cls: s.requested!,
+    },
   ];
 
   return (
     <section className={`view active ${s.page} ${s.fill}`}>
-      <div className={`${s.stats} ${s.five}`} role="group" aria-label="Filter by status">
+      <div className={`${s.stats} ${s.six}`} role="group" aria-label="Filter by status">
         {stats.map((k) => {
           const on = (q.review ?? '') === k.review;
           return (

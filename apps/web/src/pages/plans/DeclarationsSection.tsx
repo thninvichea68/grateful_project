@@ -1,12 +1,24 @@
+import type { ReactNode } from 'react';
 import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { type ShipmentDetail } from '@gs/shared';
 import { FieldError } from '../../components/ui';
 import { maskDeclareNo } from '../../lib/declareNo';
-import { fi } from './formIcons';
+import { FIELD_ICON, fi } from './formIcons';
+import sf from './ShipmentForm.module.css';
 import { blankDeclaration, type FormValues } from './formModel';
 
-/** Customs declarations (the CDC master list is drawn down by the import invoice items). */
-export function DeclarationsSection({ original }: { original?: ShipmentDetail | undefined }) {
+/**
+ * Customs declarations (the CDC master list is drawn down by the import invoice items).
+ * `port`: the shipment's Clearance Port field, shown first on the first row (every
+ * declaration clears there), with the column kept on the other rows so they line up.
+ */
+export function DeclarationsSection({
+  original,
+  port,
+}: {
+  original?: ShipmentDetail | undefined;
+  port?: ReactNode;
+}) {
   const {
     control,
     register,
@@ -62,9 +74,33 @@ export function DeclarationsSection({ original }: { original?: ShipmentDetail | 
             }}
           >
             <input type="hidden" {...register(`declarations.${di}.id`)} />
-            <div className="form-fields-grid">
+            {/* A later declaration: its number, and Remove (or why it can't be removed). */}
+            {di > 0 && (
+              <div className={sf.declHead}>
+                <span>Declaration {di + 1}</span>
+                {ledger ? (
+                  <span className="create-header-desc">
+                    Has a ledger entry in Accounting, so it can't be removed here.
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-delete-shipment"
+                    onClick={() => decls.remove(di)}
+                  >
+                    Remove declaration
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Equal columns across the card; declarations take the Clearance Port on save. */}
+            <div className={sf.declGrid} data-cols={port ? 3 : 2}>
+              {port && (di === 0 ? port : <div aria-hidden="true" />)}
               <div className="form-field-group">
-                <label htmlFor={`d-${di}-no`}>Declare No.</label>
+                <label htmlFor={`d-${di}-no`} className={sf.label}>
+                  {fi[FIELD_ICON.declareNo!]({})}
+                  Declare No.
+                </label>
                 <input
                   id={`d-${di}-no`}
                   className="form-field-box"
@@ -79,7 +115,10 @@ export function DeclarationsSection({ original }: { original?: ShipmentDetail | 
                 <FieldError message={e?.declareNo?.message} />
               </div>
               <div className="form-field-group">
-                <label htmlFor={`d-${di}-date`}>Declare Date</label>
+                <label htmlFor={`d-${di}-date`} className={sf.label}>
+                  {fi[FIELD_ICON.declareDate!]({})}
+                  Declare Date
+                </label>
                 <input
                   id={`d-${di}-date`}
                   type="date"
@@ -88,22 +127,6 @@ export function DeclarationsSection({ original }: { original?: ShipmentDetail | 
                   aria-invalid={!!e?.declareDate}
                 />
                 <FieldError message={e?.declareDate?.message} />
-              </div>
-              {/* Declarations take the Clearance Port (Booking & Clearance / Vessel & Clearance), set on save. */}
-              <div className="form-field-group" style={{ justifyContent: 'flex-end' }}>
-                {di === 0 ? null : ledger ? (
-                  <span className="create-header-desc">
-                    Has a ledger entry in Accounting, so it can't be removed here.
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-delete-shipment"
-                    onClick={() => decls.remove(di)}
-                  >
-                    Remove declaration
-                  </button>
-                )}
               </div>
             </div>
           </div>

@@ -95,155 +95,6 @@
   height: 14px;
   flex-shrink: 0;
 }
-/* ---------- Setup card: the client on its own row, then the shipment choices ---------- */
-.setupClient {
-  padding-bottom: 20px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.setupClient > .setupField {
-  max-width: 560px;
-}
-/* Shipment type · Freight · Terms: separate columns divided by a rule. */
-/* The full row: Shipment type half, Freight and Terms a quarter each; every box the same
-   height (--choice-h) and corners. */
-.setupChoices {
-  --choice-h: 68px;
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
-  align-items: stretch;
-}
-/* (.setupField resets margin/padding/border, so this needs the extra weight.) */
-.setupChoices > .setupField + .setupField {
-  margin-left: 24px;
-  padding-left: 24px;
-  border-left: 1px solid var(--border-subtle);
-}
-.typeTiles {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.typeTile {
-  position: relative;
-  display: flex;
-}
-.typeTile input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-/* Icon · name and line · round check on the right. */
-.typeTile span {
-  flex: 1;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-rows: auto auto;
-  column-gap: 12px;
-  row-gap: 2px;
-  align-items: center;
-  min-height: var(--choice-h, 68px);
-  padding: 8px 14px;
-  border: 1.5px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-surface);
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-.typeTile i {
-  grid-row: 1 / span 2;
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  font-style: normal;
-}
-.typeTile i svg {
-  width: 19px;
-  height: 19px;
-}
-.typeTile b {
-  font-size: 14px;
-  color: var(--text-primary);
-  align-self: end;
-}
-.typeTile small {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  align-self: start;
-}
-.radio {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
-  background: var(--bg-surface);
-  color: #fff;
-  transition: all 0.15s ease;
-}
-.radio svg {
-  width: 12px;
-  height: 12px;
-  stroke-width: 3;
-  opacity: 0;
-}
-.typeTile span:hover {
-  border-color: var(--text-tertiary);
-}
-.typeTile input:checked + span {
-  border-color: var(--accent-primary);
-  background: var(--status-progress-bg);
-}
-.typeTile input:checked + span i {
-  background: var(--accent-primary);
-  color: #fff;
-}
-.typeTile input:checked + span b {
-  color: var(--accent-primary);
-}
-.typeTile input:checked + span .radio {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-}
-.typeTile input:checked + span .radio svg {
-  opacity: 1;
-}
-.typeTile input:focus-visible + span {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-fieldset:disabled .typeTile span {
-  cursor: not-allowed;
-}
-.setupField {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  border: none;
-  padding: 0;
-  margin: 0;
-}
-/* Setup headings (Client, Shipment type, Freight, Terms): an icon, then the name. */
-.cap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.cap svg,
 .page label.label svg {
   width: 15px;
   height: 15px;
@@ -266,63 +117,80 @@ fieldset:disabled .typeTile span {
   height: 14px;
   color: var(--text-tertiary);
 }
-/* A label with a "!" note at the far end (e.g. the automatic statuses). */
-.labelRow {
+/* Status: one tile per status, its badge on the right and how it is worked out below. */
+.statusTile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  /* A light tint of the subtle grey, so the tiles stay soft on the white card. */
+  background: color-mix(in srgb, var(--bg-subtle) 40%, var(--bg-surface));
+}
+.statusHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.statusIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+.statusIcon svg {
+  width: 15px;
+  height: 15px;
+}
+.statusLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.statusHint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* Customs declarations: equal columns across the card (Clearance Port · Declare No. · Date). */
+.declGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--decl-cols, 2), minmax(0, 1fr));
+  gap: 20px 18px;
+}
+.declGrid[data-cols='3'] {
+  --decl-cols: 3;
+}
+/* A later declaration's heading: "Declaration 2" and its Remove button. */
+.declHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-}
-.infoTip {
-  position: relative;
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  display: grid;
-  place-items: center;
-  border: 1.5px solid var(--text-primary);
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--text-primary);
-  cursor: help;
-}
-.infoTip:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-.infoText {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: -6px;
-  z-index: 20;
-  width: 280px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-surface);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  gap: 12px;
+  margin-bottom: 12px;
   font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
+  font-weight: 700;
   color: var(--text-secondary);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.15s ease,
-    transform 0.15s ease;
 }
-.infoTip:hover .infoText,
-.infoTip:focus-visible .infoText {
-  opacity: 1;
-  transform: none;
+@media (max-width: 640px) {
+  .declGrid {
+    grid-template-columns: 1fr;
+  }
 }
-.clientSelect {
-  height: 44px;
-  font-size: 13px !important;
-  font-weight: 700 !important;
+/* Field values in regular weight, like typed text: dropdowns (native and searchable) and
+   their option lists included. Labels stay bold. */
+.page :global(.form-select-box),
+.page [role='listbox'] li {
+  font-weight: 400;
 }
 
 /* A Select's box wrapper: adds nothing to the layout. */
@@ -352,126 +220,6 @@ fieldset:disabled .typeTile span {
   color: var(--text-tertiary);
   pointer-events: none;
 }
-.segmented {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  height: 42px;
-  border-radius: 8px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-}
-.segOpt {
-  position: relative;
-  display: flex;
-}
-.segOpt input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.segOpt span {
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-.segOpt span:hover {
-  color: var(--text-primary);
-}
-.segOpt input:checked + span {
-  background: var(--bg-surface);
-  color: var(--accent-primary);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-}
-.segOpt input:focus-visible + span {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 1px;
-}
-.segOpt span svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-
-/* Freight and Terms: equal boxes filling their column, as tall as the type tiles and with
-   the same corners. Freight puts the icon above its name. */
-.segmented[data-variant] {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 8px;
-  padding: 0;
-  height: auto;
-  border: none;
-  background: none;
-}
-.segmented[data-variant] .segOpt {
-  min-width: 0;
-}
-.segmented[data-variant] .segOpt span {
-  flex: 1;
-  justify-content: center;
-  gap: 7px;
-  min-height: var(--choice-h, 68px);
-  padding: 6px 8px;
-  border: 1.5px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--bg-surface);
-  text-align: center;
-  white-space: normal;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-.segmented[data-variant='pill'] .segOpt span {
-  flex-direction: column;
-  gap: 5px;
-}
-.segmented[data-variant='pill'] .segOpt span svg {
-  width: 19px;
-  height: 19px;
-}
-.segmented[data-variant] .segOpt span:hover {
-  border-color: var(--text-tertiary);
-}
-/* Selected: the same tint and outline as the selected type tile. */
-.segmented[data-variant] .segOpt input:checked + span {
-  border-color: var(--accent-primary);
-  background: var(--status-progress-bg);
-  color: var(--accent-primary);
-  box-shadow: none;
-}
-/* Air: Terms greyed out, nothing highlighted. */
-.setupField[disabled] .segmented[data-variant] .segOpt span,
-.setupField[disabled] .segmented[data-variant] .segOpt input:checked + span {
-  border-color: var(--border-subtle);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-}
-/* Air: Terms don't apply. Nothing is highlighted and hovering does nothing. */
-.setupField[disabled] .segOpt span {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-.setupField[disabled] .segOpt span:hover {
-  color: var(--text-secondary);
-}
-.setupField[disabled] .segOpt input:checked + span {
-  background: none;
-  box-shadow: none;
-  color: var(--text-secondary);
-}
-
 /* ---------- Section cards ---------- */
 .stack {
   display: flex;
@@ -511,40 +259,12 @@ fieldset:disabled .typeTile span {
   background: currentColor;
 }
 
-@media (max-width: 1100px) {
-  .setupChoices {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    row-gap: 20px;
-  }
-  .setupChoices > .setupField:first-child {
-    grid-column: 1 / -1;
-  }
-  .setupChoices > .setupField:nth-child(2) {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
-  }
-}
 @media (max-width: 1000px) {
   .grid {
     --cols: 2 !important;
   }
 }
 @media (max-width: 640px) {
-  .setupChoices {
-    grid-template-columns: 1fr;
-  }
-  .setupChoices > .setupField + .setupField {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: 0;
-  }
-  .typeTiles {
-    grid-template-columns: 1fr;
-  }
-  .segmented {
-    overflow-x: auto;
-  }
   .grid {
     --cols: 1 !important;
   }
@@ -764,26 +484,12 @@ fieldset:disabled .typeTile span {
   border-radius: 6px;
 }
 
-/* ---------- Setup card: client and shipment number side by side ---------- */
-.setupTop {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 36px;
-}
-.setupClient.setupTop > .setupField {
-  max-width: none;
-}
-.setupTop > .setupField:last-child {
-  max-width: 440px;
-}
 /* The client, the shipment's key field, in a soft yellow. */
 .clientHi {
   background-color: color-mix(in srgb, var(--status-pending-bg) 70%, var(--bg-surface)) !important;
   border-color: color-mix(in srgb, var(--status-pending-fg) 25%, transparent) !important;
 }
 .refBox {
-  height: 44px;
-  font-weight: 700;
   color: var(--text-secondary);
   cursor: default;
 }
@@ -801,10 +507,6 @@ fieldset:disabled .typeTile span {
 }
 
 @media (max-width: 760px) {
-  .setupTop {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
   .mileLabel {
     font-size: 10px;
   }

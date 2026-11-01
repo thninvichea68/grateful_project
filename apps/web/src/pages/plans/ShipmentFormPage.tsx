@@ -14,6 +14,8 @@ import {
   CLEARANCE_STATUS_LABEL,
   clearanceStatusOf,
   CONTAINER_SIZES,
+  INCOTERM_LABEL,
+  INCOTERMS,
   shipmentStatusOf,
   SHIPMENT_STATUS_LABEL,
   shipmentInputSchema,
@@ -42,6 +44,7 @@ import { formResolver } from '../../lib/zodForm';
 import { AddNewSelect } from './AddNewSelect';
 import { CargoSection, DotsMenu } from './CargoSection';
 import { DeclarationsSection } from './DeclarationsSection';
+import { SupportDocumentsModal } from './SupportDocuments';
 import {
   blankContainer,
   cleanForSubmit,
@@ -60,20 +63,25 @@ interface Step {
   render: () => ReactNode;
 }
 
-type Choice = { value: string; label: string; icon?: FormIcon };
-const FREIGHT: Choice[] = [
-  { value: 'SEA', label: 'Sea', icon: 'ship' },
-  { value: 'AIR', label: 'Air', icon: 'plane' },
-  { value: 'ROAD', label: 'Truck', icon: 'truck' },
+type Choice = { value: string; label: string };
+/** Freight methods: named in full in the dropdown, short in the header ("By Sea"). */
+const FREIGHT: (Choice & { short: string })[] = [
+  { value: 'SEA', short: 'By Sea', label: 'Ocean Freight (Sea)' },
+  { value: 'AIR', short: 'By Air', label: 'Air Freight' },
+  { value: 'ROAD', short: 'By Truck', label: 'Road Freight (Truck)' },
+  { value: 'RAIL', short: 'By Rail', label: 'Rail Freight' },
 ];
-const TERMS: Choice[] = [
-  { value: 'FCL', label: 'CY / CY' },
-  { value: 'LCL', label: 'CFS / CFS (LCL)' },
+/** Shipping terms: spelled out in the dropdown, short in the header. */
+const TERMS: (Choice & { short: string })[] = [
+  { value: 'FCL', short: 'CY / CY', label: 'CY / CY (FCL, Full Container Load)' },
+  { value: 'LCL', short: 'CFS / CFS (LCL)', label: 'CFS / CFS (LCL, Less Than Container Load)' },
 ];
-const DIRECTIONS = [
-  { value: 'IMPORT', label: 'Import', sub: 'Goods arriving into Cambodia', icon: 'importBox' },
-  { value: 'EXPORT', label: 'Export', sub: 'Goods shipped out of Cambodia', icon: 'exportBox' },
-] as const;
+/** Air freight has no CY / CY or LCL terms. */
+const AIR_TERMS: Choice[] = [{ value: 'NONE', label: 'None (air freight)' }];
+const DIRECTIONS: Choice[] = [
+  { value: 'IMPORT', label: 'Import' },
+  { value: 'EXPORT', label: 'Export' },
+];
 
 const TONE: Record<string, string> = {
   COMPLETED: 'done',
@@ -144,6 +152,7 @@ function ShipmentForm({
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
   // A saved shipment opens for viewing; ⋯ → Edit unlocks it. New ones start editable.
   const [editing, setEditing] = useState(!detail);
+  const [supportDocs, setSupportDocs] = useState(false);
   const readOnly = !can('shipments:write') || !editing;
   const clientLocked = !!detail && detail.declarations.some((d) => d.hasLedgerEntry);
 
@@ -296,8 +305,8 @@ function ShipmentForm({
   const metaParts = [
     clientName,
     DIRECTIONS.find((d) => d.value === direction)?.label,
-    `By ${FREIGHT.find((x) => x.value === transportMode)?.label.toLowerCase() ?? ''}`,
-    TERMS.find((t) => t.value === loadType)?.label,
+    FREIGHT.find((x) => x.value === transportMode)?.short,
+    TERMS.find((t) => t.value === loadType)?.short,
   ].filter(Boolean);
   // Editing an existing record: save from any step. New record: walk the steps, create at the end.
   const canSaveHere = !!detail || isLast;
@@ -335,6 +344,16 @@ function ShipmentForm({
           editing
             ? { label: 'Cancel Edit', icon: icons.close({}), onClick: cancelEdit }
             : { label: 'Edit', icon: icons.edit({}), onClick: () => setEditing(true) },
+        ]
+      : []),
+    // A saved shipment's files (each up to 10 MB), viewable without entering Edit.
+    ...(detail && can('documents:read')
+      ? [
+          {
+            label: 'Support Documents',
+            icon: icons.paperclip({}),
+            onClick: () => setSupportDocs(true),
+          },
         ]
       : []),
     ...(detail && can('shipments:delete')
@@ -431,74 +450,70 @@ function ShipmentForm({
     </div>
   );
 
-  const setupCard = (
-    <div className="cx-card">
-      <div className={`${f.setupClient} ${f.setupTop}`}>
-        <div className={f.setupField}>
-          <label className={f.cap} htmlFor="f-clientId">
-            {fi.idCard({})}
-            Client
-          </label>
-          <div>
-            <select
-              id="f-clientId"
-              className={`form-select-box ${f.clientSelect} ${f.clientHi}`}
-              {...register('clientId')}
-              disabled={clientLocked}
-              title={
-                clientLocked
-                  ? 'Locked: a declaration of this shipment is already in the ledger'
-                  : undefined
-              }
-            >
-              {lookups.clients
-                .filter((c) => c.status !== 'INACTIVE' || c.id === detail?.clientId)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-        <div className={f.setupField}>
-          <label className={f.cap} htmlFor="f-reference">
-            {fi.idCard({})}
-            Shipment Number
-          </label>
-          <div>
-            <input
-              id="f-reference"
-              className={`form-field-box ${f.refBox}`}
-              value={detail?.reference ?? ''}
-              placeholder="Assigned when the shipment is created"
-              readOnly
-              tabIndex={-1}
-            />
-          </div>
-        </div>
+  const generalCard = (
+    <Card title="General Information" icon="idCard">
+      <div className="form-field-group" style={spanStyle(2)}>
+        <FieldLabel name="clientId" label="Client" />
+        <select
+          id="f-clientId"
+          className={`form-select-box ${f.clientHi}`}
+          {...register('clientId')}
+          disabled={clientLocked}
+          title={
+            clientLocked
+              ? 'Locked: a declaration of this shipment is already in the ledger'
+              : undefined
+          }
+        >
+          {lookups.clients
+            .filter((c) => c.status !== 'INACTIVE' || c.id === detail?.clientId)
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
       </div>
-      <div className={f.setupChoices}>
-        <DirectionTiles onChange={() => setStep(0)} />
-        <Segmented
-          name="transportMode"
-          label="Freight"
-          icon="ship"
-          variant="pill"
-          options={FREIGHT}
-          // Switching away from Air: pick CY / CY so Sea and Truck have terms.
-          onChange={() => loadType === 'NONE' && setValue('loadType', 'FCL')}
-        />
-        <Segmented
-          name="loadType"
-          label="Terms"
-          icon="file"
-          variant="tile"
-          options={TERMS}
-          disabled={transportMode === 'AIR'}
+      <div className="form-field-group" style={spanStyle(2)}>
+        <FieldLabel name="reference" label="Shipment Number" />
+        <input
+          id="f-reference"
+          className={`form-field-box ${f.refBox}`}
+          value={detail?.reference ?? ''}
+          placeholder="Assigned when the shipment is created"
+          readOnly
+          tabIndex={-1}
         />
       </div>
-    </div>
+      <Select
+        name="direction"
+        label="Shipment Type"
+        options={DIRECTIONS}
+        onChange={() => setStep(0)}
+        span={2}
+      />
+      <Select
+        name="transportMode"
+        label="Freight Method"
+        options={FREIGHT}
+        span={2}
+        // Switching away from Air: pick CY / CY so Sea and Truck have terms.
+        onChange={() => loadType === 'NONE' && setValue('loadType', 'FCL')}
+      />
+      <Select
+        name="loadType"
+        label="Shipping Terms"
+        options={transportMode === 'AIR' ? AIR_TERMS : TERMS}
+        disabled={transportMode === 'AIR'}
+      />
+      <Select
+        name="incoterm"
+        label="Incoterms"
+        options={INCOTERMS.map((t) => ({ value: t, label: `${t} – ${INCOTERM_LABEL[t]}` }))}
+        placeholder="Select incoterm"
+      />
+      <Field name="receivedDocumentDate" label="Received Document Date" type="date" span={2} />
+    </Card>
   );
 
   return (
@@ -539,9 +554,9 @@ function ShipmentForm({
             style={{ border: 'none', minWidth: 0, padding: 0 }}
           >
             <div className={f.stack}>
-              {/* ---------- Setup: client and shipment number, then the shipment choices,
-                  on the first tab only ---------- */}
-              {current === 0 && setupCard}
+              {/* ---------- General information: client, shipment number and the shipment
+                  choices, on the first tab only ---------- */}
+              {current === 0 && generalCard}
 
               <ErrorBanner error={violations ? null : (save.error ?? del.error)} />
               {violations && (
@@ -575,6 +590,14 @@ function ShipmentForm({
           </fieldset>
         </form>
       </FormProvider>
+      {supportDocs && detail && (
+        <SupportDocumentsModal
+          title={detail.reference}
+          link={{ shipmentId: detail.id }}
+          clientId={detail.clientId}
+          onClose={() => setSupportDocs(false)}
+        />
+      )}
     </section>
   );
 }
@@ -653,74 +676,6 @@ function Milestones({ direction }: { direction: FormValues['direction'] }) {
 type Span = number | 'full';
 const spanStyle = (span?: Span): CSSProperties | undefined =>
   span === 'full' ? { gridColumn: '1 / -1' } : span ? { gridColumn: `span ${span}` } : undefined;
-
-/** Export / Import as two large tiles, so the shipment type can't be mistaken for the client. */
-function DirectionTiles({ onChange }: { onChange: () => void }) {
-  const { register } = useFormContext<FormValues>();
-  return (
-    <fieldset className={f.setupField}>
-      <legend className={f.cap} style={{ marginBottom: 8 }}>
-        {fi.box({})}
-        Shipment type
-      </legend>
-      <div className={f.typeTiles}>
-        {DIRECTIONS.map((o) => (
-          <label key={o.value} className={f.typeTile}>
-            <input type="radio" value={o.value} {...register('direction', { onChange })} />
-            <span>
-              <i aria-hidden="true">{fi[o.icon]({})}</i>
-              <b>{o.label}</b>
-              <small>{o.sub}</small>
-              <em className={f.radio} aria-hidden="true">
-                {fi.check({})}
-              </em>
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-/** Freight as pill buttons with icons; Terms as small tiles. */
-function Segmented({
-  name,
-  label,
-  icon,
-  variant,
-  options,
-  disabled,
-  onChange,
-}: {
-  name: 'direction' | 'transportMode' | 'loadType';
-  label: string;
-  icon: FormIcon;
-  variant: 'pill' | 'tile';
-  options: Choice[];
-  disabled?: boolean;
-  onChange?: () => void;
-}) {
-  const { register } = useFormContext<FormValues>();
-  return (
-    <fieldset className={f.setupField} disabled={disabled}>
-      <legend className={f.cap} style={{ marginBottom: 8 }}>
-        {fi[icon]({})}
-        {label}
-      </legend>
-      <div className={f.segmented} data-variant={variant}>
-        {options.map((o) => (
-          <label key={o.value} className={f.segOpt}>
-            <input type="radio" value={o.value} {...register(name, { onChange })} />
-            <span>
-              {o.icon && fi[o.icon]({})}
-              {o.label}
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 /** Quantity, with its unit (CTNS…) shown as a tag inside the box. */
 function QuantityField() {
@@ -913,19 +868,48 @@ function CoFormSelect({ lookups }: { lookups: LookupsResponse }) {
   );
 }
 
+/**
+ * The import or export type (Garments…), kept in the material field. A plan workbook import
+ * fills it with the CDC groups ("RAW MATERIAL, ACCESSORY"), which stays selectable until changed.
+ */
+function CargoTypeSelect({
+  label,
+  options,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+}) {
+  const current = useWatch<FormValues, 'material'>({ name: 'material' }) ?? '';
+  return (
+    <Select
+      name="material"
+      label={label}
+      options={
+        current && !options.some((o) => o.value === current)
+          ? [...options, { value: current, label: current }]
+          : options
+      }
+      placeholder="Select type"
+      span={2}
+    />
+  );
+}
+
 /** A country, picked from every country in the world with its flag; type to search. */
 function CountryField({
   name,
   label,
   countries,
+  span,
 }: {
   name: 'destinationCountryIso2' | 'originCountryIso2';
   label: string;
   countries: LookupsResponse['countries'];
+  span?: Span;
 }) {
   const { field, fieldState } = useController<FormValues, typeof name>({ name });
   return (
-    <div className="form-field-group">
+    <div className="form-field-group" style={spanStyle(span)}>
       <FieldLabel name={name} label={label} />
       <CountrySelect
         id={`f-${name}`}
@@ -946,12 +930,16 @@ function Select({
   options,
   placeholder,
   span,
+  disabled,
+  onChange,
 }: {
   name: keyof FormValues;
   label: string;
   options: { value: string; label: string }[];
   placeholder?: string;
   span?: Span;
+  disabled?: boolean;
+  onChange?: () => void;
 }) {
   const {
     register,
@@ -965,7 +953,8 @@ function Select({
         <select
           id={`f-${name}`}
           className="form-select-box"
-          {...register(name)}
+          {...register(name, { onChange })}
+          disabled={disabled}
           aria-invalid={!!err}
         >
           {placeholder !== undefined && <option value="">{placeholder}</option>}
@@ -981,14 +970,31 @@ function Select({
   );
 }
 
-/** A "!" beside a label that shows its note on hover or keyboard focus. */
-function InfoTip({ children }: { children: ReactNode }) {
+/** One status as a tile: what it is, its badge, and how it is worked out. */
+function StatusTile({
+  icon,
+  label,
+  tone,
+  value,
+  children,
+}: {
+  icon: FormIcon;
+  label: string;
+  tone: string;
+  value: string;
+  children: ReactNode;
+}) {
   return (
-    <span className={f.infoTip} tabIndex={0}>
-      <span aria-hidden="true">!</span>
-      {/* Faded out rather than hidden, so screen readers still read it. */}
-      <span className={f.infoText}>{children}</span>
-    </span>
+    <div className={f.statusTile}>
+      <div className={f.statusHead}>
+        <span className={f.statusIcon}>{fi[icon]({})}</span>
+        <span className={f.statusLabel}>{label}</span>
+        <span className={f.badge} data-tone={tone}>
+          {value}
+        </span>
+      </div>
+      <p className={f.statusHint}>{children}</p>
+    </div>
   );
 }
 
@@ -1002,20 +1008,15 @@ function ShipmentStatusField() {
   const status = shipmentStatusOf({ direction, atd, arriveFty, declarations });
   const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
   return (
-    <div className="form-field-group">
-      <div className={f.labelRow}>
-        <FieldLabel name="shipmentStatus" label="Shipment Status" />
-        <InfoTip>
-          Set automatically: Completed once {done} is filled in, In Progress once a customs
-          declaration is recorded, otherwise Pending.
-        </InfoTip>
-      </div>
-      <div>
-        <span className={f.badge} data-tone={TONE[status]}>
-          {SHIPMENT_STATUS_LABEL[status]}
-        </span>
-      </div>
-    </div>
+    <StatusTile
+      icon="activity"
+      label="Status"
+      tone={TONE[status]!}
+      value={SHIPMENT_STATUS_LABEL[status]}
+    >
+      Completed once {done} is filled in, In Progress once a declaration is recorded, otherwise
+      Pending.
+    </StatusTile>
   );
 }
 
@@ -1025,20 +1026,15 @@ function ClearanceStatusField() {
   const declarations = useWatch({ control, name: 'declarations' });
   const status = clearanceStatusOf({ declarations });
   return (
-    <div className="form-field-group">
-      <div className={f.labelRow}>
-        <FieldLabel name="clearanceStatus" label="Clearance Status" />
-        <InfoTip>
-          Set automatically: Customs Cleared once a declaration has its Declare No. and Declare
-          Date, In Progress once a Declare No. is entered, otherwise Pending Review.
-        </InfoTip>
-      </div>
-      <div>
-        <span className={f.badge} data-tone={TONE[status]}>
-          {CLEARANCE_STATUS_LABEL[status]}
-        </span>
-      </div>
-    </div>
+    <StatusTile
+      icon="badge"
+      label="Clearance Status"
+      tone={TONE[status]!}
+      value={CLEARANCE_STATUS_LABEL[status]}
+    >
+      Customs Cleared once a declaration has its Declare No. and Date, In Progress once a Declare
+      No. is entered, otherwise Pending Review.
+    </StatusTile>
   );
 }
 
@@ -1170,7 +1166,8 @@ function ContainersCard() {
     return (
       <Card title="Containers" icon="container" cols={1}>
         <p className={f.note}>
-          Containers are recorded for CY / CY (FCL) shipments only. Change Terms above to add them.
+          Containers are recorded for CY / CY (FCL) shipments only. Change Shipping Terms on the
+          Shipment Information tab to add them.
         </p>
       </Card>
     );
@@ -1184,7 +1181,7 @@ function ContainersCard() {
                 <tr>
                   <th>Container No.</th>
                   <th>Size</th>
-                  {direction === 'EXPORT' && <th>Liner Seal</th>}
+                  <th>Liner Seal</th>
                   {direction === 'EXPORT' && <th>Customs Seal</th>}
                   {byTruck && <th>Truck No.</th>}
                   <th />
@@ -1212,15 +1209,13 @@ function ContainersCard() {
                         ))}
                       </select>
                     </td>
-                    {direction === 'EXPORT' && (
-                      <td>
-                        <input
-                          className="form-field-box"
-                          placeholder="Liner Seal"
-                          {...register(`containers.${i}.linerSeal`)}
-                        />
-                      </td>
-                    )}
+                    <td>
+                      <input
+                        className="form-field-box"
+                        placeholder="Liner Seal"
+                        {...register(`containers.${i}.linerSeal`)}
+                      />
+                    </td>
                     {direction === 'EXPORT' && (
                       <td>
                         <input
@@ -1281,7 +1276,7 @@ function buildSteps(
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
 
   const statusCard = (
-    <Card title="Status" icon="activity" cols={2}>
+    <Card title="Shipment Status" icon="activity" cols={2}>
       <ShipmentStatusField />
       <ClearanceStatusField />
     </Card>
@@ -1317,6 +1312,7 @@ function buildSteps(
           'quantity',
           'quantityUnit',
           'material',
+          'receivedDocumentDate',
         ],
         render: () => (
           <>
@@ -1326,20 +1322,17 @@ function buildSteps(
               <PartiesFields lookups={lookups} which="forwarder" />
               <BrokerSelect lookups={lookups} />
             </Card>
+            {/* Laid out like an import's: destination and export type, then quantity and unit. */}
             <Card title="Cargo" icon="box">
               <CountryField
                 name="destinationCountryIso2"
                 label="Destination Country"
                 countries={lookups.countries}
+                span={2}
               />
+              <CargoTypeSelect label="Export Type" options={materials} />
               <QuantityField />
               <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
-              <Select
-                name="material"
-                label="Material"
-                options={materials}
-                placeholder="Select material"
-              />
             </Card>
           </>
         ),
@@ -1408,8 +1401,8 @@ function buildSteps(
         render: () => (
           <>
             <DeclarationsSection original={detail} />
-            {statusCard}
             {remarkCard}
+            {statusCard}
           </>
         ),
       },
@@ -1428,6 +1421,7 @@ function buildSteps(
         'forwarderId',
         'broker',
         'originCountryIso2',
+        'material',
         'receivedDocumentDate',
       ],
       render: () => (
@@ -1438,15 +1432,17 @@ function buildSteps(
             <PartiesFields lookups={lookups} which="forwarder" />
             <BrokerSelect lookups={lookups} />
           </Card>
+          {/* Origin and import type on one row; quantity and unit share the half below. */}
           <Card title="Cargo" icon="box">
-            <QuantityField />
-            <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
             <CountryField
               name="originCountryIso2"
               label="Origin Country"
               countries={lookups.countries}
+              span={2}
             />
-            <Field name="receivedDocumentDate" label="Received Document" type="date" />
+            <CargoTypeSelect label="Import Type" options={materials} />
+            <QuantityField />
+            <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
           </Card>
         </>
       ),
@@ -1467,12 +1463,10 @@ function buildSteps(
         'bookingNo',
         'hblNo',
         'doDate',
-        'clearancePortId',
         'eta',
         'arriveFty',
         'vesselName',
         'voyageNo',
-        'coNumber',
         'containers',
         'loadType',
       ],
@@ -1492,29 +1486,34 @@ function buildSteps(
             <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} />
             <Field name="doDate" label="DO / EDO Date" type="date" />
           </Card>
-          <Card title={air ? 'Clearance' : 'Vessel & Clearance'} icon={air ? 'anchor' : 'ship'}>
-            {!air && <Field name="vesselName" label="Vessel Name" span={2} />}
-            {!air && <Field name="voyageNo" label="Voyage No." span={2} />}
-            <Select
-              name="clearancePortId"
-              label="Clearance Port"
-              options={ports}
-              placeholder="Select port"
-              span={2}
-            />
-            <Field name="coNumber" label="CO Number" span={2} />
-          </Card>
+          {/* The clearance port is with the customs declarations (last tab). */}
+          {!air && (
+            <Card title="Vessel" icon="ship">
+              <Field name="vesselName" label="Vessel Name" span={2} />
+              <Field name="voyageNo" label="Voyage No." span={2} />
+            </Card>
+          )}
         </>
       ),
     },
     {
       label: 'Weights & Declaration',
-      fields: ['declarations', 'remark'],
+      fields: ['clearancePortId', 'declarations', 'remark'],
       render: () => (
         <>
-          <DeclarationsSection original={detail} />
-          {statusCard}
+          <DeclarationsSection
+            original={detail}
+            port={
+              <Select
+                name="clearancePortId"
+                label="Clearance Port"
+                options={ports}
+                placeholder="Select port"
+              />
+            }
+          />
           {remarkCard}
+          {statusCard}
         </>
       ),
     },

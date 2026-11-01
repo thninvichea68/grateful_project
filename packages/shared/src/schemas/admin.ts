@@ -150,12 +150,17 @@ export const documentMetaSchema = z.object({
   statusLabel: optText(60),
   shipmentId: optUuid,
   clientId: optUuid,
+  /** A credit note's or record summary's support document (⋯ → Upload support documents). */
+  creditNoteId: optUuid,
+  recordSummaryId: optUuid,
 });
 
 export const documentListQuerySchema = paginationQuerySchema.extend({
   category: z.enum(DOCUMENT_CATEGORIES).optional(),
   shipmentId: z.string().uuid().optional(),
   clientId: z.string().uuid().optional(),
+  creditNoteId: z.string().uuid().optional(),
+  recordSummaryId: z.string().uuid().optional(),
 });
 
 export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
@@ -181,6 +186,8 @@ export interface DocumentRow {
   shipmentReference: string | null;
   clientId: string | null;
   clientName: string | null;
+  creditNoteId: string | null;
+  recordSummaryId: string | null;
   uploadedBy: string | null;
   createdAt: string;
 }
@@ -453,6 +460,23 @@ export interface PublicHoliday {
   nameKh: string | null;
   note: string | null;
 }
+
+/** Settings → Invoice Management: the VAT percent in force from a date. */
+export const vatRateInputSchema = z.object({
+  effectiveDate: isoDate,
+  percent: z.coerce
+    .number({ invalid_type_error: 'Enter the VAT percent' })
+    .min(0, 'The VAT percent cannot be below 0')
+    .max(100, 'The VAT percent cannot be over 100')
+    .multipleOf(0.01, 'Use at most 2 decimals'),
+  note: z
+    .string()
+    .trim()
+    .max(200)
+    .nullish()
+    .transform((v) => v || null),
+});
+export type VatRateInput = z.input<typeof vatRateInputSchema>;
 
 export interface SettingsBundle {
   company: CompanyInput;

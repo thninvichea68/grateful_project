@@ -14,6 +14,35 @@ export type TransportMode = (typeof TRANSPORT_MODES)[number];
 export const LOAD_TYPES = ['FCL', 'LCL', 'NONE'] as const;
 export type LoadType = (typeof LOAD_TYPES)[number];
 
+/** Incoterms 2020: the seven rules for any mode of transport, then the four for sea and inland waterway. */
+export const INCOTERMS = [
+  'EXW',
+  'FCA',
+  'CPT',
+  'CIP',
+  'DAP',
+  'DPU',
+  'DDP',
+  'FAS',
+  'FOB',
+  'CFR',
+  'CIF',
+] as const;
+export type Incoterm = (typeof INCOTERMS)[number];
+export const INCOTERM_LABEL: Record<Incoterm, string> = {
+  EXW: 'Ex Works',
+  FCA: 'Free Carrier',
+  CPT: 'Carriage Paid To',
+  CIP: 'Carriage and Insurance Paid To',
+  DAP: 'Delivered at Place',
+  DPU: 'Delivered at Place Unloaded',
+  DDP: 'Delivered Duty Paid',
+  FAS: 'Free Alongside Ship',
+  FOB: 'Free on Board',
+  CFR: 'Cost and Freight',
+  CIF: 'Cost, Insurance and Freight',
+};
+
 /** Worked out from the shipment's dates and declarations (see shipmentStatusOf), never chosen. */
 export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
@@ -77,8 +106,17 @@ export type StaffStatus = (typeof STAFF_STATUSES)[number];
 
 export const CREDIT_NOTE_REF_TYPES = ['HOUSE_BILL', 'BILL_NO', 'HAWB_NO'] as const;
 export type CreditNoteRefType = (typeof CREDIT_NOTE_REF_TYPES)[number];
-/** Accounting's check of a submitted Credit Noted. */
-export const CREDIT_NOTE_REVIEW_STATUSES = ['UNCHECKED', 'REVIEWED', 'CHECKED', 'REVISED'] as const;
+/**
+ * Accounting's check of a submitted credit note or record summary. REVISION_REQUESTED ("Request
+ * Revise"): its maker reopened it after submitting and resubmitted it for accounting to approve.
+ */
+export const CREDIT_NOTE_REVIEW_STATUSES = [
+  'UNCHECKED',
+  'REVIEWED',
+  'CHECKED',
+  'REVISED',
+  'REVISION_REQUESTED',
+] as const;
 export type CreditNoteReviewStatus = (typeof CREDIT_NOTE_REVIEW_STATUSES)[number];
 
 export const AUDIT_ACTIONS = [

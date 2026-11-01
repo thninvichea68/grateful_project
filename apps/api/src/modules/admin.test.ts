@@ -524,6 +524,26 @@ describe('documents', () => {
     expect((await api('delete', `/documents/${up.body.id}`).set(h)).status).toBe(204);
     expect((await api('get', `/documents/${up.body.id}/download`).set(h)).status).toBe(404);
   });
+
+  it("keeps a shipment's support documents to 10 MB each", async () => {
+    const h = await as('OPERATOR');
+    const shipment = await api('post', '/shipments')
+      .set(h)
+      .send({ clientId: b.jr.id, direction: 'IMPORT', transportMode: 'SEA', loadType: 'LCL' });
+    const pdf = (bytes: number) => Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(bytes)]);
+    const attach = (file: Buffer, shipmentId?: string) => {
+      const req = api('post', '/documents').set(h);
+      if (shipmentId) void req.field('shipmentId', shipmentId);
+      return req.attach('file', file, { filename: 'support.pdf', contentType: 'application/pdf' });
+    };
+    const ok = await attach(pdf(1024), shipment.body.id);
+    expect(ok.status).toBe(201);
+    expect(ok.body.shipmentReference).toBe(shipment.body.reference);
+    const big = pdf(10 * 1024 * 1024);
+    expect((await attach(big, shipment.body.id)).status).toBe(400);
+    // The library's own limit (20 MB) still applies to files not linked to a shipment.
+    expect((await attach(big)).status).toBe(201);
+  });
 });
 
 describe('quotations', () => {

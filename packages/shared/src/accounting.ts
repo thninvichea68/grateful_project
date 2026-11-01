@@ -14,7 +14,42 @@ import {
   type Decimalish,
 } from './money';
 
-export const VAT_RATE = 0.1;
+/**
+ * The VAT percent before any change in Settings → Invoice Management. Each document stores the
+ * percent in force on its own date, so a later change never alters documents already made.
+ */
+export const DEFAULT_VAT_PERCENT = 10;
+
+/** One dated VAT percent (Settings → Invoice Management): in force from its date on. */
+export interface VatRate {
+  id: string;
+  effectiveDate: string;
+  /** e.g. "10.00". */
+  percent: string;
+  note: string | null;
+}
+
+/** The VAT percent in force on a date (YYYY-MM-DD): the latest rate dated on/before it. */
+export function vatPercentOn(
+  rates: readonly Pick<VatRate, 'effectiveDate' | 'percent'>[] | undefined,
+  date: string | null | undefined,
+): number {
+  let best: Pick<VatRate, 'effectiveDate' | 'percent'> | undefined;
+  for (const r of rates ?? [])
+    if ((!date || r.effectiveDate <= date) && (!best || r.effectiveDate > best.effectiveDate))
+      best = r;
+  return best ? Number(best.percent) : DEFAULT_VAT_PERCENT;
+}
+
+/** 10 → "10", "12.50" → "12.5". */
+export const fmtVatPercent = (percent: Decimalish): string =>
+  String(Number(toNumber(percent).toFixed(2)));
+
+/** "VAT 10%": a line's Mark and the column / total label. */
+export const vatLabel = (percent: Decimalish = DEFAULT_VAT_PERCENT): string =>
+  `VAT ${fmtVatPercent(percent)}%`;
+
+const vatOf = (amount: number, percent: Decimalish) => round2((amount * toNumber(percent)) / 100);
 
 export interface LedgerInput {
   clearFee: Decimalish;
@@ -39,10 +74,14 @@ export interface LedgerTotals {
 
 /**
  * Net profit = (INV revenue + DIS + DN total) − (clear fee + THC + CM + other pay).
- * VAT 10% is computed on INV revenue but is pass-through: it is NOT part of profit.
+ * VAT (the row's percent, 10% by default) is computed on INV revenue but is pass-through: it is
+ * NOT part of profit.
  */
-export function computeLedger(i: LedgerInput): LedgerTotals {
-  const vat = round2(toNumber(i.invRevenue) * VAT_RATE);
+export function computeLedger(
+  i: LedgerInput,
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
+): LedgerTotals {
+  const vat = vatOf(toNumber(i.invRevenue), vatPercent);
   const inflowC = toCents(i.invRevenue) + toCents(i.disTotal) + toCents(i.dnTotal);
   const outflowC =
     toCents(i.clearFee) + toCents(i.thc) + toCents(i.commission) + toCents(i.otherPay);
@@ -67,9 +106,12 @@ export interface TaxLineTotals {
   amount: number;
 }
 
-export function computeTaxLine(line: TaxLineInput): TaxLineTotals {
+export function computeTaxLine(
+  line: TaxLineInput,
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
+): TaxLineTotals {
   const subtotal = lineAmount(line.qty, line.unitPrice);
-  const vat = line.vatable === false ? 0 : round2(subtotal * VAT_RATE);
+  const vat = line.vatable === false ? 0 : vatOf(subtotal, vatPercent);
   return { subtotal, vat, amount: round2(subtotal + vat) };
 }
 
@@ -89,8 +131,9 @@ export interface TaxDocumentTotals {
 export function computeTaxDocument(
   lines: TaxLineInput[],
   exchangeRate: Decimalish,
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
 ): TaxDocumentTotals {
-  const computed = lines.map(computeTaxLine);
+  const computed = lines.map((l) => computeTaxLine(l, vatPercent));
   const subtotal = sumMoney(computed.map((l) => l.subtotal));
   const vat = sumMoney(computed.map((l) => l.vat));
   const total = round2(subtotal + vat);
@@ -111,19 +154,27 @@ export function computeLinesTotal(lines: { qty: Decimalish; unitPrice: Decimalis
 
 /**
  * Credit notes and record summaries: the import / export processing fee is GS's own service,
- * charged with 10% VAT on top (its Mark reads "VAT 10%"). Every other line is a pass-through.
+ * charged with VAT on top (the document's percent; its Mark reads "VAT 10%"). Every other line
+ * is a pass-through.
  */
 export const isVatChargedLine = (description: string | null | undefined): boolean =>
   /^\s*(IMPORT|EXPORT)\s+PROCESSING\s+FEE\b/i.test(description ?? '');
 
-/** A credit note / record summary line's subtotal: qty × price, plus 10% VAT on the processing fee. */
-export function chargeLineAmount(line: {
-  description?: string | null;
-  qty: Decimalish;
-  unitPrice: Decimalish;
-}): number {
+/** The multiplier a VAT-charged line's amount takes: 10% → 1.1. */
+export const vatFactor = (vatPercent: Decimalish = DEFAULT_VAT_PERCENT): number =>
+  Number(((100 + toNumber(vatPercent)) / 100).toFixed(4));
+
+/** A credit note / record summary line's subtotal: qty × price, plus VAT on the processing fee. */
+export function chargeLineAmount(
+  line: {
+    description?: string | null;
+    qty: Decimalish;
+    unitPrice: Decimalish;
+  },
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
+): number {
   const amount = lineAmount(line.qty, line.unitPrice);
-  return isVatChargedLine(line.description) ? lineAmount(amount, '1.1') : amount;
+  return isVatChargedLine(line.description) ? lineAmount(amount, vatFactor(vatPercent)) : amount;
 }
 
 /**
@@ -186,6 +237,27 @@ export const RECORD_SUMMARY_ITEMS: Record<
     ['EQMC FOR INV:', ''],
   ],
 };
+
+/** The standard breakdown with the processing fee's Mark showing the given VAT percent. */
+export const recordSummaryItems = (
+  direction: 'IMPORT' | 'EXPORT',
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
+): (readonly [description: string, mark: string])[] =>
+  RECORD_SUMMARY_ITEMS[direction].map(([d, m]) =>
+    isVatChargedLine(d) ? ([d, vatLabel(vatPercent)] as const) : ([d, m] as const),
+  );
+
+/**
+ * A line's Mark at the document's VAT percent: the processing fee's "VAT 10%" follows the
+ * percent (e.g. "VAT 12%"); any other Mark stays as typed.
+ */
+export const vatMark = (
+  line: { description?: string | null; mark?: string | null },
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
+): string | null =>
+  isVatChargedLine(line.description) && /^\s*VAT\s*[\d.]+\s*%\s*$/i.test(line.mark ?? '')
+    ? vatLabel(vatPercent)
+    : (line.mark ?? null);
 
 /** Charges billed per set, whatever the shipment. */
 export const PER_SET_CHARGES = [
@@ -272,8 +344,9 @@ export function recordSummaryLedger(
 /** Sum of credit note / record summary lines (see {@link chargeLineAmount}). */
 export function computeChargeLinesTotal(
   lines: { description?: string | null; qty: Decimalish; unitPrice: Decimalish }[],
+  vatPercent: Decimalish = DEFAULT_VAT_PERCENT,
 ): number {
-  return sumMoney(lines.map(chargeLineAmount));
+  return sumMoney(lines.map((l) => chargeLineAmount(l, vatPercent)));
 }
 
 /**

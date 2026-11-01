@@ -67,7 +67,19 @@ export const BASE_COLUMNS: PlanColumn[] = [
     label: 'Clearance Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
-  { key: 'fwd', label: 'Forwarder', render: (r) => dash(r.forwarderName?.toUpperCase()) },
+  {
+    key: 'fwd',
+    label: 'Forwarder',
+    // Cut short with "…"; the whole name on hover.
+    render: (r) =>
+      r.forwarderName ? (
+        <span className="cell-ellipsis" style={{ maxWidth: 170 }} title={r.forwarderName}>
+          {r.forwarderName.toUpperCase()}
+        </span>
+      ) : (
+        '-'
+      ),
+  },
   // The port's short name (SHV, KTI, OLAIR…), in capitals; the full name on hover.
   {
     key: 'clearance',

@@ -178,7 +178,7 @@ async function notInvoiced(tx: Tx, recordId: string): Promise<boolean> {
     tx,
     sql`SELECT a.inv_revenue = 0 AND EXISTS (
           SELECT 1 FROM record_summaries s WHERE s.accounting_record_id = a.id
-            AND s.status = 'ISSUED' AND s.review_status = 'CHECKED') AS yes
+            AND s.status = 'ISSUED' AND s.review_status IN ('CHECKED', 'REVISION_REQUESTED')) AS yes
         FROM accounting_records a WHERE a.id = ${recordId}`,
   );
   return !!r?.yes;
@@ -410,7 +410,9 @@ export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumb
     sql`SELECT a.id FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
         WHERE (a.inv_no IS NULL OR a.dis_no IS NULL OR a.dn_no IS NULL)
           AND EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id
-                      AND cn.status = 'ISSUED' AND cn.review_status = 'CHECKED')
+                      AND cn.status = 'ISSUED'
+                      -- A revision waiting for approval (Request Revise) was approved before.
+                      AND cn.review_status IN ('CHECKED', 'REVISION_REQUESTED'))
         ORDER BY d.declare_date, a.inv_date, d.declare_no`,
   );
   const out: AssignedNumbers[] = [];

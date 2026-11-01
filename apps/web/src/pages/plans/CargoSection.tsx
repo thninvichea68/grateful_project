@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFieldArray, useFormContext, useWatch, type Control } from 'react-hook-form';
 import {
@@ -40,13 +40,15 @@ const CHEVRON = (
 /** The invoice's HTS codes (one invoice = one code; more than one is flagged). */
 const htsCodesOf = (lines: InvoiceValues['lines'] | undefined) => invoiceHtsCodes(lines ?? []);
 
-type MenuAction = {
+export type MenuAction = {
   label: string;
   icon: React.ReactNode;
   onClick?: (() => void) | undefined;
   disabled?: boolean;
   title?: string | undefined;
   danger?: boolean;
+  /** Starts a new group: a thin line above it (not before the first item). */
+  separated?: boolean;
 };
 
 /**
@@ -109,19 +111,21 @@ export function DotsMenu({
       {pos &&
         createPortal(
           <div ref={menu} className={c.menu} role="menu" style={{ top: pos.top, right: pos.right }}>
-            {actions.map((a) => (
-              <button
-                key={a.label}
-                type="button"
-                role="menuitem"
-                className={a.danger ? `${c.menuItem} ${c.menuDanger}` : c.menuItem}
-                disabled={a.disabled || !a.onClick}
-                title={a.title}
-                onClick={a.onClick && pick(a.onClick)}
-              >
-                {a.icon}
-                {a.label}
-              </button>
+            {actions.map((a, i) => (
+              <Fragment key={a.label}>
+                {a.separated && i > 0 && <div className={c.menuSep} role="separator" />}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={a.danger ? `${c.menuItem} ${c.menuDanger}` : c.menuItem}
+                  disabled={a.disabled || !a.onClick}
+                  title={a.title}
+                  onClick={a.onClick && pick(a.onClick)}
+                >
+                  {a.icon}
+                  {a.label}
+                </button>
+              </Fragment>
             ))}
           </div>,
           document.body,

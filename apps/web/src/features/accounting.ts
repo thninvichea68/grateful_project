@@ -21,7 +21,9 @@ import type {
   RecordSummaryReviewRow,
   RecordSummaryShipment,
   ReleasedInvoiceSet,
+  VatRate,
 } from '@gs/shared';
+import { vatPercentOn } from '@gs/shared';
 import { api } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
 
@@ -355,7 +357,7 @@ export function useDocAction(type: BillingDocType) {
       body,
     }: {
       id?: string;
-      action: 'create' | 'update' | 'issue' | 'void' | 'correct' | 'delete';
+      action: 'create' | 'update' | 'issue' | 'resubmit' | 'void' | 'correct' | 'delete';
       body?: unknown;
     }) => {
       const base = `/accounting/docs/${type}`;
@@ -366,6 +368,9 @@ export function useDocAction(type: BillingDocType) {
           return api<BillingDoc>(`${base}/${id}`, { method: 'PUT', json: body });
         case 'issue':
           return api<BillingDoc>(`${base}/${id}/issue`, { method: 'POST' });
+        // A submitted credit note / record summary revised: saved and sent back as Request Revise.
+        case 'resubmit':
+          return api<BillingDoc>(`${base}/${id}/resubmit`, { method: 'POST', json: body });
         case 'void':
           return api<BillingDoc>(`${base}/${id}/void`, { method: 'POST', json: body });
         // An authorised correction of an issued document's number / date (with a reason).
@@ -396,4 +401,26 @@ export function useCompany() {
     queryFn: () => api<CompanyInfo>('/meta/company'),
     staleTime: 10 * 60_000,
   });
+}
+
+/** The dated VAT percents (Settings → Invoice Management), for previewing a document's VAT. */
+export function useVatRates() {
+  return useQuery({
+    queryKey: ['meta', 'vat-rates'],
+    queryFn: () => api<VatRate[]>('/meta/vat-rates'),
+    staleTime: 10 * 60_000,
+  });
+}
+
+/**
+ * The VAT percent a document works at: its own stored percent while its date is unchanged,
+ * otherwise the percent in force on the (new) date, as the server will store it on save.
+ */
+export function useDocVatPercent(
+  date: string | null | undefined,
+  saved?: { date: string | null | undefined; vatRate: string | null | undefined } | null,
+): number {
+  const rates = useVatRates();
+  if (saved?.vatRate != null && saved.date === date) return Number(saved.vatRate);
+  return vatPercentOn(rates.data, date);
 }

@@ -1,4 +1,9 @@
-import type { BillingDoc, BillingDocType } from '@gs/shared';
+import {
+  fmtVatPercent,
+  DEFAULT_VAT_PERCENT,
+  type BillingDoc,
+  type BillingDocType,
+} from '@gs/shared';
 import type { CompanyInfo } from '../../features/accounting';
 import './printFonts';
 import s from './print.module.css';
@@ -10,6 +15,8 @@ import p from './invoicePrint.module.css';
  */
 
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
+/** PKGS as printed: the quantity and its unit (629 CTNS). */
+const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const money = (v: string | number | null | undefined) =>
   Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const riel = (v: string | number | null | undefined) =>
@@ -81,6 +88,8 @@ export function Masthead({ c, compact = false }: { c: CompanyInfo; compact?: boo
 }
 
 export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo; tax: boolean }) {
+  // The invoice's own VAT percent (kept with it; Settings → Invoice Management sets new ones).
+  const vat = fmtVatPercent(d.header.vatRate ?? DEFAULT_VAT_PERCENT);
   return (
     <>
       <Masthead c={c} />
@@ -109,7 +118,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
           <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
           <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-          <div className={p.ship}>PKGS: {h(d, 'pkgs')}</div>
+          <div className={p.ship}>PKGS: {pkgs(d)}</div>
         </div>
         <div className={p.metaRight}>
           <div>
@@ -174,9 +183,9 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
             </th>
             <th className={p.r}>
               <span className={p.thStack}>
-                {tax ? 'អាករ 10%' : 'អាករ (0%)'}
+                {tax ? `អាករ ${vat}%` : 'អាករ (0%)'}
                 <br />
-                {tax ? 'VAT (10%)' : 'VAT (0%)'}
+                {tax ? `VAT (${vat}%)` : 'VAT (0%)'}
               </span>
             </th>
             <th className={p.r}>
@@ -212,7 +221,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
             <>
               <TaxTotal label="សរុប SUB TOTAL" khr={d.totals.subtotalKhr} usd={d.totals.subtotal} />
               <TaxTotal
-                label="អាករលើតម្លៃបន្ថែម (VAT 10%)"
+                label={`អាករលើតម្លៃបន្ថែម (VAT ${vat}%)`}
                 khr={d.totals.vatKhr}
                 usd={d.totals.vat}
               />
@@ -326,7 +335,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
               <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
               <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
               <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-              <div className={p.ship}>PKGS: {h(d, 'pkgs')}</div>
+              <div className={p.ship}>PKGS: {pkgs(d)}</div>
             </>
           ) : (
             <div className={p.ship}>CHARGE: {h(d, 'reference')}</div>

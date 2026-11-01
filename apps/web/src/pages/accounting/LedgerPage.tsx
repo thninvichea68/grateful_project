@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { LedgerRow } from '@gs/shared';
+import { vatLabel, type LedgerRow } from '@gs/shared';
 import { useLedger } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
@@ -63,6 +63,9 @@ export function LedgerPage() {
   };
   const list = useLedger(q);
   const t = list.data?.totals;
+  // "VAT 10%" while every row shown has the same percent; just "VAT" across a rate change.
+  const vatRates = new Set((list.data?.data ?? []).map((r) => Number(r.vatRate)));
+  const vatHead = vatRates.size === 1 ? vatLabel([...vatRates][0]) : 'VAT';
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params);
     if (v || k === 'month') next.set(k, v);
@@ -179,7 +182,7 @@ export function LedgerPage() {
             <StatTile label="INV (Service revenue)" value={`$${m(t.invRevenue)}`} />
             <StatTile label="Disbursements" value={`$${m(t.disTotal)}`} />
             <StatTile label="Debit notes" value={`$${m(t.dnTotal)}`} />
-            <StatTile label="VAT 10% (Not profit)" value={`$${m(t.vat)}`} />
+            <StatTile label={`${vatHead} (Not profit)`} value={`$${m(t.vat)}`} />
             <StatTile
               label="Net profit"
               value={`$${m(t.netProfit)}`}
@@ -220,7 +223,7 @@ export function LedgerPage() {
                 <th style={{ textAlign: 'right' }}>CM</th>
                 <th style={{ textAlign: 'right' }}>INV (Revenue)</th>
                 <th style={{ textAlign: 'right' }}>DIS (Formula)</th>
-                <th style={{ textAlign: 'right' }}>VAT 10%</th>
+                <th style={{ textAlign: 'right' }}>{vatHead}</th>
                 <th style={{ textAlign: 'right' }}>DN Total</th>
                 <th style={{ textAlign: 'right' }}>Net Profit</th>
                 <th>Mark</th>

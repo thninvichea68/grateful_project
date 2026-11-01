@@ -1,5 +1,10 @@
 import type { Borders, Font, Workbook, Worksheet } from 'exceljs';
-import type { BillingDoc, BillingDocType } from '@gs/shared';
+import {
+  DEFAULT_VAT_PERCENT,
+  fmtVatPercent,
+  type BillingDoc,
+  type BillingDocType,
+} from '@gs/shared';
 import type { CompanyInfo } from '../../features/accounting';
 import { saveBlob } from '../../lib/files';
 import { logoDataUrl } from './recordSummaryExport';
@@ -129,6 +134,8 @@ export const RIEL = '#,##0';
 export const DATE_UPPER = 'dd\\-mmm\\-yyyy';
 export const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
+/** PKGS as printed: the quantity and its unit (629 CTNS). */
+const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 /** 2026-06-02 → 02-JUN-2026, as printed (text, so the month stays in capitals). */
 export const longDate = (iso: string) => {
@@ -347,6 +354,8 @@ function taxOrDisbursement(
     string,
     string,
   ];
+  // The invoice's own VAT percent, as printed (10 unless Settings → Invoice Management changed it).
+  const vat = fmtVatPercent(d.header.vatRate ?? DEFAULT_VAT_PERCENT);
   // The sheet's columns (px): No, Description, Quantity, Unit, Unit Price, Sub Total, VAT, Amount.
   px(32, 313, 55, 48, 70, 75, 65, 75).forEach((w, i) => (ws.getColumn(i + 1 + o).width = w.width));
   const ALL: [number, number] = [1, 8];
@@ -391,7 +400,7 @@ function taxOrDisbursement(
     `SHIPPER: ${h(d, 'shipper')}`,
     `CONSIGNEE: ${h(d, 'consignee')}`,
     `HBL: ${h(d, 'hbl')}`,
-    `PKGS: ${h(d, 'pkgs')}`,
+    `PKGS: ${pkgs(d)}`,
   ];
   const right: (Part[] | string)[] = [
     [
@@ -436,7 +445,7 @@ function taxOrDisbursement(
     ['ឯកតា', 'Unit', 'center'],
     ['ថ្លៃឯកតា', 'Unit Price', 'right'],
     ['សរុប', 'Sub Total', 'right'],
-    tax ? ['អាករ 10%', 'VAT (10%)', 'right'] : ['អាករ (0%)', 'VAT (0%)', 'right'],
+    tax ? [`អាករ ${vat}%`, `VAT (${vat}%)`, 'right'] : ['អាករ (0%)', 'VAT (0%)', 'right'],
     ['ថ្លៃទំនិញ', 'Amount', 'right'],
   ];
   heads.forEach(([k, e, align], i) => {
@@ -472,9 +481,9 @@ function taxOrDisbursement(
       l.unit ?? '',
       num(l.unitPrice),
       { formula: `ROUND(${C}${r}*${E}${r},2)`, result: num(l.subtotal) },
-      // A line the system charges no VAT on keeps its 0; the rest are 10% of the sub total.
+      // A line the system charges no VAT on keeps its 0; the rest are the VAT % of the sub total.
       tax && num(l.vat) !== 0
-        ? { formula: `ROUND(${F}${r}*0.1,2)`, result: num(l.vat) }
+        ? { formula: `ROUND(${F}${r}*${Number(vat) / 100},2)`, result: num(l.vat) }
         : tax
           ? 0
           : '-',
@@ -508,7 +517,7 @@ function taxOrDisbursement(
     const rate = num(h(d, 'exchangeRate'));
     const rows: [string, Value, number][] = [
       ['សរុប SUB TOTAL', sum(F, num(d.totals.subtotal)), num(d.totals.subtotalKhr)],
-      ['អាករលើតម្លៃបន្ថែម (VAT 10%)', sum(G, num(d.totals.vat)), num(d.totals.vatKhr)],
+      [`អាករលើតម្លៃបន្ថែម (VAT ${vat}%)`, sum(G, num(d.totals.vat)), num(d.totals.vatKhr)],
       [
         'សរុបរួម GRAND TOTAL',
         { formula: `${H}${top}+${H}${top + 1}`, result: num(d.totals.total) },
@@ -617,7 +626,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
           `SHIPPER: ${h(d, 'shipper')}`,
           `CONSIGNEE: ${h(d, 'consignee')}`,
           `HBL: ${h(d, 'hbl')}`,
-          `PKGS: ${h(d, 'pkgs')}`,
+          `PKGS: ${pkgs(d)}`,
         ]
       : [`CHARGE: ${h(d, 'reference')}`]),
   ];

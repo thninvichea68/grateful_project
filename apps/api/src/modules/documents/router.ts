@@ -33,16 +33,38 @@ async function documentClientId(id: string): Promise<string | null> {
 /** Restricted users may only file documents under their own clients or shipments. */
 async function assertMetaAllowed(
   req: Parameters<typeof allowedClients>[0],
-  meta: { clientId?: string | null | undefined; shipmentId?: string | null | undefined },
+  meta: {
+    clientId?: string | null | undefined;
+    shipmentId?: string | null | undefined;
+    creditNoteId?: string | null | undefined;
+    recordSummaryId?: string | null | undefined;
+  },
 ) {
   if (!allowedClients(req)) return;
   if (meta.clientId) assertClientAllowed(req, meta.clientId);
   if (meta.shipmentId) assertClientAllowed(req, await shipmentClientId(meta.shipmentId));
+  for (const [table, id] of [
+    ['credit_notes', meta.creditNoteId],
+    ['record_summaries', meta.recordSummaryId],
+  ] as const)
+    if (id) {
+      const [r] = await queryRows<{ clientId: string }>(
+        db,
+        sql`SELECT client_id AS "clientId" FROM ${sql.raw(table)} WHERE id = ${id}`,
+      );
+      if (!r) throw notFound('Document');
+      assertClientAllowed(req, r.clientId);
+    }
   if (!meta.clientId && !meta.shipmentId) assertClientAllowed(req, null);
 }
 
 const ALLOWED = /\.(pdf|png|jpe?g|webp|xlsx|xls|csv|docx|doc|txt)$/i;
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+/**
+ * Support documents stay smaller: a shipment's (Shipping Plans → ⋯ → Support Documents) and a
+ * credit note's or record summary's (⋯ → Upload support documents).
+ */
+export const MAX_SHIPMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
@@ -93,7 +115,7 @@ documentsRouter.use(requireAuth);
 const SELECT = sql`
   SELECT d.id, d.title, d.original_name AS "originalName", d.mime_type AS "mimeType", d.size_bytes AS "sizeBytes", d.category,
          d.status_label AS "statusLabel", d.shipment_id AS "shipmentId", s.reference AS "shipmentReference", d.client_id AS "clientId",
-         c.name AS "clientName", u.full_name AS "uploadedBy", ${isoTs('d.created_at')} AS "createdAt"
+         c.name AS "clientName", d.credit_note_id AS "creditNoteId", d.record_summary_id AS "recordSummaryId", u.full_name AS "uploadedBy", ${isoTs('d.created_at')} AS "createdAt"
   FROM documents d LEFT JOIN shipments s ON s.id = d.shipment_id LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN users u ON u.id = d.uploaded_by_id`;
 
 documentsRouter.get('/', requirePermission('documents:read'), async (req, res) => {
@@ -102,6 +124,8 @@ documentsRouter.get('/', requirePermission('documents:read'), async (req, res) =
   if (q.category) c.push(sql`d.category = ${q.category}`);
   if (q.shipmentId) c.push(sql`d.shipment_id = ${q.shipmentId}`);
   if (q.clientId) c.push(sql`d.client_id = ${q.clientId}`);
+  if (q.creditNoteId) c.push(sql`d.credit_note_id = ${q.creditNoteId}`);
+  if (q.recordSummaryId) c.push(sql`d.record_summary_id = ${q.recordSummaryId}`);
   const scoped = clientCondition(DOC_CLIENT, scopeClients(req));
   if (scoped) c.push(scoped);
   if (q.q) {
@@ -136,6 +160,11 @@ documentsRouter.post('/', requirePermission('documents:write'), upload, async (r
     title: req.body.title || req.file.originalname,
   });
   await assertMetaAllowed(req, meta);
+  if (
+    (meta.shipmentId || meta.creditNoteId || meta.recordSummaryId) &&
+    req.file.size > MAX_SHIPMENT_UPLOAD_BYTES
+  )
+    throw badRequest('A support document must be 10 MB or smaller');
   const stored = await putFile(req.file.buffer, req.file.originalname);
   const id = await db.transaction(async (tx) => {
     const [row] = await tx
@@ -187,7 +216,8 @@ documentsRouter.patch('/:id', requirePermission('documents:write'), async (req, 
       ([, x]) => x !== undefined,
     ),
   );
-  if ('clientId' in v || 'shipmentId' in v) await assertMetaAllowed(req, v);
+  if ('clientId' in v || 'shipmentId' in v || 'creditNoteId' in v || 'recordSummaryId' in v)
+    await assertMetaAllowed(req, v);
   const [row] = await db
     .update(documents)
     .set(v)

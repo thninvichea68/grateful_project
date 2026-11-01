@@ -59,6 +59,10 @@ export const money = (name: string) => numeric(name, { precision: 14, scale: 2 }
 export const rate = (name: string) => numeric(name, { precision: 14, scale: 4 });
 /** Quantity, weight, CBM: NUMERIC(14,3). */
 export const qty = (name: string) => numeric(name, { precision: 14, scale: 3 });
+/** A VAT percent: NUMERIC(5,2), e.g. 10.00. */
+export const percent = (name: string) => numeric(name, { precision: 5, scale: 2 });
+/** A document's VAT percent, kept with it so a later change in Settings never alters it. */
+export const vatRate = () => percent('vat_rate').notNull().default('10');
 /** Whole riel amounts. */
 export const khr = (name: string) => numeric(name, { precision: 16, scale: 0 });
 

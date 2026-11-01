@@ -14,20 +14,28 @@ import { ErrorBanner, Modal, ui } from './ui';
 import { useToast } from './Toast';
 
 /**
- * Upload one file with its metadata. Pass shipmentId/clientId to link it.
+ * Upload one file with its metadata. Pass shipmentId / creditNoteId / recordSummaryId and
+ * clientId to link it.
  * Pass `doc` instead to edit an existing document's details (the file itself stays).
  */
 export function DocumentUploadModal({
   shipmentId,
+  creditNoteId,
+  recordSummaryId,
   clientId,
   defaultCategory = 'OTHER',
   doc,
+  maxMb = 20,
   onClose,
 }: {
   shipmentId?: string;
+  creditNoteId?: string;
+  recordSummaryId?: string;
   clientId?: string;
   defaultCategory?: DocumentCategory;
   doc?: DocumentRow;
+  /** The largest file allowed (a shipment's support documents: 10 MB). */
+  maxMb?: number;
   onClose: () => void;
 }) {
   const lookups = useLookups();
@@ -49,17 +57,21 @@ export function DocumentUploadModal({
     fd.append('category', category);
     if (statusLabel) fd.append('statusLabel', statusLabel);
     if (shipmentId) fd.append('shipmentId', shipmentId);
+    if (creditNoteId) fd.append('creditNoteId', creditNoteId);
+    if (recordSummaryId) fd.append('recordSummaryId', recordSummaryId);
     if (client) fd.append('clientId', client);
     return api('/documents', { method: 'POST', body: fd });
   }, [['documents'], ['operations']]);
-  const tooBig = !!file && file.size > 20 * 1024 * 1024;
+  const tooBig = !!file && file.size > maxMb * 1024 * 1024;
   return (
     <Modal
       title={doc ? 'Edit document' : 'Upload document'}
       sub={
         doc
           ? `${doc.originalName} · ${fmtFileSize(doc.sizeBytes)}`
-          : 'Add a file to the document library and link it to a client.'
+          : shipmentId || creditNoteId || recordSummaryId
+            ? `Kept with this ${shipmentId ? 'shipment' : creditNoteId ? 'credit note' : 'record summary'}; it also shows in the Document Library.`
+            : 'Add a file to the document library and link it to a client.'
       }
       onClose={onClose}
       width={560}
@@ -74,14 +86,14 @@ export function DocumentUploadModal({
           <FilePicker
             id="up-file"
             accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.doc,.txt"
-            hint="PDF, images, Excel, CSV, Word or text · up to 20 MB"
+            hint={`PDF, images, Excel, CSV, Word or text · up to ${maxMb} MB`}
             file={file}
             onChange={(f) => {
               setFile(f);
               if (f && !title) setTitle(f.name.replace(/\.[^.]+$/, ''));
             }}
           />
-          {tooBig && <span className={ui.fieldError}>This file is larger than 20 MB.</span>}
+          {tooBig && <span className={ui.fieldError}>This file is larger than {maxMb} MB.</span>}
         </div>
         <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
           <label htmlFor="up-title">Title</label>

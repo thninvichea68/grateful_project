@@ -79,6 +79,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     flightNo: '',
     checkInDate: '',
     doDate: '',
+    incoterm: '',
     cutOffDate: '',
     thcHblNo: '',
     thcHblDate: '',
@@ -128,6 +129,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     flightNo: s(d.flightNo),
     checkInDate: s(d.checkInDate),
     doDate: s(d.doDate),
+    incoterm: d.incoterm ?? '',
     cutOffDate: s(d.cutOffDate),
     thcHblNo: s(d.thcHblNo),
     thcHblDate: s(d.thcHblDate),
@@ -205,7 +207,8 @@ export function cleanForSubmit(v: FormValues): FormValues {
       .filter((i) => i.invoiceNo || i.lines.some(lineFilled))
       .map((i) => ({ ...i, lines: i.lines.filter(lineFilled) })),
     declarations: (v.declarations ?? [])
-      .filter((d) => d.id || d.declareNo?.trim() || d.declareDate || d.notes?.trim())
+      // A saved declaration cleared out is dropped too, which removes it on save.
+      .filter((d) => d.declareNo?.trim() || d.declareDate || d.notes?.trim())
       // Declarations have no port picker: they clear at the shipment's Clearance Port (an
       // export without one keeps the port it had).
       .map((d) => ({

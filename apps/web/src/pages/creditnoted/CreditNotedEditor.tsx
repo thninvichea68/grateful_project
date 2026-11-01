@@ -8,6 +8,7 @@ import {
   DEFAULT_CHARGE_UNITS,
   chargeLineAmount,
   computeChargeLinesTotal,
+  vatMark,
   containerUnit,
   followShipmentUnit,
   type BillingDoc,
@@ -19,6 +20,7 @@ import {
   useCreditNoteMessages,
   useDoc,
   useDocAction,
+  useDocVatPercent,
   usePrefill,
   useSetCreditNoteReview,
 } from '../../features/accounting';
@@ -37,6 +39,9 @@ import { initialValues, priceOrZeroResolver, type Values } from '../accounting/D
 import { DOC_STATUS_PILL } from '../accounting/DocsListPage';
 import { REVIEW, REVIEW_PILL, ReviseModal, checkIcon } from '../accounting/CreditNotesReview';
 import { CreditNote } from '../print/PrintDocPage';
+import { DotsMenu, type MenuAction } from '../plans/CargoSection';
+import { fi } from '../plans/formIcons';
+import { SupportDocumentsModal } from '../plans/SupportDocuments';
 import ps from '../print/print.module.css';
 import { timeAgo } from './Inbox';
 import { cnSeq } from './seq';
@@ -113,7 +118,11 @@ function CreditNotedEditor({
   const lookups = useLookups();
   const company = useCompany();
   const action = useDocAction(TYPE);
-  const editable = can('creditnotes:write') && (!doc || doc.status === 'DRAFT');
+  // ⋯ → Revise reopens a submitted note for editing until it is resubmitted (or cancelled).
+  const [reopened, setReopened] = useState(false);
+  const editable =
+    can('creditnotes:write') &&
+    (!doc || doc.status === 'DRAFT' || (reopened && doc.status === 'ISSUED'));
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
     // A blank note bills the company, as the broker's vouchers always do.
@@ -130,6 +139,7 @@ function CreditNotedEditor({
     handleSubmit,
     setValue,
     getValues,
+    reset,
     formState: { errors },
   } = useForm<Values>({
     // An empty price is saved as 0: the item stays on the note, off the voucher until priced.
@@ -207,8 +217,17 @@ function CreditNotedEditor({
     }
     return true;
   };
-  // The import / export processing fee carries 10% VAT on top (see chargeLineAmount).
-  const total = computeChargeLinesTotal(values.lines ?? []);
+  // The import / export processing fee carries VAT on top (see chargeLineAmount), at the percent
+  // in force on the note's date; a saved note keeps its own while its date stays.
+  const vatPercent = useDocVatPercent(
+    values.cnDate as string | undefined,
+    doc
+      ? { date: doc.date, vatRate: doc.header.vatRate }
+      : prefill
+        ? { date: prefill.cnDate as string, vatRate: prefill.vatRate as string }
+        : null,
+  );
+  const total = computeChargeLinesTotal(values.lines ?? [], vatPercent);
 
   // Live preview: the print layout fed with what's in the form right now.
   const preview: BillingDoc = {
@@ -222,11 +241,14 @@ function CreditNotedEditor({
     clientName: '',
     accountingRecordId: doc?.accountingRecordId ?? null,
     declareNo: String(values.declareNo ?? '') || null,
-    header: Object.fromEntries(
-      Object.entries(values)
-        .filter(([k]) => k !== 'lines')
-        .map(([k, v]) => [k, v === undefined || v === null ? null : String(v)]),
-    ),
+    header: {
+      ...Object.fromEntries(
+        Object.entries(values)
+          .filter(([k]) => k !== 'lines')
+          .map(([k, v]) => [k, v === undefined || v === null ? null : String(v)]),
+      ),
+      vatRate: String(vatPercent),
+    },
     lines: (values.lines ?? []).map((l, i) => ({
       id: String(i),
       lineNo: i + 1,
@@ -234,8 +256,8 @@ function CreditNotedEditor({
       qty: l.qty || '0',
       unit: l.unit,
       unitPrice: l.unitPrice || '0',
-      subtotal: chargeLineAmount(l),
-      mark: l.mark,
+      subtotal: chargeLineAmount(l, vatPercent),
+      mark: vatMark(l, vatPercent),
     })),
     totals: { subtotal: total, vat: '0', total },
     createdAt: doc?.createdAt ?? '',
@@ -267,6 +289,30 @@ function CreditNotedEditor({
       await action.mutateAsync({ action: 'issue', id: saved.id });
       toast(`Credit Noted No. ${cnSeq(saved.number)} submitted to the Monthly Ledger.`);
     });
+
+  /**
+   * Revise → Resubmit: the changes are saved and the note goes back to accounting as Request
+   * Revise. The Monthly Ledger keeps its approved Clear Fee until accounting approves again.
+   */
+  const resubmit = () =>
+    handleSubmit(async (v) => {
+      if (!doc) return;
+      if (
+        !window.confirm(
+          `Resubmit Credit Noted No. ${cnSeq(doc.number)} to accounting?\n\n` +
+            'It goes back as Request Revise. The Monthly Ledger keeps the approved Clear Fee ' +
+            'until accounting approves the revision.',
+        )
+      )
+        return;
+      await action.mutateAsync({ action: 'resubmit', id: doc.id, body: v });
+      setReopened(false);
+      toast(`Credit Noted No. ${cnSeq(doc.number)} resubmitted to accounting (Request Revise).`);
+    })();
+  const cancelRevise = () => {
+    reset(defaults);
+    setReopened(false);
+  };
 
   /** Discard (cancel) a submitted note: its Clear Fee comes back out of the Monthly Ledger. */
   const discard = async () => {
@@ -342,6 +388,53 @@ function CreditNotedEditor({
     }
   };
 
+  // ⋯: change it (Revise, support files), then print / export, then delete.
+  const [supportDocs, setSupportDocs] = useState(false);
+  const deleteAction: MenuAction | null = !doc
+    ? null
+    : doc.status === 'ISSUED'
+      ? can('accounting:write')
+        ? { label: 'Delete', icon: icons.trash({}), onClick: () => void discard(), danger: true }
+        : null
+      : can('creditnotes:write')
+        ? { label: 'Delete', icon: icons.trash({}), onClick: () => void remove(), danger: true }
+        : null;
+  const menuActions: MenuAction[] = [
+    ...(doc?.status === 'ISSUED' && can('creditnotes:write') && !canDecide && !reopened
+      ? [{ label: 'Revise', icon: icons.edit({}), onClick: () => setReopened(true) }]
+      : []),
+    ...(doc && can('documents:read')
+      ? [
+          {
+            label: 'Upload support documents',
+            icon: icons.paperclip({}),
+            onClick: () => setSupportDocs(true),
+          },
+        ]
+      : []),
+    {
+      label: 'Print',
+      icon: icons.printer({}),
+      onClick: () => printSheet(document.title),
+      title: 'Print the credit note as shown on the right',
+      separated: true,
+    },
+    {
+      label: 'PDF file',
+      icon: fi.file({}),
+      onClick: () => printSheet(creditNoteFileName(preview)),
+      title: `Choose "Save as PDF" in the print window (${creditNoteFileName(preview)}.pdf)`,
+    },
+    {
+      label: exporting ? 'Exporting…' : 'Export Excel',
+      icon: icons.download({}),
+      onClick: () => void exportExcel(),
+      disabled: exporting,
+      title: `${creditNoteFileName(preview)}.xlsx`,
+    },
+    ...(deleteAction ? [{ ...deleteAction, separated: true }] : []),
+  ];
+
   const err = (name: string) =>
     (errors as Record<string, { message?: string } | undefined>)[name]?.message;
   const lineErr = (i: number, f: string) =>
@@ -411,19 +504,7 @@ function CreditNotedEditor({
             <p>Generate clean payment vouchers for operations &amp; finance</p>
           </div>
           <div className={s.headActions}>
-            {editable && doc?.status === 'DRAFT' && (
-              <button
-                type="button"
-                className={s.headDelete}
-                disabled={action.isPending}
-                onClick={() => void remove()}
-                aria-label="Delete draft"
-                title="Delete draft"
-              >
-                {icons.trash({})}
-              </button>
-            )}
-            {editable && (
+            {editable && !reopened && (
               <button
                 type="button"
                 className="btn-cancel-shipment"
@@ -433,7 +514,7 @@ function CreditNotedEditor({
                 Save draft
               </button>
             )}
-            {editable && (
+            {editable && !reopened && (
               <button
                 type="button"
                 className={s.submit}
@@ -442,6 +523,26 @@ function CreditNotedEditor({
               >
                 {icons.send({ width: 15, height: 15 })} Submit to Monthly
               </button>
+            )}
+            {editable && reopened && (
+              <>
+                <button
+                  type="button"
+                  className="btn-cancel-shipment"
+                  disabled={action.isPending}
+                  onClick={cancelRevise}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={s.submit}
+                  disabled={action.isPending}
+                  onClick={() => void resubmit()}
+                >
+                  {icons.send({ width: 15, height: 15 })} Resubmit
+                </button>
+              </>
             )}
             {canDecide && doc && (
               <>
@@ -467,25 +568,31 @@ function CreditNotedEditor({
                 )}
               </>
             )}
-            {can('accounting:write') && doc?.status === 'ISSUED' && (
-              <button type="button" className="btn-delete-shipment" onClick={() => void discard()}>
-                Discard
-              </button>
-            )}
-            {can('creditnotes:write') && doc?.status === 'VOID' && (
-              <button
-                type="button"
-                className="btn-delete-shipment"
-                disabled={action.isPending}
-                onClick={() => void remove()}
-              >
-                {icons.trash({ width: 15, height: 15 })} Delete
-              </button>
-            )}
+            <DotsMenu label="More actions" className={s.headIcon} actions={menuActions} />
           </div>
         </header>
-        <ReviewBanner doc={doc} />
+        {reopened ? (
+          <div className={`${s.banner} ${s.bannerRevise}`} role="status">
+            <div className={s.bannerHead}>
+              <b>Revising a submitted credit note</b>
+            </div>
+            <p className={s.bannerHint}>
+              Make the changes, then press “Resubmit”. Accounting sees it as Request Revise; the
+              Monthly Ledger keeps the approved Clear Fee until they approve it.
+            </p>
+          </div>
+        ) : (
+          <ReviewBanner doc={doc} />
+        )}
         <ErrorBanner error={action.error ?? setReview.error} />
+        {supportDocs && doc && (
+          <SupportDocumentsModal
+            title={`Credit Noted No. ${cnSeq(doc.number)}`}
+            link={{ creditNoteId: doc.id }}
+            clientId={doc.clientId}
+            onClose={() => setSupportDocs(false)}
+          />
+        )}
         {revising && doc && (
           <ReviseModal
             row={{
@@ -512,7 +619,11 @@ function CreditNotedEditor({
               <div className={s.grid}>
                 {field('billTo', 'Bill to', { span: true, locked: lockBillTo })}
                 {field('cnDate', 'Date', { type: 'date' })}
-                {field('declareNo', 'Declare no', { onInput: maskDeclareNo })}
+                {field('declareNo', 'Declare no', {
+                  onInput: maskDeclareNo,
+                  // A revision stays on its declaration (its Monthly Ledger entry).
+                  locked: reopened,
+                })}
                 <label className={s.field}>
                   <span>Client</span>
                   <select
@@ -695,40 +806,14 @@ function CreditNotedEditor({
                 {doc.status === 'DRAFT'
                   ? 'Read only for your role.'
                   : doc.status === 'ISSUED'
-                    ? 'Submitted to the Monthly Ledger; it can no longer be edited.'
+                    ? can('creditnotes:write') && !canDecide
+                      ? 'Submitted to the Monthly Ledger. To change it, use ⋯ → Revise.'
+                      : 'Submitted to the Monthly Ledger.'
                     : 'This credit note was discarded.'}
               </p>
             )}
           </fieldset>
         </form>
-
-        <footer className={s.foot}>
-          <button
-            type="button"
-            className={s.footBtn}
-            onClick={() => printSheet(document.title)}
-            title="Print the credit note as shown on the right"
-          >
-            Print
-          </button>
-          <button
-            type="button"
-            className={`${s.footBtn} ${s.footPrimary}`}
-            onClick={() => printSheet(creditNoteFileName(preview))}
-            title={`Choose "Save as PDF" in the print window (${creditNoteFileName(preview)}.pdf)`}
-          >
-            PDF File
-          </button>
-          <button
-            type="button"
-            className={`${s.footBtn} ${s.footExcel}`}
-            disabled={exporting}
-            onClick={() => void exportExcel()}
-            title={`${creditNoteFileName(preview)}.xlsx`}
-          >
-            {exporting ? 'Exporting…' : 'Excel Export'}
-          </button>
-        </footer>
       </div>
 
       <Preview>
@@ -766,7 +851,8 @@ function ReviewBanner({ doc }: { doc?: BillingDoc | undefined }) {
   const m = messages.data?.[0];
   if (!doc || !m) return null;
   const returned = m.kind === 'REVISED' && doc.status === 'DRAFT';
-  const checked = m.kind === 'CHECKED' && doc.status === 'ISSUED';
+  const checked =
+    m.kind === 'CHECKED' && doc.status === 'ISSUED' && doc.header.reviewStatus === 'CHECKED';
   if (!returned && !checked) return null;
   return (
     <div className={`${s.banner} ${returned ? s.bannerRevise : s.bannerCheck}`} role="status">

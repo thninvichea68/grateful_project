@@ -1,52 +1,54 @@
-/* Tax invoice / disbursement / debit note header: labelled sections (document, customer,
-   shipment), each with its fields in a compact four-column grid. */
+/* Tax invoice / disbursement / debit note header: three side-by-side columns (document,
+   customer, shipment), each a heading over its fields stacked one per row. */
 .card {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 40px;
+  align-items: start;
 }
 .section {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 24px;
-  padding: 14px 0;
+  min-width: 0;
 }
-.section + .section {
-  border-top: 1px solid var(--border-subtle);
+/* Three levels: section title (large, accent underline) › field label (small, muted) › value. */
+.sectionHead {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .sectionHead h4 {
-  margin: 0;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 -1px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent-primary);
+  font-size: 15px;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
-.sectionHead p {
-  margin: 3px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text-secondary);
+/* The shared card-title chip (.cx-title-icon), a size smaller for these column heads. */
+.headIcon {
+  width: 30px !important;
+  height: 30px !important;
 }
 
+/* Full-width rows; short shipment values (PKGS, weight, ports…) pair up two to a row. */
 .fields {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
   align-content: start;
   align-items: start;
 }
 .field {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
-.field[data-span='2'] {
-  grid-column: span 2;
-}
-.field[data-span='3'] {
-  grid-column: span 3;
-}
-.field[data-span='4'] {
-  grid-column: 1 / -1;
+.field[data-half] {
+  grid-column: auto;
 }
 
 /* Fixed line boxes, so every label and box in a row lines up (Khmer glyphs included). The
@@ -55,12 +57,12 @@
   display: block;
   height: 16px;
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 500;
   line-height: 16px;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 .field :global(.form-field-box),
 .field :global(.form-select-box) {
@@ -69,10 +71,18 @@
   height: 34px;
   margin: 0;
   font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
   line-height: 20px;
 }
 .field :global(.form-field-box) {
   padding: 0 10px;
+}
+/* The global select padding (10px top and bottom) leaves no room for the text in a 34px box. */
+.field :global(.form-select-box) {
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 10px;
 }
 .field :global(.form-field-box[readonly]) {
   background: var(--bg-subtle);
@@ -82,7 +92,7 @@
 /* Long values (addresses) wrap onto a second line instead of being cut off. */
 .field .textarea {
   display: block;
-  height: 54px;
+  height: 78px;
   min-height: 54px;
   padding: 6px 10px;
   font-family: var(--font-main);
@@ -93,18 +103,13 @@
   font-family: 'GS Khmer', var(--font-main) !important;
 }
 
-@media (max-width: 1200px) {
-  .section {
-    grid-template-columns: 1fr;
-    gap: 14px;
+@media (max-width: 1100px) {
+  .card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 720px) {
-  .fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .field[data-span='3'],
-  .field[data-span='2'] {
-    grid-column: 1 / -1;
+  .card {
+    grid-template-columns: 1fr;
   }
 }

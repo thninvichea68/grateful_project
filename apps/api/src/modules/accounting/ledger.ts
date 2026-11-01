@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import {
   computeLedger,
+  DEFAULT_VAT_PERCENT,
   toMoneyString,
   type CreditNoteDeclaration,
   type DeclarationOption,
@@ -9,6 +10,7 @@ import {
   type LedgerSummary,
   type Paginated,
   type RecordSummaryShipment,
+  type VatRate,
 } from '@gs/shared';
 import type { Request } from 'express';
 import type { z } from 'zod';
@@ -50,12 +52,32 @@ export async function rateOn(tx: DbOrTx, date: string): Promise<string> {
   return base ? String(base.value) : '4026';
 }
 
+/**
+ * The VAT percent in force on a date (Settings → Invoice Management): the latest vat_rates row
+ * on/before it, else the standard 10%. Stored on each document, so later changes never alter it.
+ */
+export async function vatRateOn(tx: DbOrTx, date: string): Promise<string> {
+  const [r] = await queryRows<{ percent: string }>(
+    tx,
+    sql`SELECT percent::text AS percent FROM vat_rates WHERE effective_date <= ${date}::date ORDER BY effective_date DESC LIMIT 1`,
+  );
+  return r?.percent ?? String(DEFAULT_VAT_PERCENT);
+}
+
+/** Every dated VAT percent, newest first (documents take the one in force on their date). */
+export const listVatRates = (): Promise<VatRate[]> =>
+  queryRows<VatRate>(
+    db,
+    sql`SELECT id, to_char(effective_date, 'YYYY-MM-DD') AS "effectiveDate", percent::text AS percent, note
+        FROM vat_rates ORDER BY effective_date DESC`,
+  );
+
 const SELECT = sql`
   SELECT a.id, a.declaration_id AS "declarationId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
          s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
          c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", p.code AS "portCode", p.customs_port_no AS "portNo", p.short_name AS "portName",
          a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
-         a.exchange_rate::text AS "exchangeRate", a.clear_fee::text AS "clearFee", a.thc::text AS thc, a.other_pay::text AS "otherPay",
+         a.exchange_rate::text AS "exchangeRate", a.vat_rate::text AS "vatRate", a.clear_fee::text AS "clearFee", a.thc::text AS thc, a.other_pay::text AS "otherPay",
          a.commission::text AS commission, a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.vat::text AS vat,
          a.dn_total::text AS "dnTotal", a.net_profit::text AS "netProfit", ${CHEA_STATUS} AS "cheaStatus", a.mark,
          (SELECT coalesce(json_agg(x ORDER BY x.type), '[]'::json) FROM (
@@ -200,15 +222,18 @@ export async function declarationClientId(declarationId: string): Promise<string
 export async function recompute(tx: DbOrTx, id: string): Promise<void> {
   const [r] = await tx.select().from(accountingRecords).where(eq(accountingRecords.id, id));
   if (!r) return;
-  const t = computeLedger({
-    clearFee: r.clearFee,
-    thc: r.thc,
-    otherPay: r.otherPay,
-    commission: r.commission,
-    invRevenue: r.invRevenue,
-    disTotal: r.disTotal,
-    dnTotal: r.dnTotal,
-  });
+  const t = computeLedger(
+    {
+      clearFee: r.clearFee,
+      thc: r.thc,
+      otherPay: r.otherPay,
+      commission: r.commission,
+      invRevenue: r.invRevenue,
+      disTotal: r.disTotal,
+      dnTotal: r.dnTotal,
+    },
+    r.vatRate,
+  );
   await tx
     .update(accountingRecords)
     .set({ vat: toMoneyString(t.vat), netProfit: toMoneyString(t.netProfit) })
@@ -249,6 +274,7 @@ export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request)
         dnNo: input.dnNo,
         invDate,
         exchangeRate: input.exchangeRate ?? (await rateOn(tx, invDate)),
+        vatRate: await vatRateOn(tx, invDate),
         clearFee: input.clearFee,
         thc: input.thc,
         otherPay: input.otherPay,
@@ -321,6 +347,9 @@ export async function updateLedger(
         .where(eq(customsDeclarations.id, before.declarationId));
       values.invDate = await issueDateFor(tx, d!.dd);
     }
+    // A new invoice date takes that date's VAT percent; otherwise the row keeps its own.
+    if (values.invDate !== undefined && values.invDate !== before.invDate)
+      values.vatRate = await vatRateOn(tx, values.invDate as string);
     await tx
       .update(accountingRecords)
       .set({ ...values, updatedById: req.auth!.userId })

@@ -171,6 +171,11 @@ export type FormIcon = keyof typeof fi;
 /** Each field's label icon, by field name. */
 export const FIELD_ICON: Partial<Record<string, FormIcon>> = {
   clientId: 'idCard',
+  reference: 'hash',
+  direction: 'route',
+  transportMode: 'ship',
+  loadType: 'file',
+  incoterm: 'route',
   consigneeId: 'user',
   forwarderId: 'building',
   shipperName: 'building',
@@ -184,6 +189,8 @@ export const FIELD_ICON: Partial<Record<string, FormIcon>> = {
   hblNo: 'file',
   crd: 'calendar',
   clearancePortId: 'anchor',
+  declareNo: 'hash',
+  declareDate: 'calendar',
   etd: 'calendar',
   atd: 'calendar',
   eta: 'calendar',

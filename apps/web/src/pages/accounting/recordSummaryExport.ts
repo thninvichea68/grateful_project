@@ -1,5 +1,5 @@
 import type { Borders, Cell, Font, Workbook, Worksheet } from 'exceljs';
-import { isVatChargedLine, type BillingDoc } from '@gs/shared';
+import { isVatChargedLine, vatFactor, type BillingDoc } from '@gs/shared';
 import type { CompanyInfo } from '../../features/accounting';
 import { saveBlob } from '../../lib/files';
 import { SHIPMENT_SEPARATOR, pricedLines, recordSummaryHeader } from '../print/PrintDocPage';
@@ -177,9 +177,9 @@ export function addRecordSummarySheet(
     ws.getCell(row, 5).value = l.unit;
     ws.getCell(row, 6).value = Number(l.unitPrice) || 0;
     ws.getCell(row, 7).value = {
-      // The processing fee: 10% VAT on top, as in the system.
+      // The processing fee: the document's VAT on top (10% → ×1.1), as in the system.
       formula: isVatChargedLine(l.description)
-        ? `ROUND(ROUND(D${row}*F${row},2)*1.1,2)`
+        ? `ROUND(ROUND(D${row}*F${row},2)*${vatFactor(d.header.vatRate ?? undefined)},2)`
         : `ROUND(D${row}*F${row},2)`,
       result: Number(l.subtotal) || 0,
     };

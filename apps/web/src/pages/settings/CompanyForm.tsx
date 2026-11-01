@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { companySchema, type CompanyInput } from '@gs/shared';
 import { useApiMutation } from '../../features/admin';
 import { ErrorBanner, FieldError } from '../../components/ui';
 import { useToast } from '../../components/Toast';
+import { icons } from '../../layout/icons';
 import { api } from '../../lib/api';
 import { formResolver } from '../../lib/zodForm';
 import s from './CompanyForm.module.css';
@@ -11,7 +12,7 @@ import s from './CompanyForm.module.css';
 /**
  * Settings → Company: the details printed on tax invoices, disbursements and other documents,
  * in three sections (identity, address, bank), each labelled on the left with its fields on
- * the right, and one Save bar at the bottom.
+ * the right. It opens read-only; the pencil (top right) unlocks it and shows the Save bar.
  */
 export function CompanyForm({
   initial,
@@ -33,6 +34,11 @@ export function CompanyForm({
     reset,
     formState: { errors, isDirty },
   } = useForm<CompanyInput>({ resolver: formResolver(companySchema), defaultValues: initial });
+  const [editing, setEditing] = useState(false);
+  const cancel = () => {
+    reset();
+    setEditing(false);
+  };
 
   const field = (
     name: keyof CompanyInput,
@@ -76,8 +82,21 @@ export function CompanyForm({
   return (
     <div className={s.card}>
       <header className={s.head}>
-        <h3>Workspace &amp; company</h3>
-        <p>Printed on tax invoices, disbursements and other documents.</p>
+        <div>
+          <h3>Workspace &amp; company</h3>
+          <p>Printed on tax invoices, disbursements and other documents.</p>
+        </div>
+        {manage && !editing && (
+          <button
+            type="button"
+            className={s.editBtn}
+            onClick={() => setEditing(true)}
+            aria-label="Edit company details"
+            title="Edit company details"
+          >
+            {icons.edit({})}
+          </button>
+        )}
       </header>
       <ErrorBanner error={save.error} />
       <form
@@ -85,12 +104,16 @@ export function CompanyForm({
           void handleSubmit(async (v) => {
             await save.mutateAsync(v);
             reset(v);
+            setEditing(false);
             toast('Company details saved.');
           })(e)
         }
         noValidate
       >
-        <fieldset disabled={!manage} className={s.fieldset}>
+        <fieldset
+          disabled={!manage || !editing}
+          className={`${s.fieldset}${editing ? '' : ` ${s.viewing}`}`}
+        >
           {section(
             'Company identity',
             'The legal name in English and Khmer, as registered, with the tax number.',
@@ -120,7 +143,7 @@ export function CompanyForm({
             3,
           )}
         </fieldset>
-        {manage && (
+        {manage && editing && (
           <footer className={s.foot}>
             <span className={s.status} aria-live="polite">
               {isDirty ? 'Unsaved changes' : 'All changes saved'}
@@ -128,10 +151,10 @@ export function CompanyForm({
             <button
               type="button"
               className="btn-cancel-shipment"
-              disabled={!isDirty || save.isPending}
-              onClick={() => reset()}
+              disabled={save.isPending}
+              onClick={cancel}
             >
-              Discard
+              {isDirty ? 'Discard' : 'Cancel'}
             </button>
             <button
               type="submit"

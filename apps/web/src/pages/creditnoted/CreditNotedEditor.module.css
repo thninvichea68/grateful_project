@@ -349,44 +349,6 @@
   color: var(--text-tertiary);
 }
 
-.foot {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-.footBtn {
-  height: 38px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-family: var(--font-main);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.footBtn:hover:not(:disabled) {
-  border-color: var(--border-strong);
-}
-.footBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.footPrimary {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-  color: #041b2d;
-}
-.footPrimary:hover:not(:disabled) {
-  background: var(--accent-lime-bright);
-}
-.footExcel {
-  color: var(--status-completed-fg);
-  border-color: var(--status-completed-bg);
-}
 /* Preview pane: grey desk with the A4 sheet. */
 .preview {
   min-width: 0;

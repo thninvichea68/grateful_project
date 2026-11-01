@@ -4,8 +4,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Doubled class to outrank CountrySelect's `.list li` whatever the stylesheet order. */
-li.add.add {
+/* Doubled class (and the ul) to outrank CountrySelect's `.list li` and the shipment form's
+   regular-weight options, whatever the stylesheet order. */
+ul li.add.add {
   color: var(--accent-primary);
   font-weight: 700;
 }

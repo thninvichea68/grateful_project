@@ -23,6 +23,7 @@ import {
   lookupTypeEnum,
   rate,
   khr,
+  percent,
 } from './_common';
 import { users } from './auth';
 
@@ -178,6 +179,21 @@ export const exchangeRates = pgTable('exchange_rates', {
   id: id(),
   effectiveDate: date('effective_date').notNull().unique(),
   usdToKhr: rate('usd_to_khr').notNull(),
+  createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
+  ...timestamps,
+});
+
+/**
+ * Settings → Invoice Management: the VAT percent in force from each date. A document takes the
+ * percent of its own date when it is made (stored in its vat_rate), so adding or changing a
+ * rate here never alters documents already made.
+ */
+export const vatRates = pgTable('vat_rates', {
+  id: id(),
+  effectiveDate: date('effective_date').notNull().unique(),
+  percent: percent('percent').notNull(),
+  /** e.g. the Prakas or law the new rate comes from. */
+  note: text('note'),
   createdById: uuid('created_by_id').references(() => users.id, { onDelete: 'set null' }),
   ...timestamps,
 });

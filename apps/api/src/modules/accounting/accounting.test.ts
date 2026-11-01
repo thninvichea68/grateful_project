@@ -452,7 +452,8 @@ describe('billing documents', () => {
       invoiceDate: '2026-08-24',
       exchangeRate: '4030.0000',
       containerNo: 'MRKU8974303',
-      pkgs: '978 CTNS',
+      pkgs: '978',
+      pkgsUnit: 'CTNS',
       grossWeightKg: '8800',
       volumeCbm: '45.5',
       pod: 'UNITED STATES',
@@ -524,10 +525,20 @@ describe('billing documents', () => {
       status: 'ISSUED',
     });
 
+    // Issued, it can still be fixed: it stays issued with its number, and the ledger follows.
+    const edited = await request(app)
+      .put(`/api/v1/accounting/docs/tax-invoices/${id}`)
+      .set(h)
+      .send({ ...pre, invoiceNo: 'GS26-999', lines: [{ ...pre.lines[0], unitPrice: '210' }] });
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ status: 'ISSUED', number: 'GS26-001' });
     expect(
-      (await request(app).put(`/api/v1/accounting/docs/tax-invoices/${id}`).set(h).send(pre))
-        .status,
-    ).toBe(409);
+      (await request(app).get(`/api/v1/accounting/ledger/${rec.id}`).set(h)).body,
+    ).toMatchObject({ invNo: 'GS26-001', invRevenue: '210.00' });
+    await request(app)
+      .put(`/api/v1/accounting/docs/tax-invoices/${id}`)
+      .set(h)
+      .send({ ...pre, lines: [{ ...pre.lines[0], unitPrice: '200' }] });
     expect(
       (await request(app).delete(`/api/v1/accounting/docs/tax-invoices/${id}`).set(h)).status,
     ).toBe(409);
@@ -550,6 +561,91 @@ describe('billing documents', () => {
 
     const next = await request(app).post('/api/v1/accounting/docs/tax-invoices').set(h).send(pre);
     expect(next.body.number).toBe('GS26-002');
+  });
+
+  it('a new VAT rate in Settings applies to documents made from then on, never to ones already made', async () => {
+    const h = await as('ACCOUNTANT');
+    const before = await ledgerRow(); // invoice date 2026-08-24, made at the standard 10%
+    expect(
+      (await request(app).get(`/api/v1/accounting/ledger/${before.id}`).set(h)).body,
+    ).toMatchObject({ vatRate: '10.00', vat: '18.50' });
+
+    // Only an admin (settings:manage) changes it; everyone signed in can read it.
+    await request(app)
+      .post('/api/v1/settings/vat-rates')
+      .set(h)
+      .send({ effectiveDate: '2026-08-01', percent: 12 })
+      .expect(403);
+    const added = await request(app)
+      .post('/api/v1/settings/vat-rates')
+      .set(await as('ADMIN'))
+      .send({ effectiveDate: '2026-08-01', percent: 12, note: 'Prakas 123' });
+    expect(added.status).toBe(201);
+    await request(app)
+      .post('/api/v1/settings/vat-rates')
+      .set(await as('ADMIN'))
+      .send({ effectiveDate: '2026-08-01', percent: 11 })
+      .expect(409);
+    expect(
+      (
+        await request(app)
+          .get('/api/v1/meta/vat-rates')
+          .set(await as('VIEWER'))
+      ).body,
+    ).toEqual([
+      { id: added.body.id, effectiveDate: '2026-08-01', percent: '12.00', note: 'Prakas 123' },
+    ]);
+
+    // The row made before keeps its 10%, even when edited later.
+    const edited = await request(app)
+      .patch(`/api/v1/accounting/ledger/${before.id}`)
+      .set(h)
+      .send({ invRevenue: '200' });
+    expect(edited.body).toMatchObject({ vatRate: '10.00', vat: '20.00' });
+
+    // A shipment made now takes 12% everywhere: ledger, tax invoice, record summary.
+    const after = await ledgerRow(b.jr.id, 'I 122051', '2026-08-21');
+    expect(
+      (await request(app).get(`/api/v1/accounting/ledger/${after.id}`).set(h)).body,
+    ).toMatchObject({ vatRate: '12.00', vat: '22.20' });
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/tax-invoices/prefill')
+        .query({ recordId: after.id })
+        .set(h)
+    ).body;
+    expect(pre.vatRate).toBe('12.00');
+    const inv = await request(app).post('/api/v1/accounting/docs/tax-invoices').set(h).send(pre);
+    expect(inv.body.header.vatRate).toBe('12.00');
+    expect(inv.body.totals).toMatchObject({ subtotal: '185.00', vat: '22.20', total: '207.20' });
+    expect(inv.body.lines[0]).toMatchObject({ vat: '22.20', amount: '207.20' });
+
+    const rs = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ recordId: after.id })
+        .set(h)
+    ).body;
+    expect(rs.vatRate).toBe('12.00');
+    expect(rs.lines[0]).toMatchObject({ mark: 'VAT 12%', unitPrice: '185' });
+    const summary = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      // A stale "VAT 10%" Mark from the browser follows the summary's percent.
+      .send({ ...rs, lines: [{ ...rs.lines[0], mark: 'VAT 10%' }] });
+    expect(summary.status).toBe(201);
+    expect(summary.body.lines[0]).toMatchObject({ mark: 'VAT 12%', subtotal: '207.20' });
+    expect(summary.body.totals.total).toBe('207.20');
+
+    // Removing the rate changes nothing already made.
+    await request(app)
+      .delete(`/api/v1/settings/vat-rates/${added.body.id}`)
+      .set(await as('ADMIN'))
+      .expect(204);
+    expect(
+      (await request(app).get(`/api/v1/accounting/docs/tax-invoices/${inv.body.id}`).set(h)).body
+        .totals.vat,
+    ).toBe('22.20');
   });
 
   it('keeps decimals the prototype dropped (18.75 is not 18)', async () => {
@@ -1031,6 +1127,51 @@ describe('billing documents', () => {
     expect(invoices.data.map((d: { number: string }) => d.number)).toEqual([invNo]);
   });
 
+  it('a record summary revised after approval keeps its ledger amounts until approved again', async () => {
+    const acc = await as('ACCOUNTANT');
+    const op = await as('OPERATOR');
+    const declarationId = await declaration(b.jr.id, 'I 151810', '2026-08-21', 'IMPORT');
+    const docs = '/api/v1/accounting/docs/record-summaries';
+    const pre = (await request(app).get(`${docs}/prefill`).query({ declarationId }).set(op)).body;
+    const fee = (unitPrice: string) => [
+      { description: 'IMPORT PROCESSING FEE', qty: '1', unit: 'SHIP', unitPrice, mark: 'VAT 10%' },
+    ];
+    const rs = await request(app)
+      .post(docs)
+      .set(op)
+      .send({ ...pre, lines: fee('100') })
+      .expect(201);
+    const id = rs.body.id;
+    await request(app).post(`${docs}/${id}/issue`).set(op).expect(200);
+    const review = (reviewStatus: string, message?: string) =>
+      request(app).patch(`${docs}/${id}/review`).set(acc).send({ reviewStatus, message });
+    await review('CHECKED').expect(200);
+    const recordId = (await request(app).get(`${docs}/${id}`).set(op)).body.accountingRecordId;
+    const inv = async () =>
+      (await request(app).get(`/api/v1/accounting/ledger/${recordId}`).set(acc)).body.invRevenue;
+    expect(await inv()).toBe('100.00');
+
+    const resubmit = async (unitPrice: string) => {
+      const d = (await request(app).get(`${docs}/${id}`).set(op)).body;
+      return request(app)
+        .post(`${docs}/${id}/resubmit`)
+        .set(op)
+        .send({ ...d.header, clientId: d.clientId, lines: fee(unitPrice) });
+    };
+    const res = await resubmit('150');
+    expect(res.status).toBe(200);
+    expect(res.body.header.reviewStatus).toBe('REVISION_REQUESTED');
+    // Waiting for accounting: the ledger keeps the approved amount.
+    expect(await inv()).toBe('100.00');
+    await review('CHECKED').expect(200);
+    expect(await inv()).toBe('150.00');
+
+    // Sent back by accounting while under revision: its amounts leave the ledger.
+    await resubmit('160');
+    await review('REVISED', 'Fee is 155').expect(200);
+    expect(await inv()).toBe('0.00');
+  });
+
   it('record summaries have their own access: Operations work on them, not the rest of accounting', async () => {
     const rec = await ledgerRow();
     const op = await as('OPERATOR');
@@ -1281,7 +1422,14 @@ describe('customs broker: Credit Noted only', () => {
     const review = () =>
       request(app).get('/api/v1/accounting/credit-notes/review').query({ year: 2026 }).set(acc);
     let list = (await review()).body;
-    expect(list.counts).toEqual({ total: 1, checked: 0, unchecked: 1, reviewed: 0, revised: 0 });
+    expect(list.counts).toEqual({
+      total: 1,
+      checked: 0,
+      unchecked: 1,
+      reviewed: 0,
+      revised: 0,
+      revisionRequested: 0,
+    });
     expect(list.data[0]).toMatchObject({
       declareNo: 'I 122050',
       clientCode: 'JR',
@@ -1380,6 +1528,98 @@ describe('customs broker: Credit Noted only', () => {
     expect((await inbox()).unread).toBe(2);
     await api('post', '/credit-notes/inbox/read').send({});
     expect((await inbox()).unread).toBe(0);
+  });
+
+  it('Revise → Resubmit: Request Revise keeps the approved fee until accounting approves', async () => {
+    await declaration(b.jr.id, 'I 30001', '2026-08-21', 'IMPORT');
+    const declId = await declaration(b.jr.id, 'I 30002', '2026-08-22', 'IMPORT');
+    const h = await as('CUSTOMS_BROKER');
+    const acc = await as('ACCOUNTANT');
+    const docs = '/api/v1/accounting/docs/credit-notes';
+    const draft = (
+      await request(app).get(`${docs}/prefill`).query({ declarationId: declId }).set(h)
+    ).body;
+    const line = (unitPrice: string) => ({
+      description: 'IMPORT-CLEARANCE',
+      qty: '1',
+      unit: "40'",
+      unitPrice,
+    });
+    const cn = await request(app)
+      .post(docs)
+      .set(h)
+      .send({ ...draft, lines: [line('100')] });
+    const id = cn.body.id;
+    const body = async (unitPrice: string, extra: object = {}) => {
+      const d = (await request(app).get(`${docs}/${id}`).set(h)).body;
+      return { ...d.header, clientId: d.clientId, lines: [line(unitPrice)], ...extra };
+    };
+    const resubmit = async (unitPrice: string, extra: object = {}) =>
+      request(app)
+        .post(`${docs}/${id}/resubmit`)
+        .set(h)
+        .send(await body(unitPrice, extra));
+    const review = (reviewStatus: string, message?: string) =>
+      request(app).patch(`${docs}/${id}/review`).set(acc).send({ reviewStatus, message });
+    const fee = async () =>
+      (await request(app).get('/api/v1/accounting/ledger').query({ year: '2026' }).set(acc)).body
+        .data[0].clearFee;
+
+    // A draft isn't revised: it is simply edited.
+    expect((await resubmit('100')).status).toBe(409);
+    await request(app).post(`${docs}/${id}/issue`).set(h);
+    expect((await review('CHECKED')).status).toBe(200);
+    expect(await fee()).toBe('100.00');
+
+    // Resubmitted: Request Revise for accounting, same number and declaration; the ledger
+    // keeps the approved fee meanwhile.
+    const res = await resubmit('120', { declareNo: 'I 30001' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      status: 'ISSUED',
+      number: cn.body.number,
+      declareNo: 'I 30002',
+      totals: { total: '120.00' },
+    });
+    expect(res.body.header.reviewStatus).toBe('REVISION_REQUESTED');
+    expect(await fee()).toBe('100.00');
+    const list = (
+      await request(app)
+        .get('/api/v1/accounting/credit-notes/review')
+        .query({ year: 2026, review: 'REVISION_REQUESTED' })
+        .set(acc)
+    ).body;
+    expect(list.counts).toMatchObject({ checked: 0, revisionRequested: 1 });
+    expect(list.data).toHaveLength(1);
+    // Request Revise is the maker's; accounting approves or sends back.
+    expect((await review('REVISION_REQUESTED')).status).toBe(400);
+
+    // Approved: the Monthly Ledger takes the revised fee.
+    expect((await review('CHECKED')).status).toBe(200);
+    expect(await fee()).toBe('120.00');
+
+    // Revised again and sent back by accounting: the approved fee comes out.
+    await resubmit('130');
+    expect(await fee()).toBe('120.00');
+    expect((await review('REVISED', 'Wrong rate')).status).toBe(200);
+    expect(await fee()).toBe('0.00');
+
+    // ⋯ → Upload support documents: a file kept with this credit note.
+    const up = await request(app)
+      .post('/api/v1/documents')
+      .set(acc)
+      .field('title', 'Chea receipt')
+      .field('creditNoteId', id)
+      .field('clientId', b.jr.id)
+      .attach('file', Buffer.from('%PDF-1.4\n'), {
+        filename: 'receipt.pdf',
+        contentType: 'application/pdf',
+      });
+    expect(up.status).toBe(201);
+    const files = (await request(app).get('/api/v1/documents').query({ creditNoteId: id }).set(acc))
+      .body;
+    expect(files.data.map((d: { title: string }) => d.title)).toEqual(['Chea receipt']);
+    expect(files.data[0].creditNoteId).toBe(id);
   });
 
   it("accounting's remarks reach the broker even when someone else created the note", async () => {

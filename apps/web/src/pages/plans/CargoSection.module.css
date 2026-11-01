@@ -468,6 +468,12 @@ select.cell {
   background: var(--bg-surface);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
 }
+/* A thin line between groups of menu items. */
+.menuSep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border-subtle);
+}
 .menuItem {
   display: flex;
   align-items: center;

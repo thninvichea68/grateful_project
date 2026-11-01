@@ -198,7 +198,7 @@ function ClientCard({ r, link }: { r: ClientRevenueRow; link: string }) {
 
       <footer className={s.foot}>
         <span title="Collected for the tax office, not profit">
-          VAT 10% <b>{fmtMoney(r.vat)}</b>
+          VAT <b>{fmtMoney(r.vat)}</b>
         </span>
         <span className={s.dot} aria-hidden="true" />
         <span data-warn={r.unpaid > 0 || undefined} className={s.unpaid}>

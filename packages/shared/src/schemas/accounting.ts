@@ -83,6 +83,8 @@ export interface LedgerRow {
   dnNo: string | null;
   invDate: string;
   exchangeRate: string;
+  /** The VAT percent in force on the invoice date, kept with the row (e.g. "10.00"). */
+  vatRate: string;
   clearFee: string;
   thc: string;
   otherPay: string;
@@ -267,16 +269,26 @@ const docBase = {
   clientId: z.string().uuid('Choose a client'),
   lines: z.array(billingLineInputSchema).min(1, 'Add at least one line'),
 };
+/** A container size from the list, or none (a blank choice clears it). */
+const containerSize = z
+  .enum(CONTAINER_SIZES)
+  .nullish()
+  .or(z.literal(''))
+  .transform((v) => (v ? v : null));
+
 const shipmentFields = {
   pol: optText(80),
   pod: optText(80),
   containerNo: optText(120),
+  containerSize,
   volumeCbm: decimal(3, { min: 0 }),
   grossWeightKg: decimal(3, { min: 0 }),
   shipper: optText(200),
   consignee: optText(200),
   hbl: optText(60),
+  /** Quantity (the printed PKGS) and its unit, e.g. 629 + CTNS. */
   pkgs: optText(60),
+  pkgsUnit: optText(30),
 };
 const customer = {
   customerNameEn: z.string().trim().min(2, 'Enter the customer name').max(200),
@@ -349,11 +361,7 @@ export const recordSummaryInputSchema = z.object({
   quantityText: optText(60),
   blNo: optText(60),
   containerNo: optText(120),
-  containerSize: z
-    .enum(CONTAINER_SIZES)
-    .nullish()
-    .or(z.literal(''))
-    .transform((v) => (v ? v : null)),
+  containerSize,
   grossWeightKg: decimal(3, { min: 0 }),
   cbm: optText(30),
 });
@@ -401,7 +409,8 @@ export const creditNoteListQuerySchema = creditNoteReviewQuerySchema.omit({ revi
  */
 export const creditNoteReviewInputSchema = z
   .object({
-    reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES),
+    // Request Revise is the maker's (by resubmitting), never accounting's decision.
+    reviewStatus: z.enum(CREDIT_NOTE_REVIEW_STATUSES).exclude(['REVISION_REQUESTED']),
     message: z.string().trim().max(1000).optional(),
   })
   .refine((v) => v.reviewStatus !== 'REVISED' || (v.message ?? '').length >= 3, {
@@ -498,6 +507,8 @@ export interface CreditNoteReviewCounts {
   /** Opened by accounting, not decided yet. */
   reviewed: number;
   revised: number;
+  /** Revised by its maker after submitting and resubmitted, waiting for approval. */
+  revisionRequested: number;
 }
 
 /** Header + lines as stored. Field names follow the document type's input schema. */

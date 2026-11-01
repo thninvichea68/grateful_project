@@ -13,6 +13,7 @@ import st from './SettingsPage.module.css';
 import r from './settings/ExchangeRates.module.css';
 import { icons } from '../layout/icons';
 import { PublicHolidays } from './settings/PublicHolidays';
+import { InvoiceManagement } from './settings/InvoiceManagement';
 import { useToast } from '../components/Toast';
 import { ApiError, api } from '../lib/api';
 import { queryKeys } from '../lib/queryKeys';
@@ -21,6 +22,7 @@ const TABS = [
   ['profile', 'My profile'],
   ['company', 'Company'],
   ['rates', 'Rates'],
+  ['invoice', 'Invoice management'],
   ['holidays', 'Public holidays'],
   ['ports', 'Ports'],
   ['forwarders', 'Forwarders'],
@@ -106,6 +108,7 @@ function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
             <CompanyForm initial={settings.data.company} manage={manage} invalidate={INVALIDATE} />
           )}
           {tab === 'rates' && <RatesTab manage={manage} />}
+          {tab === 'invoice' && <InvoiceManagement manage={manage} />}
           {tab === 'holidays' && <PublicHolidays manage={manage} />}
           {tab === 'ports' && <Ports manage={manage} />}
           {tab === 'forwarders' && <Forwarders manage={manage} />}

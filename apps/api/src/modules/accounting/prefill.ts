@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
-  RECORD_SUMMARY_ITEMS,
+  recordSummaryItems,
   chargeLineUnit,
   containerUnit,
   recordSummaryLedgerGroup,
@@ -13,7 +13,7 @@ import { db } from '../../db/client';
 import { badRequest, notFound } from '../../lib/errors';
 import { issueDateFor } from '../../lib/issueDate';
 import { queryRows } from '../../lib/listing';
-import { rateOn } from './ledger';
+import { rateOn, vatRateOn } from './ledger';
 
 interface Ctx {
   /** Null for a declaration not in the Monthly Ledger yet (record summaries only). */
@@ -23,6 +23,8 @@ interface Ctx {
   invDate: string | null;
   declareDate: string;
   exchangeRate: string;
+  /** The ledger row's VAT percent (10 without a row). */
+  vatRate: string;
   invNo: string | null;
   disNo: string | null;
   dnNo: string | null;
@@ -89,7 +91,7 @@ export async function prefill(
     sql`
     SELECT a.id AS "recordId", c.id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
            to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", a.exchange_rate::text AS "exchangeRate",
-           a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
+           coalesce(a.vat_rate, 10)::text AS "vatRate", a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM tax_invoices t WHERE upper(t.invoice_no) = upper(a.inv_no)) THEN a.inv_no END AS "freeInvNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM disbursements t WHERE upper(t.dis_no) = upper(a.dis_no) AND extract(year FROM t.dis_date) = extract(year FROM a.inv_date)) THEN a.dis_no END AS "freeDisNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM debit_notes t WHERE upper(t.dn_no) = upper(a.dn_no)) THEN a.dn_no END AS "freeDnNo",
@@ -127,11 +129,9 @@ export async function prefill(
     shipper: c.shipper,
     consignee: c.consignee,
     hbl: c.hbl ?? 'NON',
-    pkgs: Number(c.ctns)
-      ? `${n(c.ctns)} CTNS`
-      : c.quantity
-        ? `${n(c.quantity)} ${c.quantityUnit ?? ''}`.trim()
-        : null,
+    containerSize: c.containerSize,
+    pkgs: Number(c.ctns) ? n(c.ctns) : c.quantity ? n(c.quantity) : null,
+    pkgsUnit: Number(c.ctns) ? 'CTNS' : c.quantity ? c.quantityUnit : null,
   };
   const customer = {
     customerNameEn: (c.legalName ?? c.clientName).toUpperCase(),
@@ -160,6 +160,7 @@ export async function prefill(
         invoiceNo: c.freeInvNo,
         invoiceDate: c.invDate,
         exchangeRate: c.exchangeRate,
+        vatRate: c.vatRate,
         lines: [line(fee, c.invRevenue)],
       };
     case 'disbursements':
@@ -188,7 +189,10 @@ export async function prefill(
           line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal),
         ],
       };
-    case 'record-summaries':
+    case 'record-summaries': {
+      // Not in the ledger yet: the issue date it will get (next working day after clearance).
+      const summaryDate = c.invDate ?? (await issueDateFor(db, c.declareDate));
+      const vatRate = await vatRateOn(db, summaryDate);
       return {
         ...base,
         direction: c.direction,
@@ -200,17 +204,18 @@ export async function prefill(
         forwarderId: c.forwarderId,
         portId: c.portId,
         declareNo: c.declareNo,
-        // Not in the ledger yet: the issue date it will get (next working day after clearance).
-        summaryDate: c.invDate ?? (await issueDateFor(db, c.declareDate)),
-        quantityText: ship.pkgs,
+        summaryDate,
+        vatRate,
+        quantityText: ship.pkgs && `${ship.pkgs} ${ship.pkgsUnit ?? ''}`.trim(),
         blNo: c.hbl,
         containerNo: c.containers,
         containerSize: c.containerSize,
         grossWeightKg: n(c.gw),
         cbm: c.transportMode === 'AIR' ? 'NON' : n(c.cbm),
         // The standard import / export breakdown; the processing fee starts at the ledger's
-        // service fee (10% VAT goes on top), the rest are priced per shipment.
-        lines: RECORD_SUMMARY_ITEMS[c.direction].map(([description, mark], i) => ({
+        // service fee (VAT at the summary date's percent goes on top), the rest are priced
+        // per shipment.
+        lines: recordSummaryItems(c.direction, vatRate).map(([description, mark], i) => ({
           description,
           qty: '1',
           unit: chargeLineUnit(description, shipmentChargeUnit(c)),
@@ -218,6 +223,7 @@ export async function prefill(
           mark,
         })),
       };
+    }
   }
 }
 
@@ -308,6 +314,7 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
     accountingRecordId: c.recordId ?? '',
     clientId: c.clientId,
     cnDate: c.declareDate,
+    vatRate: await vatRateOn(db, c.declareDate),
     billTo: (c.company?.nameEn ?? 'GRATEFUL SOLUTIONS (CAMBODIA) CO.,LTD').toUpperCase(),
     address: c.company?.addressEn ?? null,
     shipper: c.shipper,
@@ -365,6 +372,7 @@ export async function clientPrefill(
         ...customer,
         invoiceDate: date,
         exchangeRate: await rateOn(db, date),
+        vatRate: await vatRateOn(db, date),
         lines: [],
       };
     case 'disbursements':

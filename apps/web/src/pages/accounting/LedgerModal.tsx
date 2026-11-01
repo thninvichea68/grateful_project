@@ -6,11 +6,17 @@ import {
   BILLING_DOC_TYPES,
   computeLedger,
   ledgerInputSchema,
+  vatLabel,
   type LedgerEntryInput,
   type LedgerRow,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useDeclarationOptions, useDeleteLedger, useSaveLedger } from '../../features/accounting';
+import {
+  useDeclarationOptions,
+  useDeleteLedger,
+  useDocVatPercent,
+  useSaveLedger,
+} from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
@@ -93,15 +99,23 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
   const pickedDecl = options.data?.find((o) => o.id === v.declarationId);
   const clientId = row?.clientId ?? pickedDecl?.clientId;
   const clientCm = lookups.data?.clients.find((c) => c.id === clientId)?.commissionUsd;
-  const preview = computeLedger({
-    clearFee: v.clearFee,
-    thc: v.thc,
-    otherPay: v.otherPay,
-    commission: v.commission === '' || v.commission === undefined ? clientCm : v.commission,
-    invRevenue: v.invRevenue,
-    disTotal: v.disTotal,
-    dnTotal: v.dnTotal,
-  });
+  // The row's VAT percent while its invoice date stays; else the one in force on the new date.
+  const vatPercent = useDocVatPercent(
+    v.invDate || row?.invDate,
+    row ? { date: row.invDate, vatRate: row.vatRate } : null,
+  );
+  const preview = computeLedger(
+    {
+      clearFee: v.clearFee,
+      thc: v.thc,
+      otherPay: v.otherPay,
+      commission: v.commission === '' || v.commission === undefined ? clientCm : v.commission,
+      invRevenue: v.invRevenue,
+      disTotal: v.disTotal,
+      dnTotal: v.dnTotal,
+    },
+    vatPercent,
+  );
 
   const onSubmit = handleSubmit(async (values) => {
     if (row) {
@@ -291,7 +305,9 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
             fontWeight: 700,
           }}
         >
-          <span>VAT 10%: {fmtMoney(preview.vat)}</span>
+          <span>
+            {vatLabel(vatPercent)}: {fmtMoney(preview.vat)}
+          </span>
           <span>In: {fmtMoney(preview.totalInflow)}</span>
           <span>Out: {fmtMoney(preview.totalOutflow)}</span>
           <span
@@ -392,8 +408,7 @@ function DocumentsMenu({
         onClick={() => setOpen((o) => !o)}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
       >
-        Documents ({row.documents.length})
-        {icons.chevronDown({ width: 14, height: 14 })}
+        Documents ({row.documents.length}){icons.chevronDown({ width: 14, height: 14 })}
       </button>
       {open && (
         // Opens upward: the section sits at the bottom of the modal.

@@ -15,6 +15,7 @@ import {
   lookupValueInputSchema,
   portInputSchema,
   publicHolidayInputSchema,
+  vatRateInputSchema,
   type PublicHoliday,
   type SettingsBundle,
 } from '@gs/shared';
@@ -28,6 +29,7 @@ import {
   ports,
   publicHolidays,
   settings,
+  vatRates,
 } from '../../db/schema';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
@@ -39,6 +41,7 @@ import { marketPrices, syncFuelPrices, syncMetalPrices } from './marketSync';
 import { excelUpload, requireFile } from '../../lib/http';
 import { queryRows } from '../../lib/listing';
 import { parseRateWorkbook } from './rateImport';
+import { listVatRates } from '../accounting/ledger';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -343,6 +346,68 @@ settingsRouter.delete('/public-holidays/:id', manage, async (req, res) => {
   const [row] = await db.delete(publicHolidays).where(eq(publicHolidays.id, id)).returning();
   if (!row) throw notFound('Public holiday');
   await audit(db, { action: 'DELETE', entity: 'public_holiday', entityId: id, before: row }, req);
+  res.status(204).end();
+});
+
+/* ---------- Invoice management: VAT percent by effective date ---------- */
+
+settingsRouter.get('/vat-rates', requirePermission('settings:read'), async (_req, res) => {
+  res.json(await listVatRates());
+});
+
+const isUnique = (err: unknown) =>
+  ((err as { cause?: { code?: string } }).cause?.code ?? (err as { code?: string }).code) ===
+  '23505';
+
+/**
+ * A new VAT percent from a date. Only documents made (or re-dated) from now on take it;
+ * documents already made keep the percent they were made with.
+ */
+settingsRouter.post('/vat-rates', manage, async (req, res) => {
+  const v = parse(vatRateInputSchema, req.body);
+  try {
+    const [row] = await db
+      .insert(vatRates)
+      .values({ ...v, percent: String(v.percent), createdById: req.auth!.userId })
+      .returning();
+    await audit(db, { action: 'CREATE', entity: 'vat_rate', entityId: row!.id, after: row }, req);
+    res.status(201).json(row);
+  } catch (err) {
+    if (isUnique(err))
+      throw conflict(`There is already a VAT rate from ${v.effectiveDate}. Edit that one.`);
+    throw err;
+  }
+});
+
+settingsRouter.patch('/vat-rates/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const v = parse(vatRateInputSchema, req.body);
+  const [before] = await db.select().from(vatRates).where(eq(vatRates.id, id));
+  if (!before) throw notFound('VAT rate');
+  try {
+    const [row] = await db
+      .update(vatRates)
+      .set({ ...v, percent: String(v.percent), updatedAt: new Date() })
+      .where(eq(vatRates.id, id))
+      .returning();
+    await audit(
+      db,
+      { action: 'UPDATE', entity: 'vat_rate', entityId: id, before, after: row },
+      req,
+    );
+    res.json(row);
+  } catch (err) {
+    if (isUnique(err))
+      throw conflict(`There is already a VAT rate from ${v.effectiveDate}. Edit that one.`);
+    throw err;
+  }
+});
+
+settingsRouter.delete('/vat-rates/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const [row] = await db.delete(vatRates).where(eq(vatRates.id, id)).returning();
+  if (!row) throw notFound('VAT rate');
+  await audit(db, { action: 'DELETE', entity: 'vat_rate', entityId: id, before: row }, req);
   res.status(204).end();
 });
 

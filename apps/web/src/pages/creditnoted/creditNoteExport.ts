@@ -1,5 +1,5 @@
 import type { Workbook } from 'exceljs';
-import { isVatChargedLine, type BillingDoc } from '@gs/shared';
+import { isVatChargedLine, vatFactor, type BillingDoc } from '@gs/shared';
 import { saveBlob } from '../../lib/files';
 import { creditNoteHeader, pricedLines } from '../print/PrintDocPage';
 import { addPrintFonts } from '../print/printFonts';
@@ -248,9 +248,9 @@ function addCreditNoteSheet(
     ws.getCell(row, 4).value = l.unit;
     ws.getCell(row, 5).value = Number(l.unitPrice) || 0;
     ws.getCell(row, 6).value = {
-      // The processing fee: 10% VAT on top, as in the system.
+      // The processing fee: the document's VAT on top (10% → ×1.1), as in the system.
       formula: isVatChargedLine(l.description)
-        ? `ROUND(ROUND(C${row}*E${row},2)*1.1,2)`
+        ? `ROUND(ROUND(C${row}*E${row},2)*${vatFactor(d.header.vatRate ?? undefined)},2)`
         : `ROUND(C${row}*E${row},2)`,
       result: Number(l.subtotal) || 0,
     };
