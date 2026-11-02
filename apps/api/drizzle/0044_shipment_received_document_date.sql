@@ -1,1 +1,0 @@
-ALTER TABLE "shipments" ADD COLUMN "received_document_date" date;

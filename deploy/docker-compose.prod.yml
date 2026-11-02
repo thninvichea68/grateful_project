@@ -1,0 +1,38 @@
+# Production on a server with a domain name, HTTPS by Caddy:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+# Only ports 80 and 443 are open; the database and the app stay inside Docker.
+services:
+  postgres:
+    ports: !reset []
+
+  api:
+    environment:
+      CORS_ORIGIN: https://${DOMAIN:?Set DOMAIN in .env}
+      COOKIE_SECURE: 'true'
+      # Caddy → nginx (web) → API
+      TRUST_PROXY: 2
+
+  web:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+      UPSTREAM: web:80
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

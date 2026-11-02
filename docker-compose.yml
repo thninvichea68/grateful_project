@@ -12,7 +12,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-gs_command_center}
       TZ: Asia/Phnom_Penh
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -24,9 +24,9 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: server/Dockerfile
     restart: unless-stopped
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     environment:
       NODE_ENV: production
       PORT: 4000
@@ -43,7 +43,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: client/Dockerfile
     restart: unless-stopped
     ports:
       - '${WEB_PORT:-8080}:80'

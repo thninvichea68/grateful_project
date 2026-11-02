@@ -8,7 +8,7 @@
  *                     (Windows default: C:\Program Files\PostgreSQL\<version>\bin is detected)
  *
  * Output: gs-db-YYYYMMDD-HHmm.dump (pg_dump custom format) and uploads/ (mirror of UPLOAD_DIR).
- * Restore: see DEPLOY.md → "Restore from a backup".
+ * Restore: see docs/DEPLOY.md → "Restore from a backup".
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -25,7 +25,7 @@ const url = new URL(dbUrl);
 const backupDir = path.resolve(process.env.BACKUP_DIR || 'backups');
 const keepDays = Number(process.env.BACKUP_KEEP_DAYS || 30);
 // Relative paths are relative to the project folder, exactly as the API resolves them.
-const uploadDir = path.resolve(process.env.UPLOAD_DIR || 'apps/api/storage');
+const uploadDir = path.resolve(process.env.UPLOAD_DIR || 'server/storage');
 
 function findPgDump() {
   const exe = process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump';

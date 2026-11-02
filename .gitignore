@@ -2,11 +2,12 @@ node_modules
 dist
 .env
 .env.*.local
-apps/api/storage/*
-!apps/api/storage/.gitkeep
+server/storage/*
+!server/storage/.gitkeep
 coverage
 *.log
 .DS_Store
 /storage/
 /backups/
 logs/
+.env.production

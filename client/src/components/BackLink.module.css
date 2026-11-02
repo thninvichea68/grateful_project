@@ -1,0 +1,47 @@
+/* Back button: a clean square with a chevron, beside the page title. */
+.back {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  color: var(--text-primary);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.back svg {
+  width: 15px;
+  height: 15px;
+}
+.back:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
+}
+.back:active {
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+.back:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* The title block holding it: button on the left, centred on the title and subtitle. */
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 20px;
+  align-items: center;
+}
+.row > .back {
+  grid-row: 1 / span 6;
+}
+.row > :not(.back) {
+  grid-column: 2;
+}

@@ -4,12 +4,21 @@ Production version of the "GS Dashboard" prototype: React + TypeScript web app, 
 Every number, table row and chart is read from PostgreSQL through the API — nothing is hard-coded in the browser.
 
 ```
-apps/web         React 18 · Vite · React Router · TanStack Query · React Hook Form + Zod
-apps/api         Node 20 · Express 5 · Drizzle ORM · Zod · JWT (access + httpOnly refresh cookie) · pino
-packages/shared  Zod schemas, enums, permissions and the accounting / cut-stock formulas used by both
+GS-Command-Center/
+├── client/      Web app — React 18 · Vite · React Router · TanStack Query · React Hook Form + Zod
+├── server/      API — Node 20 · Express 5 · Drizzle ORM · Zod · JWT (access + httpOnly refresh cookie) · pino
+├── shared/      Zod schemas, enums, permissions and the accounting / cut-stock formulas used by both
+├── deploy/      Hosting: PM2 process file, Caddyfile (HTTPS), production Docker override
+├── docs/        Deployment guide and business data-flow notes
+├── samples/     Real client spreadsheets the imports and exports were modelled on
+├── scripts/     Operations scripts (database + uploads backup)
+├── storage/     Uploaded files (local, not in git)
+├── .github/     CI: typecheck, lint, tests, build and Docker images on every push
+├── docker-compose.yml   PostgreSQL + API + website containers
+└── .env.example         Settings template (copy to .env)
 ```
 
-**Status: complete (Phases 1–6).** Every page is built on the database, hardened and documented for production. **To go live, follow [DEPLOY.md](DEPLOY.md).**
+**Status: complete (Phases 1–6).** Every page is built on the database, hardened and documented for production. **To go live, follow [docs/DEPLOY.md](docs/DEPLOY.md).**
 
 ---
 
@@ -62,17 +71,17 @@ Open **http://localhost:5173**. Vite forwards `/api` to the API, so the browser 
 
 ### Everyday commands
 
-| Command                                        | What it does                                                         |
-| ---------------------------------------------- | -------------------------------------------------------------------- |
-| `pnpm dev`                                     | API (watch mode) + web (Vite) together                               |
-| `pnpm db:migrate`                              | Apply pending migrations                                             |
-| `pnpm db:seed`                                 | **Wipe** and reload the demo dataset                                 |
-| `pnpm db:reset`                                | Drop everything, migrate, seed                                       |
-| `pnpm db:generate`                             | After editing `apps/api/src/db/schema/*`, create a new SQL migration |
-| `pnpm db:studio`                               | Browse the database in Drizzle Studio                                |
-| `pnpm test`                                    | All unit + integration tests (needs the Docker postgres running)     |
-| `pnpm typecheck` · `pnpm lint` · `pnpm format` | Quality checks                                                       |
-| `pnpm build`                                   | Production builds of every package                                   |
+| Command                                        | What it does                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev`                                     | API (watch mode) + web (Vite) together                             |
+| `pnpm db:migrate`                              | Apply pending migrations                                           |
+| `pnpm db:seed`                                 | **Wipe** and reload the demo dataset                               |
+| `pnpm db:reset`                                | Drop everything, migrate, seed                                     |
+| `pnpm db:generate`                             | After editing `server/src/db/schema/*`, create a new SQL migration |
+| `pnpm db:studio`                               | Browse the database in Drizzle Studio                              |
+| `pnpm test`                                    | All unit + integration tests (needs the Docker postgres running)   |
+| `pnpm typecheck` · `pnpm lint` · `pnpm format` | Quality checks                                                     |
+| `pnpm build`                                   | Production builds of every package                                 |
 
 ---
 
@@ -88,7 +97,7 @@ Open **http://localhost:5173**. Vite forwards `/api` to the API, so the browser 
 | sokha.chan@gs.local     | Operator   | shipments, clients, cut stock, documents, follow-ups; no accounting                |
 | dara.kim@gs.local       | Viewer     | read-only                                                                          |
 
-The full permission matrix is in `packages/shared/src/permissions.ts`.
+The full permission matrix is in `shared/src/permissions.ts`.
 
 ## What the seed loads
 
@@ -98,7 +107,7 @@ Deterministic (same result every run), dated around the real current date so sta
 - 10 customs ports from the accounting engine's directory (SHV11, PNH01 KTI, PNH21 O'Lair…), 7 forwarders (Maersk, FWF, Hippo, …), 25 countries
 - **262 shipments** across 2026 (peak in June), 195 containers, 386 cargo invoices with 1,392 lines
 - 225 customs declarations, each with a monthly-ledger row computed by the shared accounting formulas (≈ 5 % are loss-making)
-- **195 cut-stock items read directly from `JR CDC MASTER LIST.xlsx`** (`apps/api/src/db/seed/data/`), including the 10 items that are already over-imported in the spreadsheet; a few 2026 declarations draw them down further
+- **195 cut-stock items read directly from `JR CDC MASTER LIST.xlsx`** (`server/src/db/seed/data/`), including the 10 items that are already over-imported in the spreadsheet; a few 2026 declarations draw them down further
 - 8 quotation templates extracted from `quotation-system.html`, 10 follow-ups, monthly USD→KHR rates
 
 ---
@@ -107,7 +116,7 @@ Deterministic (same result every run), dated around the real current date so sta
 
 ### Data model
 
-37 tables (`apps/api/src/db/schema/`), migrations in `apps/api/drizzle/`. Highlights:
+37 tables (`server/src/db/schema/`), migrations in `server/drizzle/`. Highlights:
 
 - **Shipments** split freight into `transport_mode` (SEA/AIR/ROAD/RAIL) and `load_type` (FCL = CY/CY, LCL, NONE). The Key Accounts CY/CY · LCL · AIR columns are derived from these.
 - **Customs declarations** are their own table (a shipment can have several). Each declaration has at most one **accounting record** (the Chea payment / monthly ledger row) and any number of **CDC lines**.
@@ -117,7 +126,7 @@ Deterministic (same result every run), dated around the real current date so sta
 - `fob_amount` on cargo invoice lines is a PostgreSQL generated column (`round(pcs × fob_unit_price, 2)`).
 - `audit_log` records who changed what (before/after JSON), logins, failed logins and token reuse.
 
-### Accounting formulas (`packages/shared/src/accounting.ts`)
+### Accounting formulas (`shared/src/accounting.ts`)
 
 Ported from `accounting-engine.html` and unit-tested against the two real declarations in the prototype:
 
@@ -140,7 +149,7 @@ All arithmetic is done in integer cents / BigInt fixed point — no floating-poi
 
 ### Look and feel
 
-The prototype's stylesheet is ported unchanged (`apps/web/src/styles/prototype.css`), with tokens in `tokens.css` and the bundled Helvetica faces in `fonts.css`. Components reuse the prototype's class names (`.sidebar`, `.menu-item`, `.card`, `.status-tag`, …), so screens match pixel-for-pixel. New, page-specific styles go in CSS Modules.
+The prototype's stylesheet is ported unchanged (`client/src/styles/prototype.css`), with tokens in `tokens.css` and the bundled Helvetica faces in `fonts.css`. Components reuse the prototype's class names (`.sidebar`, `.menu-item`, `.card`, `.status-tag`, …), so screens match pixel-for-pixel. New, page-specific styles go in CSS Modules.
 
 Changes from the prototype shell: Cut Stock and Quotations were added to the sidebar; "Ask AI" and "Help" were removed from the top bar (no feature behind them); the bell shows **overdue follow-ups** from the database; the clock always shows Phnom Penh time.
 
@@ -183,15 +192,15 @@ Changes from the prototype shell: Cut Stock and Quotations were added to the sid
 
 ## Going live (Phase 6)
 
-See **[DEPLOY.md](DEPLOY.md)** for step-by-step instructions on a Windows office server or a Linux VPS. Summary:
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for step-by-step instructions on a Windows office server or a Linux VPS. Summary:
 
-| Command                                          | What it does                                                                                     |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `pnpm build`                                     | Build the API and the website                                                                    |
-| `pnpm db:migrate:prod`                           | Apply migrations using `.env`                                                                    |
-| `pnpm db:init:prod`                              | Empty database → reference data + first Admin (no demo data; safe to re-run)                     |
-| `pnpm start` or `pm2 start ecosystem.config.cjs` | Run in production: one process serves the API **and** the website (`WEB_DIST_DIR=apps/web/dist`) |
-| `pnpm backup`                                    | Database dump + new uploaded files into `BACKUP_DIR`, keeps `BACKUP_KEEP_DAYS` days              |
+| Command                                                 | What it does                                                                                   |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `pnpm build`                                            | Build the API and the website                                                                  |
+| `pnpm db:migrate:prod`                                  | Apply migrations using `.env`                                                                  |
+| `pnpm db:init:prod`                                     | Empty database → reference data + first Admin (no demo data; safe to re-run)                   |
+| `pnpm start` or `pm2 start deploy/ecosystem.config.cjs` | Run in production: one process serves the API **and** the website (`WEB_DIST_DIR=client/dist`) |
+| `pnpm backup`                                           | Database dump + new uploaded files into `BACKUP_DIR`, keeps `BACKUP_KEEP_DAYS` days            |
 
 Hardening in this phase:
 
@@ -234,7 +243,7 @@ GET  /accounting/docs/:type/prefill?clientId&date     a document of no shipment,
 
 **Follow-ups** (`/followup`) — FLW-#### references, client/assignee/due (Phnom Penh time)/priority/status, overdue rows highlighted, one-click **Mark done**; the sidebar badge and the bell (overdue) follow the data.
 
-**Documents** (`/documents`) — upload PDF, images, Excel, CSV, Word or text up to 20 MB, with title, category and status, linked to a client and/or shipment; download; delete (soft — the file is kept for the audit trail). Files are stored under `UPLOAD_DIR` (`apps/api/storage` by default) in `year/month/<random-id>` names; downloads are always sent as attachments.
+**Documents** (`/documents`) — upload PDF, images, Excel, CSV, Word or text up to 20 MB, with title, category and status, linked to a client and/or shipment; download; delete (soft — the file is kept for the audit trail). Files are stored under `UPLOAD_DIR` (`server/storage` by default) in `year/month/<random-id>` names; downloads are always sent as attachments.
 
 **Operations** (`/operations`) — the customs declaration register: declaration, date, port, shipment, HBL, client, clearance, ledger status (filter "Not yet in ledger"), CDC lines and document count. Click a row to see and upload that shipment's BL / compliance documents.
 

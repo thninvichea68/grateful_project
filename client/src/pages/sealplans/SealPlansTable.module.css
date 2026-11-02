@@ -1,0 +1,153 @@
+/* Seal Plans table: one line per container, light month dividers, gaps shown in place. */
+.scroll {
+  overflow: auto;
+  max-height: calc(100vh - 290px);
+  min-height: 240px;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 10px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--accent-primary);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+.table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.table th:first-child,
+.table td:first-child {
+  padding-left: 14px;
+}
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.row:hover {
+  background: var(--bg-inset);
+}
+.row:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* Month divider: a label, not a bar. */
+.month td {
+  padding: 18px 14px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.month b {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.month span {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.container {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.size {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.client {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.clip {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.muted {
+  color: var(--text-tertiary);
+}
+.missing {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+/* Header cells hold the shared search boxes (plans/HeadCell). */
+.table th {
+  padding: 8px 4px;
+}
+.table th:first-child {
+  padding-left: 10px;
+}
+.table th:last-child {
+  padding-right: 10px;
+}
+/* Fit the card: fixed column shares, long values end in "…". */
+.table {
+  table-layout: fixed;
+}
+.table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table th:nth-child(1) {
+  width: 14%;
+}
+.table th:nth-child(2) {
+  width: 7%;
+}
+.table th:nth-child(3) {
+  width: 9%;
+}
+.table th:nth-child(4) {
+  width: 11%;
+}
+.table th:nth-child(5),
+.table th:nth-child(6),
+.table th:nth-child(7),
+.table th:nth-child(8),
+.table th:nth-child(9) {
+  width: 8%;
+}
+.table th:nth-child(10) {
+  width: 7%;
+}
+.table th:nth-child(11) {
+  width: 12%;
+}
+.month td {
+  overflow: visible;
+}

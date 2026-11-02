@@ -1,1 +1,0 @@
-ALTER TABLE "containers" ADD COLUMN "truck_no" text;

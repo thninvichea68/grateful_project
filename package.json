@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": ">=20.12"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "pnpm --parallel --filter @gs/api --filter @gs/web dev",
@@ -18,10 +18,15 @@
     "db:reset": "pnpm --filter @gs/api db:reset",
     "db:studio": "pnpm --filter @gs/api db:studio",
     "docker:seed": "docker compose exec api node dist/db/seed/index.js --force",
-    "start": "node --env-file=.env apps/api/dist/server.js",
-    "db:migrate:prod": "node --env-file=.env apps/api/dist/db/migrate.js",
+    "prod:up": "docker compose -p gs-prod --env-file .env.production up -d --build",
+    "prod:init": "docker compose -p gs-prod --env-file .env.production exec api node dist/db/init.js",
+    "prod:logs": "docker compose -p gs-prod --env-file .env.production logs -f api",
+    "prod:ps": "docker compose -p gs-prod --env-file .env.production ps",
+    "prod:down": "docker compose -p gs-prod --env-file .env.production down",
+    "start": "node --env-file=.env server/dist/server.js",
+    "db:migrate:prod": "node --env-file=.env server/dist/db/migrate.js",
     "db:init": "pnpm --filter @gs/api db:init",
-    "db:init:prod": "node --env-file=.env apps/api/dist/db/init.js",
+    "db:init:prod": "node --env-file=.env server/dist/db/init.js",
     "backup": "node --env-file=.env scripts/backup.mjs"
   },
   "devDependencies": {

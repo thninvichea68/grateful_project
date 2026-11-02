@@ -1,0 +1,1 @@
+ALTER TABLE "shipments" ADD COLUMN "cut_off_at" timestamp;

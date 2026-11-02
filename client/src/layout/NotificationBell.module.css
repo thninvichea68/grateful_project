@@ -1,0 +1,118 @@
+/* Top-bar alerts dropdown. */
+.wrap {
+  position: relative;
+}
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.head span {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.note {
+  margin: 0;
+  padding: 10px 16px 14px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+}
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-main);
+  cursor: pointer;
+}
+.item:hover {
+  background: var(--bg-subtle);
+}
+.item[data-unread='true'] {
+  background: color-mix(in srgb, var(--accent-primary) 7%, transparent);
+}
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+.item[data-priority='HIGH'] .dot {
+  background: var(--status-exception-fg);
+}
+.item[data-priority='MEDIUM'] .dot {
+  background: var(--status-pending-fg);
+}
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.subject {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+.item[data-unread='true'] .subject {
+  font-weight: 700;
+}
+.meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.when {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.when[data-overdue='true'] {
+  color: var(--status-exception-fg);
+  font-weight: 700;
+}
+.footer {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+  color: var(--accent-primary);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}

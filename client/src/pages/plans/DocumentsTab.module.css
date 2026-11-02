@@ -1,0 +1,219 @@
+/* Shipment → Documents tab: the one merged clearance file. */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge[data-state='done'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.badge[data-state='due'] {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.badge[data-state='wait'] {
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+}
+.body {
+  padding: 20px 24px 24px;
+}
+.empty {
+  padding: 16px 24px 24px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Drop zone ---------- */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 20px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.drop[data-over='true'] {
+  border-color: var(--accent-primary);
+  background: var(--status-completed-bg);
+}
+.drop b {
+  color: var(--text-primary);
+}
+.dropIcon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--status-completed-bg);
+  color: var(--accent-primary);
+}
+
+/* ---------- File rows ---------- */
+.fileMain,
+.file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+}
+.file {
+  padding: 10px 12px;
+}
+.file + .file {
+  margin-top: 8px;
+}
+.fileBody {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fileIcon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 42px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.file .fileIcon {
+  width: 34px;
+  height: 38px;
+  font-size: 9.5px;
+}
+.fileText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.fileText b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+.fileBody:hover .fileText b {
+  color: var(--accent-primary);
+}
+.fileText small {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.fileActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.others {
+  margin-top: 20px;
+}
+.othersHead {
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Buttons ---------- */
+.btn,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.danger {
+  border-color: transparent;
+  font-size: 17px;
+}
+.danger:hover:not(:disabled) {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.primary {
+  border: 0;
+  background: var(--accent-primary);
+  color: #fff;
+}
+.primary:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+.btn:disabled,
+.primary:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}

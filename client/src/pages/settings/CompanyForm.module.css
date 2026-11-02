@@ -1,0 +1,156 @@
+/* Settings → Company: header, three labelled sections, Save bar. Full width of the page. */
+.card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+.head {
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.head p {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* One section: what it is on the left, its fields on the right. */
+.section {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 40px;
+  padding: 28px;
+}
+.section + .section {
+  border-top: 1px solid var(--border-subtle);
+}
+.sectionHead h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.sectionHead p {
+  margin: 8px 0 0;
+  max-width: 280px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  align-content: start;
+}
+.fields[data-cols='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.full {
+  grid-column: 1 / -1;
+}
+/* Fixed line boxes, so a Khmer label or box (taller glyphs) lines up with its English twin. */
+.field > label {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  overflow: visible;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.field :global(.form-field-box) {
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
+  margin: 0;
+  padding: 0 14px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.field .textarea {
+  display: block;
+  height: 76px;
+  min-height: 76px;
+  padding: 12px 14px;
+  font-family: var(--font-main);
+  line-height: 22px;
+  resize: vertical;
+}
+.khmer {
+  font-family: 'GS Khmer', var(--font-main) !important;
+}
+
+/* Save bar: stays at the bottom of the window while the form scrolls. */
+.foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 28px;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 8px 8px;
+  background: var(--bg-subtle);
+}
+.status {
+  margin-right: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1280px) {
+  .section {
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 28px;
+  }
+  .fields[data-cols='3'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .sectionHead p {
+    max-width: none;
+  }
+}
+@media (max-width: 600px) {
+  .fields,
+  .fields[data-cols='3'] {
+    grid-template-columns: 1fr;
+  }
+  .section,
+  .head,
+  .foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

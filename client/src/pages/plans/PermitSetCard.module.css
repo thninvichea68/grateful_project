@@ -1,0 +1,88 @@
+/* Invoice / PL → Permit Application Set: four documents in hand-in order. */
+.progress {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+.progress[data-done='true'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.empty {
+  padding: 0 24px 20px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.docs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0 24px 22px;
+  list-style: none;
+}
+@media (max-width: 1000px) {
+  .docs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.doc {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.doc[data-ok='false'] {
+  border-style: dashed;
+  border-color: var(--status-pending-fg);
+  background: var(--status-pending-bg);
+}
+.no {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--status-pending-fg);
+  color: var(--status-pending-fg);
+  font-size: 12px;
+  font-weight: 800;
+}
+.doc[data-ok='true'] .no {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: #fff;
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.text b {
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+.detail,
+.need {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+.detail {
+  color: var(--text-secondary);
+}
+.need {
+  color: var(--status-pending-fg);
+  font-weight: 600;
+}

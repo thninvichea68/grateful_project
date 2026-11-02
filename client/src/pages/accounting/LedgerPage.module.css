@@ -1,0 +1,530 @@
+/* Ledger: title sits in the accounting tabs row; then filters + actions, tiles, table. */
+.title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+.period {
+  color: var(--accent-primary);
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.actions > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+}
+.actions svg {
+  width: 15px;
+  height: 15px;
+}
+.export {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.export:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+/* Filter bar: plain row; search takes the free width. */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--border-subtle);
+}
+/* Search takes the width left over in the row. */
+.filters .search {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+/* Fill the window exactly: the content area becomes a column, the ledger card takes the
+   height left under the tabs, and only the table scrolls (no page scrollbar). Small
+   screens keep normal page scrolling. */
+@media (min-width: 900px) and (min-height: 600px) {
+  :global(.content):has(> .fill) {
+    display: flex;
+    flex-direction: column;
+  }
+  :global(.view.active).fill {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fill > :global(.card) {
+    padding: 16px 20px 14px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .tableScroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .divider {
+    display: none;
+  }
+}
+
+/* ---------- Period: Monthly / Yearly, then ‹ month › ---------- */
+.segment {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-inset);
+}
+.segment button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.segment button[aria-pressed='true'] {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+.stepper button {
+  width: 32px;
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.stepper button:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.periodInput {
+  height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  outline: none;
+}
+
+/* ---------- Income statement: one panel, three parts ---------- */
+.statement {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
+  margin: 16px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+@media (max-width: 1100px) {
+  .statement {
+    grid-template-columns: 1fr 1fr;
+  }
+  .resultPart {
+    grid-column: 1 / -1;
+    border-left: 0 !important;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+.part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 20px 16px;
+}
+.part + .part {
+  border-left: 1px solid var(--border-subtle);
+}
+.partHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.partHead > span:first-child {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.partHead b {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.part dl {
+  margin: 0;
+}
+.line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.line dt {
+  color: var(--text-secondary);
+}
+.line dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.resultPart {
+  background: var(--bg-inset);
+}
+.margin {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.margin[data-neg='true'] {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.netValue {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  line-height: 1.1;
+  color: var(--accent-primary);
+  font-variant-numeric: tabular-nums;
+}
+.netValue[data-neg='true'] {
+  color: var(--status-exception-fg);
+}
+/* Income split: costs vs profit. */
+.split {
+  display: flex;
+  height: 8px;
+  margin: 12px 0 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.splitCost {
+  background: var(--text-tertiary);
+  opacity: 0.55;
+}
+.splitProfit {
+  flex: 1;
+  background: var(--accent-primary);
+}
+.splitLegend {
+  display: flex;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+.splitLegend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: 0;
+}
+.keyCost {
+  background: var(--text-tertiary);
+  opacity: 0.55;
+}
+.keyProfit {
+  background: var(--accent-primary);
+}
+.memos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.memoChip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+.memoChip b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+button.memoChip {
+  cursor: pointer;
+}
+.memoChip[data-warn='true'] {
+  border-color: transparent;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.memoChip[data-warn='true'] b {
+  color: var(--status-pending-fg);
+}
+.memoChip[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+/* ---------- Ledger table ---------- */
+.ledger {
+  width: 100%;
+  min-width: 1500px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+}
+.ledger th,
+.ledger td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  text-align: left;
+}
+.ledger thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+/* The group row above the column names. */
+.groups th {
+  padding-top: 6px;
+  padding-bottom: 4px;
+  border-bottom: 0;
+  color: var(--text-tertiary) !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.ledger thead tr:nth-child(2) th {
+  top: 26px;
+}
+/* A rule between groups. */
+.groupStart {
+  border-left: 1px solid var(--border-subtle);
+}
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+.row {
+  cursor: pointer;
+}
+.row:hover td {
+  background: var(--bg-inset);
+}
+.row:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+/* The declaration stays in view while the wide ledger scrolls sideways. */
+.stickyA {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+}
+.ledger thead .stickyA {
+  z-index: 4;
+}
+.declare {
+  font-weight: 700;
+}
+.markDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--status-pending-fg);
+  vertical-align: middle;
+}
+.client {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.chea {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--status-pending-fg);
+}
+.chea[data-paid='true'] {
+  color: var(--status-completed-fg);
+}
+.notInvoiced {
+  color: var(--status-pending-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+/* Net profit: the column that matters, a shade apart. */
+.resultHead {
+  background: var(--bg-inset) !important;
+}
+.result {
+  background: var(--bg-inset);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.result[data-neg='true'] {
+  color: var(--status-exception-fg);
+}
+.memo {
+  color: var(--text-tertiary);
+}
+
+/* Total row: stays at the bottom while rows scroll; single rule above, double under profit. */
+.ledger tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  border-top: 1.5px solid var(--text-primary);
+  border-bottom: 0;
+  background: var(--bg-surface);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.ledger tfoot .stickyA {
+  z-index: 3;
+}
+.grand {
+  text-decoration: underline double;
+  text-underline-offset: 4px;
+}
+
+/* ---------- Compact statement: lines in two columns, about half the height ---------- */
+.statement {
+  margin: 12px 0;
+  border-radius: 10px;
+}
+.part {
+  padding: 10px 16px 11px;
+}
+.partHead {
+  align-items: center;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+}
+.partHead b {
+  font-size: 15px;
+}
+.part dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 22px;
+}
+.line {
+  padding: 1px 0;
+  font-size: 12px;
+}
+.netLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.netValue {
+  font-size: 20px;
+  letter-spacing: -0.3px;
+}
+.margin {
+  padding: 1px 7px;
+  font-size: 11px;
+}
+.split {
+  height: 6px;
+  margin: 4px 0 8px;
+}
+.memos {
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 0;
+  padding-top: 0;
+}
+.splitLegend {
+  margin-right: auto;
+  gap: 12px;
+}
+.memoChip {
+  padding: 2px 9px;
+  font-size: 11.5px;
+}
+
+/* Two header rows pinned together: the group row is exactly 26px, the names sit under it. */
+.groups th {
+  height: 26px;
+  box-sizing: border-box;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  vertical-align: middle;
+}

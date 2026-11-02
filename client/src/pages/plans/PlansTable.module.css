@@ -1,0 +1,536 @@
+/* Shipping Plans table cells: a primary value with a muted second line, compact chips. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sub {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.client {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 16px;
+  color: var(--accent-primary);
+  background: var(--bg-subtle);
+}
+.more {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  cursor: help;
+}
+.freight {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Status sits at the right edge and stays visible while the wide table scrolls. */
+.statusCol {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--bg-surface);
+  box-shadow: inset 1px 0 0 var(--border-subtle);
+}
+th.statusCol {
+  z-index: 6;
+  background: var(--bg-surface-elevated);
+}
+tr:hover > .statusCol {
+  background: var(--bg-subtle);
+}
+.alert {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.alert[data-tone='danger'] {
+  color: var(--status-exception-fg);
+}
+.alert[data-tone='warning'] {
+  color: var(--status-pending-fg);
+}
+.alert[data-tone='info'] {
+  color: var(--status-progress-fg);
+}
+
+.activeFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Slightly tighter rows than the shared table: most cells have two lines. */
+.table td,
+.table th {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.table td {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+/* Long port / forwarder names shorten with "…"; the full name shows on hover. */
+.clip {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Urgent shipments: a small red tag after the bill number. */
+.urgent {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* ---------- Page layout: direction + tools, then status tabs + alert chips ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 18px;
+}
+.segment {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--bg-inset);
+  flex-shrink: 0;
+}
+.segment button {
+  padding: 7px 18px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.segment button[aria-pressed='true'] {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
+}
+.mine {
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-canvas);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mine[aria-pressed='true'] {
+  border-color: var(--accent-primary);
+  background: var(--status-completed-bg);
+  color: var(--accent-primary);
+}
+
+.bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text-primary);
+}
+.tab[aria-pressed='true'] {
+  border-bottom-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tab[aria-pressed='true'] .count {
+  background: var(--status-completed-bg);
+  color: var(--accent-primary);
+}
+.watch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip b {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.chip[data-on][data-tone='danger'] {
+  border-color: transparent;
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.chip[data-on][data-tone='warning'] {
+  border-color: transparent;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.chip[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+.clear {
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.clear:hover {
+  color: var(--text-primary);
+}
+
+/* ---------- Rows ---------- */
+.bill {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.table th {
+  white-space: nowrap;
+}
+.table td {
+  vertical-align: middle;
+}
+/* Rows that need someone: a coloured edge on the left. */
+.table tr[data-tone='danger'] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--status-exception-fg);
+}
+.table tr[data-tone='warning'] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--status-pending-fg);
+}
+.freight {
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 18px;
+}
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.unassigned {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Row ⋯ menu: the last column, pinned at the right edge after Status. */
+.statusCol {
+  right: 48px;
+}
+.actionCol {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  width: 48px;
+  padding-left: 4px !important;
+  padding-right: 10px !important;
+  text-align: right;
+  background: var(--bg-surface);
+}
+th.actionCol {
+  z-index: 6;
+  background: var(--bg-surface-elevated);
+}
+tr:hover > .actionCol {
+  background: var(--bg-subtle);
+}
+.rowDots {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.rowDots:hover,
+.rowDots[aria-expanded='true'] {
+  background: var(--bg-subtle);
+  color: var(--accent-primary);
+}
+.danger,
+.danger > svg {
+  color: var(--status-exception-fg) !important;
+}
+
+/* One line per row: an overdue / customs problem shows as a dot by the status (label on hover). */
+.alertDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.alertDot[data-tone='danger'] {
+  background: var(--status-exception-fg);
+}
+.alertDot[data-tone='warning'] {
+  background: var(--status-pending-fg);
+}
+.table td {
+  white-space: nowrap;
+}
+.table .clip {
+  display: inline-block;
+  max-width: 200px;
+  vertical-align: bottom;
+}
+
+/* ---------- Header: one row; each column name is also its search box ---------- */
+/* Beats the shared sticky-header style (grey fill, shadow) on this table. */
+:global(.plans-table-scroll) .table thead th {
+  padding: 8px 6px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+:global(.plans-table-scroll) .table thead th:first-child {
+  padding-left: 10px;
+}
+.head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.head:hover {
+  border-color: var(--border-strong);
+}
+.head:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--status-completed-bg);
+}
+/* Looks like a label until it is used. */
+.headInput {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: text;
+}
+select.headInput {
+  cursor: pointer;
+  appearance: none;
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+.headInput::placeholder {
+  color: var(--accent-primary);
+  font-weight: 700;
+  opacity: 1;
+}
+
+.headInput:focus::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+/* A column being searched: tinted, with × to clear. */
+.head[data-filled='true'] {
+  border-color: var(--accent-primary);
+  background: var(--status-completed-bg);
+}
+.head[data-filled='true'] .headInput {
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+.headBtn {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.headBtn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+.headBtn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+/* Sort arrow: only on hover, or when this column is sorted. */
+.sort {
+  opacity: 0;
+}
+.head:hover .sort,
+.sort:focus-visible,
+.sort[data-dir='asc'],
+.sort[data-dir='desc'] {
+  opacity: 1;
+}
+.sort[data-dir='asc'],
+.sort[data-dir='desc'] {
+  color: var(--accent-primary);
+  font-weight: 800;
+}
+
+/* ---------- Fit the card: 8 columns, no sideways scroll, nothing pinned ---------- */
+.table {
+  table-layout: fixed;
+  width: 100%;
+}
+.table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table .statusCol,
+.table .actionCol {
+  position: static;
+  box-shadow: none;
+}
+.table th.statusCol {
+  width: 160px;
+}
+.table th.actionCol {
+  width: 48px;
+}
+.table td.statusCol {
+  overflow: visible;
+}
+select.headInput {
+  padding-right: 24px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%2394A3B8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+/* A tab whose count needs attention (Seal Plans → Planning). */
+.tab[data-warn='true'] .count {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+/* A tab whose count is bad news (Follow Up → Overdue). */
+.tab[data-danger='true'] .count {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+/* A tab that is a link (Accounting sections): active by route. */
+a.tab {
+  text-decoration: none;
+}
+.tabOn {
+  border-bottom-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 700;
+}

@@ -1,0 +1,889 @@
+/* Shipment create / edit page. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-bottom: 8px;
+}
+
+/* ---------- Header ---------- */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.badge[data-tone='done'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.badge[data-tone='progress'] {
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+.badge[data-tone='pending'] {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.badge[data-tone='exception'] {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.badge[data-tone='draft'] {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.meta strong {
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  font-family: var(--font-main);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.exportBtn svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent-emerald);
+}
+.exportBtn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+}
+.exportBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--status-exception-fg);
+  cursor: pointer;
+}
+.deleteBtn svg {
+  width: 15px;
+  height: 15px;
+}
+.deleteBtn:hover {
+  background: var(--status-exception-bg);
+  border-color: var(--status-exception-fg);
+}
+
+/* ---------- Setup card: the client on its own row, then the shipment choices ---------- */
+/* Client · Assigned staff · Urgent on one row. */
+.setupClient {
+  display: grid;
+  grid-template-columns: minmax(220px, 440px) minmax(200px, 300px) auto;
+  justify-content: start;
+  align-items: end;
+  gap: 16px 24px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+/* Shipment type · Freight · Terms: separate columns divided by a rule. */
+.setupChoices {
+  display: grid;
+  grid-template-columns: minmax(300px, 520px) auto auto;
+  justify-content: start;
+  align-items: start;
+}
+/* (.setupField resets margin/padding/border, so this needs the extra weight.) */
+.setupChoices > .setupField + .setupField {
+  margin-left: 28px;
+  padding-left: 28px;
+  border-left: 1px solid var(--border-subtle);
+}
+.typeTiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.typeTile {
+  position: relative;
+  display: flex;
+}
+.typeTile input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.typeTile span {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.typeTile i {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-style: normal;
+  font-size: 16px;
+  font-weight: 700;
+}
+.typeTile b {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.typeTile small {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.typeTile span:hover {
+  border-color: var(--text-tertiary);
+}
+.typeTile input:checked + span {
+  border-color: var(--accent-primary);
+  background: var(--status-progress-bg);
+}
+.typeTile input:checked + span i {
+  background: var(--accent-primary);
+  color: #fff;
+}
+.typeTile input:checked + span b {
+  color: var(--accent-primary);
+}
+.typeTile input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+fieldset:disabled .typeTile span {
+  cursor: not-allowed;
+}
+.setupField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.cap {
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.clientSelect {
+  height: 42px;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+.segOpt {
+  position: relative;
+  display: flex;
+}
+.segOpt input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segOpt span {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.segOpt span:hover {
+  color: var(--text-primary);
+}
+.segOpt input:checked + span {
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+.segOpt input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+/* Air: Terms don't apply. Nothing is highlighted and hovering does nothing. */
+.setupField:disabled .segOpt span {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.setupField:disabled .segOpt span:hover {
+  color: var(--text-secondary);
+}
+.setupField:disabled .segOpt input:checked + span {
+  background: none;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+/* ---------- Workflow tracker (top) ---------- */
+.tracker {
+  padding: 18px 20px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.trackerHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-tertiary);
+}
+.trackerHead b {
+  color: var(--text-secondary);
+}
+.trackerList {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+}
+.trackerStage {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 96px;
+}
+/* The line to the next stage, green once this stage is done. */
+.trackerStage:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 13px;
+  left: calc(50% + 16px);
+  right: calc(-50% + 16px);
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+}
+.trackerStage[data-state='done']:not(:last-child)::after {
+  background: var(--status-completed-fg);
+}
+.trackerStage button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0 4px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.trackerDot {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.trackerLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.trackerHint {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.trackerStage[data-state='done'] .trackerDot {
+  border-color: var(--status-completed-fg);
+  background: var(--status-completed-fg);
+  color: var(--bg-surface);
+}
+.trackerStage[data-state='done'] .trackerLabel {
+  color: var(--text-primary);
+}
+.trackerStage[data-state='next'] .trackerDot {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+.trackerStage[data-state='next'] .trackerHint {
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+.trackerStage button[aria-current='step'] .trackerLabel {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+.trackerStage button:hover .trackerLabel {
+  color: var(--accent-primary);
+}
+.trackerStage button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* A stage that cannot go on (a rejected permit). */
+.trackerStage[data-state='block'] .trackerDot {
+  border-color: var(--status-exception-fg);
+  color: var(--status-exception-fg);
+}
+.trackerStage[data-state='block'] .trackerHint {
+  color: var(--status-exception-fg);
+  font-weight: 700;
+}
+
+/* ---------- A form in titled columns (Arrival & DO) ---------- */
+.formCols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px 28px;
+}
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+/* What a document takes from the shipment: ✓ in, ✕ still missing. */
+.checklist {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.checklist li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.checklist li::before {
+  flex: none;
+  font-weight: 800;
+}
+.checklist li[data-ok='true']::before {
+  content: '✓';
+  color: var(--status-completed-fg);
+}
+.checklist li[data-ok='false']::before {
+  content: '✕';
+  color: var(--status-exception-fg);
+}
+.checklist b {
+  color: var(--text-primary);
+}
+.formSectionTitle {
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent-primary);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ---------- Header: who owns it ---------- */
+.owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.owner b {
+  display: block;
+  color: var(--text-primary);
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+  font-size: 12px;
+  font-weight: 800;
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 39px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.checkRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+}
+
+/* ---------- Tabs: General, then one per workflow stage ---------- */
+/* Spread evenly across the full width, as on the NSW forms; scrolls (without a visible bar)
+   only when the screen is too narrow for every tab. */
+.tabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--text-primary);
+}
+.tab[aria-selected='true'] {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+.tabIcon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 9px;
+  line-height: 1;
+}
+.tab[data-done='true'] .tabIcon {
+  border-color: var(--status-completed-fg);
+  background: var(--status-completed-fg);
+  color: var(--bg-surface);
+}
+.tab[data-error='true'] {
+  color: var(--status-exception-fg);
+}
+.tab[data-error='true'] .tabIcon {
+  border-color: var(--status-exception-fg);
+  background: var(--status-exception-fg);
+  color: var(--bg-surface);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* ---------- Section cards ---------- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.stack > :global(.cx-card + .cx-card) {
+  margin-top: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: 18px;
+}
+.note {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Parties: shipper and consignee side by side ---------- */
+.parties {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.stack > .parties > :global(.cx-card + .cx-card) {
+  margin-top: 0;
+}
+.partyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.partyHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.partyHead h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.partyTag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.partyTag[data-tone='client'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.partyTag[data-tone='other'] {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.partyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+/* A value from the client profile or another record: grey, not editable here. */
+.roBox {
+  min-height: 39px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Cargo invoices (step) and their items (next step) ---------- */
+.invTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.invTable th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.invTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.invTable tfoot td {
+  border-bottom: 0;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.invTable .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.invTableWrap {
+  overflow-x: auto;
+}
+.stepHint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.stepHint b {
+  color: var(--text-primary);
+}
+.invTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.invTab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.invTab b {
+  color: var(--text-primary);
+}
+.invTab small {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.invTab[aria-pressed='true'] {
+  border-color: var(--accent-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+.invTab[data-error='true'] {
+  border-color: var(--status-exception-fg);
+}
+
+/* ---------- Sticky action bar ---------- */
+.actionBar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px 12px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  min-width: 0;
+}
+.progress strong {
+  color: var(--text-primary);
+}
+.dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.dirty::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.buttons :global(.btn-create-submit),
+.buttons :global(.btn-cancel-shipment) {
+  height: 40px;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-radius: 8px;
+}
+.secondaryNext {
+  composes: btn-cancel-shipment from global;
+  color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+@media (max-width: 1100px) {
+  .setupChoices {
+    grid-template-columns: auto auto;
+    row-gap: 20px;
+  }
+  .setupChoices {
+    justify-content: stretch;
+  }
+  .setupChoices > .setupField:first-child {
+    grid-column: 1 / -1;
+  }
+  .setupChoices > .setupField:nth-child(2) {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+@media (max-width: 1000px) {
+  .grid {
+    --cols: 2 !important;
+  }
+  .parties {
+    grid-template-columns: 1fr;
+  }
+  .formCols {
+    grid-template-columns: 1fr;
+  }
+  .setupClient {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .setupChoices {
+    grid-template-columns: 1fr;
+  }
+  .setupChoices > .setupField + .setupField {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .typeTiles {
+    grid-template-columns: 1fr;
+  }
+  .segmented {
+    overflow-x: auto;
+  }
+  .grid {
+    --cols: 1 !important;
+  }
+  .grid > * {
+    grid-column: 1 / -1 !important;
+  }
+  .partyGrid {
+    grid-template-columns: 1fr;
+  }
+  .progress span:not(.dirty) {
+    display: none;
+  }
+}
+
+/* Data that disagrees with itself (e.g. completed while customs is not cleared). */
+.warn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 13px;
+  font-weight: 600;
+}

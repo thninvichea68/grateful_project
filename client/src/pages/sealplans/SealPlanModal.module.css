@@ -1,0 +1,36 @@
+/* Seal Plan editor: readiness checklist above the form. */
+.readiness {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font-size: 12.5px;
+}
+.readiness[data-stage='READY'] {
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+.readiness[data-stage='LOADED'],
+.readiness[data-stage='DEPARTED'] {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.readiness ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.readiness li {
+  font-weight: 600;
+}
+.readiness li[data-done='true'] {
+  opacity: 0.65;
+}

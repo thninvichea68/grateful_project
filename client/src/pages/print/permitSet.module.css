@@ -1,0 +1,260 @@
+/* Import permit application set: cover letter, invoice, packing list (A4, one per page). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.toolbar {
+  align-items: center;
+}
+.toggles {
+  display: flex;
+  gap: 6px;
+  margin-right: auto;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  font: 600 12.5px/1 inherit;
+  cursor: pointer;
+}
+.toggle[data-on='true'] {
+  border-color: #0891b2;
+  color: #0e7490;
+  background: #ecfeff;
+}
+.toggle input {
+  accent-color: #0891b2;
+}
+
+/* A document that isn't ready: on screen only, never printed. */
+.missing {
+  min-height: 0 !important;
+  padding: 24px 28px !important;
+  font-size: 13px !important;
+  border: 2px dashed #f59e0b;
+}
+.missing h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.missing ul {
+  margin: 8px 0 0 18px;
+  color: #b45309;
+  font-weight: 600;
+}
+@media print {
+  .missing {
+    display: none;
+  }
+  .stack {
+    gap: 0;
+  }
+  .stack > div {
+    break-after: page;
+    page-break-after: always;
+  }
+  .stack > div:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}
+
+.en {
+  font-family: 'Times New Roman', Times, serif;
+}
+
+/* ---------- Cover letter ---------- */
+.cover {
+  font-size: 14px;
+}
+.coverTop {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: start;
+}
+.from {
+  display: grid;
+  gap: 2px;
+  padding-top: 6px;
+}
+.from > div {
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 6px;
+  align-items: baseline;
+}
+.from .en {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.dates {
+  margin: 10px 0 0 auto;
+  width: 60%;
+  text-align: center;
+}
+.to {
+  margin: 22px 0 18px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 2;
+}
+.terms {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px 4px;
+  margin: 0;
+}
+.terms dt::after {
+  content: ' :';
+  font-family: 'Times New Roman', serif;
+}
+.terms dd {
+  margin: 0;
+}
+.refs {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+.refs li::before {
+  content: '- ';
+}
+.body {
+  margin: 14px 0 0;
+  text-indent: 76px;
+}
+.sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 34px 0 0 auto;
+  width: 46%;
+  text-align: center;
+  line-height: 1.8;
+}
+.small {
+  font-size: 12px;
+}
+.signSpace {
+  height: 90px;
+}
+
+/* ---------- Invoice / packing list ---------- */
+.doc {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 16mm 16mm 18mm !important;
+  display: flex;
+  flex-direction: column;
+}
+.letterhead {
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 2.5px solid #111;
+  font-size: 11px;
+}
+.letterhead h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+}
+.docTitle {
+  margin: 16px 0 12px;
+  text-align: center;
+  font-size: 16px;
+  letter-spacing: 3px;
+}
+.meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.meta span,
+.consignee > span {
+  color: #374151;
+}
+.consignee {
+  display: grid;
+  grid-template-columns: 84px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+.origin {
+  align-self: end;
+  white-space: nowrap;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-left: 1px solid #111;
+  border-right: 1px solid #111;
+}
+.table th {
+  border: 1px solid #111;
+  font-weight: 700;
+  text-align: left;
+  vertical-align: bottom;
+}
+.table th small {
+  display: block;
+  font-weight: 400;
+  text-decoration: underline;
+}
+.table tbody tr:last-child td {
+  border-bottom: 1px solid #111;
+  padding-bottom: 14px;
+}
+.table tfoot td {
+  border: 0;
+  padding-top: 8px;
+  font-weight: 700;
+}
+.table tfoot td:last-child,
+.table tfoot td.r:not(:first-child) {
+  border-bottom: 3px double #111;
+}
+.r {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.c {
+  text-align: center !important;
+}
+.foot {
+  margin-top: auto;
+  padding-top: 28px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 24px;
+  align-items: end;
+}
+.ctnr {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+.supplierSign {
+  grid-column: 2;
+  min-width: 260px;
+  text-align: center;
+}
+.signLine {
+  height: 64px;
+  border-bottom: 1px solid #111;
+}

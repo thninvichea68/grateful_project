@@ -9,22 +9,28 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/node_modules/**',
-      'apps/api/drizzle/**',
-      'apps/web/public/**',
+      'server/drizzle/**',
+      'client/public/**',
       // Vendored Bklit UI charts (MIT), kept as published.
-      'apps/web/src/components/bklit/**',
+      'client/src/components/bklit/**',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['client/**/*.{ts,tsx}'],
     languageOptions: { globals: globals.browser },
     plugins: { 'react-hooks': reactHooks },
     rules: { ...reactHooks.configs.recommended.rules },
   },
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'scripts/**/*.mjs', '*.cjs'],
+    files: [
+      'server/**/*.ts',
+      'shared/**/*.ts',
+      'scripts/**/*.mjs',
+      'client/scripts/**/*.mjs',
+      '**/*.cjs',
+    ],
     languageOptions: { globals: globals.node },
     // The API logs through pino; console is allowed only in CLI scripts (with a disable comment).
     rules: { 'no-console': 'error' },
@@ -41,7 +47,7 @@ export default tseslint.config(
     },
   },
   // CLI scripts print to the terminal.
-  { files: ['scripts/**/*.mjs'], rules: { 'no-console': 'off' } },
-  { files: ['*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },
+  { files: ['scripts/**/*.mjs', 'client/scripts/**/*.mjs'], rules: { 'no-console': 'off' } },
+  { files: ['**/*.cjs'], languageOptions: { sourceType: 'commonjs', globals: globals.node } },
   prettier,
 );

@@ -2,8 +2,15 @@
 **/dist
 **/coverage
 .git
+.github
 .env
 .env.*
 !.env.example
-apps/api/storage
+server/storage
+storage
+backups
+logs
+samples
+docs
+GS Dashboard Test
 *.log

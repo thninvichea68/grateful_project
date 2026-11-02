@@ -1,1 +1,0 @@
-ALTER TABLE "users" ADD COLUMN "client_scopes" jsonb DEFAULT '{}'::jsonb NOT NULL;

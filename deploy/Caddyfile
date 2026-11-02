@@ -1,0 +1,8 @@
+# HTTPS in front of the app. Caddy gets and renews the certificate by itself.
+#   VPS with PM2:  copy to /etc/caddy/Caddyfile, replace {$DOMAIN} with your domain,
+#                  then `systemctl reload caddy`. Traffic goes to the API on 127.0.0.1:4000.
+#   Docker:        used by deploy/docker-compose.prod.yml, which sends traffic to the web container.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy {$UPSTREAM:127.0.0.1:4000}
+}

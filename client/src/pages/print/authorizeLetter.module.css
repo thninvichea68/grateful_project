@@ -1,0 +1,97 @@
+/* The transfer of rights (លិខិតផ្ទេរសិទ្ធិ): one A4 page laid out like the customs form. */
+.letter {
+  font-family: 'Khmer OS Siemreap', 'GS Siemreap', 'GS Khmer', 'Times New Roman', serif;
+  font-size: 13.5px;
+  line-height: 1.85;
+  padding: 14mm 18mm 10mm 22mm;
+}
+/* Exactly one A4 page. */
+@media print {
+  .letter {
+    height: 297mm;
+    min-height: 0;
+  }
+}
+.moul {
+  font-family: 'Khmer OS Muol Light', 'GS Moul', serif;
+  font-weight: 400;
+}
+.kingdom {
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.9;
+}
+/* The ornament under the motto. */
+.rule {
+  width: 92px;
+  margin: 2px auto 10px;
+  border-top: 1px solid #111;
+  border-bottom: 1px solid #111;
+  height: 3px;
+}
+.title {
+  text-align: center;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.p {
+  margin: 0;
+  text-indent: 0;
+}
+.indent {
+  padding-left: 2.2em;
+}
+.b {
+  font-family: 'Khmer OS Siemreap', 'GS Siemreap', serif;
+  font-weight: 700;
+}
+.box {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin: 0 0.25em;
+  border: 1px solid #111;
+  vertical-align: -0.1em;
+  text-align: center;
+  font-size: 0.85em;
+  line-height: 0.95em;
+}
+.dots {
+  letter-spacing: 1px;
+  color: #444;
+}
+.docs {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 16px;
+  padding-left: 0.4em;
+}
+.docs span:nth-child(2n) {
+  white-space: nowrap;
+}
+.dates {
+  margin-top: 18px;
+  text-align: center;
+  padding-left: 30%;
+}
+.signs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-top: 6px;
+  text-align: center;
+}
+.signs > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 125px;
+}
+.thumb {
+  grid-column: 2;
+  margin-top: 16px;
+  text-align: center;
+  min-height: 105px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
