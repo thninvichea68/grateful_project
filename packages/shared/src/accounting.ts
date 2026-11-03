@@ -283,9 +283,18 @@ export function shipmentChargeUnit(s: {
   return containerUnit(s.containerSize);
 }
 
-/** A credit note / record summary line's unit: SET for the per-set charges, else the shipment's. */
-export const chargeLineUnit = (description: string | null | undefined, shipUnit: string): string =>
-  PER_SET_CHARGES.includes((description ?? '').trim().toUpperCase()) ? 'SET' : shipUnit;
+/** Charges billed per invoice ("APPLY CO FOR INV: JRA26051"), matched on the description's start. */
+const PER_INV_CHARGES = /^(APPLY\s+CO|EQMC)\s+FOR\s+INV\b/i;
+
+/**
+ * A credit note / record summary line's unit: SET for the per-set charges, INV for the per-invoice
+ * ones, else the shipment's.
+ */
+export function chargeLineUnit(description: string | null | undefined, shipUnit: string): string {
+  const d = (description ?? '').trim();
+  if (PER_INV_CHARGES.test(d)) return 'INV';
+  return PER_SET_CHARGES.includes(d.toUpperCase()) ? 'SET' : shipUnit;
+}
 
 /**
  * A unit that follows the shipment (SHIP, SET or a container size: 20GP, 40'HQ, 40'). Others
@@ -311,6 +320,8 @@ export function billingUnit(
 ): string {
   const u = (unit ?? '').trim();
   if (!isShipmentUnit(u)) return u;
+  // Already in the sheet's short form (40H, 40G…): the user set it, keep it.
+  if (/^\d{2}[A-Z]$/i.test(u)) return u.toUpperCase();
   const fixed = BILLING_UNITS.find(([re]) => re.test((description ?? '').trim()));
   if (fixed) return fixed[1];
   const size = /^(\d{2})'?\s*[A-Z]{0,2}$/i.exec(u);

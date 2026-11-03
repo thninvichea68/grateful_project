@@ -304,6 +304,8 @@ describe('charge line units (credit noted / record summary)', () => {
     expect(chargeLineUnit('TRUCKING FEE', fcl)).toBe("40'HQ");
     for (const d of ['PERMIT FEE', 'service taxation', 'MISSING INSURANCE', 'DOCUMENT FEE'])
       expect(chargeLineUnit(d, fcl)).toBe('SET');
+    for (const d of ['APPLY CO FOR INV:', 'APPLY CO FOR INV: JRA26051', 'eqmc for inv: JRA26051'])
+      expect(chargeLineUnit(d, fcl)).toBe('INV');
   });
   it('re-units only lines whose unit follows the shipment', () => {
     expect(followShipmentUnit({ description: 'THC FEE', unit: '20GP' }, "40'HQ")).toBe("40'HQ");
@@ -321,5 +323,7 @@ describe('charge line units (credit noted / record summary)', () => {
     expect(billingUnit('SERVICE TAXATION', 'SET')).toBe('SHIP');
     expect(billingUnit('PERMIT FEE', 'SET')).toBe('SET');
     expect(billingUnit('STORAGE', 'DAY')).toBe('DAY');
+    expect(billingUnit('EXPORT PROCESSING FEE', '40G')).toBe('40G');
+    expect(billingUnit('INCREASE TRUCKING FEE', '40g')).toBe('40G');
   });
 });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { vatLabel, type LedgerRow } from '@gs/shared';
-import { useLedger } from '../../features/accounting';
+import { useLedger, useLedgerColumnValues } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
 import { CheaPill, Pill } from '../../components/StatusPill';
@@ -10,6 +10,8 @@ import { downloadFile } from '../../lib/files';
 import { fmtDate, fmtNum } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { SearchBox } from '../../components/SearchBox';
+import { HeaderFilter } from '../../components/HeaderFilter';
+import { useHeaderFilters } from '../../components/useHeaderFilters';
 import { StatTile, StatTiles } from '../../components/StatTiles';
 import { LedgerModal } from './LedgerModal';
 import { ClearFeePayments } from './ClearFeePayments';
@@ -22,6 +24,42 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 /** 2026-08-22 → Saturday (the date is a plain calendar day, so read it as UTC). */
 const weekday = (iso: string | null | undefined) =>
   iso ? (WEEKDAYS[new Date(`${iso.slice(0, 10)}T00:00:00Z`).getUTCDay()] ?? '-') : '-';
+const CHEA_LABEL: Record<string, string> = { PAID: 'Paid', UNPAID: 'Unpaid', NA: 'N/A' };
+const money = { kind: 'number', align: 'right', format: m } as const;
+const asDate = { kind: 'date', format: fmtDate } as const;
+
+/** The table's columns, keyed as the API's header filters. */
+const COLUMNS: {
+  key: string;
+  label: string;
+  kind?: 'number' | 'date';
+  align?: 'right';
+  format?: (v: string) => string;
+}[] = [
+  { key: 'chea', label: 'Chea Payment', format: (v) => CHEA_LABEL[v] ?? v },
+  { key: 'portNo', label: 'Port Number' },
+  { key: 'portCode', label: 'Port Code' },
+  { key: 'portName', label: 'Port Name' },
+  { key: 'declareNo', label: 'Declare' },
+  { key: 'declareDate', label: 'Date', ...asDate },
+  { key: 'client', label: 'Client' },
+  { key: 'inv', label: 'INV' },
+  { key: 'dis', label: 'Disbursement' },
+  { key: 'dn', label: 'DN' },
+  { key: 'invDate', label: 'Date (INV)', ...asDate },
+  { key: 'exchangeRate', label: 'Exchange Rate', ...money, format: (v) => fmtNum(v, 0) },
+  { key: 'weekday', label: 'Weekday' },
+  { key: 'clearFee', label: 'Clear Fee', ...money },
+  { key: 'thc', label: 'THC', ...money },
+  { key: 'otherPay', label: 'Other Pay', ...money },
+  { key: 'commission', label: 'CM', ...money },
+  { key: 'invRevenue', label: 'INV (Revenue)', ...money },
+  { key: 'disTotal', label: 'DIS (Formula)', ...money },
+  { key: 'vat', label: 'VAT', ...money },
+  { key: 'dnTotal', label: 'DN Total', ...money },
+  { key: 'netProfit', label: 'Net Profit', ...money },
+  { key: 'mark', label: 'Mark' },
+];
 const docNo = (
   r: LedgerRow,
   type: 'tax-invoices' | 'disbursements' | 'debit-notes',
@@ -47,6 +85,8 @@ export function LedgerPage() {
   const lookups = useLookups();
   const [params, setParams] = useSearchParams();
   const [open, setOpen] = useState<LedgerRow | null>(null);
+  const header = useHeaderFilters(params, setParams);
+  const sort = params.get('sort') ?? undefined;
   // Period: a month (default) or a whole year (?year=2026, Jan–Dec).
   const year = params.get('year');
   const month = year ? '' : (params.get('month') ?? thisMonth());
@@ -58,10 +98,15 @@ export function LedgerPage() {
     clientId: params.get('clientId') || undefined,
     cheaStatus: params.get('chea') || undefined,
     q: params.get('q') || undefined,
+    filters: header.raw,
     page: Number(params.get('page') ?? 1),
     pageSize: Number(params.get('pageSize') ?? 50),
+    sort,
   };
   const list = useLedger(q);
+  // The open header filter's values come from the list's other filters, not the page.
+  const { page: _page, pageSize: _size, sort: _sort, ...valuesQuery } = q;
+  const colValues = useLedgerColumnValues(header.openCol, valuesQuery);
   const t = list.data?.totals;
   // "VAT 10%" while every row shown has the same percent; just "VAT" across a rate change.
   const vatRates = new Set((list.data?.data ?? []).map((r) => Number(r.vatRate)));
@@ -159,6 +204,21 @@ export function LedgerPage() {
             onChange={(e) => set('q', e.target.value.trim())}
             aria-label="Search"
           />
+          {(header.active || sort) && (
+            <button
+              type="button"
+              className={ui.ghostBtn}
+              onClick={() => {
+                const next = new URLSearchParams(params);
+                next.delete('f');
+                next.delete('sort');
+                next.delete('page');
+                setParams(next, { replace: true });
+              }}
+            >
+              Clear filters
+            </button>
+          )}
           <div className={l.actions}>
             <button
               type="button"
@@ -168,6 +228,8 @@ export function LedgerPage() {
                   month: month || undefined,
                   year: year || undefined,
                   clientId: q.clientId,
+                  filters: header.raw,
+                  sort,
                 }).catch(() => toast('Export failed.'))
               }
             >
@@ -204,29 +266,25 @@ export function LedgerPage() {
           <table className="data-table-clean">
             <thead>
               <tr>
-                <th>Chea Payment</th>
-                <th>Port Number</th>
-                <th>Port Code</th>
-                <th>Port Name</th>
-                <th>Declare</th>
-                <th>Date</th>
-                <th>Client</th>
-                <th>INV</th>
-                <th>Disbursement</th>
-                <th>DN</th>
-                <th>Date (INV)</th>
-                <th style={{ textAlign: 'right' }}>Exchange Rate</th>
-                <th>Weekday</th>
-                <th style={{ textAlign: 'right' }}>Clear Fee</th>
-                <th style={{ textAlign: 'right' }}>THC</th>
-                <th style={{ textAlign: 'right' }}>Other Pay</th>
-                <th style={{ textAlign: 'right' }}>CM</th>
-                <th style={{ textAlign: 'right' }}>INV (Revenue)</th>
-                <th style={{ textAlign: 'right' }}>DIS (Formula)</th>
-                <th style={{ textAlign: 'right' }}>{vatHead}</th>
-                <th style={{ textAlign: 'right' }}>DN Total</th>
-                <th style={{ textAlign: 'right' }}>Net Profit</th>
-                <th>Mark</th>
+                {COLUMNS.map((c) => (
+                  <th key={c.key} style={c.align ? { textAlign: 'right' } : undefined}>
+                    <HeaderFilter
+                      label={c.key === 'vat' ? vatHead : c.label}
+                      kind={c.kind}
+                      align={c.align}
+                      format={c.format}
+                      open={header.openCol === c.key}
+                      onOpen={() => header.setOpenCol(c.key)}
+                      onClose={header.close}
+                      values={header.openCol === c.key ? colValues.data : undefined}
+                      loading={colValues.isLoading}
+                      selected={header.filters[c.key]}
+                      sort={sort === c.key ? 'asc' : sort === `-${c.key}` ? 'desc' : undefined}
+                      onApply={(kept) => header.apply(c.key, kept)}
+                      onSort={(d) => set('sort', d === 'asc' ? c.key : `-${c.key}`)}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>

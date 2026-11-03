@@ -43,6 +43,7 @@ interface Ctx {
   direction: 'IMPORT' | 'EXPORT';
   transportMode: string;
   loadType: string;
+  flightNo: string | null;
   forwarderId: string | null;
   portId: string | null;
   portName: string | null;
@@ -98,7 +99,7 @@ export async function prefill(
            CASE WHEN NOT EXISTS (SELECT 1 FROM debit_notes t WHERE upper(t.dn_no) = upper(a.dn_no)) THEN a.dn_no END AS "freeDnNo",
            a.clear_fee::text AS "clearFee", a.thc::text AS thc,
            a.other_pay::text AS "otherPay", a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
-           d.declare_no AS "declareNo", s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.forwarder_id AS "forwarderId",
+           d.declare_no AS "declareNo", s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.flight_no AS "flightNo", s.forwarder_id AS "forwarderId",
            coalesce(d.port_id, s.clearance_port_id) AS "portId", p.short_name AS "portName", oc.name AS "originName", dc.name AS "destinationName",
            c.name AS "clientName", c.legal_name AS "legalName", c.legal_name_km AS "legalNameKm", c.address, c.vattin,
            s.shipper_name AS shipper, cn.name AS consignee, s.hbl_no AS hbl, s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
@@ -122,10 +123,15 @@ export async function prefill(
     // POL / POD print in capitals (UNITED STATES, SHV PORT).
     pol: (isImport ? c.originName : c.portName)?.toUpperCase() ?? null,
     pod: (isImport ? c.portName : c.destinationName)?.toUpperCase() ?? null,
-    containerNo: c.containers,
+    // By air the Container No. holds the flight no. (it prints as FLIGHT NO).
+    containerNo: c.transportMode === 'AIR' ? (c.flightNo ?? c.containers) : c.containers,
     volumeCbm: n(c.cbm),
     // Not a document field: lets a preview print "NON" as the volume by air.
     transportMode: c.transportMode,
+    // Not a document field either: an LCL shipment prints "CTNR NO: LCL".
+    loadType: c.loadType,
+    // Nor this: by air the CTNR NO line is the FLIGHT NO.
+    flightNo: c.flightNo,
     grossWeightKg: n(c.gw),
     shipper: c.shipper,
     consignee: c.consignee,

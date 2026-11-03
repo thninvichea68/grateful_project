@@ -133,6 +133,11 @@ export interface BillingShipmentRow {
    * was made outside the system (e.g. in Excel). It still counts on the statement.
    */
   manual: Record<BillingPackType, { number: string; total: string } | null>;
+  /**
+   * Nothing to bill on this type: the shipment is numbered, but this type has no number and
+   * no amount (no processing fee → no tax invoice; no DN charges → no debit note).
+   */
+  none: Record<BillingPackType, boolean>;
 }
 
 export interface StatementLine {

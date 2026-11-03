@@ -15,7 +15,7 @@ import {
   type TransportMode,
 } from '../enums';
 import { paginationQuerySchema } from './common';
-import { decimal, optDate, optText, optUuid } from './fields';
+import { decimal, headerFiltersParam, optDate, optText, optUuid } from './fields';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date');
 const money = (allowEmpty = true) => decimal(2, { min: 0, allowEmpty }).transform((v) => v ?? '0');
@@ -62,6 +62,8 @@ export const ledgerListQuerySchema = paginationQuerySchema.extend({
   clientId: z.string().uuid().optional(),
   cheaStatus: z.enum(CHEA_STATUSES).optional(),
   pageSize: z.coerce.number().int().min(1).max(1000).default(100),
+  /** Header filters, Excel style: the values each column keeps. */
+  filters: headerFiltersParam.optional(),
 });
 
 export interface LedgerRow {
@@ -375,7 +377,40 @@ export const BILLING_DOC_SCHEMAS = {
 } as const;
 export type BillingDocInput<T extends BillingDocType> = z.input<(typeof BILLING_DOC_SCHEMAS)[T]>;
 
+/** The tax invoice / DIS / debit note list columns, filtered and sorted from their headers. */
+export const BILLING_LIST_COLUMNS = [
+  'number',
+  'date',
+  'client',
+  'billTo',
+  'declareNo',
+  'declareDate',
+  'quantity',
+  'freight',
+  'total',
+  'status',
+] as const;
+export type BillingListColumn = (typeof BILLING_LIST_COLUMNS)[number];
+/** Column → the values kept, as the API returns them ('' for a blank cell). */
+export type BillingListFilters = Partial<Record<BillingListColumn, string[]>>;
+
+/** `filters` comes as JSON in the query string: {"client":["JR","SAK"],"freight":[""]}. */
+const columnFiltersSchema = z
+  .string()
+  .transform((s, ctx) => {
+    try {
+      return JSON.parse(s) as unknown;
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'filters must be JSON' });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.record(z.enum(BILLING_LIST_COLUMNS), z.array(z.string().max(300)).max(2000)));
+
 export const billingDocListQuerySchema = paginationQuerySchema.extend({
+  filters: columnFiltersSchema.optional(),
+  sort: z.enum(BILLING_LIST_COLUMNS).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
   clientId: z.string().uuid().optional(),
   status: z.enum(BILLING_DOC_STATUSES).optional(),
   month: z
@@ -557,10 +592,14 @@ export interface BillingDocListItem {
   clientName: string;
   billTo: string | null;
   declareNo: string | null;
+  /** Tax invoices, DIS and debit notes: the declaration's date (YYYY-MM-DD). */
+  declareDate?: string | null;
   total: string;
   /** Record summaries only. */
   direction?: 'IMPORT' | 'EXPORT';
-  transportMode?: string;
+  /** Record summaries, tax invoices, DIS and debit notes (the shipment's, null without one). */
+  transportMode?: string | null;
+  /** Record summaries, tax invoices, DIS and debit notes ("616 CTNS"). */
   quantityText?: string | null;
   port?: string | null;
   /** Record summaries: accounting's check (Expense to Clients). */

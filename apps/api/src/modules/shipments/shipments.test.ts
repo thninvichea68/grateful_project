@@ -507,6 +507,93 @@ describe('shipments', () => {
     ]);
     const noMatch = await request(app).get('/api/v1/shipments').query({ q: '%' }).set(h);
     expect(noMatch.body.meta.total).toBe(0);
+
+    // Header filters, Excel style: a column's values come from the other filters.
+    const values = (column: string, filters?: object) =>
+      request(app)
+        .get('/api/v1/shipments/values')
+        .query({ column, ...(filters ? { filters: JSON.stringify(filters) } : {}) })
+        .set(h);
+    expect((await values('client')).body).toEqual(['JR', 'JYX']);
+    // The import has no containers: its blank is offered too.
+    expect((await values('ctnr')).body).toEqual(['MRKU8974303', '']);
+    expect((await values('client', { ctnr: [''] })).body).toEqual(['JYX']);
+    // The column's own filter leaves its values as they were.
+    expect((await values('client', { client: ['JR'] })).body).toEqual(['JR', 'JYX']);
+    const byHeader = await request(app)
+      .get('/api/v1/shipments')
+      .query({ filters: JSON.stringify({ ctnr: ['MRKU8974303'] }) })
+      .set(h);
+    expect(byHeader.body.data.map((r: { clientCode: string }) => r.clientCode)).toEqual(['JR']);
+    const none = await request(app)
+      .get('/api/v1/shipments')
+      .query({ filters: JSON.stringify({ client: [] }) })
+      .set(h);
+    expect(none.body.meta.total).toBe(0);
+    const sorted = await request(app).get('/api/v1/shipments').query({ sort: '-client' }).set(h);
+    expect(sorted.body.data.map((r: { clientCode: string }) => r.clientCode)).toEqual([
+      'JYX',
+      'JR',
+    ]);
+    expect((await values('nope')).status).toBe(400);
+    // Every column's values, and a filter and sort on each of them, run.
+    for (const column of [
+      'invoice',
+      'qty',
+      'eta',
+      'declareNo',
+      'clearanceDate',
+      'declareDate',
+      'fwd',
+      'clearance',
+      'hbl',
+      'ctnr',
+      'ctnrSize',
+      'freight',
+      'reference',
+      'client',
+      'consignee',
+      'invoiceDate',
+      'country',
+      'bookingNo',
+      'linerSeal',
+      'customsSeal',
+      'crd',
+      'thcHblNo',
+      'thcHblDate',
+      'thcHblAmount',
+      'clearanceStatus',
+      'vessel',
+      'voyage',
+      'coForm',
+      'coNumber',
+      'coStatus',
+      'netWeight',
+      'grossWeight',
+      'cbm',
+      'qtyPcs',
+      'ctns',
+      'totalFob',
+      'poNo',
+      'styleNo',
+      'htsCode',
+      'fobPrice',
+      'description',
+      'etdPort',
+      'remark',
+      'etd',
+      'atd',
+      'arriveFty',
+      'status',
+    ]) {
+      const vs = await values(column);
+      expect(vs.status, column).toBe(200);
+      const kept = await request(app)
+        .get('/api/v1/shipments')
+        .query({ filters: JSON.stringify({ [column]: vs.body }), sort: `-${column}` })
+        .set(h);
+      expect(kept.body.meta.total, column).toBe(2);
+    }
   });
 
   it('rejects business-rule violations with field paths', async () => {

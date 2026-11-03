@@ -1,6 +1,7 @@
 import type { Borders, Font, Workbook, Worksheet } from 'exceljs';
 import {
   billingUnit,
+  containerUnit,
   invoiceBank,
   DEFAULT_VAT_PERCENT,
   fmtVatPercent,
@@ -65,6 +66,9 @@ export async function workbookBlob(wb: Workbook): Promise<Blob> {
 /** Manual column breaks (a page ends after each column number), written by workbookBlob. */
 const colBreaks = new WeakMap<Worksheet, number[]>();
 
+/** Narrow margins (mm), as on GS's own invoice sheets, so the sheet fills the A4 page. */
+const INVOICE_MARGINS = { left: 5, right: 5, top: 5, bottom: 5 };
+
 /** One document as its own workbook. */
 export async function exportInvoiceExcel(d: BillingDoc, c: CompanyInfo) {
   const { default: ExcelJS } = await import('exceljs');
@@ -81,7 +85,7 @@ export function addDocSheet(
   logo: string | null,
   name: string,
 ): string {
-  const ws = a4Sheet(wb, name, { left: 8, right: 8, top: 10, bottom: 10 }, true);
+  const ws = a4Sheet(wb, name, INVOICE_MARGINS, true);
   return d.type === 'debit-notes'
     ? debitNote(ws, d)
     : taxOrDisbursement(wb, ws, d, c, logo, d.type === 'tax-invoices');
@@ -99,10 +103,10 @@ export function addPairSheet(
   logo: string | null,
   name: string,
 ): [string, string] {
-  const ws = a4Sheet(wb, name, { left: 8, right: 8, top: 10, bottom: 10 });
+  const ws = a4Sheet(wb, name, INVOICE_MARGINS);
   // Excel ignores manual breaks on a sheet scaled to fit, so a fixed scale that keeps each
   // half on its page (the foot is pushed to A4_INVOICE_PT, which prints a little over A4).
-  Object.assign(ws.pageSetup, { fitToPage: false, scale: 95 });
+  Object.assign(ws.pageSetup, { fitToPage: false, scale: 98 });
   const pair = { lines: Math.max(tax.lines.length, dis.lines.length) };
   const refs: [string, string] = [
     taxOrDisbursement(wb, ws, tax, c, logo, true, { ...pair, o: 0 }),
@@ -136,9 +140,16 @@ export const RIEL = '#,##0';
 export const DATE_UPPER = 'dd\\-mmm\\-yyyy';
 export const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
-/** Container no. and size, in capitals as on the sheet: TCNU5209621 / 40HQ (LCL alone). */
-const container = (d: BillingDoc) =>
-  [h(d, 'containerNo'), h(d, 'containerSize')].filter(Boolean).join(' / ').toUpperCase();
+/**
+ * Container no. and size, in capitals as on the sheet: TCNU5209621 / 40HQ. LCL alone for LCL;
+ * the number alone for CY (its size goes in VOLUME).
+ */
+const container = (d: BillingDoc) => {
+  if (h(d, 'loadType') === 'LCL') return 'LCL';
+  // A CY shipment's size prints as its VOLUME instead.
+  const size = h(d, 'loadType') === 'FCL' ? '' : h(d, 'containerSize');
+  return [h(d, 'containerNo'), size].filter(Boolean).join(' / ').toUpperCase();
+};
 /** PKGS as printed: the quantity and its unit (629 CTNS). */
 const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -155,9 +166,22 @@ const fixed2 = (v: string) =>
 const kgs = (v: string) => (v ? `${fixed2(v)} KGS` : '');
 const cbm = (v: string) =>
   v ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 })} CBM` : '';
-/** The VOLUME line: always "NON" for a shipment by air (no CBM), import or export. */
-const volume = (d: BillingDoc) =>
-  h(d, 'transportMode') === 'AIR' ? 'NON' : cbm(h(d, 'volumeCbm'));
+/**
+ * CTNR NO: …, or FLIGHT NO: … for a shipment by air: what the document's Container No. holds,
+ * else the shipment's flight no.
+ */
+const ctnrLine = (d: BillingDoc) =>
+  h(d, 'transportMode') === 'AIR'
+    ? `FLIGHT NO: ${(h(d, 'containerNo') || h(d, 'flightNo')).toUpperCase()}`
+    : `CTNR NO: ${container(d)}`;
+/** The VOLUME line: "NON" by air (no CBM), the container size (40'HQ) for CY, else the CBM. */
+const volume = (d: BillingDoc) => {
+  if (h(d, 'transportMode') === 'AIR') return 'NON';
+  // CY: the container size (40'HQ), not the CBM.
+  if (h(d, 'loadType') === 'FCL' && h(d, 'containerSize'))
+    return containerUnit(h(d, 'containerSize'));
+  return cbm(h(d, 'volumeCbm'));
+};
 
 const MM = 1 / 25.4; // inches
 /**
@@ -218,7 +242,11 @@ export function logoImage(wb: Workbook, logo: string): number {
 type Value = string | number | Date | { formula: string; result?: number | string } | null;
 type Align = 'left' | 'center' | 'right';
 type PutRest = Parameters<typeof put> extends [unknown, unknown, unknown, ...infer T] ? T : never;
-/** Merge a row's span (when wider than one cell) and set its value and look. */
+/**
+ * Set a row span's value and look. A span wider than one cell is merged, or with `merge:
+ * false` left as plain cells: centred across the span ("Center Across Selection"), the value
+ * in its last cell when right-aligned (so it runs left), else in its first.
+ */
 export function put(
   ws: Worksheet,
   row: number,
@@ -233,21 +261,66 @@ export function put(
     shrink?: boolean;
     indent?: number;
     valign?: 'top' | 'bottom';
+    /** False: no merged cells (see above). */
+    merge?: boolean;
   } = {},
 ) {
-  if (c2 > c1) ws.mergeCells(row, c1, row, c2);
-  const cell = ws.getCell(row, c1);
+  const merge = extra.merge ?? true;
+  if (c2 > c1 && merge) ws.mergeCells(row, c1, row, c2);
+  const across = c2 > c1 && !merge && horizontal === 'center';
+  const cell = ws.getCell(row, !merge && horizontal === 'right' ? c2 : c1);
   if (value !== null && value !== '') cell.value = value as never;
   cell.font = font;
   cell.alignment = {
-    horizontal,
+    horizontal: across ? 'centerContinuous' : horizontal,
     vertical: extra.valign ?? 'middle',
     wrapText: !!extra.wrap,
     ...(extra.shrink ? { shrinkToFit: true } : {}),
     ...(extra.indent ? { indent: extra.indent } : {}),
   };
+  // Excel centres across the run of cells that all have "Center Across Selection".
+  if (across)
+    for (let col = c1 + 1; col <= c2; col++)
+      ws.getCell(row, col).alignment = { horizontal: 'centerContinuous', vertical: 'middle' };
   if (extra.numFmt) cell.numFmt = extra.numFmt;
   return cell;
+}
+
+type Part = { text: string; font: Partial<Font> };
+/**
+ * Breaks text into lines of at most `max` characters at spaces, keeping each part's font:
+ * a cell that isn't merged can't wrap across the cells its text runs into, so each line
+ * gets a row of its own.
+ */
+function lineUp(parts: Part[], max: number): Part[][] {
+  const lines: Part[][] = [[]];
+  let len = 0;
+  for (const p of parts)
+    for (const word of p.text.split(/(?<= )/)) {
+      if (len > 0 && len + word.trimEnd().length > max) {
+        lines.push([]);
+        len = 0;
+      }
+      const text = len === 0 ? word.trimStart() : word;
+      if (!text) continue;
+      const line = lines[lines.length - 1]!;
+      const prev = line[line.length - 1];
+      if (prev && prev.font === p.font) prev.text += text;
+      else line.push({ text, font: p.font });
+      len += text.length;
+    }
+  return lines;
+}
+
+/** One line of text in a cell, as plain text or rich text when its fonts differ. */
+function putLine(ws: Worksheet, row: number, col: number, line: Part[] | undefined, h: Align) {
+  const cell = ws.getCell(row, col);
+  cell.alignment = { horizontal: h, vertical: 'middle' };
+  if (!line?.length) return;
+  if (line.length === 1) {
+    cell.value = line[0]!.text;
+    cell.font = line[0]!.font;
+  } else cell.value = { richText: line } as never;
 }
 
 /** Add a border to one side of every cell in a row's span. */
@@ -318,8 +391,9 @@ export function masthead(
   col0 = 0,
 ): number {
   const all: [number, number] = [1 + col0, cols + col0];
-  put(ws, row, all, c.nameKm ?? '', f(MUOL, 13.5), 'center');
-  put(ws, row + 1, all, c.nameEn ?? '', f(EN, 11.5, { bold: true }), 'center');
+  const no = { merge: false };
+  put(ws, row, all, c.nameKm ?? '', f(MUOL, 13.5), 'center', no);
+  put(ws, row + 1, all, c.nameEn ?? '', f(EN, 11.5, { bold: true }), 'center', no);
   put(
     ws,
     row + 2,
@@ -327,9 +401,10 @@ export function masthead(
     `លេខអត្តសញ្ញាណកម្ម អតប (VATTIN) : ${c.vattin ?? ''}`,
     f(KM, 9.5, { bold: true }),
     'center',
+    no,
   );
-  put(ws, row + 3, all, `អាស័យដ្ឋាន : ${c.addressKm ?? ''}`, f(KM, 8), 'center', { wrap: true });
-  put(ws, row + 4, all, `លេខទូរស័ព្ទ: ${c.phone ?? ''}`, f(KM, 8), 'center');
+  put(ws, row + 3, all, `អាស័យដ្ឋាន : ${c.addressKm ?? ''}`, f(KM, 8), 'center', no);
+  put(ws, row + 4, all, `លេខទូរស័ព្ទ: ${c.phone ?? ''}`, f(KM, 8), 'center', no);
   [26, 18, 17, 24, 14].forEach((pt, i) => height(ws, row + i, pt));
   if (logo)
     ws.addImage(logoImage(wb, logo), {
@@ -353,8 +428,15 @@ function taxOrDisbursement(
   pair: { o: number; lines: number } = { o: 0, lines: 0 },
 ): string {
   const { o } = pair;
-  const P = (row: number, [c1, c2]: [number, number], ...rest: PutRest) =>
-    put(ws, row, [c1 + o, c2 + o], ...rest);
+  // No merged cells on the invoice sheets.
+  const P = (
+    row: number,
+    [c1, c2]: [number, number],
+    value: Value,
+    font: Partial<Font>,
+    horizontal: Align = 'left',
+    extra: PutRest[3] = {},
+  ) => put(ws, row, [c1 + o, c2 + o], value, font, horizontal, { ...extra, merge: false });
   const RL = (row: number, [c1, c2]: [number, number], side: keyof Borders, e: Borders['top']) =>
     rule(ws, row, [c1 + o, c2 + o], side, e);
   // A row keeps the taller of the two documents' heights.
@@ -377,15 +459,16 @@ function taxOrDisbursement(
   ht(1, 14);
   let r = masthead(wb, ws, c, logo, 8, 2, o);
 
-  // Title between the heavy rule and the details.
+  // Title between the heavy rule (a little space under it) and the details.
   ht(r, 12);
   RL(r + 1, ALL, 'top', THICK);
-  P(r + 1, ALL, tax ? 'វិក្កយបត្រអាករ' : 'វិក្កយបត្របង់ជំនួស', f(MUOL, 14), 'center');
-  ht(r + 1, 28);
-  P(r + 2, ALL, tax ? 'TAX INVOICE' : 'DISBURSEMENT', f(EN, 13, { bold: true }), 'center');
-  ht(r + 2, 19);
-  ht(r + 3, 12);
-  r += 4;
+  ht(r + 1, 8);
+  P(r + 2, ALL, tax ? 'វិក្កយបត្រអាករ' : 'វិក្កយបត្របង់ជំនួស', f(MUOL, 14), 'center');
+  ht(r + 2, 28);
+  P(r + 3, ALL, tax ? 'TAX INVOICE' : 'DISBURSEMENT', f(EN, 13, { bold: true }), 'center');
+  ht(r + 3, 19);
+  ht(r + 4, 12);
+  r += 5;
 
   // Customer on the left (A–D), document and shipment on the right (E–H), right-aligned.
   // As on the sheet: 1.25fr to 1fr, so the right side has room for the Khmer labels.
@@ -394,7 +477,6 @@ function taxOrDisbursement(
   const val = f(EN, 10);
   const ship = f(EN, 9);
   const kmLbl = f(KM, 10);
-  type Part = { text: string; font: Partial<Font> };
   const left: (Part[] | string)[] = [
     [
       { text: 'ឈ្មោះអតិថិជន', font: f(MUOL, 8.8) },
@@ -430,28 +512,23 @@ function taxOrDisbursement(
     '', // one blank line before the shipment details, as on the sheet
     `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
     `VOLUME: ${volume(d)}`,
-    `CTNR NO: ${container(d)}`,
+    ctnrLine(d),
     `POL: ${h(d, 'pol').toUpperCase()}`,
     `POD: ${h(d, 'pod').toUpperCase()}`,
     `Exchange Rate: 1USD = ${Math.round(num(h(d, 'exchangeRate'))).toLocaleString('en-US')} KHR`,
   ];
-  const text = (v: Part[] | string) => (typeof v === 'string' ? v : v.map((p) => p.text).join(''));
-  const meta = (v: Part[] | string) => (typeof v === 'string' ? v : { richText: v });
-  // The customer name stays on one line (as on the sheet), shrunk to fit.
-  const oneLine = new Set([0]);
-  for (let i = 0; i < Math.max(left.length, right.length); i++, r++) {
-    const lv = left[i] ?? '';
-    const rv = right[i] ?? '';
-    P(r, L, null, ship, 'left', oneLine.has(i) ? { shrink: true } : { wrap: true });
-    P(r, R, null, ship, 'right', { wrap: true });
-    if (text(lv)) ws.getCell(r, o + 1).value = meta(lv) as never;
-    if (text(rv)) ws.getCell(r, o + 4).value = meta(rv) as never;
-    const lines = Math.max(
-      oneLine.has(i) ? 1 : Math.ceil(text(lv).length / 68),
-      Math.ceil(text(rv).length / 58),
-      1,
-    );
-    ht(r, (i === 3 ? 18 : 15) * lines);
+  const parts = (v: Part[] | string | undefined): Part[] =>
+    typeof v === 'string' ? [{ text: v, font: ship }] : (v ?? []);
+  // A long value takes more rows (about 68 characters a line on the left, 58 on the right);
+  // the customer name stays on one line, as on the sheet.
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const lv = lineUp(parts(left[i]), i === 0 ? Infinity : 68);
+    const rv = lineUp(parts(right[i]), 58);
+    for (let k = 0; k < Math.max(lv.length, rv.length); k++, r++) {
+      putLine(ws, r, o + L[0], lv[k], 'left');
+      putLine(ws, r, o + R[1], rv[k], 'right');
+      ht(r, i === 3 ? 18 : 15);
+    }
   }
   ht(r, 10);
   r += 1;
@@ -623,7 +700,8 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
   ws.columns = px(28, 445, 45, 55, 75, 85);
   const ALL: [number, number] = [1, 6];
   stamp(ws, 1, 6, d.status);
-  put(ws, 2, ALL, 'DEBIT NOTE', f(EN, 14, { bold: true, underline: true }), 'center');
+  const no = { merge: false }; // no merged cells on the invoice sheets
+  put(ws, 2, ALL, 'DEBIT NOTE', f(EN, 14, { bold: true, underline: true }), 'center', no);
   height(ws, 2, 22);
   height(ws, 3, 35); // the space under the headline
 
@@ -662,25 +740,24 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
       ? [
           `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
           `VOLUME: ${volume(d)}`,
-          `CTNR NO: ${container(d)}`,
+          ctnrLine(d),
           `POL: ${h(d, 'pol').toUpperCase()}`,
           `POD: ${h(d, 'pod').toUpperCase()}`,
         ]
       : []),
   ];
-  const text = (v: (typeof left)[number]) =>
-    typeof v === 'string' ? v : v.map((p) => p.text).join('');
+  const parts = (v: (typeof left)[number] | undefined): Part[] =>
+    typeof v === 'string' ? [{ text: v, font: f(EN, 9) }] : (v ?? []);
+  // A long value takes more rows (about 64 characters a line on the left, 40 on the right).
   let r = 4;
-  for (let i = 0; i < Math.max(left.length, right.length); i++, r++) {
-    const lv = left[i] ?? '';
-    const rv = right[i] ?? '';
-    put(ws, r, [1, 2], null, f(EN, 9), 'left', { wrap: true });
-    put(ws, r, [3, 6], null, f(EN, 9), 'right', { wrap: true });
-    if (text(lv))
-      ws.getCell(r, 1).value = (typeof lv === 'string' ? lv : { richText: lv }) as never;
-    if (text(rv))
-      ws.getCell(r, 3).value = (typeof rv === 'string' ? rv : { richText: rv }) as never;
-    height(ws, r, 15 * Math.max(1, Math.ceil(text(lv).length / 70)));
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const lv = lineUp(parts(left[i]), 64);
+    const rv = lineUp(parts(right[i]), 40);
+    for (let k = 0; k < Math.max(lv.length, rv.length); k++, r++) {
+      putLine(ws, r, 1, lv[k], 'left');
+      putLine(ws, r, 6, rv[k], 'right');
+      height(ws, r, 15);
+    }
   }
   height(ws, r, 28); // one blank line before the table
   r += 1;
@@ -717,7 +794,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
     r += 1;
   }
   const bold = f(EN, 9, { bold: true });
-  put(ws, r, [1, 4], 'GRAND TOTAL:', bold, 'right', { indent: 1 });
+  put(ws, r, [1, 4], 'GRAND TOTAL:', bold, 'right', { indent: 1, merge: false });
   put(ws, r, [5, 5], 'USD', bold, 'center');
   put(
     ws,
@@ -730,15 +807,23 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
     'right',
     { numFmt: MONEY },
   );
-  for (let col = 1; col <= 6; col++) ws.getCell(r, col).border = { ...box(), top: MEDIUM };
+  // Boxed like the table, but "GRAND TOTAL:" runs across A–D with no rules between them.
+  for (let col = 1; col <= 6; col++) {
+    const { left, right, ...rest } = { ...box(), top: MEDIUM };
+    ws.getCell(r, col).border = {
+      ...rest,
+      ...(col === 1 || col >= 5 ? { left } : {}),
+      ...(col >= 4 ? { right } : {}),
+    };
+  }
   height(ws, r, 16);
   const grand = `'${ws.name}'!F${r}`;
 
   // Footer at the page foot.
   const footRow = pushToFoot(ws, r + 1, 16, A4_INVOICE_PT);
   const foot = f(EN, 9, { bold: true, underline: true });
-  put(ws, footRow, [1, 2], 'Thank you for your supporting', foot);
-  put(ws, footRow, [4, 6], 'AUTHORIZED SIGNATURE', foot, 'right');
+  put(ws, footRow, [1, 2], 'Thank you for your supporting', foot, 'left', no);
+  put(ws, footRow, [4, 6], 'AUTHORIZED SIGNATURE', foot, 'right', no);
   height(ws, footRow, 16);
   ws.pageSetup.printArea = `A1:F${footRow}`;
   return grand;

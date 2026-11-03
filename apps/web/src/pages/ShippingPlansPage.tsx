@@ -1,16 +1,19 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SHIPMENT_STATUS_LABEL, type ShipmentStatus } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
-import { useLookups, useShipments } from '../features/hooks';
+import { useLookups, useShipmentColumnValues, useShipments } from '../features/hooks';
 import { ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
 import { SearchBox } from '../components/SearchBox';
+import { HeaderFilter } from '../components/HeaderFilter';
+import { useHeaderFilters } from '../components/useHeaderFilters';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
 import { ImportPlanDialog } from './plans/ImportPlanDialog';
 import { StatusRulesDialog } from './plans/StatusRulesDialog';
 import { fmtDate } from '../lib/format';
-import { BASE_COLUMNS, EXPANDED_COLUMNS } from './plans/columns';
+import { BASE_COLUMNS, EXPANDED_COLUMNS, type PlanColumn } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
 import { CardToggle } from './dashboard/parts';
@@ -41,6 +44,7 @@ export function ShippingPlansPage() {
   const lookups = useLookups();
   const [prefs, setPrefs] = useState(readPrefs);
   const [exporting, setExporting] = useState(false);
+  const header = useHeaderFilters(params, setParams);
 
   const filters = {
     clientId: params.getAll('clientId'),
@@ -63,8 +67,12 @@ export function ShippingPlansPage() {
     direction: filters.direction,
     status: filters.status || undefined,
     month: filters.month || undefined,
+    filters: header.raw,
   };
   const list = useShipments(query);
+  // The open header filter's values come from the list's other filters, not the page.
+  const { page: _page, pageSize: _size, sort: _sort, ...valuesQuery } = query;
+  const colValues = useShipmentColumnValues(header.openCol, valuesQuery);
   const cols = useMemo(
     () => columnsFor(prefs.expandAll, filters.direction),
     [prefs.expandAll, filters.direction],
@@ -128,6 +136,7 @@ export function ShippingPlansPage() {
         month: filters.month || undefined,
         q: filters.q || undefined,
         sort: filters.sort,
+        filters: header.raw,
       });
     } catch {
       toast('Export failed. Try again.');
@@ -135,6 +144,24 @@ export function ShippingPlansPage() {
       setExporting(false);
     }
   };
+
+  // Excel-style header: a column's filter and sort ("?sort=hbl" / "-hbl").
+  const head = (c: Pick<PlanColumn, 'key' | 'label' | 'kind' | 'format'>) => (
+    <HeaderFilter
+      label={c.label}
+      kind={c.kind}
+      format={c.format}
+      open={header.openCol === c.key}
+      onOpen={() => header.setOpenCol(c.key)}
+      onClose={header.close}
+      values={header.openCol === c.key ? colValues.data : undefined}
+      loading={colValues.isLoading}
+      selected={header.filters[c.key]}
+      sort={filters.sort === c.key ? 'asc' : filters.sort === `-${c.key}` ? 'desc' : undefined}
+      onApply={(kept) => header.apply(c.key, kept)}
+      onSort={(d) => setParam('sort', d === 'asc' ? c.key : `-${c.key}`)}
+    />
+  );
 
   const filterValue: PlansFilterValue = {
     status: filters.status,
@@ -201,6 +228,21 @@ export function ShippingPlansPage() {
               onApply={apply}
               columnsFor={(expand) => columnsFor(expand, filters.direction)}
             />
+            {header.active && (
+              <button
+                type="button"
+                className={ui.ghostBtn}
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete('f');
+                  next.delete('sort');
+                  next.delete('page');
+                  setParams(next, { replace: true });
+                }}
+              >
+                Clear filters
+              </button>
+            )}
             <PlansMoreMenu
               exporting={exporting}
               onExport={() => void doExport()}
@@ -223,18 +265,26 @@ export function ShippingPlansPage() {
               <tr ref={headRef}>
                 {cols.map((c) => (
                   <th key={c.key} {...frozenProps(c.key)}>
-                    {c.label}
+                    {head(c)}
                   </th>
                 ))}
                 {isExport ? (
                   <>
-                    <th>ETD</th>
-                    <th>ATD</th>
+                    <th>{head({ key: 'etd', label: 'ETD', kind: 'date', format: fmtDate })}</th>
+                    <th>{head({ key: 'atd', label: 'ATD', kind: 'date', format: fmtDate })}</th>
                   </>
                 ) : (
-                  <th>Arrive FTY</th>
+                  <th>
+                    {head({ key: 'arriveFty', label: 'Arrive FTY', kind: 'date', format: fmtDate })}
+                  </th>
                 )}
-                <th>Status</th>
+                <th>
+                  {head({
+                    key: 'status',
+                    label: 'Status',
+                    format: (v) => SHIPMENT_STATUS_LABEL[v as ShipmentStatus] ?? v,
+                  })}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -248,7 +298,8 @@ export function ShippingPlansPage() {
                   filters.clientId.length ||
                   filters.month ||
                   filters.direction === 'EXPORT' ||
-                  filters.status
+                  filters.status ||
+                  header.active
                     ? 'No shipments match the selected filters.'
                     : 'No shipments yet. Create one with “New Shipment”.'
                 }

@@ -50,6 +50,15 @@ export function useLedger(q: Query) {
   });
 }
 
+/** A Monthly Ledger column's values for its header filter ('' = blanks), fetched when it opens. */
+export function useLedgerColumnValues(column: string | null, q: Query) {
+  return useQuery({
+    queryKey: [...KEY, 'ledger', 'values', column, q],
+    queryFn: () => api<string[]>('/accounting/ledger/values', { query: { ...q, column } }),
+    enabled: !!column,
+  });
+}
+
 export function useLedgerRow(id: string | null) {
   return useQuery({
     queryKey: [...KEY, 'ledger-row', id],
@@ -154,6 +163,20 @@ export function useDocs(type: BillingDocType, q: Query, enabled = true) {
     queryKey: [...KEY, 'docs', type, q],
     queryFn: () => api<Paginated<BillingDocListItem>>(`/accounting/docs/${type}`, { query: q }),
     placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
+/** A list column's values for its header filter ('' = blanks), fetched when the filter opens. */
+export function useDocColumnValues(
+  type: BillingDocType,
+  column: string,
+  q: Query,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: [...KEY, 'docs', type, 'values', column, q],
+    queryFn: () => api<string[]>(`/accounting/docs/${type}/values`, { query: { ...q, column } }),
     enabled,
   });
 }

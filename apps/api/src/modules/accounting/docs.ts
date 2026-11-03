@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core';
 import {
   BILLING_DOC_SCHEMAS,
@@ -16,6 +16,8 @@ import {
   vatMark,
   type BillingDoc,
   type BillingDocListItem,
+  type BillingListColumn,
+  type BillingListFilters,
   type BillingDocType,
   type BillingLineInput,
   type CreditNoteMessage,
@@ -59,6 +61,7 @@ import {
   periodOf,
   releaseNumber,
   resequence,
+  syncDebitNoteNumber,
   syncInvoiceNumber,
   takeNumber,
   type AssignedNumbers,
@@ -557,6 +560,8 @@ export async function updateDoc(
       await tx.delete(cfg.lines).where(eq(col(cfg.lines, cfg.fk), id));
       await writeLines(tx, type, id, input, t.lines, values.vatRate as string);
       if (issued) await issuedToLedger(tx, cfg, await lockDoc(tx, type, id), req);
+      if (type === 'tax-invoices' && input.accountingRecordId)
+        await followTaxInvoice(tx, input.accountingRecordId, values, req);
       if (
         isIssueDated(type) &&
         !input.accountingRecordId &&
@@ -586,6 +591,85 @@ export async function updateDoc(
     });
   } catch (err) {
     friendlyUnique(err, type);
+  }
+}
+
+/** The shipment details a shipment's DIS and debit note print the same as its tax invoice. */
+const SHIPMENT_FIELDS = [
+  'pol',
+  'pod',
+  'containerNo',
+  'containerSize',
+  'volumeCbm',
+  'grossWeightKg',
+  'shipper',
+  'consignee',
+  'hbl',
+  'pkgs',
+  'pkgsUnit',
+] as const;
+
+/**
+ * A tax invoice was saved: its shipment's DIS and debit note (not cancelled ones) take its
+ * customer and shipment details, so a fix is made once, not three times.
+ */
+async function followTaxInvoice(tx: Tx, recordId: string, inv: Row, req: Request): Promise<void> {
+  const ship = Object.fromEntries(
+    SHIPMENT_FIELDS.filter((k) => inv[k] !== undefined).map((k) => [k, inv[k]]),
+  );
+  const customer: Record<'disbursements' | 'debit-notes', Row> = {
+    disbursements: Object.fromEntries(
+      ['customerNameEn', 'customerNameKm', 'customerAddress', 'customerVattin']
+        .filter((k) => inv[k] !== undefined)
+        .map((k) => [k, inv[k]]),
+    ),
+    'debit-notes': {
+      ...(inv.customerNameEn !== undefined ? { billTo: inv.customerNameEn } : {}),
+      ...(inv.customerAddress !== undefined ? { address: inv.customerAddress } : {}),
+    },
+  };
+  for (const type of ['disbursements', 'debit-notes'] as const) {
+    const cfg = CONFIG[type];
+    const set = { ...ship, ...customer[type] };
+    if (!Object.keys(set).length) continue;
+    const docs = (await tx
+      .select()
+      .from(cfg.table)
+      .where(
+        and(
+          eq(col(cfg.table, 'accountingRecordId'), recordId),
+          sql`${col(cfg.table, 'status')} <> 'VOID'`,
+        ),
+      )
+      .for('update')) as Row[];
+    for (const doc of docs) {
+      const changed = Object.fromEntries(
+        Object.entries(set).filter(([k, v]) =>
+          // 12.43 and 12.430 are the same weight / volume.
+          k === 'volumeCbm' || k === 'grossWeightKg'
+            ? (doc[k] == null ? null : Number(doc[k])) !==
+              (v == null || v === '' ? null : Number(v))
+            : String(doc[k] ?? '') !== String(v ?? ''),
+        ),
+      );
+      if (!Object.keys(changed).length) continue;
+      await tx
+        .update(cfg.table)
+        .set(changed as never)
+        .where(eq(col(cfg.table, 'id'), doc.id as string));
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: cfg.sqlTable,
+          entityId: doc.id as string,
+          before: Object.fromEntries(Object.keys(changed).map((k) => [k, doc[k]])),
+          after: changed,
+          reason: 'Follows its tax invoice',
+        },
+        req,
+      );
+    }
   }
 }
 
@@ -730,8 +814,9 @@ async function summaryToLedger(
     })
     .where(eq(accountingRecords.id, recordId));
   await recompute(tx, recordId);
-  // No processing fee means no tax invoice, so no INV number.
+  // No processing fee means no tax invoice, so no INV number; no DN charges, no DN number.
   await syncInvoiceNumber(tx, recordId, req);
+  await syncDebitNoteNumber(tx, recordId, req);
 }
 
 /** A checked record summary unchecked, revised or cancelled: the amounts go back to the issued documents'. */
@@ -859,7 +944,7 @@ export const isIssueDated = (type: BillingDocType): type is IssueDatedType =>
 /**
  * A declaration's clearance (declare) date changed. While none of its tax invoice, DIS and
  * debit note is issued, its Monthly Ledger entry moves to the new issue date (the next
- * working day) and that day's rate; a number whose period changes (a debit note's declaration
+ * working day) and that day's rate; a number whose period changes (a debit note's issue
  * month, an INV or DIS year) is given back and the period's next one taken. Drafts follow the
  * entry. Once one document is issued, the dates and numbers stay as they are.
  */
@@ -1120,6 +1205,8 @@ export async function deleteDoc(type: BillingDocType, id: string, req: Request):
         null,
         req.auth?.userId ?? null,
       );
+      // The later numbers close up the gap.
+      await resequence(tx, req);
     }
     await audit(tx, { action: 'DELETE', entity: cfg.sqlTable, entityId: id, before: doc }, req);
   });
@@ -1142,9 +1229,15 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
     .where(eq(col(cfg.lines, cfg.fk), id))
     .orderBy(asc(col(cfg.lines, 'lineNo')))) as Row[];
   const [rec] = doc.accountingRecordId
-    ? await queryRows<{ declareNo: string; transportMode: string | null }>(
+    ? await queryRows<{
+        declareNo: string;
+        transportMode: string | null;
+        loadType: string | null;
+        flightNo: string | null;
+      }>(
         db,
-        sql`SELECT d.declare_no AS "declareNo", s.transport_mode AS "transportMode"
+        sql`SELECT d.declare_no AS "declareNo", s.transport_mode AS "transportMode", s.load_type AS "loadType",
+                   s.flight_no AS "flightNo"
             FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
             LEFT JOIN shipments s ON s.id = d.shipment_id WHERE a.id = ${doc.accountingRecordId as string}`,
       )
@@ -1171,6 +1264,10 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
   );
   // The shipment's mode, for printing: by air the volume shows "NON" (a record summary has its own).
   if (!header.transportMode && rec?.transportMode) header.transportMode = rec.transportMode;
+  // And its load: an LCL shipment prints "CTNR NO: LCL".
+  if (!header.loadType && rec?.loadType) header.loadType = rec.loadType;
+  // By air the CTNR NO line is the FLIGHT NO.
+  if (!header.flightNo && rec?.flightNo) header.flightNo = rec.flightNo;
   // Live from the Monthly Ledger, so a number the accountant corrects there shows here too.
   if (type === 'record-summaries' && doc.accountingRecordId)
     Object.assign(header, await ledgerNumbers(db, doc.accountingRecordId as string));
@@ -1284,27 +1381,59 @@ export function previewDoc(
   };
 }
 
-export async function listDocs(
-  type: BillingDocType,
-  p: {
-    page: number;
-    pageSize: number;
-    q?: string | undefined;
-    clientId?: string | undefined;
-    /** Per-user client access; undefined = every client. */
-    clientIds?: string[] | undefined;
-    status?: string | undefined;
-    month?: string | undefined;
-    year?: number | undefined;
-    monthOfYear?: number | undefined;
-    /** Record summaries only (the other tables have no direction). */
-    direction?: string | undefined;
-    /** Record summaries only: accounting's check (UNCHECKED, REVISED, …). */
-    review?: string | undefined;
-  },
-): Promise<Paginated<BillingDocListItem>> {
+type ListParams = {
+  page: number;
+  pageSize: number;
+  q?: string | undefined;
+  clientId?: string | undefined;
+  /** Per-user client access; undefined = every client. */
+  clientIds?: string[] | undefined;
+  status?: string | undefined;
+  month?: string | undefined;
+  year?: number | undefined;
+  monthOfYear?: number | undefined;
+  /** Record summaries only (the other tables have no direction). */
+  direction?: string | undefined;
+  /** Record summaries only: accounting's check (UNCHECKED, REVISED, …). */
+  review?: string | undefined;
+  /** Header filters, Excel style: the values each column keeps ('' = blank). */
+  filters?: BillingListFilters | undefined;
+  sort?: BillingListColumn | undefined;
+  dir?: 'asc' | 'desc' | undefined;
+};
+
+const LIST_FROM = (type: BillingDocType) => sql`
+    FROM ${sql.raw(CONFIG[type].sqlTable)} t JOIN clients cl ON cl.id = t.client_id
+    LEFT JOIN accounting_records a ON a.id = t.accounting_record_id LEFT JOIN customs_declarations d ON d.id = a.declaration_id
+    LEFT JOIN shipments s ON s.id = d.shipment_id`;
+
+/** Each header-filter column: the value it shows (as text) and what it sorts by. */
+function listColumns(type: BillingDocType): Record<BillingListColumn, { value: SQL; order: SQL }> {
   const cfg = CONFIG[type];
-  const t = sql.raw(cfg.sqlTable);
+  const dateCol = sql.raw(`t.${cfg.dateSql}`);
+  const numCol = cfg.numberSql ? sql.raw(`t.${cfg.numberSql}`) : sql`NULL::text`;
+  const same = (e: SQL) => ({ value: e, order: e });
+  const quantity =
+    type === 'tax-invoices' || type === 'disbursements' || type === 'debit-notes'
+      ? sql`NULLIF(trim(concat_ws(' ', t.pkgs, t.pkgs_unit)), '')`
+      : sql`t.quantity_text`;
+  return {
+    number: same(numCol),
+    date: { value: sql`to_char(${dateCol}, 'YYYY-MM-DD')`, order: dateCol },
+    client: same(sql`cl.code`),
+    billTo: same(sql.raw(`t.${cfg.billToSql}`)),
+    declareNo: same(sql`d.declare_no`),
+    declareDate: { value: sql`to_char(d.declare_date, 'YYYY-MM-DD')`, order: sql`d.declare_date` },
+    quantity: same(quantity),
+    freight: same(sql`s.transport_mode::text`),
+    total: { value: sql`t.total::text`, order: sql`t.total` },
+    status: same(sql`t.status::text`),
+  };
+}
+
+/** The list's conditions; `except` leaves out that column's own header filter. */
+function listWhere(type: BillingDocType, p: ListParams, except?: BillingListColumn): SQL[] {
+  const cfg = CONFIG[type];
   const dateCol = sql.raw(`t.${cfg.dateSql}`);
   const numCol = cfg.numberSql ? sql.raw(`t.${cfg.numberSql}`) : sql`NULL`;
   const c = [sql`true`];
@@ -1326,6 +1455,28 @@ export async function listDocs(
       sql`(${numCol} ILIKE ${like} OR ${sql.raw(`t.${cfg.billToSql}`)} ILIKE ${like} OR d.declare_no ILIKE ${like} OR cl.code ILIKE ${like})`,
     );
   }
+  const cols = listColumns(type);
+  for (const [k, kept] of Object.entries(p.filters ?? {}) as [BillingListColumn, string[]][]) {
+    if (k === except) continue;
+    c.push(
+      kept.length
+        ? sql`coalesce(${cols[k].value}, '') IN (${sql.join(
+            kept.map((v) => sql`${v}`),
+            sql`, `,
+          )})`
+        : sql`false`,
+    );
+  }
+  return c;
+}
+
+export async function listDocs(
+  type: BillingDocType,
+  p: ListParams,
+): Promise<Paginated<BillingDocListItem>> {
+  const cfg = CONFIG[type];
+  const dateCol = sql.raw(`t.${cfg.dateSql}`);
+  const numCol = cfg.numberSql ? sql.raw(`t.${cfg.numberSql}`) : sql`NULL`;
   // Record Summary's list also shows the shipment and its INV / DIS / DN numbers.
   const extra =
     type === 'record-summaries'
@@ -1335,17 +1486,46 @@ export async function listDocs(
            CASE WHEN a.id IS NULL THEN t.dn_no ELSE a.dn_no END AS "dnNo",
            t.quantity_text AS "quantityText", (SELECT p.short_name FROM ports p WHERE p.id = t.port_id) AS port,
            t.review_status AS "reviewStatus"`
-      : sql``;
+      : // Tax invoice / DIS / debit note: the declare date, packages and freight, to check at a glance.
+        type === 'tax-invoices' || type === 'disbursements' || type === 'debit-notes'
+        ? sql`, to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+             NULLIF(trim(concat_ws(' ', t.pkgs, t.pkgs_unit)), '') AS "quantityText",
+             s.transport_mode AS "transportMode"`
+        : sql``;
+  // A header sort first (blanks last, as Excel), then the usual newest first.
+  const sorted = p.sort
+    ? sql`${listColumns(type)[p.sort].order} ${sql.raw(p.dir === 'desc' ? 'DESC' : 'ASC')} NULLS LAST, `
+    : sql``;
   const rows = await queryRows<BillingDocListItem & { total_count: string }>(
     db,
     sql`
     SELECT t.id, ${numCol} AS number, to_char(${dateCol}, 'YYYY-MM-DD') AS date, t.status, cl.code AS "clientCode", cl.name AS "clientName",
            ${sql.raw(`t.${cfg.billToSql}`)} AS "billTo", d.declare_no AS "declareNo", t.total::text AS total${extra}, count(*) OVER () AS total_count
-    FROM ${t} t JOIN clients cl ON cl.id = t.client_id
-    LEFT JOIN accounting_records a ON a.id = t.accounting_record_id LEFT JOIN customs_declarations d ON d.id = a.declaration_id
-    ${whereAll(c)} ORDER BY ${dateCol} DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
+    ${LIST_FROM(type)}
+    ${whereAll(listWhere(type, p))} ORDER BY ${sorted}${dateCol} DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
   );
   return toPaginated(rows, p.page, p.pageSize);
+}
+
+/**
+ * A column's values for its header filter: those left by the list's other filters (as Excel
+ * offers), each once, in the column's order; '' stands for blank cells.
+ */
+export async function listColumnValues(
+  type: BillingDocType,
+  column: BillingListColumn,
+  p: ListParams,
+): Promise<string[]> {
+  const col = listColumns(type)[column];
+  const rows = await queryRows<{ v: string }>(
+    db,
+    sql`SELECT v FROM (
+          SELECT DISTINCT coalesce(${col.value}, '') AS v, ${col.order} AS o
+          ${LIST_FROM(type)}
+          ${whereAll(listWhere(type, p, column))}
+        ) x ORDER BY o NULLS LAST, v LIMIT 2000`,
+  );
+  return [...new Set(rows.map((r) => r.v))];
 }
 
 /* ---------- Deleting a shipment's issued invoice set ---------- */

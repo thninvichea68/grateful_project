@@ -20,7 +20,7 @@ import {
   type TransportMode,
 } from '../enums';
 import { paginationQuerySchema } from './common';
-import { decimal, multi, optDate, optText, optUuid } from './fields';
+import { decimal, headerFiltersParam, multi, optDate, optText, optUuid } from './fields';
 
 /** ISO 6346 shape: 4 letters + 7 digits. Spaces/dashes are stripped. */
 export const containerNo = z
@@ -367,6 +367,8 @@ export const shipmentListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM')
     .optional(),
+  /** Header filters, Excel style: the values each list column keeps. */
+  filters: headerFiltersParam.optional(),
 });
 export type ShipmentListQuery = z.input<typeof shipmentListQuerySchema>;
 

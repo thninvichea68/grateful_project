@@ -6,6 +6,7 @@ import {
   type CreditNoteDeclaration,
   type DeclarationOption,
   type EligibleRecord,
+  type HeaderFilters,
   type LedgerRow,
   type LedgerSummary,
   type Paginated,
@@ -25,7 +26,13 @@ import {
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
 import { issueDateFor } from '../../lib/issueDate';
-import { businessRule, conflict, notFound } from '../../lib/errors';
+import { badRequest, businessRule, conflict, notFound } from '../../lib/errors';
+import {
+  columnOrder,
+  headerFilterConds,
+  headerFilterValuesQuery,
+  type FilterColumns,
+} from '../../lib/headerFilter';
 import {
   likePattern,
   orderBy,
@@ -107,10 +114,50 @@ interface ListParams {
   /** Per-user client access; undefined = every client. */
   clientIds?: string[] | undefined;
   cheaStatus?: string | undefined;
+  /** Header filters, Excel style: the values each column keeps ('' = blank). */
+  filters?: HeaderFilters | undefined;
 }
 
-function where(p: ListParams) {
-  const c = [sql`true`];
+const money = (e: string) => ({ value: sql.raw(`${e}::text`), order: sql.raw(e) });
+const day = (e: string) => ({ value: sql.raw(`to_char(${e}, 'YYYY-MM-DD')`), order: sql.raw(e) });
+
+/** The Monthly Ledger's columns, for their header filters and sorting (keyed as the web's). */
+const LEDGER_COLUMNS: FilterColumns = {
+  chea: { value: CHEA_STATUS },
+  portNo: { value: sql`p.customs_port_no` },
+  portCode: { value: sql`p.code` },
+  portName: { value: sql`p.short_name` },
+  declareNo: { value: sql`d.declare_no` },
+  declareDate: day('d.declare_date'),
+  client: { value: sql`c.code` },
+  inv: { value: sql`a.inv_no` },
+  dis: { value: sql`a.dis_no` },
+  dn: { value: sql`a.dn_no` },
+  invDate: day('a.inv_date'),
+  exchangeRate: money('a.exchange_rate'),
+  // Monday…Sunday, in week order.
+  weekday: {
+    value: sql`trim(to_char(a.inv_date, 'FMDay'))`,
+    order: sql`extract(isodow FROM a.inv_date)`,
+  },
+  clearFee: money('a.clear_fee'),
+  thc: money('a.thc'),
+  otherPay: money('a.other_pay'),
+  commission: money('a.commission'),
+  invRevenue: money('a.inv_revenue'),
+  disTotal: money('a.dis_total'),
+  vat: money('a.vat'),
+  dnTotal: money('a.dn_total'),
+  netProfit: money('a.net_profit'),
+  mark: { value: sql`a.mark` },
+};
+const LEDGER_SORTS = Object.fromEntries(
+  Object.entries(LEDGER_COLUMNS).map(([k, c]) => [k, columnOrder(c)]),
+);
+
+/** The list's conditions; `except` leaves out that column's own header filter. */
+function where(p: ListParams, except?: string) {
+  const c = [sql`true`, ...headerFilterConds(LEDGER_COLUMNS, p.filters, except)];
   if (p.month)
     c.push(
       sql`${LEDGER_DATE} >= ${`${p.month}-01`}::date AND ${LEDGER_DATE} < (${`${p.month}-01`}::date + interval '1 month')`,
@@ -139,7 +186,7 @@ export async function listLedger(
     db,
     sql`
     ${SELECT}, count(*) OVER () AS total_count ${FROM} ${where(p)}
-    ${orderBy(p.sort, { invDate: sql`a.inv_date`, declareNo: sql`d.declare_no`, client: sql`c.code`, netProfit: sql`a.net_profit` }, sql`date_trunc('month', ${LEDGER_DATE}), a.inv_no NULLS LAST, a.dis_no NULLS LAST, a.dn_no NULLS LAST, d.declare_no`)}
+    ${orderBy(p.sort, LEDGER_SORTS, sql`date_trunc('month', ${LEDGER_DATE}), a.inv_no NULLS LAST, a.dis_no NULLS LAST, a.dn_no NULLS LAST, d.declare_no`)}
     ${paginate(p.page, p.pageSize)}`,
   );
   const [totals] = await queryRows<LedgerSummary>(
@@ -153,6 +200,17 @@ export async function listLedger(
     ${FROM} ${where(p)}`,
   );
   return { ...toPaginated(rows, p.page, p.pageSize), totals: totals! };
+}
+
+/** A column's values for its header filter, under the list's other filters ('' = blanks). */
+export async function ledgerColumnValues(column: string, p: ListParams): Promise<string[]> {
+  const col = Object.hasOwn(LEDGER_COLUMNS, column) ? LEDGER_COLUMNS[column] : undefined;
+  if (!col) throw badRequest('Unknown column');
+  const rows = await queryRows<{ v: string }>(
+    db,
+    headerFilterValuesQuery(col, sql`${FROM} ${where(p, column)}`),
+  );
+  return [...new Set(rows.map((r) => r.v))];
 }
 
 export async function getLedger(id: string): Promise<LedgerRow> {
@@ -386,6 +444,8 @@ export async function deleteLedger(id: string, req: Request): Promise<void> {
     );
     if (issued!.n) throw conflict('This ledger entry has issued documents. Cancel them first.');
     await tx.delete(accountingRecords).where(eq(accountingRecords.id, id));
+    // Its INV / DIS / DN numbers are free: the later ones close up the gap.
+    if (before.invNo || before.disNo || before.dnNo) await resequence(tx, req);
     await audit(tx, { action: 'DELETE', entity: 'accounting_record', entityId: id, before }, req);
   });
 }

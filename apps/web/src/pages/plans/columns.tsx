@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import { CLEARANCE_STATUS_LABEL, freightMethodLabel, type ShipmentListItem } from '@gs/shared';
+import {
+  CLEARANCE_STATUS_LABEL,
+  freightMethodLabel,
+  type ClearanceStatus,
+  type LoadType,
+  type ShipmentListItem,
+  type TransportMode,
+} from '@gs/shared';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 
 export interface PlanColumn {
@@ -11,7 +18,15 @@ export interface PlanColumn {
   exportOnly?: boolean;
   /** Import-side details (ETA at the port): left out of the Export list. */
   importOnly?: boolean;
+  /** For the header filter: the sort wording, and how a value shows in its checklist. */
+  kind?: 'number' | 'date';
+  format?: (v: string) => string;
 }
+
+const asDate = { kind: 'date', format: fmtDate } as const;
+const asNum = (decimals?: number) =>
+  ({ kind: 'number', format: (v: string) => fmtNum(v, decimals) }) as const;
+const asMoney = { kind: 'number', format: fmtMoney } as const;
 
 const dash = (v: ReactNode) => (v === null || v === undefined || v === '' ? '-' : v);
 const qty = (r: ShipmentListItem) =>
@@ -58,12 +73,13 @@ export const BASE_COLUMNS: PlanColumn[] = [
     bold: true,
     exportOnly: true,
   },
-  { key: 'qty', label: 'Quantity', render: qty },
-  { key: 'eta', label: 'ETA Port', render: (r) => fmtDate(r.eta), importOnly: true },
+  { key: 'qty', ...asNum(), label: 'Quantity', render: qty },
+  { key: 'eta', ...asDate, label: 'ETA Port', render: (r) => fmtDate(r.eta), importOnly: true },
   { key: 'declareNo', label: 'Declare No.', render: declareNos, exportOnly: true },
   // Customs clearance (declaration) date: the order the plan is listed in by default.
   {
     key: 'clearanceDate',
+    ...asDate,
     label: 'Clearance Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
@@ -114,6 +130,7 @@ export const BASE_COLUMNS: PlanColumn[] = [
   },
   {
     key: 'freight',
+    format: (v) => freightMethodLabel(...(v.split('/') as [TransportMode, LoadType])),
     label: 'Freight Method',
     render: (r) => freightMethodLabel(r.transportMode, r.loadType),
   },
@@ -124,7 +141,7 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'reference', label: 'Reference', render: (r) => r.reference },
   { key: 'client', label: 'Client', render: (r) => r.clientCode },
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
-  { key: 'invoiceDate', label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
+  { key: 'invoiceDate', ...asDate, label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },
   {
     key: 'bookingNo',
@@ -156,16 +173,23 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
       ),
     exportOnly: true,
   },
-  { key: 'crd', label: 'CRD', render: (r) => fmtDate(r.crd), exportOnly: true },
+  { key: 'crd', ...asDate, label: 'CRD', render: (r) => fmtDate(r.crd), exportOnly: true },
   { key: 'thcHblNo', label: 'INVOICE / THC No.', render: (r) => dash(r.thcHblNo) },
-  { key: 'thcHblDate', label: 'Invoice / THC Date', render: (r) => fmtDate(r.thcHblDate) },
+  {
+    key: 'thcHblDate',
+    ...asDate,
+    label: 'Invoice / THC Date',
+    render: (r) => fmtDate(r.thcHblDate),
+  },
   {
     key: 'thcHblAmount',
+    ...asMoney,
     label: 'Invoice / THC Amount',
     render: (r) => (r.thcHblAmount ? fmtMoney(r.thcHblAmount) : '-'),
   },
   {
     key: 'clearanceStatus',
+    format: (v) => CLEARANCE_STATUS_LABEL[v as ClearanceStatus] ?? v,
     label: 'Clearance Status',
     render: (r) => CLEARANCE_STATUS_LABEL[r.clearanceStatus],
   },
@@ -174,13 +198,19 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'coForm', label: 'CO Form', render: (r) => dash(r.coForm), exportOnly: true },
   { key: 'coNumber', label: 'CO Number', render: (r) => dash(r.coNumber), exportOnly: true },
   { key: 'coStatus', label: 'CO Status', render: (r) => dash(r.coStatus), exportOnly: true },
-  { key: 'netWeight', label: 'Net Weight', render: (r) => `${fmtNum(r.totals.netWeightKg, 2)} KG` },
+  {
+    key: 'netWeight',
+    ...asNum(2),
+    label: 'Net Weight',
+    render: (r) => `${fmtNum(r.totals.netWeightKg, 2)} KG`,
+  },
   {
     key: 'grossWeight',
+    ...asNum(2),
     label: 'Gross Weight',
     render: (r) => `${fmtNum(r.totals.grossWeightKg, 2)} KG`,
   },
-  { key: 'cbm', label: 'CBM', render: (r) => fmtNum(r.totals.cbm) },
+  { key: 'cbm', ...asNum(), label: 'CBM', render: (r) => fmtNum(r.totals.cbm) },
   { key: 'poNo', label: 'PO No.', render: (r) => dash(r.firstLine?.poNo), exportOnly: true },
   {
     key: 'styleNo',
@@ -194,18 +224,21 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
     render: (r) => dash(r.firstLine?.htsCode),
     exportOnly: true,
   },
-  { key: 'qtyPcs', label: 'Qty (PCS)', render: (r) => fmtNum(r.totals.pcs) },
-  { key: 'ctns', label: 'CTNS', render: (r) => fmtNum(r.totals.ctns) },
+  { key: 'qtyPcs', ...asNum(), label: 'Qty (PCS)', render: (r) => fmtNum(r.totals.pcs) },
+  { key: 'ctns', ...asNum(), label: 'CTNS', render: (r) => fmtNum(r.totals.ctns) },
   {
     key: 'fobPrice',
+    kind: 'number',
+    format: (v) => `$${fmtNum(v, 4)}`,
     label: 'FOB Price',
     render: (r) => (r.firstLine?.fobUnitPrice ? `$${fmtNum(r.firstLine.fobUnitPrice, 4)}` : '-'),
   },
-  { key: 'totalFob', label: 'Total FOB', render: (r) => fmtMoney(r.totals.fob) },
+  { key: 'totalFob', ...asMoney, label: 'Total FOB', render: (r) => fmtMoney(r.totals.fob) },
   // An Export lists it up front, before Clearance Date.
   { key: 'declareNo', label: 'Declare No.', render: declareNos, importOnly: true },
   {
     key: 'declareDate',
+    ...asDate,
     label: 'Declare Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },

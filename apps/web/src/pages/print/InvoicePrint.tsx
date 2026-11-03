@@ -1,5 +1,6 @@
 import {
   billingUnit,
+  containerUnit,
   invoiceBank,
   fmtVatPercent,
   DEFAULT_VAT_PERCENT,
@@ -55,9 +56,16 @@ function FitLine({ children }: { children: ReactNode }) {
     </div>
   );
 }
-/** Container no. and size as printed, in capitals: TCNU5209621 / 40HQ (LCL alone). */
-const container = (d: BillingDoc) =>
-  [h(d, 'containerNo'), h(d, 'containerSize')].filter(Boolean).join(' / ').toUpperCase();
+/**
+ * Container no. and size as printed, in capitals: TCNU5209621 / 40HQ. LCL alone for LCL; the
+ * number alone for CY (its size goes in VOLUME).
+ */
+const container = (d: BillingDoc) => {
+  if (h(d, 'loadType') === 'LCL') return 'LCL';
+  // A CY shipment's size prints as its VOLUME instead.
+  const size = h(d, 'loadType') === 'FCL' ? '' : h(d, 'containerSize');
+  return [h(d, 'containerNo'), size].filter(Boolean).join(' / ').toUpperCase();
+};
 /** QUANTITY as printed: the quantity and its unit (629 CTNS). */
 const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const money = (v: string | number | null | undefined) =>
@@ -73,9 +81,22 @@ const longDate = (iso: string) => {
 const kgs = (v: string) => (v ? `${money(v)} KGS` : '');
 const cbm = (v: string) =>
   v ? `${Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 })} CBM` : '';
-/** The VOLUME line: always "NON" for a shipment by air (no CBM), import or export. */
-const volume = (d: BillingDoc) =>
-  h(d, 'transportMode') === 'AIR' ? 'NON' : cbm(h(d, 'volumeCbm'));
+/**
+ * CTNR NO: …, or FLIGHT NO: … for a shipment by air: what the document's Container No. holds,
+ * else the shipment's flight no.
+ */
+const ctnrLine = (d: BillingDoc) =>
+  h(d, 'transportMode') === 'AIR'
+    ? `FLIGHT NO: ${(h(d, 'containerNo') || h(d, 'flightNo')).toUpperCase()}`
+    : `CTNR NO: ${container(d)}`;
+/** The VOLUME line: "NON" by air (no CBM), the container size (40'HQ) for CY, else the CBM. */
+const volume = (d: BillingDoc) => {
+  if (h(d, 'transportMode') === 'AIR') return 'NON';
+  // CY: the container size (40'HQ), not the CBM.
+  if (h(d, 'loadType') === 'FCL' && h(d, 'containerSize'))
+    return containerUnit(h(d, 'containerSize'));
+  return cbm(h(d, 'volumeCbm'));
+};
 /** 1 → "1", 3.3 → "3.3" (the debit note's Q'TY column). */
 const plain = (v: string | number) =>
   Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 });
@@ -181,7 +202,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           </div>
           <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
           <div className={p.ship}>VOLUME: {volume(d)}</div>
-          <div className={p.ship}>CTNR NO: {container(d)}</div>
+          <div className={p.ship}>{ctnrLine(d)}</div>
           <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
           <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
           <div className={p.ship}>Exchange Rate: 1USD = {riel(h(d, 'exchangeRate'))} KHR</div>
@@ -403,7 +424,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
             <>
               <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
               <div className={p.ship}>VOLUME: {volume(d)}</div>
-              <div className={p.ship}>CTNR NO: {container(d)}</div>
+              <div className={p.ship}>{ctnrLine(d)}</div>
               <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
               <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
             </>

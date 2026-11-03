@@ -211,6 +211,15 @@ export function useShipments(query: Query) {
   });
 }
 
+/** A Shipping Plans column's values for its header filter ('' = blanks), fetched when it opens. */
+export function useShipmentColumnValues(column: string | null, query: Query) {
+  return useQuery({
+    queryKey: [...queryKeys.shipments, 'values', column, query],
+    queryFn: () => api<string[]>('/shipments/values', { query: { ...query, column } }),
+    enabled: !!column,
+  });
+}
+
 export function useShipment(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.shipment(id ?? 'new'),

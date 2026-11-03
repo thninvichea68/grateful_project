@@ -5,6 +5,7 @@ import {
   type ClientStatusRule,
   type ClientStatusRuleParsed,
   type CompletionMilestone,
+  type HeaderFilters,
   type Incoterm,
   type OverImportViolation,
   type Paginated,
@@ -29,7 +30,20 @@ import {
   shipments,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
-import { AppError, businessRule, conflict, forbidden, notFound } from '../../lib/errors';
+import {
+  AppError,
+  badRequest,
+  businessRule,
+  conflict,
+  forbidden,
+  notFound,
+} from '../../lib/errors';
+import {
+  columnOrder,
+  headerFilterConds,
+  headerFilterValuesQuery,
+  type FilterColumns,
+} from '../../lib/headerFilter';
 import {
   likePattern,
   orderBy,
@@ -57,8 +71,8 @@ export interface ShipmentFilters {
   q?: string | undefined;
 }
 
-export function shipmentWhere(f: ShipmentFilters) {
-  const conds = [sql`s.deleted_at IS NULL`];
+export function shipmentWhere(f: ShipmentFilters, extra: SQL[] = []) {
+  const conds = [sql`s.deleted_at IS NULL`, ...extra];
   if (f.clientId?.length)
     conds.push(
       sql`s.client_id IN (${sql.join(
@@ -139,17 +153,148 @@ const SORTS = {
   arriveFty: sql`s.arrive_fty`,
 };
 
+/* ---------- Header filters (Excel style) on the Shipping Plans columns ---------- */
+
+const day = (e: SQL) => sql`to_char(${e}, 'YYYY-MM-DD')`;
+/** A cell listing several values (blanks left out). */
+const several = (select: SQL) =>
+  sql`ARRAY(SELECT v FROM (${select}) z(v) WHERE v IS NOT NULL AND v <> '')`;
+const total = (e: string) => {
+  const order = sql`(SELECT coalesce(sum(${sql.raw(`l.${e}`)}), 0) FROM cargo_invoice_lines l
+                     JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id)`;
+  return { value: sql`${order}::text`, order };
+};
+/** The first cargo line, as the list shows it. */
+const firstLine = (e: string) =>
+  sql`(SELECT ${sql.raw(e)} FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id
+       WHERE ci.shipment_id = s.id ORDER BY ci.sort_order, l.line_no LIMIT 1)`;
+const text = (e: string) => ({ value: sql.raw(e) });
+const date = (e: string) => ({ value: day(sql.raw(e)), order: sql.raw(e) });
+
+/** Keyed as the web's Shipping Plans columns (plans/columns.tsx), plus ETD, ATD, Arrive FTY, Status. */
+const PLAN_COLUMNS: FilterColumns = {
+  invoice: {
+    many: sql`ARRAY(SELECT invoice_no FROM cargo_invoices WHERE shipment_id = s.id ORDER BY sort_order)`,
+  },
+  qty: { value: sql`s.quantity::text`, order: sql`s.quantity` },
+  eta: date('s.eta'),
+  declareNo: {
+    many: several(
+      sql`SELECT declare_no FROM customs_declarations WHERE shipment_id = s.id ORDER BY declare_date`,
+    ),
+  },
+  clearanceDate: { value: day(clearanceDate()), order: clearanceDate() },
+  declareDate: { value: day(clearanceDate()), order: clearanceDate() },
+  fwd: { value: sql`upper(f.name)` },
+  clearance: { value: sql`upper(coalesce(nullif(p.short_name, ''), p.name))` },
+  hbl: text('s.hbl_no'),
+  ctnr: {
+    many: several(
+      sql`SELECT container_no FROM containers WHERE shipment_id = s.id ORDER BY sort_order`,
+    ),
+  },
+  ctnrSize: {
+    many: several(
+      sql`SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order`,
+    ),
+  },
+  // "SEA/FCL": the web shows it as its freight method label.
+  freight: { value: sql`s.transport_mode::text || '/' || s.load_type::text` },
+  reference: text('s.reference'),
+  client: text('c.code'),
+  consignee: text('cn.name'),
+  invoiceDate: (() => {
+    const e = sql`(SELECT min(invoice_date) FROM cargo_invoices WHERE shipment_id = s.id)`;
+    return { value: day(e), order: e };
+  })(),
+  country: text('ctry.name'),
+  bookingNo: text('s.booking_no'),
+  linerSeal: {
+    many: several(
+      sql`SELECT liner_seal FROM containers WHERE shipment_id = s.id ORDER BY sort_order`,
+    ),
+  },
+  customsSeal: {
+    many: several(
+      sql`SELECT customs_seal FROM containers WHERE shipment_id = s.id ORDER BY sort_order`,
+    ),
+  },
+  crd: date('s.crd'),
+  thcHblNo: text('s.thc_hbl_no'),
+  thcHblDate: date('s.thc_hbl_date'),
+  thcHblAmount: { value: sql`s.thc_hbl_amount::text`, order: sql`s.thc_hbl_amount` },
+  clearanceStatus: text('s.clearance_status::text'),
+  vessel: text('s.vessel_name'),
+  voyage: text('s.voyage_no'),
+  coForm: text('s.co_form'),
+  coNumber: text('s.co_number'),
+  coStatus: text('s.co_status'),
+  netWeight: total('net_weight_kg'),
+  grossWeight: total('gross_weight_kg'),
+  cbm: total('cbm'),
+  qtyPcs: total('pcs'),
+  ctns: total('ctns'),
+  totalFob: total('fob_amount'),
+  poNo: { value: firstLine('l.po_no') },
+  styleNo: { value: firstLine('l.style_no') },
+  htsCode: { value: firstLine('l.hts_code') },
+  fobPrice: { value: firstLine('l.fob_unit_price::text'), order: firstLine('l.fob_unit_price') },
+  description: { value: firstLine('coalesce(l.description, ci.description)') },
+  etdPort: text('s.etd_port'),
+  remark: text('s.remark'),
+  etd: date('s.etd'),
+  atd: date('s.atd'),
+  arriveFty: date('s.arrive_fty'),
+  status: text('s.status::text'),
+};
+
+/** The ids query's FROM: what the header-filter columns read. */
+const PLAN_FROM = sql`FROM shipments s JOIN clients c ON c.id = s.client_id
+  LEFT JOIN forwarders f ON f.id = s.forwarder_id
+  LEFT JOIN ports p ON p.id = s.clearance_port_id
+  LEFT JOIN consignees cn ON cn.id = s.consignee_id
+  LEFT JOIN countries ctry ON ctry.iso2 = CASE WHEN s.direction = 'IMPORT' THEN s.origin_country_iso2 ELSE s.destination_country_iso2 END`;
+
+/** The toolbar's filters and the header filters (but `except`'s own). */
+const planWhere = (f: ShipmentFilters & { filters?: HeaderFilters | undefined }, except?: string) =>
+  shipmentWhere(f, headerFilterConds(PLAN_COLUMNS, f.filters, except));
+
+/** Sorting by any column, from its header ("?sort=-hbl"). */
+const PLAN_SORTS = {
+  ...Object.fromEntries(Object.entries(PLAN_COLUMNS).map(([k, c]) => [k, columnOrder(c)])),
+  ...SORTS,
+};
+
+/** A column's values for its header filter, under the list's other filters ('' = blanks). */
+export async function listShipmentColumnValues(
+  column: string,
+  f: ShipmentFilters & { filters?: HeaderFilters | undefined },
+): Promise<string[]> {
+  const col = Object.hasOwn(PLAN_COLUMNS, column) ? PLAN_COLUMNS[column] : undefined;
+  if (!col) throw badRequest('Unknown column');
+  const rows = await queryRows<{ v: string }>(
+    db,
+    headerFilterValuesQuery(col, sql`${PLAN_FROM} ${planWhere(f, column)}`),
+  );
+  return [...new Set(rows.map((r) => r.v))];
+}
+
 export async function listShipments(
-  f: ShipmentFilters & { page: number; pageSize: number; sort?: string | undefined },
+  f: ShipmentFilters & {
+    page: number;
+    pageSize: number;
+    sort?: string | undefined;
+    filters?: HeaderFilters | undefined;
+  },
 ): Promise<Paginated<ShipmentListItem>> {
   // 1) Pick the page's ids (cheap: filters, sort and count only).
   const page = await queryRows<{ id: string; total_count: string }>(
     db,
     sql`
     SELECT s.id, count(*) OVER () AS total_count
-    FROM shipments s JOIN clients c ON c.id = s.client_id
-    ${shipmentWhere(f)}
-    ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
+    ${PLAN_FROM}
+    ${planWhere(f)}
+    ${orderBy(f.sort, PLAN_SORTS, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
     ${paginate(f.page, f.pageSize)}`,
   );
   if (!page.length) return toPaginated([], f.page, f.pageSize);
@@ -169,12 +314,12 @@ export async function listShipments(
 
 /** All matching rows (for Excel export), capped. */
 export async function listShipmentsForExport(
-  f: ShipmentFilters & { sort?: string | undefined },
+  f: ShipmentFilters & { sort?: string | undefined; filters?: HeaderFilters | undefined },
   limit = 10000,
 ): Promise<ShipmentListItem[]> {
   return queryRows<ShipmentListItem>(
     db,
-    sql`${listSelect()} ${shipmentWhere(f)} ${orderBy(f.sort, SORTS, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
+    sql`${listSelect()} ${planWhere(f)} ${orderBy(f.sort, PLAN_SORTS, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
   );
 }
 

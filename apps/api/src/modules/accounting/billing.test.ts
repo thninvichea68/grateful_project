@@ -151,12 +151,12 @@ afterAll(async () => {
 
 describe('client billing: a client month', () => {
   it('reads numbers typed in the ledger as documents made outside the system', async () => {
-    // 2 Sep (Wed) → invoice date 3 Sep, as GS26-360 in the workbook.
+    // 2 Sep (Wed) → invoice date 3 Sep, the first of the year.
     await shipment(b.jr.id, 'E 264562', '2026-09-02', {
       hbl: 'COSU6464276980',
       ledger: {
-        invNo: 'GS26-360',
-        disNo: 'DIS403',
+        invNo: 'GS26-001',
+        disNo: 'DIS001',
         dnNo: 'JR2609001',
         invRevenue: '242',
         disTotal: '637.25',
@@ -172,17 +172,17 @@ describe('client billing: a client month', () => {
     expect(m.client).toMatchObject({ code: 'JR' });
     expect(m.rows.map((r: { declareNo: string }) => r.declareNo)).toEqual(['E 264562', 'E 272714']);
     expect(m.rows[0].manual).toEqual({
-      'tax-invoices': { number: 'GS26-360', total: '266.20' },
-      disbursements: { number: 'DIS403', total: '637.25' },
+      'tax-invoices': { number: 'GS26-001', total: '266.20' },
+      disbursements: { number: 'DIS001', total: '637.25' },
       'debit-notes': { number: 'JR2609001', total: '707.50' },
     });
     expect(m.statements.INVOICE.lines).toEqual([
       {
         date: '2026-09-03',
-        invNo: 'GS26-360',
-        disNo: 'DIS403',
+        invNo: 'GS26-001',
+        disNo: 'DIS001',
         dnNo: null,
-        ref: 'COSU6464276980',
+        ref: 'CXDU0264562',
         amount: '903.45',
         manual: true,
         draft: false,
@@ -212,8 +212,8 @@ describe('client billing: a client month', () => {
         d.date,
       ]),
     ).toEqual([
-      ['tax-invoices', 'GS26-360', '2026-09-03'],
-      ['disbursements', 'DIS403', '2026-09-03'],
+      ['tax-invoices', 'GS26-001', '2026-09-03'],
+      ['disbursements', 'DIS001', '2026-09-03'],
       ['debit-notes', 'JR2609001', '2026-09-03'],
     ]);
     expect(pack.docs.map((d: { totals: { total: string } }) => d.totals.total)).toEqual([
@@ -221,7 +221,7 @@ describe('client billing: a client month', () => {
       '637.25',
       '707.50',
     ]);
-    expect(pack.docs[0].header).toMatchObject({ invoiceNo: 'GS26-360', hbl: 'COSU6464276980' });
+    expect(pack.docs[0].header).toMatchObject({ invoiceNo: 'GS26-001', hbl: 'COSU6464276980' });
 
     const all = (await acc('get', '/billing', { query: { month: '2026-09' } })).body;
     expect(all.rows.map((r: { clientCode: string }) => r.clientCode)).toEqual(['JR', 'JYX']);
@@ -318,7 +318,7 @@ describe('client billing: a client month', () => {
       expect.objectContaining({ invNo: 'GS26-003', disNo: null, amount: '220.00' }),
     ]);
     expect(m.statements.DEBIT_NOTE.lines).toEqual([
-      expect.objectContaining({ dnNo: 'JR2609001', ref: 'COSU6464270110', amount: '707.50' }),
+      expect.objectContaining({ dnNo: 'JR2609001', ref: 'CXDU0266001', amount: '707.50' }),
     ]);
     expect(m.summary).toMatchObject({ issued: 4, drafts: 2, stage: 'DRAFTS' });
     // Issuing wrote the documents into the Monthly Ledger.
@@ -346,15 +346,15 @@ describe('client billing: a client month', () => {
 
   it('automatic numbers continue after numbers typed in the ledger', async () => {
     await shipment(b.jr.id, 'E 264562', '2026-09-02', {
-      ledger: { invNo: 'GS26-360', disNo: 'DIS403', dnNo: 'JR2609001' },
+      ledger: { invNo: 'GS26-001', disNo: 'DIS001', dnNo: 'JR2609001' },
     });
     await shipment(b.jr.id, 'E 266002', '2026-09-09');
     const created = await acc('post', `/billing/${b.jr.id}/drafts`, {
       body: { month: '2026-09', types: ['tax-invoices', 'disbursements', 'debit-notes'] },
     });
     expect(created.body.created.map((c: { number: string }) => c.number)).toEqual([
-      'GS26-361',
-      'DIS404',
+      'GS26-002',
+      'DIS002',
       'JR2609002',
     ]);
   });
@@ -398,6 +398,25 @@ describe('client billing: a client month', () => {
         amount: '80.00',
       }),
     ]);
+  });
+
+  it('statement REF: the container for an export by CY/CY, the BL / HBL for an import', async () => {
+    const typed = (invNo: string, dnNo: string) => ({
+      ledger: { invNo, dnNo, invRevenue: '100', dnTotal: '50' },
+    });
+    await shipment(b.jr.id, 'E 264562', '2026-09-02', {
+      hbl: 'COSU6464276980',
+      ...typed('GS26-001', 'JR2609001'),
+    });
+    await shipment(b.jr.id, 'I 96707', '2026-09-03', {
+      direction: 'IMPORT',
+      hbl: 'HEH2601282',
+      ...typed('GS26-002', 'JR2609002'),
+    });
+    const { statements } = (await month(b.jr.id)).body;
+    const refs = (lines: { ref: string }[]) => lines.map((l) => l.ref);
+    expect(refs(statements.INVOICE.lines)).toEqual(['CXDU0264562', 'HEH2601282']);
+    expect(refs(statements.DEBIT_NOTE.lines)).toEqual(['CXDU0264562', 'HEH2601282']);
   });
 });
 

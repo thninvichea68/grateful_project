@@ -10,12 +10,11 @@ import { formatNumber, highestNumber, regexLiteral } from '../../lib/numbering';
  * The INV / DIS / DN numbers of a shipment (one set per declare no.), read live:
  * - INV  GS26-NNN: one run for every client, per year (GS27-001 in January).
  * - DIS  DISNNN:   one run for every client, restarting at DIS001 each January.
- * - DN   <client><YYMM>NNN: per client, restarting each month: the month of the declaration
- *   (clearance) date, which is the shipment's Monthly Ledger month, not of the issue date.
- * The next number is the highest one in use (ledger + documents) + 1. A debit note number
- * released by deleting an issued invoice set is handed out first, lowest first, so a client's
- * month has no gaps. INV and DIS never reuse one: a freed number stays a gap so the year's run
- * keeps date order (GS26-017 must not turn up in October between January's invoices).
+ * - DN   <client><YYMM>NNN: per client, restarting each month: the month of the issue (INV)
+ *   date, which is the shipment's Monthly Ledger month, not of the clearance date.
+ * The next number is the highest one in use (ledger + documents) + 1. No run ever skips a
+ * number: when one is freed (a revise, a deleted draft) the later ones close up, and every run
+ * stays in INV-date order (see resequence), so GS26-017 never turns up in October.
  * Everything here runs under one transaction-scoped lock, so two people approving at the same
  * moment can't take the same number.
  */
@@ -73,12 +72,12 @@ export function periodOf(kind: NumberKind, date: string, clientCode: string): Pe
 }
 
 /**
- * The date a shipment's number of a kind is counted by: the declaration date for a debit note
- * (its month is the shipment's ledger month), else the issue (INV) date, so a tax invoice dated
- * January takes the new year's number.
+ * The date a shipment's number of a kind is counted by: its issue (INV) date, which is also its
+ * ledger month, whatever the clearance date. A debit note billed 30 Oct for a shipment cleared
+ * 2 Nov takes an October number; a tax invoice dated January takes the new year's number.
  */
-export const periodDate = (kind: NumberKind, r: { invDate: string; declareDate: string }) =>
-  kind === 'DN' ? r.declareDate : r.invDate;
+export const periodDate = (_kind: NumberKind, r: { invDate: string; declareDate: string }) =>
+  r.invDate;
 
 /** One numbering at a time across the company (released when the transaction ends). */
 export async function lockNumbering(tx: Tx): Promise<void> {
@@ -193,6 +192,21 @@ async function notInvoiced(tx: Tx, recordId: string): Promise<boolean> {
   return !!r?.yes;
 }
 
+/**
+ * No debit note: the shipment's checked record summary has no debit note charges (e.g. a THC
+ * billed on its DIS only), so the ledger's DN total is 0. Such a shipment takes no DN number.
+ */
+async function noDebitNote(tx: Tx, recordId: string): Promise<boolean> {
+  const [r] = await queryRows<{ yes: boolean }>(
+    tx,
+    sql`SELECT a.dn_total = 0 AND EXISTS (
+          SELECT 1 FROM record_summaries s WHERE s.accounting_record_id = a.id
+            AND s.status = 'ISSUED' AND s.review_status IN ('CHECKED', 'REVISION_REQUESTED')) AS yes
+        FROM accounting_records a WHERE a.id = ${recordId}`,
+  );
+  return !!r?.yes;
+}
+
 /** Gives a Monthly Ledger entry the INV / DIS / DN numbers (of `kinds`) it is still missing. */
 export async function assignNumbers(
   tx: Tx,
@@ -207,6 +221,7 @@ export async function assignNumbers(
   for (const kind of kinds) {
     if (r[FIELD[kind]]) continue;
     if (kind === 'INV' && (await notInvoiced(tx, recordId))) continue;
+    if (kind === 'DN' && (await noDebitNote(tx, recordId))) continue;
     const got = await takeNumber(tx, kind, periodDate(kind, r), r.code, r.declareNo);
     await tx.execute(sql`
       UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[kind])} = ${got.number}, updated_by_id = ${req.auth?.userId ?? null}
@@ -272,19 +287,44 @@ const LOOSE_DOCS = sql`
   WHERE x.accounting_record_id IS NULL AND x.status <> 'VOID' AND x.dis_no IS NOT NULL`;
 
 /**
+ * Runs are gapless from this INV date on. Numbers before it stay as the accountant's workbook
+ * had them (Jan–Sep 2026, gaps included, as already sent to clients); later ones follow on.
+ */
+export const GAPLESS_FROM = '2026-10-01';
+
+/** Every number in use, by anything (cancelled documents too); a DIS with its year. */
+interface HeldNumber {
+  kind: NumberKind;
+  number: string;
+  year: number | null;
+}
+const HELD_NUMBERS = sql`
+  SELECT 'INV' AS kind, invoice_no AS number, NULL::int AS year FROM tax_invoices
+  UNION ALL SELECT 'INV', inv_no, NULL FROM accounting_records WHERE inv_no IS NOT NULL
+  UNION ALL SELECT 'DIS', dis_no, extract(year FROM dis_date)::int FROM disbursements WHERE dis_no IS NOT NULL
+  UNION ALL SELECT 'DIS', dis_no, extract(year FROM inv_date)::int FROM accounting_records WHERE dis_no IS NOT NULL
+  UNION ALL SELECT 'DN', dn_no, NULL FROM debit_notes WHERE dn_no IS NOT NULL
+  UNION ALL SELECT 'DN', dn_no, NULL FROM accounting_records WHERE dn_no IS NOT NULL`;
+
+/**
  * Keeps every run in date order. A shipment approved late with an earlier INV date takes its
  * slot and the later ones move down: each run's numbers (INV per year, DIS per year, DN per
  * client and month) are handed out again in order of date, then the number held now (same-day
  * shipments keep the order they were numbered in, as in the accountant's monthly sheets). A
  * tax invoice or DIS made without a shipment (a monthly fee) counts by its own date, so one
- * dated 31 Oct but made on 2 Nov still falls before November's. Only the numbers already in
- * the run are reused, so gaps and the numbers of cancelled documents stay where they are.
+ * dated 31 Oct but made on 2 Nov still falls before November's. A run never skips a number
+ * (from GAPLESS_FROM on): it is numbered again one after another, stepping only over numbers
+ * kept by something outside it (a cancelled document), so a number freed by a revise or a
+ * deleted draft is closed up at once.
  * Draft and issued documents and record summaries take their entry's new number.
  */
 export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
   await lockNumbering(tx);
-  const rows = await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS);
+  let rows = await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS);
+  const moved = await moveDebitNotesToInvMonth(tx, rows, req);
+  if (moved.length) rows = await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS);
   const loose = await queryRows<LooseDoc>(tx, LOOSE_DOCS);
+  const held = await queryRows<HeldNumber>(tx, HELD_NUMBERS);
   const changes: Renumbered[] = [];
   type Entry = Omit<Renumbered, 'to' | 'kind'> & { date: string; seq: number };
   for (const kind of NUMBER_KINDS) {
@@ -313,8 +353,25 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
           declareNo: d.number,
           date: d.date,
         });
-    for (const { p, entries } of runs.values()) {
-      const slots = entries.map((e) => e.seq).sort((a, b) => a - b);
+    for (const { p, entries: all } of runs.values()) {
+      // Numbers of the run held by something that isn't one of its entries stay put, and so
+      // do the entries from before GAPLESS_FROM; the rest follow on from them without a gap.
+      const mine = new Set(all.map((e) => e.seq));
+      const kept = new Set<number>();
+      for (const h of held)
+        if (h.kind === kind && (kind !== 'DIS' || String(h.year) === p.key)) {
+          const seq = seqOf(p, h.number);
+          if (seq !== null && !mine.has(seq)) kept.add(seq);
+        }
+      const entries = all.filter((e) => e.date >= GAPLESS_FROM);
+      let base = 0;
+      for (const e of all)
+        if (e.date < GAPLESS_FROM) {
+          kept.add(e.seq);
+          base = Math.max(base, e.seq);
+        }
+      const slots: number[] = [];
+      for (let n = base + 1; slots.length < entries.length; n++) if (!kept.has(n)) slots.push(n);
       entries.sort(
         (a, b) =>
           a.date.localeCompare(b.date) || a.seq - b.seq || a.declareNo.localeCompare(b.declareNo),
@@ -325,7 +382,57 @@ export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
     }
   }
   await renumber(tx, changes, req, (declareNo) => `Renumbered ${declareNo} to keep INV-date order`);
-  return changes;
+  // No run has a gap now, so no debit note number is waiting to be handed out again.
+  await tx.execute(sql`DELETE FROM released_numbers WHERE reassigned_at IS NULL`);
+  // A record summary shows its shipment's numbers.
+  await tx.execute(sql`
+    UPDATE record_summaries r SET inv_no = a.inv_no, dis_no = a.dis_no, dn_no = a.dn_no
+    FROM accounting_records a
+    WHERE r.accounting_record_id = a.id AND r.status <> 'VOID'
+      AND (r.inv_no IS DISTINCT FROM a.inv_no OR r.dis_no IS DISTINCT FROM a.dis_no
+        OR r.dn_no IS DISTINCT FROM a.dn_no)`);
+  return [...moved, ...changes];
+}
+
+/**
+ * A debit note numbered for another month than its entry's INV date (the issue date was moved,
+ * e.g. a shipment cleared 2 Nov but billed in October) takes the next number of the INV month's
+ * run, and the old one is given back. A number typed in another format is left as typed.
+ */
+async function moveDebitNotesToInvMonth(
+  tx: Tx,
+  rows: LedgerNumbers[],
+  req: Request,
+): Promise<Renumbered[]> {
+  const moved: Renumbered[] = [];
+  for (const r of rows) {
+    if (!r.dnNo || seqOf(periodOf('DN', r.invDate, r.code), r.dnNo) !== null) continue;
+    const m = new RegExp(`^${regexLiteral(r.code.toUpperCase())}(\\d{2})(\\d{2})\\d{3,9}$`).exec(
+      r.dnNo.toUpperCase(),
+    );
+    if (!m) continue;
+    const { number } = await takeNumber(tx, 'DN', r.invDate, r.code, r.declareNo);
+    const change: Renumbered = {
+      recordId: r.id,
+      declareNo: r.declareNo,
+      kind: 'DN',
+      from: r.dnNo,
+      to: number,
+    };
+    // One at a time, so the next entry moving to the same month sees this number taken.
+    await renumber(tx, [change], req, (declareNo) => `Moved ${declareNo} to its INV month`);
+    await releaseNumber(
+      tx,
+      'DN',
+      r.dnNo,
+      `20${m[1]}-${m[2]}-01`,
+      r.code,
+      r.declareNo,
+      req.auth?.userId ?? null,
+    );
+    moved.push(change);
+  }
+  return moved;
 }
 
 /**
@@ -462,9 +569,45 @@ export async function syncInvoiceNumber(tx: Tx, recordId: string, req: Request):
 }
 
 /**
+ * Brings a shipment's DN number in line with its checked record summary: one without debit
+ * note charges has no debit note, so its DN number is taken away and the client's later ones
+ * that month move up (resequence). A number on a live debit note is left alone. A summary that
+ * has charges again gets a number back.
+ */
+export async function syncDebitNoteNumber(tx: Tx, recordId: string, req: Request): Promise<void> {
+  await lockNumbering(tx);
+  const [r] = await queryRows<LedgerNumbers>(tx, sql`${LEDGER_NUMBERS} WHERE a.id = ${recordId}`);
+  if (!r) return;
+  if (!(await noDebitNote(tx, recordId))) {
+    if (!r.dnNo && (r.invNo || r.disNo)) {
+      await assignNumbers(tx, recordId, req, ['DN']);
+      await resequence(tx, req);
+    }
+    return;
+  }
+  // Before GAPLESS_FROM the workbook's numbers stay as they are.
+  if (!r.dnNo || r.invDate < GAPLESS_FROM) return;
+  const [live] = await queryRows<{ id: string }>(
+    tx,
+    sql`SELECT id FROM debit_notes WHERE accounting_record_id = ${recordId}
+          AND dn_no = ${r.dnNo} AND status <> 'VOID' LIMIT 1`,
+  );
+  if (live) return;
+  await renumber(
+    tx,
+    [{ recordId, declareNo: r.declareNo, kind: 'DN', from: r.dnNo, to: null }],
+    req,
+    (declareNo) =>
+      `No debit note for ${declareNo} (no debit note charges on its record summary): DN number taken away`,
+  );
+  await resequence(tx, req);
+}
+
+/**
  * Numbers every shipment that is approved (its record summary or its Chea payment is Checked)
  * but not invoiced yet, in clearance-date order, so released numbers go to the earliest one
- * waiting. Then every run is put back in INV-date order.
+ * waiting. Then every run is put back in INV-date order, closing any gap a released number
+ * left even when no shipment was waiting.
  */
 export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumbers[]> {
   await lockNumbering(tx);
@@ -484,7 +627,6 @@ export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumb
     const a = await assignNumbers(tx, w.id, req);
     if (a.numbers.length) out.push(a);
   }
-  if (!out.length) return out;
   // Report the numbers each shipment ends up with.
   for (const c of await resequence(tx, req))
     for (const n of out.find((a) => a.recordId === c.recordId)?.numbers ?? [])

@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { BILLING_DOC_TYPES, type BillingDocType, type BillingDocStatus } from '@gs/shared';
+import {
+  BILLING_DOC_TYPES,
+  type BillingDocType,
+  type BillingDocStatus,
+  type BillingListColumn,
+  type BillingListFilters,
+} from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useDocs } from '../../features/accounting';
+import { useDocColumnValues, useDocs } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { Pager, TableState, ui } from '../../components/ui';
+import { HeaderFilter, type SortDir } from '../../components/HeaderFilter';
 import { SearchBox } from '../../components/SearchBox';
 import { Pill } from '../../components/StatusPill';
 import { fmtDate, fmtMoney } from '../../lib/format';
@@ -23,6 +30,17 @@ export const DOC_STATUS_PILL: Record<
   VOID: { tone: 'exception', label: 'Cancelled' },
 };
 
+const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'TRUCK', RAIL: 'RAIL' };
+
+/** The header filters kept in the URL (?f=…), so a filtered list survives a reload or a link. */
+const readFilters = (raw: string | null): BillingListFilters => {
+  try {
+    return raw ? (JSON.parse(raw) as BillingListFilters) : {};
+  } catch {
+    return {};
+  }
+};
+
 /** `base` is where rows link to: /accounting/<type>, or /credit-noted for the broker tab. */
 export function DocsListPage({ type, base }: { type: string; base?: string }) {
   if (!(BILLING_DOC_TYPES as readonly string[]).includes(type)) return <NotFoundPage />;
@@ -36,24 +54,72 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
   const cfg = DOC_CONFIG[type];
   const isCn = type === 'credit-notes';
   const canWrite = can(isCn ? 'creditnotes:write' : 'accounting:write');
+  // Tax invoice, DIS and debit note lists also show the declare date, packages and freight.
+  const shipCols = type === 'tax-invoices' || type === 'disbursements' || type === 'debit-notes';
   const [picking, setPicking] = useState(false);
   const [params, setParams] = useSearchParams();
-  const q = {
-    page: Number(params.get('page') ?? 1),
-    pageSize: Number(params.get('pageSize') ?? 50),
+  const filters = readFilters(params.get('f'));
+  const sort = (params.get('sort') as BillingListColumn | null) ?? undefined;
+  const dir = (params.get('dir') as SortDir | null) ?? undefined;
+  // The toolbar's filters; the header filters' value lists are fetched under these too.
+  const listFilters = {
     q: params.get('q') || undefined,
     status: params.get('status') || undefined,
     clientId: params.get('clientId') || undefined,
     month: params.get('month') || undefined,
+    filters: params.get('f') || undefined,
+  };
+  const q = {
+    ...listFilters,
+    page: Number(params.get('page') ?? 1),
+    pageSize: Number(params.get('pageSize') ?? 50),
+    sort,
+    dir,
   };
   const list = useDocs(type, q);
-  const set = (k: string, v: string) => {
+  const setMany = (values: Record<string, string | undefined>) => {
     const next = new URLSearchParams(params);
-    if (v) next.set(k, v);
-    else next.delete(k);
-    if (k !== 'page') next.delete('page');
+    for (const [k, v] of Object.entries(values)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    if (!('page' in values)) next.delete('page');
     setParams(next, { replace: true });
   };
+  const set = (k: string, v: string) => setMany({ [k]: v });
+
+  // Header filters, Excel style: one open at a time, its values fetched when it opens.
+  const [openCol, setOpenCol] = useState<BillingListColumn | null>(null);
+  const close = useCallback(() => setOpenCol(null), []);
+  const colValues = useDocColumnValues(type, openCol ?? '', listFilters, !!openCol);
+  const anyHeader = Object.keys(filters).length > 0 || !!sort;
+  const head = (
+    col: BillingListColumn,
+    label: string,
+    o: { kind?: 'number' | 'date'; align?: 'right'; format?: (v: string) => string } = {},
+  ) => (
+    <th style={o.align ? { textAlign: 'right' } : undefined}>
+      <HeaderFilter
+        label={label}
+        kind={o.kind}
+        align={o.align}
+        format={o.format}
+        open={openCol === col}
+        onOpen={() => setOpenCol(col)}
+        onClose={close}
+        values={openCol === col ? colValues.data : undefined}
+        loading={colValues.isLoading}
+        selected={filters[col]}
+        sort={sort === col ? dir : undefined}
+        onApply={(kept) => {
+          const { [col]: _old, ...others } = filters;
+          const next: BillingListFilters = kept ? { ...others, [col]: kept } : others;
+          setMany({ f: Object.keys(next).length ? JSON.stringify(next) : undefined });
+        }}
+        onSort={(d) => setMany({ sort: col, dir: d })}
+      />
+    </th>
+  );
   return (
     <section className="view active view-fill">
       {BILLING_SECTION_PATHS.includes(base) && <BillingSections className={b.sectionsTop} />}
@@ -105,6 +171,15 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
               <option value="ISSUED">Issued</option>
               <option value="VOID">Cancelled</option>
             </select>
+            {anyHeader && (
+              <button
+                type="button"
+                className={ui.ghostBtn}
+                onClick={() => setMany({ f: undefined, sort: undefined, dir: undefined })}
+              >
+                Clear filters
+              </button>
+            )}
             {canWrite &&
               (isCn ? (
                 <button type="button" className="new-shipment-btn" onClick={() => setPicking(true)}>
@@ -121,18 +196,23 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
           <table className="data-table-clean">
             <thead>
               <tr>
-                <th>{cfg.numberField ? 'No.' : 'Declare No.'}</th>
-                <th>Date</th>
-                <th>Client</th>
-                <th>{type === 'record-summaries' ? 'Declare No.' : 'Bill to'}</th>
-                <th>Declare No.</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
-                <th>Status</th>
+                {head('number', cfg.numberField ? 'No.' : 'Declare No.')}
+                {head('date', 'Date', { kind: 'date', format: fmtDate })}
+                {head('client', 'Client')}
+                {head('billTo', type === 'record-summaries' ? 'Declare No.' : 'Bill to')}
+                {head('declareNo', 'Declare No.')}
+                {shipCols && head('declareDate', 'Declare Date', { kind: 'date', format: fmtDate })}
+                {shipCols && head('quantity', 'Quantity')}
+                {shipCols && head('freight', 'Freight', { format: (v) => MODE[v] ?? v })}
+                {head('total', 'Total', { kind: 'number', align: 'right', format: fmtMoney })}
+                {head('status', 'Status', {
+                  format: (v) => DOC_STATUS_PILL[v as BillingDocStatus]?.label ?? v,
+                })}
               </tr>
             </thead>
             <tbody>
               <TableState
-                cols={7}
+                cols={shipCols ? 10 : 7}
                 loading={list.isLoading}
                 error={list.error}
                 empty={list.data?.data.length === 0}
@@ -151,6 +231,11 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
                   <td>{d.clientCode}</td>
                   <td>{d.billTo ?? '-'}</td>
                   <td>{d.declareNo ?? '-'}</td>
+                  {shipCols && <td>{d.declareDate ? fmtDate(d.declareDate) : '-'}</td>}
+                  {shipCols && <td>{d.quantityText ?? '-'}</td>}
+                  {shipCols && (
+                    <td>{d.transportMode ? (MODE[d.transportMode] ?? d.transportMode) : '-'}</td>
+                  )}
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtMoney(d.total)}</td>
                   <td>
                     <Pill tone={DOC_STATUS_PILL[d.status].tone}>

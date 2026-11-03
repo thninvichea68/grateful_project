@@ -34,6 +34,22 @@ shipmentsRouter.get('/', requirePermission('shipments:read'), async (req, res) =
   res.json(await svc.listShipments({ ...q, clientId: scopeClients(req, q.clientId, 'shipments') }));
 });
 
+// A column's values for its header filter, under the list's other filters.
+shipmentsRouter.get('/values', requirePermission('shipments:read'), async (req, res) => {
+  const {
+    column,
+    page: _p,
+    pageSize: _s,
+    ...q
+  } = parse(shipmentListQuerySchema.extend({ column: z.string().max(40) }), req.query);
+  res.json(
+    await svc.listShipmentColumnValues(column, {
+      ...q,
+      clientId: scopeClients(req, q.clientId, 'shipments'),
+    }),
+  );
+});
+
 /** Same filters as the list, as an .xlsx with every "Expand All" column. */
 shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (req, res) => {
   const { page: _p, pageSize: _s, ...filters } = parse(shipmentListQuerySchema, req.query);

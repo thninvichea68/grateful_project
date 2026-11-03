@@ -41,7 +41,7 @@ import { prefill, previousLines, summaryLines } from './prefill';
 
 /*
  * Client Billing: one client's month, the way the Excel pack (e.g. "09-JR-INV") had it.
- * A shipment belongs to its Monthly Ledger month (its declaration date); a document with no
+ * A shipment belongs to its Monthly Ledger month (its INV date); a document with no
  * ledger entry (a monthly service-fee debit note) to the month of its own date. The account
  * statements are read from the issued documents — and from numbers typed in the ledger for
  * documents made outside the system — so they always match; only receipts are stored.
@@ -72,6 +72,7 @@ interface LedgerPart {
   shipmentReference: string;
   direction: 'IMPORT' | 'EXPORT';
   transportMode: TransportMode;
+  loadType: string | null;
   hbl: string | null;
   containers: string | null;
   quantity: string | null;
@@ -89,6 +90,7 @@ interface LedgerPart {
 interface DocPart extends BillingDocSlot {
   recordId: string | null;
   hbl: string | null;
+  containerNo: string | null;
   reference: string | null;
 }
 
@@ -118,7 +120,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     sql`
     SELECT a.id AS "recordId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", d.declare_no AS "declareNo",
            s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
-           s.transport_mode AS "transportMode", s.hbl_no AS hbl,
+           s.transport_mode AS "transportMode", s.load_type AS "loadType", s.hbl_no AS hbl,
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.inv_revenue::text AS "invRevenue",
@@ -138,7 +140,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   const part = (type: BillingPackType, table: string, no: string, date: string, ref: string) => sql`
     SELECT ${type} AS type, t.id, t.${sql.raw(no)} AS number, to_char(t.${sql.raw(date)}, 'YYYY-MM-DD') AS date,
            t.status::text AS status, t.total::text AS total, t.accounting_record_id AS "recordId",
-           t.hbl, ${sql.raw(ref)} AS reference, t.created_at
+           t.hbl, t.container_no AS "containerNo", ${sql.raw(ref)} AS reference, t.created_at
     FROM ${sql.raw(table)} t
     WHERE t.client_id = ${clientId} AND t.status <> 'VOID'
       AND (${linked} OR (t.accounting_record_id IS NULL AND ${inMonth(sql.raw(`t.${date}`), month)}))`;
@@ -172,7 +174,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     else others.push(d);
   }
 
-  const rows: (BillingShipmentRow & { _docs: DocPart[] })[] = ledger.map((l) => {
+  const rows: (BillingShipmentRow & { _docs: DocPart[]; _cy: boolean })[] = ledger.map((l) => {
     const own = byRecord.get(l.recordId) ?? [];
     const docsByType = emptyByType<BillingDocSlot[]>(() => []);
     for (const d of own) docsByType[d.type].push(slot(d));
@@ -188,6 +190,11 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       if (number && !l.fromChea && !docsByType[type].some((d) => d.status === 'ISSUED'))
         manual[type] = { number, total: money(cents) };
     }
+    const numbered = BILLING_PACK_TYPES.some((t) => typed[t][0]);
+    const none = emptyByType(() => false);
+    for (const type of BILLING_PACK_TYPES)
+      none[type] =
+        numbered && !typed[type][0] && typed[type][1] === 0 && !docsByType[type].length;
     return {
       recordId: l.recordId,
       invDate: l.invDate,
@@ -202,7 +209,9 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       transportMode: l.transportMode,
       docs: docsByType,
       manual,
+      none,
       _docs: own,
+      _cy: l.direction === 'EXPORT' && l.transportMode === 'SEA' && l.loadType === 'FCL',
     };
   });
 
@@ -216,10 +225,16 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   const isDraft = (list: DocPart[]) => list.some((d) => d.status === 'DRAFT');
   const invLines: (StatementLine & { cents: number })[] = [];
   const dnLines: (StatementLine & { cents: number })[] = [];
+  // A statement line's REF: an export by CY/CY has no house bill, so its container no.;
+  // anything else its BL / HBL. The declare no. when neither is there.
+  const refOf = (r: (typeof rows)[number], docs: DocPart[]) =>
+    (r._cy
+      ? realRef(docs[0]?.containerNo) ?? realRef(r.containers)
+      : realRef(docs[0]?.hbl) ?? realRef(r.hbl)) ?? r.declareNo;
   for (const r of rows) {
     const inv = issued(r._docs, 'tax-invoices');
     const dis = issued(r._docs, 'disbursements');
-    const ref = realRef(inv[0]?.hbl ?? dis[0]?.hbl) ?? realRef(r.hbl) ?? r.declareNo;
+    const ref = refOf(r, [...inv, ...dis]);
     const invPart = inv.length
       ? { nos: inv.map((d) => d.number), cents: inv.reduce((s, d) => s + toCents(d.total), 0) }
       : r.manual['tax-invoices'] && {
@@ -255,7 +270,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         invNo: null,
         disNo: null,
         dnNo: dn.number,
-        ref: realRef(dn.hbl) ?? realRef(r.hbl) ?? r.declareNo,
+        ref: refOf(r, [dn]),
         amount: dn.total,
         manual: false,
         draft: dn.status === 'DRAFT',
@@ -267,7 +282,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         invNo: null,
         disNo: null,
         dnNo: r.manual['debit-notes'].number,
-        ref: realRef(r.hbl) ?? r.declareNo,
+        ref: refOf(r, []),
         amount: r.manual['debit-notes'].total,
         manual: true,
         draft: false,
@@ -321,7 +336,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   let manual = 0;
   for (const r of rows)
     for (const type of BILLING_PACK_TYPES)
-      if (!r.docs[type].length) {
+      if (!r.docs[type].length && !r.none[type]) {
         if (r.manual[type]) manual += 1;
         else missing[type] += 1;
       }
@@ -345,7 +360,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   return {
     client,
     month,
-    rows: rows.map(({ _docs, ...r }) => r),
+    rows: rows.map(({ _docs, _cy, ...r }) => r),
     others: others.map((d) => ({ ...slot(d), reference: d.reference })),
     statements,
     summary: {
@@ -419,7 +434,7 @@ export async function createDrafts(
   const created: BillingDraftsResult['created'] = [];
   for (const r of m.rows)
     for (const type of BILLING_PACK_TYPES) {
-      if (!input.types.includes(type) || r.docs[type].length || r.manual[type]) continue;
+      if (!input.types.includes(type) || r.docs[type].length || r.manual[type] || r.none[type]) continue;
       const draft = await prefill(type, r.recordId);
       let copiedFrom: string | null = null;
       // A checked record summary's lines win over copying the last document.

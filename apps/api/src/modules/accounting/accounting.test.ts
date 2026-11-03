@@ -197,6 +197,63 @@ describe('monthly ledger', () => {
       .query({ year: '2026' })
       .set(h);
     expect(yx.headers['content-disposition']).toContain('yearly-ledger-2026');
+
+    // Header filters, Excel style: the totals follow them; a column's values come from the others.
+    const values = (column: string, filters?: object) =>
+      request(app)
+        .get('/api/v1/accounting/ledger/values')
+        .query({ year: '2026', column, ...(filters ? { filters: JSON.stringify(filters) } : {}) })
+        .set(h);
+    expect((await values('client')).body).toEqual(['JR', 'JYX']);
+    expect((await values('client', { declareNo: ['I 7'] })).body).toEqual(['JYX']);
+    const jyx = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2026', filters: JSON.stringify({ client: ['JYX'] }) })
+      .set(h);
+    expect(jyx.body.meta.total).toBe(1);
+    expect(jyx.body.totals).toMatchObject({ rows: 1, invRevenue: '100.00' });
+    const byProfit = await request(app)
+      .get('/api/v1/accounting/ledger')
+      .query({ year: '2026', sort: '-netProfit' })
+      .set(h);
+    expect(byProfit.body.data.map((r: { clientCode: string }) => r.clientCode)).toEqual([
+      'JR',
+      'JYX',
+    ]);
+    expect((await values('nope')).status).toBe(400);
+    for (const column of [
+      'chea',
+      'portNo',
+      'portCode',
+      'portName',
+      'declareNo',
+      'declareDate',
+      'client',
+      'inv',
+      'dis',
+      'dn',
+      'invDate',
+      'exchangeRate',
+      'weekday',
+      'clearFee',
+      'thc',
+      'otherPay',
+      'commission',
+      'invRevenue',
+      'disTotal',
+      'vat',
+      'dnTotal',
+      'netProfit',
+      'mark',
+    ]) {
+      const vs = await values(column);
+      expect(vs.status, column).toBe(200);
+      const kept = await request(app)
+        .get('/api/v1/accounting/ledger')
+        .query({ year: '2026', filters: JSON.stringify({ [column]: vs.body }), sort: column })
+        .set(h);
+      expect(kept.body.meta.total, column).toBe(2);
+    }
   });
 
   it('roles: operators cannot see accounting; viewers can read but not write', async () => {
@@ -671,6 +728,46 @@ describe('billing documents', () => {
     expect(res.body.totals).toMatchObject({ total: '21.25', vat: '0.00', totalKhr: '85638' });
   });
 
+  it("a shipment's DIS and debit note follow its tax invoice's details", async () => {
+    const h = await as('ACCOUNTANT');
+    const rec = await ledgerRow();
+    const make = async (type: string) => {
+      const pre = (
+        await request(app)
+          .get(`/api/v1/accounting/docs/${type}/prefill`)
+          .query({ recordId: rec.id })
+          .set(h)
+      ).body;
+      const res = await request(app).post(`/api/v1/accounting/docs/${type}`).set(h).send(pre);
+      expect(res.status).toBe(201);
+      return { id: res.body.id as string, pre };
+    };
+    const inv = await make('tax-invoices');
+    const dis = await make('disbursements');
+    const dn = await make('debit-notes');
+    await request(app)
+      .put(`/api/v1/accounting/docs/tax-invoices/${inv.id}`)
+      .set(h)
+      .send({
+        ...inv.pre,
+        customerNameEn: 'JR APPAREL (FIXED) CO., LTD',
+        volumeCbm: '12.43',
+        grossWeightKg: '3569.58',
+        pol: 'CHINA',
+      })
+      .expect(200);
+    const get = async (type: string, id: string) =>
+      (await request(app).get(`/api/v1/accounting/docs/${type}/${id}`).set(h)).body.header;
+    expect(await get('disbursements', dis.id)).toMatchObject({
+      customerNameEn: 'JR APPAREL (FIXED) CO., LTD',
+      pol: 'CHINA',
+    });
+    const dnHeader = await get('debit-notes', dn.id);
+    expect(dnHeader).toMatchObject({ billTo: 'JR APPAREL (FIXED) CO., LTD', pol: 'CHINA' });
+    expect(Number(dnHeader.volumeCbm)).toBe(12.43);
+    expect(Number(dnHeader.grossWeightKg)).toBe(3569.58);
+  });
+
   it('debit notes take the ledger number (one per shipment); credit notes and record summaries prefill from the ledger', async () => {
     const h = await as('ACCOUNTANT');
     const rec = await ledgerRow();
@@ -1094,11 +1191,9 @@ describe('billing documents', () => {
       .set(h)
       .send({ reviewStatus: 'CHECKED' });
     // Approved: numbered straight away, without waiting for its Credit Noted, and the tax
-    // invoice draft made.
+    // invoice draft made. Only a processing fee, so no debit note and no DN number.
     expect(checked.body).toMatchObject({
-      numbered: [
-        { declareNo: 'I 151809', numbers: [{ kind: 'INV' }, { kind: 'DIS' }, { kind: 'DN' }] },
-      ],
+      numbered: [{ declareNo: 'I 151809', numbers: [{ kind: 'INV' }, { kind: 'DIS' }] }],
       drafts: 1,
     });
     const summary = async () =>

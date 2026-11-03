@@ -291,7 +291,7 @@ const BILLED = sql`(a.inv_revenue + a.dis_total + a.dn_total) > 0`;
 const UNBILLED = sql`(a.inv_revenue + a.dis_total + a.dn_total) <= 0`;
 
 /**
- * Each client's ledger for the period (by declaration date, as the Monthly Ledger): every revenue and cost column,
+ * Each client's ledger for the period (by INV date, as the Monthly Ledger): every revenue and cost column,
  * net profit, margin, share of all profit and a month-by-month trend, from billed rows
  * only (see BILLED). Ledger rows have no direction or transport mode, so only the period
  * and client filters apply.

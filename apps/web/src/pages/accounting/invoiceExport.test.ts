@@ -117,52 +117,83 @@ describe('Invoice Excel', () => {
     await exportInvoiceExcel(tax, company);
     expect(saved.name).toBe('GS26-360.xlsx');
     const ws = (await load()).getWorksheet('GS26-360')!;
-    // Letterhead, then the title under a heavy rule.
+    // No merged cells: headings are centred across their columns.
+    expect(ws.model.merges).toEqual([]);
+    // Letterhead, then the title under a heavy rule, with a little space between.
     expect(ws.getCell('A2').value).toBe(company.nameKm);
+    expect(ws.getCell('A2').alignment?.horizontal).toBe('centerContinuous');
+    expect(ws.getCell('H2').alignment?.horizontal).toBe('centerContinuous');
     expect(ws.getCell('A3').value).toBe(company.nameEn);
     expect(ws.getCell('A4').value).toBe('លេខអត្តសញ្ញាណកម្ម អតប (VATTIN) : K008-902404873');
     expect(ws.getCell('H1').value).toBeNull(); // issued: no DRAFT mark
-    expect(ws.getCell('A8').value).toBe('វិក្កយបត្រអាករ');
     expect(ws.getCell('A8').border?.top?.style).toBe('thick');
-    expect(ws.getCell('A9').value).toBe('TAX INVOICE');
-    // Customer on the left, the invoice on the right.
-    expect(text(ws.getCell('A12').value)).toBe('JR APPAREL CO.,LTD');
-    expect(text(ws.getCell('D11').value)).toBe('លេខវិក្កយបត្រ / Invoice No: GS26-360');
-    expect(text(ws.getCell('D12').value)).toBe('កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date: 03-SEP-2026');
-    expect(ws.getCell('D14').value).toBe('GROSS WEIGHT: 16,864.80 KGS');
-    expect(ws.getCell('D19').value).toBe('Exchange Rate: 1USD = 4,100 KHR');
-    expect(ws.getCell('D19').alignment?.horizontal).toBe('right');
+    expect(ws.getCell('A8').value).toBeNull();
+    expect(ws.getCell('A9').value).toBe('វិក្កយបត្រអាករ');
+    expect(ws.getCell('A10').value).toBe('TAX INVOICE');
+    // Customer on the left, the invoice on the right (in H, running left).
+    expect(text(ws.getCell('A13').value)).toBe('JR APPAREL CO.,LTD');
+    expect(text(ws.getCell('H12').value)).toBe('លេខវិក្កយបត្រ / Invoice No: GS26-360');
+    expect(text(ws.getCell('H13').value)).toBe('កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date: 03-SEP-2026');
+    // A long address takes a second row rather than a merged, wrapped cell.
+    expect(text(ws.getCell('A14').value)).toMatch(/^អាស័យដ្ឋាន \/ Address: KAOH KNOR/);
+    expect(text(ws.getCell('A15').value)).toBe('STUENG DISTRICT, KANDAL');
+    expect(ws.getCell('H16').value).toBe('GROSS WEIGHT: 16,864.80 KGS');
+    expect(ws.getCell('H21').value).toBe('Exchange Rate: 1USD = 4,100 KHR');
+    expect(ws.getCell('H21').alignment?.horizontal).toBe('right');
     // Two-line headings between 2px rules; lines with formulas.
-    expect(text(ws.getCell('B21').value)).toBe('បរិយាយមុខទំនិញ\nDescription');
-    expect(ws.getCell('B21').border?.top?.style).toBe('medium');
-    expect(ws.getCell('B22').value).toBe('EXPORT PROCESSING FEE');
-    expect(ws.getCell('F22').value).toMatchObject({ formula: 'ROUND(C22*E22,2)', result: 242 });
-    expect(ws.getCell('G22').value).toMatchObject({ formula: 'ROUND(F22*0.1,2)', result: 24.2 });
-    expect(ws.getCell('H22').value).toMatchObject({ formula: 'F22+G22', result: 266.2 });
+    expect(text(ws.getCell('B23').value)).toBe('បរិយាយមុខទំនិញ\nDescription');
+    expect(ws.getCell('B23').border?.top?.style).toBe('medium');
+    expect(ws.getCell('B24').value).toBe('EXPORT PROCESSING FEE');
+    expect(ws.getCell('F24').value).toMatchObject({ formula: 'ROUND(C24*E24,2)', result: 242 });
+    expect(ws.getCell('G24').value).toMatchObject({ formula: 'ROUND(F24*0.1,2)', result: 24.2 });
+    expect(ws.getCell('H24').value).toMatchObject({ formula: 'F24+G24', result: 266.2 });
     // Totals between double rules, KHR and USD.
-    expect(ws.getCell('A24').value).toBe('សរុប SUB TOTAL');
-    expect(ws.getCell('A24').border?.top?.style).toBe('double');
-    expect(ws.getCell('H24').value).toMatchObject({ formula: 'SUM(F22:F22)', result: 242 });
-    expect(ws.getCell('H25').value).toMatchObject({ formula: 'SUM(G22:G22)', result: 24.2 });
-    expect(ws.getCell('H26').value).toMatchObject({ formula: 'H24+H25', result: 266.2 });
-    expect(ws.getCell('F26').value).toMatchObject({
-      formula: 'ROUND(H26*4100,0)',
+    expect(ws.getCell('C26').value).toBe('សរុប SUB TOTAL');
+    expect(ws.getCell('A26').border?.top?.style).toBe('double');
+    expect(ws.getCell('H26').value).toMatchObject({ formula: 'SUM(F24:F24)', result: 242 });
+    expect(ws.getCell('H27').value).toMatchObject({ formula: 'SUM(G24:G24)', result: 24.2 });
+    expect(ws.getCell('H28').value).toMatchObject({ formula: 'H26+H27', result: 266.2 });
+    expect(ws.getCell('F28').value).toMatchObject({
+      formula: 'ROUND(H28*4100,0)',
       result: 1091420,
     });
-    expect(ws.getCell('A28').value).toBe('Note: You can make payment by cross cheque to:');
+    expect(ws.getCell('A30').value).toBe('Note: You can make payment by cross cheque to:');
     // Signatures at the page foot.
-    expect(ws.getCell('A37').value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកទិញ');
-    expect(ws.getCell('F37').value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកលក់');
-    expect(ws.getRow(34).height).toBeGreaterThan(50);
+    const sig = ws.getColumn(1).values.indexOf('ហត្ថលេខា និង ឈ្មោះអ្នកទិញ');
+    expect(sig).toBeGreaterThan(30);
+    expect(ws.getCell(`H${sig}`).value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកលក់');
+    expect(ws.getRow(sig - 3).height).toBeGreaterThan(40);
   });
 
   it('shows the volume as NON for a shipment by air', async () => {
     await exportInvoiceExcel(tax, company);
     const sea = (await load()).getWorksheet('GS26-360')!;
-    expect(sea.getCell('D15').value).toBe('VOLUME: 12 CBM');
+    expect(sea.getCell('H17').value).toBe('VOLUME: 12 CBM');
     await exportInvoiceExcel({ ...tax, header: { ...tax.header, transportMode: 'AIR' } }, company);
     const ws = (await load()).getWorksheet('GS26-360')!;
-    expect(ws.getCell('D15').value).toBe('VOLUME: NON');
+    expect(ws.getCell('H17').value).toBe('VOLUME: NON');
+  });
+
+  it('by air prints the Container No. as the FLIGHT NO, else the shipment’s flight no.', async () => {
+    const flightLine = async (over: Record<string, string | null>) => {
+      await exportInvoiceExcel(
+        { ...tax, header: { ...tax.header, transportMode: 'AIR', ...over } },
+        company,
+      );
+      const found: string[] = [];
+      (await load()).getWorksheet('GS26-360')!.eachRow((row) =>
+        row.eachCell((c) => {
+          if (String(c.value).startsWith('FLIGHT NO')) found.push(String(c.value));
+        }),
+      );
+      return found;
+    };
+    expect(await flightLine({ containerNo: 'cx607', flightNo: 'CZ 3054' })).toEqual([
+      'FLIGHT NO: CX607',
+    ]);
+    expect(await flightLine({ containerNo: null, flightNo: 'CZ 3054' })).toEqual([
+      'FLIGHT NO: CZ 3054',
+    ]);
   });
 
   it('exports a draft disbursement at VAT 0%, marked DRAFT', async () => {
@@ -170,30 +201,35 @@ describe('Invoice Excel', () => {
     expect(invoiceFileName(draft)).toBe('Disbursement_JR_draft');
     await exportInvoiceExcel(draft, company);
     const ws = (await load()).worksheets[0]!;
-    expect(ws.getCell('A9').value).toBe('DISBURSEMENT');
+    expect(ws.getCell('A10').value).toBe('DISBURSEMENT');
     expect(ws.getCell('H1').value).toBe('DRAFT');
-    expect(ws.getCell('G22').value).toBe('-');
-    expect(ws.getCell('H23').value).toMatchObject({ formula: 'F23', result: 539 });
-    expect(ws.getCell('H25').value).toMatchObject({ formula: 'SUM(H22:H23)', result: 616 });
-    expect(ws.getCell('H26').value).toBe('-');
-    expect(ws.getCell('H27').value).toMatchObject({ formula: 'H25', result: 616 });
+    expect(ws.getCell('G24').value).toBe('-');
+    expect(ws.getCell('H25').value).toMatchObject({ formula: 'F25', result: 539 });
+    expect(ws.getCell('H27').value).toMatchObject({ formula: 'SUM(H24:H25)', result: 616 });
+    expect(ws.getCell('H28').value).toBe('-');
+    expect(ws.getCell('H29').value).toMatchObject({ formula: 'H27', result: 616 });
   });
 
   it('exports a debit note like its printed sheet', async () => {
     await exportInvoiceExcel(dn, company);
     expect(saved.name).toBe('JR2609001.xlsx');
     const ws = (await load()).getWorksheet('JR2609001')!;
+    expect(ws.model.merges).toEqual([]);
     expect(ws.getCell('A2').value).toBe('DEBIT NOTE');
     expect(text(ws.getCell('A4').value)).toBe('Customer: JR APPAREL CO.,LTD');
-    expect(text(ws.getCell('C4').value)).toBe('DN No: JR2609001');
-    expect(text(ws.getCell('C5').value)).toBe('DN Date: 03-SEP-2026');
-    expect(ws.getCell('A6').value).toBe('SHIPPER: JR APPAREL CO., LTD.');
-    expect(ws.getCell('B12').value).toBe('DESCRIPTION');
-    expect(ws.getCell('F13').value).toMatchObject({ formula: 'ROUND(C13*E13,2)', result: 260 });
-    expect(ws.getCell('A15').value).toBe('GRAND TOTAL:');
-    expect(ws.getCell('F15').value).toMatchObject({ formula: 'SUM(F13:F14)', result: 295 });
-    expect(ws.getCell('A18').value).toBe('Thank you for your supporting');
-    expect(ws.getCell('D18').value).toBe('AUTHORIZED SIGNATURE');
+    expect(text(ws.getCell('F4').value)).toBe('DN No: JR2609001');
+    expect(text(ws.getCell('F5').value)).toBe('DN Date: 03-SEP-2026');
+    expect(text(ws.getCell('A6').value)).toBe('DISTRICT, KANDAL'); // the address's second row
+    expect(ws.getCell('A7').value).toBe('SHIPPER: JR APPAREL CO., LTD.');
+    expect(ws.getCell('B13').value).toBe('DESCRIPTION');
+    expect(ws.getCell('F14').value).toMatchObject({ formula: 'ROUND(C14*E14,2)', result: 260 });
+    expect(ws.getCell('D16').value).toBe('GRAND TOTAL:');
+    // Ruled round A–D, with no lines through "GRAND TOTAL:".
+    expect(ws.getCell('B16').border?.left).toBeUndefined();
+    expect(ws.getCell('D16').border?.right?.style).toBe('thin');
+    expect(ws.getCell('F16').value).toMatchObject({ formula: 'SUM(F14:F15)', result: 295 });
+    expect(ws.getCell('A19').value).toBe('Thank you for your supporting');
+    expect(ws.getCell('F19').value).toBe('AUTHORIZED SIGNATURE');
   });
 });
 
@@ -288,14 +324,15 @@ describe('Month pack Excel', () => {
 
     // The tax invoice (A–H) and disbursement (I–P) side by side, their totals on one row.
     const pair = wb.getWorksheet('GS26-360 & DIS403')!;
-    expect(pair.getCell('A9').value).toBe('TAX INVOICE');
-    expect(pair.getCell('I9').value).toBe('DISBURSEMENT');
+    expect(pair.model.merges).toEqual([]);
+    expect(pair.getCell('A10').value).toBe('TAX INVOICE');
+    expect(pair.getCell('I10').value).toBe('DISBURSEMENT');
     expect(pair.getCell('I2').value).toBe(company.nameKm);
-    expect(pair.getCell('P23').value).toMatchObject({ formula: 'N23', result: 539 });
-    expect(pair.getCell('H25').value).toMatchObject({ formula: 'SUM(F22:F22)', result: 242 });
-    expect(pair.getCell('P25').value).toMatchObject({ formula: 'SUM(P22:P23)', result: 616 });
-    expect(pair.getCell('I38').value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកទិញ');
-    expect(pair.pageSetup.printArea).toBe('A1:P40');
+    expect(pair.getCell('P25').value).toMatchObject({ formula: 'N25', result: 539 });
+    expect(pair.getCell('H27').value).toMatchObject({ formula: 'SUM(F24:F24)', result: 242 });
+    expect(pair.getCell('P27').value).toMatchObject({ formula: 'SUM(P24:P25)', result: 616 });
+    expect(pair.getCell('I40').value).toBe('ហត្ថលេខា និង ឈ្មោះអ្នកទិញ');
+    expect(pair.pageSetup.printArea).toBe('A1:P42');
 
     const st = wb.getWorksheet('Statement INV')!;
     expect(st.getCell('A2').value).toBe(company.nameKm); // the invoice's letterhead
@@ -306,7 +343,7 @@ describe('Month pack Excel', () => {
     expect(st.getCell('C16').value).toBe('GS26-360');
     expect(st.getCell('B16').numFmt).toBe('dd\\-mmm\\-yyyy');
     expect(st.getCell('G16').value).toMatchObject({
-      formula: "SUM('GS26-360 & DIS403'!H27,'GS26-360 & DIS403'!P27)",
+      formula: "SUM('GS26-360 & DIS403'!H29,'GS26-360 & DIS403'!P29)",
       result: 882.2,
     });
     expect(text(st.getCell('B18').value)).toBe('BALANCE AS  SEP-2026');
@@ -318,7 +355,7 @@ describe('Month pack Excel', () => {
     const sd = wb.getWorksheet('Statement DN')!;
     expect(sd.getCell('A3').value).toBe('Account Statement'); // no letterhead
     expect(sd.getCell('C11').value).toBe('JR2609001');
-    expect(sd.getCell('F11').value).toMatchObject({ formula: "'JR2609001'!F15", result: 295 });
+    expect(sd.getCell('F11').value).toMatchObject({ formula: "'JR2609001'!F16", result: 295 });
 
     // Both balances due: an advance receipt for each, the invoices one with the letterhead.
     const or = wb.getWorksheet('Receipts')!;
@@ -360,7 +397,7 @@ describe('Month pack Excel', () => {
     // Still a workbook Excel can open.
     const back = new ExcelJS.Workbook();
     await back.xlsx.load(buf);
-    expect(back.worksheets[0]!.getCell('I9').value).toBe('DISBURSEMENT');
+    expect(back.worksheets[0]!.getCell('I10').value).toBe('DISBURSEMENT');
   });
 
   it('exports only the parts asked for', () => {

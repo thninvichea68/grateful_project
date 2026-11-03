@@ -434,6 +434,13 @@ function DocCell({
       </span>
     );
   }
+  // No fee / no charges of this type on its record summary: nothing to issue.
+  if (row.none[type])
+    return (
+      <span className={b.none} title="Nothing to bill on this shipment">
+        —
+      </span>
+    );
   return canWrite ? (
     <Link to={create} className={b.addChip}>
       + Create

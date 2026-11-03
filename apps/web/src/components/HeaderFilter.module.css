@@ -1,0 +1,180 @@
+/* The header itself: the column name and a down/up sort icon, styled as the <th> text. */
+.head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.head:hover,
+.on {
+  color: var(--accent-primary);
+}
+.right {
+  flex-direction: row-reverse;
+}
+.sortIcon {
+  position: relative;
+  display: inline-flex;
+  opacity: 0.45;
+  transition: opacity 0.15s;
+}
+.sortIcon svg {
+  width: 13px;
+  height: 13px;
+}
+.head:hover .sortIcon,
+.on .sortIcon {
+  opacity: 1;
+}
+.sortIcon path {
+  transition: opacity 0.15s;
+}
+.dim {
+  opacity: 0.3;
+}
+.lit {
+  opacity: 1;
+}
+/* Marks a filtered column. */
+.dot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+/* The filter panel, portalled to <body> and placed under the header. */
+.panel {
+  position: fixed;
+  z-index: 1000;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-elevated);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  font-family: var(--font-main);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.item:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.item:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+.icon {
+  width: 14px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+.rule {
+  margin: 6px 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+}
+.search {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-canvas);
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  outline: none;
+}
+.search:focus {
+  border-color: var(--accent-primary);
+}
+.list {
+  max-height: 240px;
+  margin-top: 6px;
+  padding: 4px 0;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.check:hover {
+  background: var(--bg-subtle);
+}
+.check input {
+  accent-color: var(--accent-primary);
+}
+.blank {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.note {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ok,
+.cancel {
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ok {
+  border: none;
+  background: var(--accent-primary);
+  color: #fff;
+}
+.ok:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cancel {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}

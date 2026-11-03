@@ -65,6 +65,25 @@ export const multi = <T extends z.ZodTypeAny>(item: T) =>
     return arr.flatMap((x) => String(x).split(',')).filter(Boolean);
   }, z.array(item).optional());
 
+/** Column → the values a header filter keeps ('' for a blank cell). */
+export type HeaderFilters = Record<string, string[]>;
+
+/**
+ * Excel-style header filters, as JSON in the query string: {"client":["JR","SAK"],"hbl":[""]}.
+ * Column keys are checked by the API against the list's own columns.
+ */
+export const headerFiltersParam = z
+  .string()
+  .transform((s, ctx) => {
+    try {
+      return JSON.parse(s) as unknown;
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'filters must be JSON' });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.record(z.string().max(40), z.array(z.string().max(300)).max(2000)));
+
 export const boolParam = z.preprocess(
   (v) => (v === undefined ? undefined : v === 'true' || v === '1' || v === true),
   z.boolean().optional(),

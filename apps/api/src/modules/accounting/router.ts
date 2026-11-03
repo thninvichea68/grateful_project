@@ -6,6 +6,7 @@ import {
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
   billingDocListQuerySchema,
+  BILLING_LIST_COLUMNS,
   billingDraftsInputSchema,
   billingIssueInputSchema,
   billingMonthQuerySchema,
@@ -110,6 +111,14 @@ accountingRouter.get('/ledger', async (req, res) =>
     }),
   ),
 );
+// A column's values for its header filter, under the list's other filters.
+accountingRouter.get('/ledger/values', async (req, res) => {
+  const { column, ...q } = parse(
+    ledgerListQuerySchema.extend({ column: z.string().max(40) }),
+    req.query,
+  );
+  res.json(await ledger.ledgerColumnValues(column, { ...q, clientIds: scopeClients(req) }));
+});
 accountingRouter.get('/declarations', async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
   res.json(await ledger.declarationOptions(q, scopeClients(req)));
@@ -451,6 +460,15 @@ accountingRouter.get('/docs/:type', async (req, res) => {
       clientIds: scopeClients(req),
     }),
   );
+});
+// A column's values for its header filter, under the list's other filters.
+accountingRouter.get('/docs/:type/values', async (req, res) => {
+  const { type } = parse(typeParam, req.params);
+  const { column, ...q } = parse(
+    billingDocListQuerySchema.extend({ column: z.enum(BILLING_LIST_COLUMNS) }),
+    req.query,
+  );
+  res.json(await docs.listColumnValues(type, column, { ...q, clientIds: scopeClients(req) }));
 });
 accountingRouter.get('/docs/:type/prefill', async (req, res) => {
   const { type } = parse(typeParam, req.params);
