@@ -294,6 +294,29 @@ export const chargeLineUnit = (description: string | null | undefined, shipUnit:
 export const isShipmentUnit = (unit: string | null | undefined): boolean =>
   /^(SHIP|SET|\d{2}'?\s*[A-Z]{0,2})$/i.test((unit ?? '').trim());
 
+/** Billing charges billed per truck or per shipment rather than per container. */
+const BILLING_UNITS: [RegExp, string][] = [
+  [/^INCREASE\s+TRUCKING\b/i, 'TRUCK'],
+  [/^SERVICE\s+TAXATION\b/i, 'SHIP'],
+];
+
+/**
+ * A tax invoice, DIS or debit note line's U/M as on GS's sheets: the container size short
+ * ("40'HQ" → 40H), SHIP for air / LCL, TRUCK for the increased trucking fee, SHIP for service
+ * taxation. A unit picked on purpose (DAY, CBM…) stays.
+ */
+export function billingUnit(
+  description: string | null | undefined,
+  unit: string | null | undefined,
+): string {
+  const u = (unit ?? '').trim();
+  if (!isShipmentUnit(u)) return u;
+  const fixed = BILLING_UNITS.find(([re]) => re.test((description ?? '').trim()));
+  if (fixed) return fixed[1];
+  const size = /^(\d{2})'?\s*[A-Z]{0,2}$/i.exec(u);
+  return size ? `${size[1]}H` : u.toUpperCase();
+}
+
 /** A line's unit once the shipment's unit or the line's description changed. */
 export const followShipmentUnit = (
   line: { description?: string | null; unit?: string | null },

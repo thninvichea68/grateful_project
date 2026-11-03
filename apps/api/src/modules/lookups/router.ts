@@ -38,6 +38,8 @@ lookupsRouter.get('/', async (req, res) => {
         legalName: clients.legalName,
         status: clients.status,
         commissionUsd: clients.commissionUsd,
+        importCompleteOn: clients.importCompleteOn,
+        exportCompleteOn: clients.exportCompleteOn,
       })
       .from(clients)
       .where(isNull(clients.deletedAt))

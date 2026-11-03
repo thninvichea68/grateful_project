@@ -319,12 +319,15 @@ accountingRouter.patch(
     const { id } = parse(idParam, req.params);
     const { reviewStatus, message } = parse(creditNoteReviewInputSchema, req.body);
     if (type === 'record-summaries') {
-      await docs.setRecordSummaryReview(id, reviewStatus, message, req);
-      // Checked: the shipment's tax invoice, DIS and DN drafts are made automatically.
+      const numbered = await docs.setRecordSummaryReview(id, reviewStatus, message, req);
+      // Checked: the shipment gets its numbers, and its tax invoice, DIS and DN drafts are made
+      // automatically (as are those of any other shipment numbered with it).
       const recordId =
         reviewStatus === 'CHECKED' ? (await docs.getDoc(type, id)).accountingRecordId : null;
       const drafts = recordId ? await billing.autoDraftsFor(recordId, req) : [];
-      res.json({ numbered: [], drafts: drafts.length });
+      for (const n of numbered)
+        if (n.recordId !== recordId) await billing.autoDraftsFor(n.recordId, req);
+      res.json({ numbered, drafts: drafts.length });
       return;
     }
     if (type !== 'credit-notes') throw notFound('Document');

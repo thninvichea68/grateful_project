@@ -8,6 +8,7 @@ import { SearchBox } from '../components/SearchBox';
 import { useToast } from '../components/Toast';
 import { downloadFile } from '../lib/files';
 import { ImportPlanDialog } from './plans/ImportPlanDialog';
+import { StatusRulesDialog } from './plans/StatusRulesDialog';
 import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
@@ -116,6 +117,7 @@ export function ShippingPlansPage() {
   };
 
   const [importing, setImporting] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const doExport = async () => {
     setExporting(true);
     try {
@@ -203,6 +205,7 @@ export function ShippingPlansPage() {
               exporting={exporting}
               onExport={() => void doExport()}
               onImport={can('shipments:write') ? () => setImporting(true) : undefined}
+              onStatusRules={() => setRulesOpen(true)}
             />
           </div>
         </div>
@@ -298,6 +301,7 @@ export function ShippingPlansPage() {
         )}
       </div>
       {importing && <ImportPlanDialog onClose={() => setImporting(false)} />}
+      {rulesOpen && <StatusRulesDialog onClose={() => setRulesOpen(false)} />}
     </section>
   );
 }

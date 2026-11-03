@@ -38,7 +38,7 @@ const NUMBER_OF = {
 } as const;
 /**
  * A tax invoice, DIS or debit note can be made once the shipment has that number (given when
- * its Chea payment is checked) and none is made yet; credit notes and summaries any time.
+ * its record summary is approved) and none is made yet; credit notes and summaries any time.
  */
 const canStart = (row: LedgerRow, t: (typeof BILLING_DOC_TYPES)[number]) =>
   !(t in NUMBER_OF) ||
@@ -285,7 +285,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
           Numbers &amp; dates
         </div>
         <div className="form-fields-grid">
-          {text('invNo', 'INV No.', 'Given when the Chea payment is checked', 'text', true)}
+          {text('invNo', 'INV No.', 'Given when the record summary is approved', 'text', true)}
           {text('disNo', 'DIS No.', 'Given when checked', 'text', true)}
           {text('dnNo', 'DN No.', 'Given when checked', 'text', true)}
           {text('invDate', 'Invoice date', 'auto: next working day', 'date', !!row)}

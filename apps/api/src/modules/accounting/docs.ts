@@ -55,6 +55,7 @@ import {
   assignNumbers,
   lockNumbering,
   numberEligible,
+  periodDate,
   periodOf,
   releaseNumber,
   resequence,
@@ -271,7 +272,7 @@ const LEDGER_FIELD = { INV: 'invNo', DIS: 'disNo', DN: 'dnNo' } as const;
 
 /**
  * A shipment document's number, date and rates, from its Monthly Ledger entry: the number
- * given when its Chea payment was checked, the issue date (next working day after
+ * given when its record summary was approved, the issue date (next working day after
  * clearance), that day's exchange rate and the entry's VAT percent. One live document of each
  * type per shipment.
  */
@@ -302,7 +303,7 @@ async function fromLedger(
   const label = BILLING_LABEL[type].toLowerCase();
   if (!number)
     throw businessRule(
-      `${r.declareNo} has no ${label} number yet. It gets one when its Chea payment is marked Checked.`,
+      `${r.declareNo} has no ${label} number yet. It gets one when its record summary is approved.`,
     );
   const [other] = await queryRows<{ number: string }>(
     tx,
@@ -321,7 +322,7 @@ async function fromLedger(
 
 /**
  * A record summary's INV / DIS / DN: never typed, always its Monthly Ledger row's (given when
- * the accountant checks the Chea payment, and following any later correction there). An
+ * the accountant approves the record summary, and following any later correction there). An
  * unlinked summary has none.
  */
 async function ledgerNumbers(
@@ -433,6 +434,8 @@ export async function createDoc(type: BillingDocType, typed: Input, req: Request
         },
         req,
       );
+      // One of its own (a monthly fee) took the next number: put it in date order.
+      if (isIssueDated(type) && !input.accountingRecordId) await resequence(tx, req);
       return row!.id as string;
     });
   } catch (err) {
@@ -554,6 +557,12 @@ export async function updateDoc(
       await tx.delete(cfg.lines).where(eq(col(cfg.lines, cfg.fk), id));
       await writeLines(tx, type, id, input, t.lines, values.vatRate as string);
       if (issued) await issuedToLedger(tx, cfg, await lockDoc(tx, type, id), req);
+      if (
+        isIssueDated(type) &&
+        !input.accountingRecordId &&
+        String(values[cfg.dateCol]) !== String(before[cfg.dateCol])
+      )
+        await resequence(tx, req);
       // Back to accounting; the ledger keeps the last approved amounts until they approve it.
       if (resubmit)
         await tx
@@ -757,6 +766,8 @@ async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
   if (!r || !stillOurs) return;
   // With a submitted record summary, the amount is the summary's: only the number goes.
   const keepTotal = !!(await liveSummaryId(tx, r.id));
+  // A credit note has no ledger number, so with the total kept there is nothing to clear.
+  if (!numberCol && keepTotal) return;
   await tx
     .update(accountingRecords)
     .set({
@@ -848,13 +859,14 @@ export const isIssueDated = (type: BillingDocType): type is IssueDatedType =>
 /**
  * A declaration's clearance (declare) date changed. While none of its tax invoice, DIS and
  * debit note is issued, its Monthly Ledger entry moves to the new issue date (the next
- * working day) and that day's rate; a number whose period changes (a debit note's month, an
- * INV or DIS year) is given back and the period's next one taken. Drafts follow the entry.
- * Once one document is issued, the dates and numbers stay as they are.
+ * working day) and that day's rate; a number whose period changes (a debit note's declaration
+ * month, an INV or DIS year) is given back and the period's next one taken. Drafts follow the
+ * entry. Once one document is issued, the dates and numbers stay as they are.
  */
 export async function applyClearanceDate(
   tx: Tx,
   declarationId: string,
+  oldDeclareDate: string,
   req: Request,
 ): Promise<void> {
   const [rec] = await queryRows<{
@@ -883,16 +895,22 @@ export async function applyClearanceDate(
   );
   if (issued) return;
   const date = await issueDateFor(tx, rec.declareDate);
-  if (date === rec.invDate) return;
-  const reason = `Declaration date changed to ${rec.declareDate}`;
-  const rate = await rateOn(tx, date);
-  const vatRate = await vatRateOn(tx, date);
+  const before = { invDate: rec.invDate, declareDate: oldDeclareDate };
+  const after = { invDate: date, declareDate: rec.declareDate };
   await lockNumbering(tx);
   // Numbers whose period changes come off the entry, then the new period's are taken.
   const moved = ISSUE_DATED.map((type) => KIND[type]).filter((kind) => {
     const n = rec[LEDGER_FIELD[kind]];
-    return !!n && periodOf(kind, rec.invDate, rec.code).key !== periodOf(kind, date, rec.code).key;
+    return (
+      !!n &&
+      periodOf(kind, periodDate(kind, before), rec.code).key !==
+        periodOf(kind, periodDate(kind, after), rec.code).key
+    );
   });
+  if (date === rec.invDate && !moved.length) return;
+  const reason = `Declaration date changed to ${rec.declareDate}`;
+  const rate = await rateOn(tx, date);
+  const vatRate = await vatRateOn(tx, date);
   await tx
     .update(accountingRecords)
     .set({
@@ -970,7 +988,7 @@ export async function applyClearanceDate(
         tx,
         kind,
         old,
-        rec.invDate,
+        periodDate(kind, before),
         rec.code,
         rec.declareNo,
         req.auth?.userId ?? null,
@@ -1049,6 +1067,16 @@ export async function correctIssuedDoc(
               eq(accountingRecords[ledgerCol], oldNumber),
             ),
           );
+      // A corrected date within the same year: the shipment's Monthly Ledger INV date follows
+      // (it orders the numbers), and the runs are put back in date order. A typed number is
+      // left as typed. (A move to another year would change the number's run: not done here.)
+      const sameYear = date !== oldDate && date.slice(0, 4) === oldDate.slice(0, 4);
+      if (sameYear && doc.accountingRecordId)
+        await tx
+          .update(accountingRecords)
+          .set({ invDate: date, updatedById: req.auth!.userId })
+          .where(eq(accountingRecords.id, doc.accountingRecordId as string));
+      if (sameYear && number === oldNumber) await resequence(tx, req);
       await audit(
         tx,
         {
@@ -1340,6 +1368,7 @@ export async function releaseInvoiceSet(
     await lockNumbering(tx);
     const [rec] = await queryRows<{
       declareNo: string;
+      declareDate: string;
       invDate: string;
       code: string;
       invNo: string | null;
@@ -1347,7 +1376,8 @@ export async function releaseInvoiceSet(
       dnNo: string | null;
     }>(
       tx,
-      sql`SELECT d.declare_no AS "declareNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
+      sql`SELECT d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+                 to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
                  a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
           FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
           JOIN clients c ON c.id = a.client_id
@@ -1393,7 +1423,22 @@ export async function releaseInvoiceSet(
       })
       .where(eq(accountingRecords.id, recordId));
     await recompute(tx, recordId);
-    // Not invoiced again: it waits for accounting to check its Chea payment once more.
+    // Not invoiced again: it waits for accounting to approve its record summary (or check its
+    // Chea payment) once more.
+    await tx
+      .update(recordSummaries)
+      .set({
+        reviewStatus: 'UNCHECKED',
+        reviewedBy: req.auth?.userId ?? null,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(recordSummaries.accountingRecordId, recordId),
+          eq(recordSummaries.status, 'ISSUED'),
+          eq(recordSummaries.reviewStatus, 'CHECKED'),
+        ),
+      );
     await tx
       .update(creditNotes)
       .set({
@@ -1418,7 +1463,7 @@ export async function releaseInvoiceSet(
             tx,
             kind,
             number,
-            rec.invDate,
+            periodDate(kind, rec),
             rec.code,
             rec.declareNo,
             req.auth?.userId ?? null,
@@ -1692,14 +1737,15 @@ export async function listRecordSummaryReview(p: {
  * - REVISED: back to Operations as an editable draft with the note saying what to change; its
  *   amounts leave the ledger until it is submitted and checked again.
  * - UNCHECKED: back to waiting; its amounts leave the ledger.
+ * Returns the shipments numbered by this approval (none unless it was checked).
  */
 export async function setRecordSummaryReview(
   id: string,
   reviewStatus: CreditNoteReviewStatus,
   message: string | undefined,
   req: Request,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<AssignedNumbers[]> {
+  return db.transaction(async (tx) => {
     const doc = await lockDoc(tx, 'record-summaries', id);
     if (doc.status !== 'ISSUED')
       throw businessRule(
@@ -1708,7 +1754,7 @@ export async function setRecordSummaryReview(
           : 'Only a submitted record summary can be checked',
       );
     // Opened by accounting: only a summary nobody has looked at yet; nothing else changes.
-    if (reviewStatus === 'REVIEWED' && doc.reviewStatus !== 'UNCHECKED') return;
+    if (reviewStatus === 'REVIEWED' && doc.reviewStatus !== 'UNCHECKED') return [];
     let recordId = doc.accountingRecordId as string | null;
     // Started from the shipping plan before the shipment was in the Monthly Ledger: approving
     // it puts the declaration there (as a checked credit note does), and the summary joins it.
@@ -1728,9 +1774,13 @@ export async function setRecordSummaryReview(
         ...(reviewStatus === 'REVISED' ? { status: 'DRAFT', reviewNote: message ?? null } : {}),
       })
       .where(eq(recordSummaries.id, id));
+    let numbered: AssignedNumbers[] = [];
     if (recordId) {
-      if (reviewStatus === 'CHECKED') await summaryToLedger(tx, id, recordId, req);
-      else if (doc.reviewStatus === 'CHECKED' || doc.reviewStatus === 'REVISION_REQUESTED')
+      if (reviewStatus === 'CHECKED') {
+        await summaryToLedger(tx, id, recordId, req);
+        // Approved: the shipment (and any other still waiting) gets its INV / DIS / DN numbers.
+        numbered = await numberEligible(tx, req);
+      } else if (doc.reviewStatus === 'CHECKED' || doc.reviewStatus === 'REVISION_REQUESTED')
         await summaryOutOfLedger(tx, recordId);
     }
     // Revised: Operations hear about it in their Record Summary inbox. An approval needs no
@@ -1756,6 +1806,7 @@ export async function setRecordSummaryReview(
       },
       req,
     );
+    return numbered;
   });
 }
 

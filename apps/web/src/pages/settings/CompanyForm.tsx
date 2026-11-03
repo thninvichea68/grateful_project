@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { companyBanks, companySchema, type CompanyInput } from '@gs/shared';
 import { useApiMutation } from '../../features/admin';
 import { ErrorBanner, FieldError } from '../../components/ui';
@@ -14,7 +14,7 @@ import s from './CompanyForm.module.css';
  * Settings → Company: the details printed on tax invoices, disbursements and other documents,
  * in three sections (identity, address, bank), each labelled on the left with its fields on
  * the right. It opens read-only; the pencil (top right) unlocks it and shows the Save bar.
- * The bank section holds any number of accounts, printed in this order on invoices.
+ * The bank section holds any number of accounts; the one marked "On invoices" is printed.
  */
 export function CompanyForm({
   initial,
@@ -34,6 +34,7 @@ export function CompanyForm({
     register,
     handleSubmit,
     reset,
+    setValue,
     control,
     formState: { errors, isDirty },
   } = useForm<CompanyInput>({
@@ -43,7 +44,7 @@ export function CompanyForm({
   });
   const banks = useFieldArray({ control, name: 'banks' });
   const [editing, setEditing] = useState(false);
-  // The bank list opens on its first account; the toggle (top right) shows the rest.
+  // The bank list opens on the invoice account; the toggle (top right) shows the rest.
   const [allBanks, setAllBanks] = useState(false);
   const cancel = () => {
     reset();
@@ -51,10 +52,20 @@ export function CompanyForm({
   };
   const locked = !manage || !editing;
   const lockClass = `${s.fieldset}${editing ? '' : ` ${s.viewing}`}`;
+  // Only one account is printed on invoices: the one marked, else the first.
+  const watched = useWatch({ control, name: 'banks' }) ?? [];
+  const onInvoice = Math.max(0, watched.findIndex((b) => b?.onInvoice));
+  const chooseInvoiceBank = (i: number) =>
+    banks.fields.forEach((_, j) =>
+      setValue(`banks.${j}.onInvoice`, j === i, { shouldDirty: true }),
+    );
   // A mistake in a folded-away account opens the list, so it can be seen.
-  const hiddenError = Array.isArray(errors.banks) && errors.banks.slice(1).some(Boolean);
+  const hiddenError =
+    Array.isArray(errors.banks) && errors.banks.some((e, i) => e && i !== onInvoice);
   const showAll = allBanks || hiddenError;
-  const shown = showAll ? banks.fields : banks.fields.slice(0, 1);
+  const shown = banks.fields
+    .map((f, i) => ({ f, i }))
+    .filter(({ i }) => showAll || i === onInvoice);
 
   const field = (
     name: Exclude<keyof CompanyInput, 'banks'>,
@@ -183,19 +194,27 @@ export function CompanyForm({
         {section(
             'bank',
             'Bank details',
-            'Where clients pay; every account is printed, in this order, in the payment section of invoices.',
+            'Where clients pay; only the account marked “On invoices” is printed in the payment section of invoices.',
             <>
               {banks.fields.length === 0 && (
                 <p className={s.empty}>No bank accounts yet.</p>
               )}
-              {shown.map((b, i) => (
+              {shown.map(({ f: b, i }, row) => (
                 <div key={b.id}>
                   <div className={s.bankHead}>
                     <span className={s.bankNo}>Account {i + 1}</span>
-                    {i === 0 && banks.fields.length > 1 && (
-                      <span className={s.bankTag}>Printed first</span>
+                    {i === onInvoice && <span className={s.bankTag}>On invoices</span>}
+                    {i !== onInvoice && editing && (
+                      <button
+                        type="button"
+                        className={s.bankUse}
+                        onClick={() => chooseInvoiceBank(i)}
+                        title="Print this account on invoices instead"
+                      >
+                        Use on invoices
+                      </button>
                     )}
-                    {i === 0 && banks.fields.length > 1 && (
+                    {row === 0 && banks.fields.length > 1 && (
                       <button
                         type="button"
                         className={s.bankToggle}

@@ -135,24 +135,34 @@
   line-height: 1.55;
   margin-bottom: 10px;
 }
+/* Each side keeps to its column: a one-line customer name shrinks, never pushes the right
+   side (Invoice No, date…) off the sheet. */
+.meta > * {
+  min-width: 0;
+}
 .metaRight {
   text-align: right;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
 }
+/* One header line that never wraps: InvoicePrint's FitLine lowers --fit until it fits. */
+.fitLine {
+  white-space: nowrap;
+  /* Not clipped: the Muol marks above a Khmer name rise past the line box. */
+}
 .lblMuol {
   font-family: var(--km-title);
-  font-size: 8.8pt;
+  font-size: calc(8.8pt * var(--fit, 1));
   font-weight: 500;
 }
 .custLbl {
   font-weight: 600;
-  font-size: 10pt;
+  font-size: calc(10pt * var(--fit, 1));
 }
 .custKm {
   font-family: var(--km-title);
-  font-size: 10pt;
+  font-size: calc(10pt * var(--fit, 1));
   font-weight: 500;
   margin-left: 4px;
 }
@@ -164,11 +174,11 @@
 }
 .metaLbl {
   font-weight: 500;
-  font-size: 10pt;
+  font-size: calc(10pt * var(--fit, 1));
 }
 .metaVal {
   font-weight: 500;
-  font-size: 10pt;
+  font-size: calc(10pt * var(--fit, 1));
   word-break: break-word;
 }
 .ship {

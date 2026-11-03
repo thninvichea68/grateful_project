@@ -6,6 +6,7 @@ import {
   useController,
   useFormContext,
   useWatch,
+  type Control,
   type FieldErrors,
 } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -13,7 +14,9 @@ import { BackLink, backRow } from '../../components/BackLink';
 import {
   CLEARANCE_STATUS_LABEL,
   clearanceStatusOf,
+  COMPLETION_MILESTONE_LABEL,
   CONTAINER_SIZES,
+  DEFAULT_COMPLETION,
   INCOTERM_LABEL,
   INCOTERMS,
   shipmentStatusOf,
@@ -136,17 +139,9 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const [direction, transportMode, loadType, clientId, atd, arriveFty, decls] = useWatch({
+  const [direction, transportMode, loadType, clientId, decls] = useWatch({
     control,
-    name: [
-      'direction',
-      'transportMode',
-      'loadType',
-      'clientId',
-      'atd',
-      'arriveFty',
-      'declarations',
-    ],
+    name: ['direction', 'transportMode', 'loadType', 'clientId', 'declarations'],
   });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
@@ -298,7 +293,7 @@ function ShipmentForm({
   };
 
   // Worked out from the dates and declarations as they are typed (the server does the same).
-  const shipStatus = shipmentStatusOf({ direction, atd, arriveFty, declarations: decls });
+  const shipStatus = useLiveShipmentStatus(control, lookups).status;
   const clearStatus = clearanceStatusOf({ declarations: decls });
   const clientName =
     lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
@@ -998,15 +993,37 @@ function StatusTile({
   );
 }
 
+/** The status under the chosen client's completion rule, as the form is filled in. */
+function useLiveShipmentStatus(control: Control<FormValues>, lookups: LookupsResponse) {
+  const [clientId, direction, atd, ata, arriveFty, doDate, receivedDocumentDate, declarations] =
+    useWatch({
+      control,
+      name: [
+        'clientId',
+        'direction',
+        'atd',
+        'ata',
+        'arriveFty',
+        'doDate',
+        'receivedDocumentDate',
+        'declarations',
+      ],
+    });
+  const client = lookups.clients.find((c) => c.id === clientId);
+  const custom = direction === 'IMPORT' ? client?.importCompleteOn : client?.exportCompleteOn;
+  const rule = custom?.length ? custom : DEFAULT_COMPLETION[direction];
+  const status = shipmentStatusOf(
+    { direction, atd, ata, arriveFty, doDate, receivedDocumentDate, declarations },
+    rule,
+  );
+  return { status, rule };
+}
+
 /** The shipment status is not chosen: it is shown as it follows from the shipment's data. */
-function ShipmentStatusField() {
+function ShipmentStatusField({ lookups }: { lookups: LookupsResponse }) {
   const { control } = useFormContext<FormValues>();
-  const [direction, atd, arriveFty, declarations] = useWatch({
-    control,
-    name: ['direction', 'atd', 'arriveFty', 'declarations'],
-  });
-  const status = shipmentStatusOf({ direction, atd, arriveFty, declarations });
-  const done = direction === 'IMPORT' ? 'ETA Factory' : 'ATD';
+  const { status, rule } = useLiveShipmentStatus(control, lookups);
+  const done = rule.map((m) => COMPLETION_MILESTONE_LABEL[m]).join(' and ');
   return (
     <StatusTile
       icon="activity"
@@ -1014,8 +1031,8 @@ function ShipmentStatusField() {
       tone={TONE[status]!}
       value={SHIPMENT_STATUS_LABEL[status]}
     >
-      Completed once {done} is filled in, In Progress once a declaration is recorded, otherwise
-      Pending.
+      Completed once {done} {rule.length > 1 ? 'are' : 'is'} in, In Progress once a declaration is
+      recorded, otherwise Pending.
     </StatusTile>
   );
 }
@@ -1277,7 +1294,7 @@ function buildSteps(
 
   const statusCard = (
     <Card title="Shipment Status" icon="activity" cols={2}>
-      <ShipmentStatusField />
+      <ShipmentStatusField lookups={lookups} />
       <ClearanceStatusField />
     </Card>
   );

@@ -394,7 +394,12 @@ export interface CompanyInfo {
   bankName?: string;
   bankAccountName?: string;
   bankAccountNo?: string;
-  banks?: { bankName?: string | null; accountName?: string | null; accountNo?: string | null }[];
+  banks?: {
+    bankName?: string | null;
+    accountName?: string | null;
+    accountNo?: string | null;
+    onInvoice?: boolean | null;
+  }[];
 }
 export function useCompany() {
   return useQuery({

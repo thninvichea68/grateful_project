@@ -1,6 +1,10 @@
 import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import {
   hasPermission,
+  shipmentStatusOf,
+  type ClientStatusRule,
+  type ClientStatusRuleParsed,
+  type CompletionMilestone,
   type Incoterm,
   type OverImportViolation,
   type Paginated,
@@ -36,6 +40,7 @@ import {
 } from '../../lib/listing';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { applyClearanceDate } from '../accounting/docs';
+import { recomputeShipmentStatuses } from '../../db/shipmentStatus';
 import { clearanceDate, periodDate, shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
 
 /* ============================== List ============================== */
@@ -336,7 +341,7 @@ const milli = (v: string | null | undefined) => Math.round(Number(v ?? 0) * 1000
 const fromMilli = (m: number) => (m / 1000).toFixed(3).replace(/\.?0+$/, '') || '0';
 
 /** Check referenced rows exist and belong together (client consignee, active client, …). */
-async function assertReferences(tx: Tx, input: ShipmentInputParsed, isNew: boolean): Promise<void> {
+async function assertReferences(tx: Tx, input: ShipmentInputParsed, isNew: boolean) {
   const [client] = await tx
     .select()
     .from(clients)
@@ -371,7 +376,21 @@ async function assertReferences(tx: Tx, input: ShipmentInputParsed, isNew: boole
     if (found.length !== new Set(portIds).size)
       throw businessRule('A selected port does not exist');
   }
+  return client;
 }
+
+/** The shipment's status under its client's completion rule (the input's uses the default). */
+const statusFor = (
+  client: {
+    importCompleteOn: CompletionMilestone[] | null;
+    exportCompleteOn: CompletionMilestone[] | null;
+  },
+  input: ShipmentInputParsed,
+) =>
+  shipmentStatusOf(
+    input,
+    input.direction === 'IMPORT' ? client.importCompleteOn : client.exportCompleteOn,
+  );
 
 /** CDC numbers compare without case, spaces or dashes ("II-125" = "ii 125"). */
 const cdcKey = (v: string) => v.toUpperCase().replace(/[\s\-–—_]+/g, '');
@@ -556,13 +575,14 @@ export async function insertShipment(
   actor: Actor,
   req: Request,
 ): Promise<{ id: string; reference: string }> {
-  await assertReferences(tx, input, true);
+  const client = await assertReferences(tx, input, true);
   const year = (shipmentDateOf(input) ?? new Date().toISOString()).slice(0, 4);
   const n = await nextNumber(tx, `SHIPMENT:${year}`);
   const [row] = await tx
     .insert(shipments)
     .values({
       ...scalarValues(input),
+      status: statusFor(client, input),
       reference: formatNumber.shipment(year.slice(2), n),
       createdById: actor.userId,
       updatedById: actor.userId,
@@ -580,6 +600,58 @@ export async function insertShipment(
     req,
   );
   return row!;
+}
+
+/* ========================= Status rules ========================= */
+
+/** Every client's completion rules, for the Shipping Plans "Status rules" dialog. */
+export async function listStatusRules(): Promise<ClientStatusRule[]> {
+  return db
+    .select({
+      clientId: clients.id,
+      code: clients.code,
+      name: clients.name,
+      status: clients.status,
+      importCompleteOn: clients.importCompleteOn,
+      exportCompleteOn: clients.exportCompleteOn,
+    })
+    .from(clients)
+    .where(isNull(clients.deletedAt))
+    .orderBy(asc(clients.name));
+}
+
+/** Sets one client's completion rules and re-works out the status of all its shipments. */
+export async function saveStatusRule(
+  clientId: string,
+  input: ClientStatusRuleParsed,
+  req: Request,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select({
+        importCompleteOn: clients.importCompleteOn,
+        exportCompleteOn: clients.exportCompleteOn,
+      })
+      .from(clients)
+      .where(and(eq(clients.id, clientId), isNull(clients.deletedAt)))
+      .for('update');
+    if (!before) throw notFound('Client');
+    const after = input;
+    await tx.update(clients).set(after).where(eq(clients.id, clientId));
+    await recomputeShipmentStatuses(tx, clientId);
+    await audit(
+      tx,
+      {
+        action: 'UPDATE',
+        entity: 'client',
+        entityId: clientId,
+        before,
+        after,
+        reason: 'Status rules',
+      },
+      req,
+    );
+  });
 }
 
 /** The friendly message for a duplicate invoice or declaration number (for the import). */
@@ -606,7 +678,7 @@ export async function updateShipment(
         .where(and(eq(shipments.id, id), isNull(shipments.deletedAt)))
         .for('update');
       if (!before) throw notFound('Shipment');
-      await assertReferences(tx, input, false);
+      const client = await assertReferences(tx, input, false);
       if (input.clientId !== before.clientId) {
         const [{ n } = { n: 0 }] = await queryRows<{ n: number }>(
           tx,
@@ -659,7 +731,11 @@ export async function updateShipment(
 
       await tx
         .update(shipments)
-        .set({ ...scalarValues(input), updatedById: actor.userId })
+        .set({
+          ...scalarValues(input),
+          status: statusFor(client, input),
+          updatedById: actor.userId,
+        })
         .where(eq(shipments.id, id));
       await writeChildren(
         tx,
@@ -671,7 +747,8 @@ export async function updateShipment(
       // A changed declaration (clearance) date re-dates its ledger entry and draft documents.
       for (const d of input.declarations) {
         const old = oldDecls.find((o) => o.id === d.id);
-        if (old && old.declareDate !== d.declareDate) await applyClearanceDate(tx, old.id, req);
+        if (old && old.declareDate !== d.declareDate)
+          await applyClearanceDate(tx, old.id, old.declareDate, req);
       }
       await audit(
         tx,

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   CLEARANCE_STATUS_LABEL,
   SHIPMENT_STATUS_LABEL,
+  clientStatusRuleInputSchema,
   freightMethodLabel,
   shipmentInputSchema,
   shipmentListQuerySchema,
@@ -269,6 +270,24 @@ shipmentsRouter.get(
     );
     res.setHeader('Content-Disposition', attachmentName(fileName));
     res.send(buffer);
+  },
+);
+
+/** Each client's "Completed when…" rules (the Shipping Plans ⋯ → Status rules dialog). */
+shipmentsRouter.get('/status-rules', requirePermission('shipments:read'), async (req, res) => {
+  const allowed = allowedClients(req, 'shipments');
+  const rules = await svc.listStatusRules();
+  res.json(allowed ? rules.filter((r) => allowed.includes(r.clientId)) : rules);
+});
+
+shipmentsRouter.put(
+  '/status-rules/:clientId',
+  requirePermission('clients:write'),
+  async (req, res) => {
+    const { clientId } = parse(z.object({ clientId: z.string().uuid() }), req.params);
+    assertClientAllowed(req, clientId, 'shipments');
+    await svc.saveStatusRule(clientId, parse(clientStatusRuleInputSchema, req.body), req);
+    res.status(204).end();
   },
 );
 

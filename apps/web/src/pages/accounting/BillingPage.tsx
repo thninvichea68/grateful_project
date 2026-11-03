@@ -32,7 +32,7 @@ export function BillingPage() {
             onChange={(m) => setParams({ month: m }, { replace: true })}
           />
           <span className={b.barHint}>
-            A shipment counts in the month of its Monthly Ledger invoice date.
+            A shipment counts in the month of its declaration date.
           </span>
           <BillingSections className={b.sectionsEnd} />
         </div>

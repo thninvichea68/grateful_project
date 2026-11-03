@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import {
   CLEARANCE_STATUSES,
+  COMPLETION_MILESTONES,
   CONTAINER_SIZES,
+  DEFAULT_COMPLETION,
   DIRECTIONS,
   INCOTERMS,
   LOAD_TYPES,
   SHIPMENT_STATUSES,
   TRANSPORT_MODES,
   type ClearanceStatus,
+  type ClientStatus,
+  type CompletionMilestone,
   type ContainerSize,
   type Incoterm,
   type Direction,
@@ -157,22 +161,65 @@ const declarationRows = z.preprocess(
   // zod 3 types a preprocess input as `unknown`; keep the array's own input type for forms.
 ) as unknown as typeof declarationArray;
 
+type StatusFacts = {
+  direction: Direction;
+  atd?: string | null | undefined;
+  ata?: string | null | undefined;
+  arriveFty?: string | null | undefined;
+  doDate?: string | null | undefined;
+  receivedDocumentDate?: string | null | undefined;
+  declarations?:
+    | { declareNo?: string | null | undefined; declareDate?: string | null | undefined }[]
+    | undefined;
+};
+
+const milestoneMet: Record<CompletionMilestone, (s: StatusFacts) => boolean> = {
+  ATD: (s) => !!s.atd,
+  ATA: (s) => !!s.ata,
+  ARRIVE_FTY: (s) => !!s.arriveFty,
+  DO_DATE: (s) => !!s.doDate,
+  DOCS_RECEIVED: (s) => !!s.receivedDocumentDate,
+  CLEARED: (s) => clearanceStatusOf(s) === 'CLEARED',
+};
+
 /**
  * A shipment's status, worked out from its data:
- * Completed — an import has its ETA Factory date, an export its ATD;
+ * Completed — every milestone of the client's rule is in (by default an import's ETA Factory
+ * date, an export's ATD);
  * In Progress — not completed, but a customs declaration is recorded;
  * Pending — otherwise.
  */
-export function shipmentStatusOf(s: {
-  direction: Direction;
-  atd?: string | null | undefined;
-  arriveFty?: string | null | undefined;
-  declarations?: { declareNo?: string | null | undefined }[] | undefined;
-}): ShipmentStatus {
-  if (s.direction === 'IMPORT' ? s.arriveFty : s.atd) return 'COMPLETED';
+export function shipmentStatusOf(
+  s: StatusFacts,
+  rule: readonly CompletionMilestone[] | null | undefined = null,
+): ShipmentStatus {
+  const need = rule?.length ? rule : DEFAULT_COMPLETION[s.direction];
+  if (need.every((m) => milestoneMet[m](s))) return 'COMPLETED';
   if (s.declarations?.some((d) => d.declareNo?.trim())) return 'IN_PROGRESS';
   return 'PENDING';
 }
+
+/** A client's completion rules; null = DEFAULT_COMPLETION for that direction. */
+export interface ClientStatusRule {
+  clientId: string;
+  code: string;
+  name: string;
+  status: ClientStatus;
+  importCompleteOn: CompletionMilestone[] | null;
+  exportCompleteOn: CompletionMilestone[] | null;
+}
+
+const ruleField = z
+  .array(z.enum(COMPLETION_MILESTONES))
+  .max(COMPLETION_MILESTONES.length)
+  .nullable()
+  .transform((v) => (v?.length ? [...new Set(v)] : null));
+export const clientStatusRuleInputSchema = z.object({
+  importCompleteOn: ruleField,
+  exportCompleteOn: ruleField,
+});
+export type ClientStatusRuleInput = z.input<typeof clientStatusRuleInputSchema>;
+export type ClientStatusRuleParsed = z.output<typeof clientStatusRuleInputSchema>;
 
 /**
  * A shipment's clearance status, worked out from its declarations:

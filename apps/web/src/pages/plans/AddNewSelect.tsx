@@ -22,6 +22,8 @@ export function AddNewSelect({
   onCreate,
   placeholder,
   addFirst = false,
+  disabled,
+  invalid,
 }: {
   id: string;
   label: string;
@@ -32,6 +34,8 @@ export function AddNewSelect({
   onCreate?: ((name: string) => Promise<string>) | undefined;
   placeholder: string;
   addFirst?: boolean;
+  disabled?: boolean;
+  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -70,6 +74,7 @@ export function AddNewSelect({
   }, [options, query, onCreate, addFirst]);
 
   const show = (initial = '') => {
+    if (disabled) return;
     const r = trigger.current?.getBoundingClientRect();
     setUp(!!r && window.innerHeight - r.bottom < 340 && r.top > 340);
     setQuery(initial);
@@ -145,6 +150,8 @@ export function AddNewSelect({
         className={`form-select-box ${cs.trigger}`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-invalid={invalid || undefined}
+        disabled={disabled}
         onClick={() => (open ? close() : show())}
         onBlur={() => !open && onBlur?.()}
         onKeyDown={(e) => {
@@ -218,7 +225,11 @@ export function AddNewSelect({
                 <span className={s.label}>{o.value === ADD ? addText : o.label}</span>
               </li>
             ))}
-            {rows.length === 0 && <li className={cs.none}>No {label.toLowerCase()} matches “{query}”</li>}
+            {rows.length === 0 && (
+              <li className={cs.none}>
+                No {label.toLowerCase()} matches “{query}”
+              </li>
+            )}
           </ul>
         </div>
       )}

@@ -48,6 +48,7 @@ import { DOC_STATUS_PILL } from './DocsListPage';
 import { REVIEW, REVIEW_PILL, checkIcon } from './CreditNotesReview';
 import { SummaryReviseModal } from './ExpenseToClients';
 import { DotsMenu, type MenuAction } from '../plans/CargoSection';
+import { AddNewSelect } from '../plans/AddNewSelect';
 import { fi } from '../plans/formIcons';
 import { SupportDocumentsModal } from '../plans/SupportDocuments';
 import s from '../creditnoted/CreditNotedEditor.module.css';
@@ -493,6 +494,17 @@ function RecordSummaryEditor({
       {name && <FieldError message={err(name)} />}
     </label>
   );
+  // A searchable dropdown is a button with a pop-up: kept out of a <label>, where every click
+  // inside (the list's scrollbar, its padding) would also press the button and close it.
+  const pickItem = (id: string, label: string, control: ReactNode, name?: string) => (
+    <div className={r.item}>
+      <span>
+        <label htmlFor={id}>{label}</label>
+      </span>
+      {control}
+      {name && <FieldError message={err(name)} />}
+    </div>
+  );
   const text = (name: string, label: string, opts: { type?: string } = {}) =>
     item(
       label,
@@ -727,46 +739,63 @@ function RecordSummaryEditor({
                 {ledgerNo('dnNo', 'Debit note no')}
               </div>
               <div className={r.grid2}>
-                {item(
+                {pickItem(
+                  'rs-client',
                   'Factory / client',
-                  <select
-                    className="form-select-box"
-                    {...register('clientId')}
+                  <AddNewSelect
+                    id="rs-client"
+                    label="Factory"
+                    placeholder="-- Select factory --"
+                    options={(lookups.data?.clients ?? []).map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                    }))}
+                    value={values.clientId as string | undefined}
+                    onChange={(v) =>
+                      setValue('clientId', v, { shouldDirty: true, shouldValidate: true })
+                    }
                     disabled={(!!defaults.accountingRecordId || !!prefill) && !!defaults.clientId}
-                    aria-invalid={!!err('clientId')}
-                  >
-                    <option value="">-- Select factory --</option>
-                    {lookups.data?.clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>,
+                    invalid={!!err('clientId')}
+                  />,
                   'clientId',
                 )}
-                {item(
+                {pickItem(
+                  'rs-forwarder',
                   'Forwarder',
-                  <select className="form-select-box" {...register('forwarderId')}>
-                    <option value="">—</option>
-                    {lookups.data?.forwarders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>,
+                  <AddNewSelect
+                    id="rs-forwarder"
+                    label="Forwarder"
+                    placeholder="—"
+                    options={[
+                      { value: '', label: '—' },
+                      ...(lookups.data?.forwarders ?? []).map((f) => ({
+                        value: f.id,
+                        label: f.name,
+                      })),
+                    ]}
+                    value={values.forwarderId as string | undefined}
+                    onChange={(v) => setValue('forwarderId', v, { shouldDirty: true })}
+                  />,
                 )}
               </div>
               <div className={r.grid3}>
-                {item(
+                {pickItem(
+                  'rs-port',
                   'Port',
-                  <select className="form-select-box" {...register('portId')}>
-                    <option value="">—</option>
-                    {lookups.data?.ports.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code} · {p.name}
-                      </option>
-                    ))}
-                  </select>,
+                  <AddNewSelect
+                    id="rs-port"
+                    label="Port"
+                    placeholder="—"
+                    options={[
+                      { value: '', label: '—' },
+                      ...(lookups.data?.ports ?? []).map((p) => ({
+                        value: p.id,
+                        label: `${p.code} · ${p.name}`,
+                      })),
+                    ]}
+                    value={values.portId as string | undefined}
+                    onChange={(v) => setValue('portId', v, { shouldDirty: true })}
+                  />,
                 )}
                 {(() => {
                   const reg = register('declareNo');

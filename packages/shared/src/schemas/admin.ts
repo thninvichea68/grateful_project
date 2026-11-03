@@ -292,6 +292,8 @@ export const companyBankSchema = z.object({
   bankName: z.string().trim().min(1, 'Enter the bank').max(120),
   accountName: optText(200),
   accountNo: z.string().trim().min(1, 'Enter the account number').max(60),
+  /** The one account printed on invoices (at most one is set; none means the first). */
+  onInvoice: z.boolean().optional(),
 });
 
 export const companySchema = z.object({
@@ -301,7 +303,7 @@ export const companySchema = z.object({
   addressEn: optText(400),
   addressKm: optText(400),
   phone: optText(60),
-  /** Legacy single account, kept in step with banks[0] for older readers. */
+  /** Legacy single account, kept in step with the invoice account for older readers. */
   bankName: optText(120),
   bankAccountName: optText(200),
   bankAccountNo: optText(60),
@@ -315,12 +317,12 @@ export type CompanyInput = z.input<typeof companySchema>;
  * saved before the list existed.
  */
 export function companyBanks(c: {
-  banks?: { bankName?: string | null; accountName?: string | null; accountNo?: string | null }[];
+  banks?: CompanyBankLike[];
   bankName?: string | null;
   bankAccountName?: string | null;
   bankAccountNo?: string | null;
-}): { bankName: string; accountName: string; accountNo: string }[] {
-  const list = c.banks?.length
+}): { bankName: string; accountName: string; accountNo: string; onInvoice: boolean }[] {
+  const list: CompanyBankLike[] = c.banks?.length
     ? c.banks
     : [{ bankName: c.bankName, accountName: c.bankAccountName, accountNo: c.bankAccountNo }];
   return list
@@ -328,8 +330,21 @@ export function companyBanks(c: {
       bankName: b.bankName ?? '',
       accountName: b.accountName ?? '',
       accountNo: b.accountNo ?? '',
+      onInvoice: !!b.onInvoice,
     }))
     .filter((b) => b.bankName || b.accountName || b.accountNo);
+}
+type CompanyBankLike = {
+  bankName?: string | null;
+  accountName?: string | null;
+  accountNo?: string | null;
+  onInvoice?: boolean | null;
+};
+
+/** The one account printed on invoices: the one chosen in Settings → Company, else the first. */
+export function invoiceBank(c: Parameters<typeof companyBanks>[0]) {
+  const banks = companyBanks(c);
+  return banks.find((b) => b.onInvoice) ?? banks[0];
 }
 
 export const exchangeRateInputSchema = z.object({

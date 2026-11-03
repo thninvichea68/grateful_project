@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ClientStatus, LookupType, PortKind } from '../enums';
+import type { ClientStatus, CompletionMilestone, LookupType, PortKind } from '../enums';
 import { optText } from './fields';
 
 export interface LookupsResponse {
@@ -10,6 +10,9 @@ export interface LookupsResponse {
     legalName: string | null;
     status: ClientStatus;
     commissionUsd: string;
+    /** The client's completion rules (null = the default for that direction). */
+    importCompleteOn: CompletionMilestone[] | null;
+    exportCompleteOn: CompletionMilestone[] | null;
   }[];
   consignees: { id: string; name: string; clientId: string | null; countryIso2: string | null }[];
   forwarders: { id: string; code: string; name: string }[];

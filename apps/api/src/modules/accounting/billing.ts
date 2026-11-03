@@ -36,11 +36,12 @@ import { isoTs, likePattern, paginate, queryRows, toPaginated, whereAll } from '
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { parse } from '../../lib/validate';
 import { createDoc, getDoc, issueDoc, previewDoc } from './docs';
+import { LEDGER_DATE } from './ledgerDate';
 import { prefill, previousLines, summaryLines } from './prefill';
 
 /*
  * Client Billing: one client's month, the way the Excel pack (e.g. "09-JR-INV") had it.
- * A shipment belongs to the month of its Monthly Ledger invoice date; a document with no
+ * A shipment belongs to its Monthly Ledger month (its declaration date); a document with no
  * ledger entry (a monthly service-fee debit note) to the month of its own date. The account
  * statements are read from the issued documents — and from numbers typed in the ledger for
  * documents made outside the system — so they always match; only receipts are stored.
@@ -125,7 +126,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
            EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id AND cn.status <> 'VOID') AS "fromChea"
     FROM accounting_records a
     JOIN customs_declarations d ON d.id = a.declaration_id JOIN shipments s ON s.id = d.shipment_id
-    WHERE a.client_id = ${clientId} AND ${inMonth(sql`a.inv_date`, month)}
+    WHERE a.client_id = ${clientId} AND ${inMonth(LEDGER_DATE, month)}
     ORDER BY a.inv_date, d.declare_no`,
   );
   const linked = ledger.length
@@ -371,7 +372,7 @@ export async function overview(month: string, clientIds?: string[]): Promise<Bil
     sql`
     SELECT c.id FROM clients c WHERE c.deleted_at IS NULL AND c.id IN (
       SELECT x.client_id FROM (
-        SELECT client_id FROM accounting_records WHERE ${inMonth(sql`inv_date`, month)}
+        SELECT client_id FROM accounting_records a WHERE ${inMonth(LEDGER_DATE, month)}
         UNION ${loose('tax_invoices', 'invoice_date')}
         UNION ${loose('disbursements', 'dis_date')}
         UNION ${loose('debit_notes', 'dn_date')}

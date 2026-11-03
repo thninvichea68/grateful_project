@@ -1,0 +1,129 @@
+/* Shipping Plans → ⋯ → Status rules dialog. */
+.tableWrap {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  background: var(--bg-surface-elevated);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-tertiary);
+}
+.table td {
+  padding: 9px 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+.inactive td {
+  opacity: 0.55;
+}
+.code {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+.name {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.pill,
+.pillOn {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill {
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.pillOn {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+  border: 1px solid transparent;
+}
+.default {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.editRow td {
+  background: var(--bg-surface-elevated);
+}
+.choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.choice input {
+  accent-color: var(--accent-primary);
+}
+.reset {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-main);
+  font-size: 11.5px;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.reset:hover {
+  text-decoration: underline;
+}
+
+.actionCell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.editActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}

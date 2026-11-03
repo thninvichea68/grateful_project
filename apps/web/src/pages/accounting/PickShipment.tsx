@@ -6,6 +6,7 @@ import { useEligible } from '../../features/accounting';
 import { useLookups } from '../../features/hooks';
 import { ErrorBanner, ui } from '../../components/ui';
 import { fmtDate } from '../../lib/format';
+import { AddNewSelect } from '../plans/AddNewSelect';
 import { DOC_CONFIG } from './docConfig';
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -18,7 +19,7 @@ const monthEnd = (m: string) => {
 
 /**
  * A new tax invoice, DIS or debit note starts from a shipment: choose the client, the month
- * and the Declare No. Only approved shipments (Chea payment checked, so they have their
+ * and the Declare No. Only approved shipments (record summary approved, so they have their
  * number) without that document yet are listed; everything else fills in from the shipment.
  */
 export function PickShipment({ type }: { type: 'tax-invoices' | 'disbursements' | 'debit-notes' }) {
@@ -101,30 +102,30 @@ export function PickShipment({ type }: { type: 'tax-invoices' | 'disbursements' 
             </div>
             <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
               <label htmlFor="pk-declare">Declare No.</label>
-              <select
+              <AddNewSelect
                 id="pk-declare"
-                className="form-select-box"
-                value=""
-                onChange={(e) => e.target.value && go({ recordId: e.target.value })}
-              >
-                <option value="">
-                  {list.isLoading
+                label="Declare no."
+                placeholder={
+                  list.isLoading
                     ? 'Loading…'
                     : rows.length
                       ? `Choose… (${rows.length} ready)`
-                      : 'No approved shipment is waiting for one'}
-                </option>
-                {rows.map((r) => (
-                  <option key={r.recordId} value={r.recordId}>
-                    {r.declareNo} · {r.clientCode} · {r.number} · {fmtDate(r.invDate)}
-                    {r.hbl && r.hbl !== 'NON' ? ` · ${r.hbl}` : ''}
-                  </option>
-                ))}
-              </select>
+                      : 'No approved shipment is waiting for one'
+                }
+                options={rows.map((r) => ({
+                  value: r.recordId,
+                  label: `${r.declareNo} · ${r.clientCode} · ${r.number} · ${fmtDate(r.invDate)}${
+                    r.hbl && r.hbl !== 'NON' ? ` · ${r.hbl}` : ''
+                  }`,
+                }))}
+                value=""
+                onChange={(id) => id && go({ recordId: id })}
+                disabled={!rows.length}
+              />
             </div>
           </div>
           <p className={ui.dialogSub} style={{ marginTop: 12 }}>
-            A shipment is listed once its Chea payment is checked and until its{' '}
+            A shipment is listed once its record summary is approved and until its{' '}
             {cfg.title.toLowerCase()} is made.
             {clientId && month && (
               <>

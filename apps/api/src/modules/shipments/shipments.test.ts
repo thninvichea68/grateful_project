@@ -537,6 +537,59 @@ describe('shipments', () => {
     expect(dup.body.error.message).toBe('Invoice no. JRA26045 is already used on another shipment');
   });
 
+  it("works the status out by the client's status rule and re-works it when the rule changes", async () => {
+    const h = await as('MANAGER');
+    // Exported with its ATD: completed under the default rule.
+    const created = (
+      await request(app)
+        .post('/api/v1/shipments')
+        .set(h)
+        .send(exportShipment({ atd: '2026-08-01' }))
+    ).body;
+    expect(created.status).toBe('COMPLETED');
+
+    const rules = await request(app).get('/api/v1/shipments/status-rules').set(h);
+    expect(rules.status).toBe(200);
+    expect(rules.body.find((r: { clientId: string }) => r.clientId === basics.jr.id)).toMatchObject(
+      { importCompleteOn: null, exportCompleteOn: null },
+    );
+
+    // Now JR's exports also need their DO date: the saved shipment drops back to In Progress.
+    const rule = { importCompleteOn: null, exportCompleteOn: ['ATD', 'DO_DATE'] };
+    expect(
+      (await request(app).put(`/api/v1/shipments/status-rules/${basics.jr.id}`).set(h).send(rule))
+        .status,
+    ).toBe(204);
+    expect((await request(app).get(`/api/v1/shipments/${created.id}`).set(h)).body.status).toBe(
+      'IN_PROGRESS',
+    );
+    // Saving the shipment with its DO date completes it under the new rule.
+    const upd = await request(app)
+      .put(`/api/v1/shipments/${created.id}`)
+      .set(h)
+      .send(
+        exportShipment({
+          atd: '2026-08-01',
+          doDate: '2026-08-02',
+          declarations: [
+            { id: created.declarations[0].id, declareNo: 'E 41001', declareDate: '2026-07-30' },
+          ],
+        }),
+      );
+    expect(upd.body.status).toBe('COMPLETED');
+
+    const bad = await request(app)
+      .put(`/api/v1/shipments/status-rules/${basics.jr.id}`)
+      .set(h)
+      .send({ importCompleteOn: ['ETD'], exportCompleteOn: null });
+    expect(bad.status).toBe(400);
+    const viewer = await request(app)
+      .put(`/api/v1/shipments/status-rules/${basics.jr.id}`)
+      .set(await as('VIEWER'))
+      .send(rule);
+    expect(viewer.status).toBe(403);
+  });
+
   it('updates by replacing children and keeps the reference', async () => {
     const h = await as('MANAGER');
     const created = (await request(app).post('/api/v1/shipments').set(h).send(exportShipment()))

@@ -18,6 +18,7 @@ import { env } from '../../config/env';
 import { queryRows } from '../../lib/listing';
 import { periodDate } from '../../lib/shipmentDate';
 import { CHEA_JOIN, CHEA_STATUS } from '../accounting/clearFeePayments';
+import { LEDGER_DATE } from '../accounting/ledgerDate';
 
 export interface Filters {
   from?: string | undefined;
@@ -290,7 +291,7 @@ const BILLED = sql`(a.inv_revenue + a.dis_total + a.dn_total) > 0`;
 const UNBILLED = sql`(a.inv_revenue + a.dis_total + a.dn_total) <= 0`;
 
 /**
- * Each client's ledger for the period (by invoice date): every revenue and cost column,
+ * Each client's ledger for the period (by declaration date, as the Monthly Ledger): every revenue and cost column,
  * net profit, margin, share of all profit and a month-by-month trend, from billed rows
  * only (see BILLED). Ledger rows have no direction or transport mode, so only the period
  * and client filters apply.
@@ -298,7 +299,7 @@ const UNBILLED = sql`(a.inv_revenue + a.dis_total + a.dn_total) <= 0`;
 export async function clientRevenue(
   f: Filters & { from: string; to: string },
 ): Promise<ClientRevenueRow[]> {
-  const c: SQL[] = [sql`a.inv_date BETWEEN ${f.from}::date AND ${f.to}::date`];
+  const c: SQL[] = [sql`${LEDGER_DATE} BETWEEN ${f.from}::date AND ${f.to}::date`];
   if (f.clientId?.length)
     c.push(
       sql`a.client_id IN (${sql.join(
@@ -338,7 +339,7 @@ export async function clientRevenue(
   }>(
     db,
     sql`
-    SELECT a.client_id AS "clientId", to_char(a.inv_date, 'YYYY-MM') AS month,
+    SELECT a.client_id AS "clientId", to_char(${LEDGER_DATE}, 'YYYY-MM') AS month,
            sum(a.inv_revenue + a.dis_total + a.dn_total)::text AS revenue, sum(a.net_profit)::text AS "netProfit"
     FROM accounting_records a ${where} AND ${BILLED} GROUP BY 1, 2`,
   );
@@ -374,16 +375,16 @@ export async function profit(
     sql`
     WITH months AS (SELECT generate_series(make_date(${year}, 1, 1), make_date(${year}, 12, 1), interval '1 month')::date AS m)
     SELECT to_char(m, 'YYYY-MM') AS month,
-           coalesce((SELECT sum(a.net_profit) FROM accounting_records a WHERE date_trunc('month', a.inv_date) = m AND ${BILLED} ${cf}), 0)::text AS "netProfit"
+           coalesce((SELECT sum(a.net_profit) FROM accounting_records a WHERE date_trunc('month', ${LEDGER_DATE}) = m AND ${BILLED} ${cf}), 0)::text AS "netProfit"
     FROM months ORDER BY m`,
   );
   const unbilled = await queryRows<ProfitSummary['unbilled'][number]>(
     db,
     sql`
-    SELECT to_char(date_trunc('month', a.inv_date), 'YYYY-MM') AS month, count(*)::int AS entries,
+    SELECT to_char(date_trunc('month', ${LEDGER_DATE}), 'YYYY-MM') AS month, count(*)::int AS entries,
            sum(a.clear_fee + a.thc + a.commission + a.other_pay)::text AS costs
     FROM accounting_records a
-    WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${UNBILLED} ${cf}
+    WHERE ${LEDGER_DATE} BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${UNBILLED} ${cf}
     GROUP BY 1 ORDER BY 1`,
   );
   const byClient = await queryRows<{
@@ -398,16 +399,16 @@ export async function profit(
     SELECT c.id AS "clientId", c.code, c.name, sum(a.net_profit)::text AS "netProfit",
            round(100.0 * sum(a.net_profit) / nullif(sum(sum(a.net_profit)) OVER (), 0), 1)::float AS pct
     FROM accounting_records a JOIN clients c ON c.id = a.client_id
-    WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${BILLED} ${cf}
+    WHERE ${LEDGER_DATE} BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${BILLED} ${cf}
     GROUP BY c.id ORDER BY sum(a.net_profit) DESC`,
   );
   const byClientMonthly = await queryRows<ProfitSummary['byClientMonthly'][number]>(
     db,
     sql`
-    SELECT to_char(date_trunc('month', a.inv_date), 'YYYY-MM') AS month, c.id AS "clientId", c.code, c.name,
+    SELECT to_char(date_trunc('month', ${LEDGER_DATE}), 'YYYY-MM') AS month, c.id AS "clientId", c.code, c.name,
            sum(a.net_profit)::text AS "netProfit"
     FROM accounting_records a JOIN clients c ON c.id = a.client_id
-    WHERE a.inv_date BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${BILLED} ${cf}
+    WHERE ${LEDGER_DATE} BETWEEN make_date(${year}, 1, 1) AND make_date(${year}, 12, 31) AND ${BILLED} ${cf}
     GROUP BY 1, c.id ORDER BY 1, sum(a.net_profit) DESC`,
   );
   const thisKey = today.slice(0, 7);
@@ -420,7 +421,7 @@ export async function profit(
         db,
         sql`
         SELECT ${prevDate} AS month, coalesce(sum(a.net_profit), 0)::text AS "netProfit" FROM accounting_records a
-        WHERE to_char(a.inv_date, 'YYYY-MM') = ${prevDate} AND ${BILLED} ${cf}`,
+        WHERE to_char(${LEDGER_DATE}, 'YYYY-MM') = ${prevDate} AND ${BILLED} ${cf}`,
       );
   // January to the same day of the year before (29 Feb → 28 Feb); all of it for a past year.
   const lyEnd = today.startsWith(String(year))
@@ -430,7 +431,7 @@ export async function profit(
     db,
     sql`
     SELECT coalesce(sum(a.net_profit), 0)::text AS "netProfit" FROM accounting_records a
-    WHERE a.inv_date BETWEEN make_date(${year - 1}, 1, 1) AND ${lyEnd}::date AND ${BILLED} ${cf}`,
+    WHERE ${LEDGER_DATE} BETWEEN make_date(${year - 1}, 1, 1) AND ${lyEnd}::date AND ${BILLED} ${cf}`,
   );
   const total = monthly.reduce((s, m) => s + Math.round(Number(m.netProfit) * 100), 0) / 100;
   return {

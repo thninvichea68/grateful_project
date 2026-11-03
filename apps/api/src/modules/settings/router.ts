@@ -118,14 +118,19 @@ async function putSetting(key: string, value: unknown, req: Parameters<typeof au
 
 settingsRouter.put('/company', manage, async (req, res) => {
   const parsed = parse(companySchema, req.body);
-  // The first account is also stored in the legacy single-bank fields.
-  const first = parsed.banks?.[0];
-  const v = parsed.banks
+  // At most one account is printed on invoices; it is also stored in the legacy single-bank fields.
+  const banks = parsed.banks?.map((b, i, all) => ({
+    ...b,
+    onInvoice: i === Math.max(0, all.findIndex((x) => x.onInvoice)),
+  }));
+  const chosen = banks?.find((b) => b.onInvoice);
+  const v = banks
     ? {
         ...parsed,
-        bankName: first?.bankName ?? null,
-        bankAccountName: first?.accountName ?? null,
-        bankAccountNo: first?.accountNo ?? null,
+        banks,
+        bankName: chosen?.bankName ?? null,
+        bankAccountName: chosen?.accountName ?? null,
+        bankAccountNo: chosen?.accountNo ?? null,
       }
     : parsed;
   await putSetting('company', v, req);

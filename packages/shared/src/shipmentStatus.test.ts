@@ -9,6 +9,21 @@ describe('shipment status', () => {
     expect(shipmentStatusOf({ direction: 'EXPORT', arriveFty: '2026-09-28' })).toBe('PENDING');
   });
 
+  it("follows the client's own rule, needing every milestone in it", () => {
+    const rule = ['ATD', 'CLEARED'] as const;
+    const atd = { direction: 'EXPORT', atd: '2026-09-04' } as const;
+    expect(shipmentStatusOf(atd, rule)).toBe('PENDING');
+    expect(
+      shipmentStatusOf(
+        { ...atd, declarations: [{ declareNo: 'E 41001', declareDate: '2026-09-02' }] },
+        rule,
+      ),
+    ).toBe('COMPLETED');
+    expect(shipmentStatusOf({ direction: 'IMPORT', ata: '2026-09-20' }, ['ATA'])).toBe('COMPLETED');
+    // An empty rule falls back to the default.
+    expect(shipmentStatusOf(atd, [])).toBe('COMPLETED');
+  });
+
   it('is in progress once a declaration is recorded, else pending', () => {
     const declared = [{ declareNo: 'I 138735' }];
     expect(shipmentStatusOf({ direction: 'IMPORT', declarations: declared })).toBe('IN_PROGRESS');

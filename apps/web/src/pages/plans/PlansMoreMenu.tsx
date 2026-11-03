@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { icons } from '../../layout/icons';
 import m from '../creditnoted/PackMenu.module.css';
 
-/** A toolbar's ⋯: Export Excel (the list's filters) and Import Excel (Shipping Plans, Cut Stock). */
+/**
+ * A toolbar's ⋯: Export Excel (the list's filters), Import Excel (Shipping Plans, Cut Stock) and
+ * Status rules (Shipping Plans).
+ */
 export function PlansMoreMenu({
   exporting,
   onExport,
   onImport,
+  onStatusRules,
   exportHint = 'Shipments matching the current filters · .xlsx',
   importHint = 'Shipping plan workbook · .xlsx',
 }: {
@@ -14,6 +18,8 @@ export function PlansMoreMenu({
   onExport: () => void;
   /** Omitted when the user can't import. */
   onImport?: (() => void) | undefined;
+  /** Each client's "Completed when…" rule; omitted where it doesn't apply. */
+  onStatusRules?: (() => void) | undefined;
   exportHint?: string;
   importHint?: string;
 }) {
@@ -35,6 +41,7 @@ export function PlansMoreMenu({
     };
   }, [open]);
 
+  const label = onStatusRules ? 'Import / Export Excel, Status rules' : 'Import or Export Excel';
   const pick = (fn: () => void) => () => {
     setOpen(false);
     fn();
@@ -44,10 +51,10 @@ export function PlansMoreMenu({
       <button
         type="button"
         className={m.dots}
-        aria-label="More: Import or Export Excel"
+        aria-label={`More: ${label}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Import or Export Excel"
+        title={label}
         disabled={exporting}
         onClick={() => setOpen((o) => !o)}
       >
@@ -68,6 +75,15 @@ export function PlansMoreMenu({
               <span>
                 <b>Import Excel</b>
                 <small>{importHint}</small>
+              </span>
+            </button>
+          )}
+          {onStatusRules && (
+            <button type="button" role="menuitem" className={m.item} onClick={pick(onStatusRules)}>
+              {icons.settings({ width: 16, height: 16 })}
+              <span>
+                <b>Status rules</b>
+                <small>When each client's shipments are Completed</small>
               </span>
             </button>
           )}

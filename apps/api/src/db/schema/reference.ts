@@ -25,6 +25,7 @@ import {
   khr,
   percent,
 } from './_common';
+import type { CompletionMilestone } from '@gs/shared';
 import { users } from './auth';
 
 export const countries = pgTable('countries', {
@@ -95,6 +96,9 @@ export const clients = pgTable(
     /** "CM" deducted in the monthly ledger. Prototype rule: JR = 0, others = 50. */
     commissionUsd: money('commission_usd').notNull().default('50.00'),
     status: clientStatusEnum('status').notNull().default('ACTIVE'),
+    /** What completes this client's shipments, per direction (null = DEFAULT_COMPLETION). */
+    importCompleteOn: text('import_complete_on').array().$type<CompletionMilestone[]>(),
+    exportCompleteOn: text('export_complete_on').array().$type<CompletionMilestone[]>(),
     ...timestamps,
     ...softDelete,
   },

@@ -1093,8 +1093,14 @@ describe('billing documents', () => {
       .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
       .set(h)
       .send({ reviewStatus: 'CHECKED' });
-    // No INV / DIS / DN numbers yet, so no drafts yet.
-    expect(checked.body).toEqual({ numbered: [], drafts: 0 });
+    // Approved: numbered straight away, without waiting for its Credit Noted, and the tax
+    // invoice draft made.
+    expect(checked.body).toMatchObject({
+      numbered: [
+        { declareNo: 'I 151809', numbers: [{ kind: 'INV' }, { kind: 'DIS' }, { kind: 'DN' }] },
+      ],
+      drafts: 1,
+    });
     const summary = async () =>
       (await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h))
         .body;
@@ -1104,7 +1110,10 @@ describe('billing documents', () => {
       (await request(app).get(`/api/v1/accounting/ledger/${recordId}`).set(h)).body,
     ).toMatchObject({ invRevenue: '100.00' });
 
-    // Its Credit Noted checked later: numbers on the summary, and the tax invoice draft made.
+    const invNo = (await summary()).header.invNo;
+    expect(invNo).toMatch(/^GS26-/);
+
+    // Its Credit Noted checked later: the numbers and the one tax invoice stay as they are.
     const cnPre = (
       await request(app)
         .get('/api/v1/accounting/docs/credit-notes/prefill')
@@ -1121,8 +1130,7 @@ describe('billing documents', () => {
       .set(h)
       .send({ reviewStatus: 'CHECKED' })
       .expect(200);
-    const invNo = (await summary()).header.invNo;
-    expect(invNo).toMatch(/^GS26-/);
+    expect((await summary()).header.invNo).toBe(invNo);
     const invoices = (await request(app).get('/api/v1/accounting/docs/tax-invoices').set(h)).body;
     expect(invoices.data.map((d: { number: string }) => d.number)).toEqual([invNo]);
   });

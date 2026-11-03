@@ -10,7 +10,8 @@ import { formatNumber, highestNumber, regexLiteral } from '../../lib/numbering';
  * The INV / DIS / DN numbers of a shipment (one set per declare no.), read live:
  * - INV  GS26-NNN: one run for every client, per year (GS27-001 in January).
  * - DIS  DISNNN:   one run for every client, restarting at DIS001 each January.
- * - DN   <client><YYMM>NNN: per client, restarting each month.
+ * - DN   <client><YYMM>NNN: per client, restarting each month: the month of the declaration
+ *   (clearance) date, which is the shipment's Monthly Ledger month, not of the issue date.
  * The next number is the highest one in use (ledger + documents) + 1. A debit note number
  * released by deleting an issued invoice set is handed out first, lowest first, so a client's
  * month has no gaps. INV and DIS never reuse one: a freed number stays a gap so the year's run
@@ -70,6 +71,14 @@ export function periodOf(kind: NumberKind, date: string, clientCode: string): Pe
     }
   }
 }
+
+/**
+ * The date a shipment's number of a kind is counted by: the declaration date for a debit note
+ * (its month is the shipment's ledger month), else the issue (INV) date, so a tax invoice dated
+ * January takes the new year's number.
+ */
+export const periodDate = (kind: NumberKind, r: { invDate: string; declareDate: string }) =>
+  kind === 'DN' ? r.declareDate : r.invDate;
 
 /** One numbering at a time across the company (released when the transaction ends). */
 export async function lockNumbering(tx: Tx): Promise<void> {
@@ -198,7 +207,7 @@ export async function assignNumbers(
   for (const kind of kinds) {
     if (r[FIELD[kind]]) continue;
     if (kind === 'INV' && (await notInvoiced(tx, recordId))) continue;
-    const got = await takeNumber(tx, kind, r.invDate, r.code, r.declareNo);
+    const got = await takeNumber(tx, kind, periodDate(kind, r), r.code, r.declareNo);
     await tx.execute(sql`
       UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[kind])} = ${got.number}, updated_by_id = ${req.auth?.userId ?? null}
       WHERE id = ${recordId}`);
@@ -235,55 +244,83 @@ const DOC_NUMBER_COL = {
 } as const;
 
 export interface Renumbered {
-  recordId: string;
+  /** The ledger entry renumbered, or null for a document made without a shipment… */
+  recordId: string | null;
+  /** …which is then this document (a tax invoice or DIS of its own). */
+  docId?: string;
   declareNo: string;
   kind: NumberKind;
   from: string;
   to: string;
 }
 
+/** Live tax invoices and DIS made without a shipment: they share the company-wide runs. */
+interface LooseDoc {
+  id: string;
+  kind: 'INV' | 'DIS';
+  number: string;
+  date: string;
+  code: string;
+}
+const LOOSE_DOCS = sql`
+  SELECT t.id, 'INV' AS kind, t.invoice_no AS number, to_char(t.invoice_date, 'YYYY-MM-DD') AS date, c.code
+  FROM tax_invoices t JOIN clients c ON c.id = t.client_id
+  WHERE t.accounting_record_id IS NULL AND t.status <> 'VOID' AND t.invoice_no IS NOT NULL
+  UNION ALL
+  SELECT x.id, 'DIS', x.dis_no, to_char(x.dis_date, 'YYYY-MM-DD'), c.code
+  FROM disbursements x JOIN clients c ON c.id = x.client_id
+  WHERE x.accounting_record_id IS NULL AND x.status <> 'VOID' AND x.dis_no IS NOT NULL`;
+
 /**
- * Keeps every run in INV-date order. A shipment approved late with an earlier INV date takes
- * its slot and the later ones move down: each run's numbers (INV per year, DIS per year, DN
- * per client and month) are handed out again in order of INV date, then the number held now
- * (same-day shipments keep the order they were numbered in, as in the accountant's monthly
- * sheets). Only the numbers already in the run are reused, so gaps and the
- * numbers of cancelled documents stay where they are. Draft and issued documents and record
- * summaries take their entry's new number.
+ * Keeps every run in date order. A shipment approved late with an earlier INV date takes its
+ * slot and the later ones move down: each run's numbers (INV per year, DIS per year, DN per
+ * client and month) are handed out again in order of date, then the number held now (same-day
+ * shipments keep the order they were numbered in, as in the accountant's monthly sheets). A
+ * tax invoice or DIS made without a shipment (a monthly fee) counts by its own date, so one
+ * dated 31 Oct but made on 2 Nov still falls before November's. Only the numbers already in
+ * the run are reused, so gaps and the numbers of cancelled documents stay where they are.
+ * Draft and issued documents and record summaries take their entry's new number.
  */
 export async function resequence(tx: Tx, req: Request): Promise<Renumbered[]> {
   await lockNumbering(tx);
   const rows = await queryRows<LedgerNumbers>(tx, LEDGER_NUMBERS);
+  const loose = await queryRows<LooseDoc>(tx, LOOSE_DOCS);
   const changes: Renumbered[] = [];
+  type Entry = Omit<Renumbered, 'to' | 'kind'> & { date: string; seq: number };
   for (const kind of NUMBER_KINDS) {
-    const runs = new Map<string, { p: Period; entries: { r: LedgerNumbers; seq: number }[] }>();
+    const runs = new Map<string, { p: Period; entries: Entry[] }>();
+    const add = (p: Period, number: string, e: Omit<Entry, 'seq' | 'from'>) => {
+      const seq = seqOf(p, number);
+      if (seq === null) return; // typed in another format, or not of its date's period
+      const run = runs.get(p.key) ?? { p, entries: [] };
+      run.entries.push({ ...e, seq, from: number });
+      runs.set(p.key, run);
+    };
     for (const r of rows) {
       const number = r[FIELD[kind]];
-      if (!number) continue;
-      const p = periodOf(kind, r.invDate, r.code);
-      const seq = seqOf(p, number);
-      if (seq === null) continue; // typed in another format, or not of its date's period
-      const run = runs.get(p.key) ?? { p, entries: [] };
-      run.entries.push({ r, seq });
-      runs.set(p.key, run);
+      if (number)
+        add(periodOf(kind, periodDate(kind, r), r.code), number, {
+          recordId: r.id,
+          declareNo: r.declareNo,
+          date: r.invDate,
+        });
     }
+    for (const d of loose)
+      if (d.kind === kind)
+        add(periodOf(kind, d.date, d.code), d.number, {
+          recordId: null,
+          docId: d.id,
+          declareNo: d.number,
+          date: d.date,
+        });
     for (const { p, entries } of runs.values()) {
       const slots = entries.map((e) => e.seq).sort((a, b) => a - b);
       entries.sort(
         (a, b) =>
-          a.r.invDate.localeCompare(b.r.invDate) ||
-          a.seq - b.seq ||
-          a.r.declareNo.localeCompare(b.r.declareNo),
+          a.date.localeCompare(b.date) || a.seq - b.seq || a.declareNo.localeCompare(b.declareNo),
       );
-      entries.forEach(({ r, seq }, i) => {
-        if (slots[i] !== seq)
-          changes.push({
-            recordId: r.id,
-            declareNo: r.declareNo,
-            kind,
-            from: r[FIELD[kind]]!,
-            to: p.format(slots[i]!),
-          });
+      entries.forEach(({ date: _d, seq, ...e }, i) => {
+        if (slots[i] !== seq) changes.push({ ...e, kind, to: p.format(slots[i]!) });
       });
     }
   }
@@ -305,6 +342,11 @@ async function renumber(
   // Two passes, so numbers trading places never meet a unique index.
   for (const c of changes) {
     const d = DOC_NUMBER_COL[c.kind];
+    if (!c.recordId) {
+      await tx.execute(sql`
+        UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = '~' || id::text WHERE id = ${c.docId!}`);
+      continue;
+    }
     await tx.execute(sql`
       UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = NULL WHERE id = ${c.recordId}`);
     await tx.execute(sql`
@@ -317,6 +359,11 @@ async function renumber(
   }
   for (const c of changes) {
     const d = DOC_NUMBER_COL[c.kind];
+    if (!c.recordId) {
+      await tx.execute(sql`
+        UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = ${c.to} WHERE id = ${c.docId!}`);
+      continue;
+    }
     await tx.execute(sql`
       UPDATE accounting_records SET ${sql.raw(LEDGER_NUMBER_COL[c.kind])} = ${c.to},
         updated_by_id = ${req.auth?.userId ?? null}
@@ -325,8 +372,24 @@ async function renumber(
       UPDATE ${sql.raw(d.table)} SET ${sql.raw(d.col)} = ${c.to}
       WHERE accounting_record_id = ${c.recordId} AND ${sql.raw(d.col)} = '~' || id::text`);
   }
+  // A document of its own is audited on itself; a shipment's change on its ledger entry.
+  for (const c of changes)
+    if (!c.recordId)
+      await audit(
+        tx,
+        {
+          action: 'UPDATE',
+          entity: DOC_NUMBER_COL[c.kind].table,
+          entityId: c.docId!,
+          before: { number: c.from },
+          after: { number: c.to },
+          reason: reason(c.declareNo),
+        },
+        req,
+      );
   const byRecord = new Map<string, typeof changes>();
-  for (const c of changes) byRecord.set(c.recordId, [...(byRecord.get(c.recordId) ?? []), c]);
+  for (const c of changes)
+    if (c.recordId) byRecord.set(c.recordId, [...(byRecord.get(c.recordId) ?? []), c]);
   for (const [recordId, cs] of byRecord)
     await audit(
       tx,
@@ -399,20 +462,21 @@ export async function syncInvoiceNumber(tx: Tx, recordId: string, req: Request):
 }
 
 /**
- * Numbers every shipment that is approved (its Chea payment is Checked) but not invoiced yet,
- * in clearance-date order, so released numbers go to the earliest one waiting. Then every run
- * is put back in INV-date order.
+ * Numbers every shipment that is approved (its record summary or its Chea payment is Checked)
+ * but not invoiced yet, in clearance-date order, so released numbers go to the earliest one
+ * waiting. Then every run is put back in INV-date order.
  */
 export async function numberEligible(tx: Tx, req: Request): Promise<AssignedNumbers[]> {
   await lockNumbering(tx);
+  // A revision waiting for approval (Request Revise) was approved before.
+  const approved = (table: string) =>
+    sql`EXISTS (SELECT 1 FROM ${sql.raw(table)} x WHERE x.accounting_record_id = a.id
+          AND x.status = 'ISSUED' AND x.review_status IN ('CHECKED', 'REVISION_REQUESTED'))`;
   const waiting = await queryRows<{ id: string }>(
     tx,
     sql`SELECT a.id FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
         WHERE (a.inv_no IS NULL OR a.dis_no IS NULL OR a.dn_no IS NULL)
-          AND EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id
-                      AND cn.status = 'ISSUED'
-                      -- A revision waiting for approval (Request Revise) was approved before.
-                      AND cn.review_status IN ('CHECKED', 'REVISION_REQUESTED'))
+          AND (${approved('record_summaries')} OR ${approved('credit_notes')})
         ORDER BY d.declare_date, a.inv_date, d.declare_no`,
   );
   const out: AssignedNumbers[] = [];

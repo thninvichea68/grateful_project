@@ -16,6 +16,7 @@ import { audit } from '../../lib/audit';
 import { notFound } from '../../lib/errors';
 import { queryRows } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
+import { LEDGER_DATE } from './ledgerDate';
 
 /**
  * The Chea payment status follows the payments: a month's ledger entries are all Paid once
@@ -33,8 +34,8 @@ export const CHEA_TRACKED_FROM = '2026-10-01';
 const CHEA_MONTHS = sql`
   WITH RECURSIVE m AS (
     SELECT g::date AS month, row_number() OVER (ORDER BY g) AS n,
-           (SELECT coalesce(sum(clear_fee), 0) FROM accounting_records
-             WHERE inv_date >= g::date AND inv_date < g::date + interval '1 month') AS fee,
+           (SELECT coalesce(sum(a.clear_fee), 0) FROM accounting_records a
+             WHERE ${LEDGER_DATE} >= g::date AND ${LEDGER_DATE} < g::date + interval '1 month') AS fee,
            (SELECT coalesce(sum(amount), 0) FROM clear_fee_payments WHERE period_month = g::date) AS paid
     FROM generate_series(
       least(${CHEA_TRACKED_FROM}::date, (SELECT min(period_month) FROM clear_fee_payments)),
@@ -50,7 +51,7 @@ const CHEA_MONTHS = sql`
   SELECT month, carried, paid + carried >= fee AS settled FROM r`;
 
 /** Joins each ledger row (alias a) to its month's settlement (alias cm). */
-export const CHEA_JOIN = sql`LEFT JOIN (${CHEA_MONTHS}) cm ON cm.month = date_trunc('month', a.inv_date)::date`;
+export const CHEA_JOIN = sql`LEFT JOIN (${CHEA_MONTHS}) cm ON cm.month = date_trunc('month', ${LEDGER_DATE})::date`;
 
 /**
  * A ledger row's Chea payment status; needs CHEA_JOIN. A row with no clear fee owes Chea
@@ -60,7 +61,7 @@ export const CHEA_JOIN = sql`LEFT JOIN (${CHEA_MONTHS}) cm ON cm.month = date_tr
  */
 export const CHEA_STATUS = sql`(CASE WHEN coalesce(a.clear_fee, 0) = 0 THEN 'NA'
   WHEN cm.settled THEN 'PAID'
-  WHEN a.inv_date < ${CHEA_TRACKED_FROM}::date THEN a.chea_status::text
+  WHEN ${LEDGER_DATE} < ${CHEA_TRACKED_FROM}::date THEN a.chea_status::text
   ELSE 'UNPAID' END)`;
 
 /**
@@ -77,7 +78,7 @@ export async function clearFeeMonth(
     db,
     sql`
     SELECT coalesce(sum(a.clear_fee), 0)::text AS total FROM accounting_records a
-    WHERE a.inv_date >= ${start}::date AND a.inv_date < (${start}::date + interval '1 month')
+    WHERE ${LEDGER_DATE} >= ${start}::date AND ${LEDGER_DATE} < (${start}::date + interval '1 month')
       ${scoped ? sql`AND ${scoped}` : sql``}`,
   );
   const [carry] = await queryRows<{ carried: string }>(

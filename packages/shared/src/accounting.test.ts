@@ -9,6 +9,7 @@ import {
   computeChargeLinesTotal,
   isVatChargedLine,
   chargeLineUnit,
+  billingUnit,
   followShipmentUnit,
   shipmentChargeUnit,
   vatPercentOn,
@@ -312,5 +313,13 @@ describe('charge line units (credit noted / record summary)', () => {
     expect(followShipmentUnit({ description: 'TRUCK', unit: 'TRUCK 5T' }, "40'HQ")).toBe(
       'TRUCK 5T',
     );
+  });
+  it("shows a debit note's units as on GS's sheet", () => {
+    expect(billingUnit('TRUCKING FEE', "40'HQ")).toBe('40H');
+    expect(billingUnit('LOLO EMPTY DROP DOWN', '20GP')).toBe('20H');
+    expect(billingUnit('INCREASE TRUCKING FEE(65%)', "40'HQ")).toBe('TRUCK');
+    expect(billingUnit('SERVICE TAXATION', 'SET')).toBe('SHIP');
+    expect(billingUnit('PERMIT FEE', 'SET')).toBe('SET');
+    expect(billingUnit('STORAGE', 'DAY')).toBe('DAY');
   });
 });

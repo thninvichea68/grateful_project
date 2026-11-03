@@ -3,6 +3,7 @@ import {
   recordSummaryItems,
   chargeLineUnit,
   containerUnit,
+  billingUnit,
   recordSummaryLedgerGroup,
   shipmentChargeUnit,
   type BillingDocType,
@@ -150,6 +151,8 @@ export async function prefill(
   const fee = isImport
     ? 'កំរៃសេវាបំពេញបែបបទនាំចូល / IMPORT PROCESSING FEE'
     : 'កំរៃសេវាបំពេញបែបបទនាំចេញ / EXPORT PROCESSING FEE';
+  // Billed per container (40H), or per shipment (SHIP) by air / LCL.
+  const shipUnit = billingUnit(null, shipmentChargeUnit(c));
 
   switch (type) {
     case 'tax-invoices':
@@ -161,7 +164,7 @@ export async function prefill(
         invoiceDate: c.invDate,
         exchangeRate: c.exchangeRate,
         vatRate: c.vatRate,
-        lines: [line(fee, c.invRevenue)],
+        lines: [line(fee, c.invRevenue, shipUnit)],
       };
     case 'disbursements':
       return {
@@ -173,7 +176,7 @@ export async function prefill(
         exchangeRate: c.exchangeRate,
         reference: c.declareNo,
         lines: (await summaryLines('disbursements', recordId)) ?? [
-          line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal),
+          line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal, shipUnit),
         ],
       };
     case 'debit-notes':
@@ -186,7 +189,7 @@ export async function prefill(
         address: c.address,
         reference: c.declareNo,
         lines: (await summaryLines('debit-notes', recordId)) ?? [
-          line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal),
+          line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal, shipUnit),
         ],
       };
     case 'record-summaries': {
@@ -250,7 +253,12 @@ export async function summaryLines(
     .filter(
       (l) => Number(l.unitPrice) > 0 && recordSummaryLedgerGroup(l.description, l.mark) === want,
     )
-    .map((l) => ({ ...l, qty: n(String(l.qty)), unitPrice: n(String(l.unitPrice)) }));
+    .map((l) => ({
+      ...l,
+      qty: n(String(l.qty)),
+      unit: billingUnit(l.description, l.unit),
+      unitPrice: n(String(l.unitPrice)),
+    }));
   return lines.length ? lines : null;
 }
 

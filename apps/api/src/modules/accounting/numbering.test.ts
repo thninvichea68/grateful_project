@@ -232,10 +232,29 @@ describe('numbers on approval', () => {
     const jr2 = await shipment(b.jr.id, 'E 31', '2026-10-07');
     const jyx = await shipment(b.jyx.id, 'E 32', '2026-10-07');
     const jrNov = await shipment(b.jr.id, 'E 33', '2026-11-03');
+    const jrNov2 = await shipment(b.jr.id, 'E 35', '2026-11-04');
     expect((await jr1.row()).dnNo).toBe('JR2610001');
     expect((await jr2.row()).dnNo).toBe('JR2610002');
     expect((await jyx.row()).dnNo).toBe('JYX2610001');
     expect((await jrNov.row()).dnNo).toBe('JR2611001');
+    expect((await jrNov2.row()).dnNo).toBe('JR2611002');
+  });
+
+  it('a shipment declared at month end belongs to its declaration month', async () => {
+    // Fri 30 Oct → INV date Mon 2 Nov, but October's ledger and an October debit note.
+    const s = await shipment(b.jr.id, 'E 34', '2026-10-30');
+    expect(s.invDate).toBe('2026-11-02');
+    expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+    const inMonth = async (month: string) =>
+      (await acc('get', '/ledger', { query: { month } })).body.data.map(
+        (r: { declareNo: string }) => r.declareNo,
+      );
+    expect(await inMonth('2026-10')).toEqual(['E 34']);
+    expect(await inMonth('2026-11')).toEqual([]);
+    // Re-declared Sun 1 Nov: same INV date, but now November's debit note.
+    await s.redate('2026-11-01');
+    expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2611001']);
+    expect(await inMonth('2026-11')).toEqual(['E 34']);
   });
 
   it('documents take the ledger number, date and rate; one of each type per shipment', async () => {
@@ -410,6 +429,48 @@ describe('a shipment approved late with an earlier INV date', () => {
     });
   });
 
+  it('a DIS of no shipment counts by its own date, even when made later', async () => {
+    const oct = await shipment(b.jr.id, 'E 97', '2026-10-27'); // → Wed 28 Oct
+    const nov = await shipment(b.jr.id, 'E 98', '2026-10-30'); // → Mon 2 Nov
+    const novDis = await draft('disbursements', nov.recordId);
+    expect((await acc('post', `/docs/disbursements/${novDis.id}/issue`)).status).toBe(200);
+    expect((await nov.row()).disNo).toBe('DIS002');
+
+    // Made on 2 Nov for October's monthly fee, dated 31 Oct: it takes DIS002, and the
+    // November shipment (its issued document included) moves to DIS003.
+    const pre = (
+      await acc('get', '/docs/disbursements/prefill', {
+        query: { clientId: b.jr.id, date: '2026-10-31' },
+      })
+    ).body;
+    const fee = await acc('post', '/docs/disbursements', { body: { ...pre, lines: LINES } });
+    expect(fee.status).toBe(201);
+    expect((await doc('disbursements', fee.body.id)).number).toBe('DIS002');
+    expect((await nov.row()).disNo).toBe('DIS003');
+    expect(await doc('disbursements', novDis.id)).toMatchObject({
+      number: 'DIS003',
+      status: 'ISSUED',
+    });
+    expect((await oct.row()).disNo).toBe('DIS001');
+  });
+
+  it('a corrected issue date moves the shipment in its runs', async () => {
+    const a = await shipment(b.jr.id, 'E 70', '2026-10-27'); // → 28 Oct
+    const c = await shipment(b.jyx.id, 'E 71', '2026-10-28'); // → 29 Oct
+    const dis = await draft('disbursements', c.recordId);
+    expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
+    expect((await c.row()).disNo).toBe('DIS002');
+
+    // Its real date was 27 Oct: the ledger follows, and it goes before E 70.
+    const ok = await acc('post', `/docs/disbursements/${dis.id}/correct`, {
+      body: { date: '2026-10-27', reason: 'Date issued in error' },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ number: 'DIS001', date: '2026-10-27' });
+    expect(await c.row()).toMatchObject({ invDate: '2026-10-27', disNo: 'DIS001' });
+    expect((await a.row()).disNo).toBe('DIS002');
+  });
+
   it('a late September shipment moves October’s INV and DIS numbers', async () => {
     const oct = await shipment(b.jr.id, 'E 95', '2026-10-07');
     const sep = await shipment(b.jr.id, 'E 96', '2026-09-28');
@@ -488,12 +549,13 @@ describe('authorised correction of an issued document', () => {
       after: { number: 'GS26-500', date: '2026-10-09', correction: true },
     });
 
-    // A number already used by another invoice is refused.
+    // A number already used by another invoice is refused. (E 61, dated 8 Oct, goes before
+    // the corrected 9 Oct invoice in the run, so the two may have traded numbers.)
     const other = await shipment(b.jyx.id, 'E 61', '2026-10-07');
     const inv2 = await draft('tax-invoices', other.recordId);
     expect((await acc('post', `/docs/tax-invoices/${inv2.id}/issue`)).status).toBe(200);
     const dup = await acc('post', `/docs/tax-invoices/${inv2.id}/correct`, {
-      body: { number: 'GS26-500', reason: 'Test' },
+      body: { number: (await doc('tax-invoices', inv.id)).number, reason: 'Test' },
     });
     expect(dup.status).toBe(409);
     // A draft is changed in the editor, not corrected.
@@ -537,6 +599,18 @@ describe('a shipment without a tax invoice', () => {
     });
     if (res.status !== 200) throw new Error(JSON.stringify(res.body));
   }
+
+  it('gets its numbers when its record summary is approved, without a credit note', async () => {
+    const rec = await history(b.jr.id, 'E 300', '2026-10-30', {});
+    expect(await numbersOf({ row: () => ledgerRow(rec.id) })).toEqual([null, null, null]);
+    await checkSummary(rec.id, '140');
+    expect(await ledgerRow(rec.id)).toMatchObject({
+      invNo: 'GS26-001',
+      disNo: 'DIS001',
+      dnNo: 'JR2610001', // declared in October
+      clearFee: '0.00',
+    });
+  });
 
   it('has no INV number when its record summary has no processing fee; the next ones follow on', async () => {
     const a = await shipment(b.jr.id, 'E 301', '2026-10-01');

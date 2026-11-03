@@ -3123,6 +3123,13 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .btn-create-submit:active {
   transform: scale(0.97);
 }
+/* A save that can't happen yet looks it, instead of a bright button that does nothing. */
+.btn-create-submit:disabled {
+  background: var(--accent-primary);
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
 
 .btn-cancel-shipment {
   background: transparent;

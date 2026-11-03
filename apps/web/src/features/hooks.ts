@@ -23,6 +23,8 @@ import type {
   ShipmentDetail,
   ShipmentInput,
   ShipmentListItem,
+  ClientStatusRule,
+  ClientStatusRuleInput,
 } from '@gs/shared';
 import { api } from '../lib/api';
 import { uploadFile } from '../lib/files';
@@ -247,6 +249,28 @@ export function useDeleteShipment() {
   return useMutation({
     mutationFn: (id: string) => api<undefined>(`/shipments/${id}`, { method: 'DELETE' }),
     onSuccess: () => invalidateShipmentData(qc),
+  });
+}
+
+/* ---------- Status rules (per client "Completed when…") ---------- */
+export function useStatusRules() {
+  return useQuery({
+    queryKey: [...queryKeys.shipments, 'status-rules'],
+    queryFn: () => api<ClientStatusRule[]>('/shipments/status-rules'),
+  });
+}
+
+/** Saving a rule re-works out the client's shipment statuses, so everything shipment-based refreshes. */
+export function useSaveStatusRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clientId, body }: { clientId: string; body: ClientStatusRuleInput }) =>
+      api<undefined>(`/shipments/status-rules/${clientId}`, { method: 'PUT', json: body }),
+    onSuccess: () =>
+      Promise.all([
+        invalidateShipmentData(qc),
+        qc.invalidateQueries({ queryKey: queryKeys.lookups }),
+      ]),
   });
 }
 

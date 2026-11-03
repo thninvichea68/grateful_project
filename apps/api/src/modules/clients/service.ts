@@ -16,6 +16,7 @@ import {
   whereAll,
 } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
+import { LEDGER_DATE } from '../accounting/ledgerDate';
 
 interface ListParams {
   page: number;
@@ -38,7 +39,7 @@ const baseSelect = (withProfit: boolean, extra: SQL = sql``) => sql`
            withProfit
              ? sql`, (SELECT coalesce(sum(a.net_profit), 0)::text FROM accounting_records a
               WHERE a.client_id = c.id
-                AND a.inv_date >= date_trunc('year', now() AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date) AS "netProfitYtd"`
+                AND ${LEDGER_DATE} >= date_trunc('year', now() AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date) AS "netProfitYtd"`
              : sql``
          }
          ${extra}

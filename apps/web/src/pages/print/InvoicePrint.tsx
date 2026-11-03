@@ -1,11 +1,12 @@
-import { Fragment } from 'react';
 import {
-  companyBanks,
+  billingUnit,
+  invoiceBank,
   fmtVatPercent,
   DEFAULT_VAT_PERCENT,
   type BillingDoc,
   type BillingDocType,
 } from '@gs/shared';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { CompanyInfo } from '../../features/accounting';
 import './printFonts';
 import s from './print.module.css';
@@ -17,7 +18,47 @@ import p from './invoicePrint.module.css';
  */
 
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
-/** PKGS as printed: the quantity and its unit (629 CTNS). */
+
+/** An address may take two lines, but "PHNOM PENH" is never split between them. */
+const keepCity = (a: string) => a.replace(/PHNOM\s+PENH/gi, (m) => m.replace(/\s+/, '\u00a0'));
+
+/**
+ * A header line that never wraps (a customer name ending "ឯ.ក"): when it is too long for its
+ * column, its text steps down in size until it fits.
+ * The sizes inside scale with --fit (see invoicePrint.module.css .fitLine).
+ */
+function FitLine({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let live = true;
+    const fit = () => {
+      if (!live) return;
+      let f = 1;
+      el.style.setProperty('--fit', '1');
+      while (el.scrollWidth > el.clientWidth + 0.5 && f > 0.6) {
+        f = Math.round((f - 0.02) * 100) / 100;
+        el.style.setProperty('--fit', String(f));
+      }
+    };
+    fit();
+    // The Khmer fonts may still be loading: measure again once they are in.
+    void document.fonts?.ready.then(fit);
+    return () => {
+      live = false;
+    };
+  });
+  return (
+    <div ref={ref} className={p.fitLine}>
+      {children}
+    </div>
+  );
+}
+/** Container no. and size as printed, in capitals: TCNU5209621 / 40HQ (LCL alone). */
+const container = (d: BillingDoc) =>
+  [h(d, 'containerNo'), h(d, 'containerSize')].filter(Boolean).join(' / ').toUpperCase();
+/** QUANTITY as printed: the quantity and its unit (629 CTNS). */
 const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const money = (v: string | number | null | undefined) =>
   Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,7 +134,8 @@ export function Masthead({ c, compact = false }: { c: CompanyInfo; compact?: boo
 export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo; tax: boolean }) {
   // The invoice's own VAT percent (kept with it; Settings → Tax Management sets new ones).
   const vat = fmtVatPercent(d.header.vatRate ?? DEFAULT_VAT_PERCENT);
-  const banks = companyBanks(c);
+  // Only the account chosen in Settings → Company is printed.
+  const bank = invoiceBank(c);
   return (
     <>
       <Masthead c={c} />
@@ -105,15 +147,15 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
 
       <div className={p.meta}>
         <div>
-          <div>
+          <FitLine>
             <span className={p.lblMuol}>ឈ្មោះអតិថិជន</span>
             <span className={p.custLbl}> / Customer:</span>
             <span className={p.custKm}>{h(d, 'customerNameKm')}</span>
-          </div>
+          </FitLine>
           <div className={p.custEn}>{h(d, 'customerNameEn')}</div>
           <div>
             <span className={p.metaLbl}>អាស័យដ្ឋាន / Address:</span>{' '}
-            <span className={p.metaVal}>{h(d, 'customerAddress')}</span>
+            <span className={p.metaVal}>{keepCity(h(d, 'customerAddress'))}</span>
           </div>
           <div style={{ marginTop: 4 }}>
             <span className={p.metaLbl}>លេខ អតប (VATTIN) :</span>{' '}
@@ -122,7 +164,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
           <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
           <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-          <div className={p.ship}>PKGS: {pkgs(d)}</div>
+          <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
         </div>
         <div className={p.metaRight}>
           <div>
@@ -139,7 +181,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           </div>
           <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
           <div className={p.ship}>VOLUME: {volume(d)}</div>
-          <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
+          <div className={p.ship}>CTNR NO: {container(d)}</div>
           <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
           <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
           <div className={p.ship}>Exchange Rate: 1USD = {riel(h(d, 'exchangeRate'))} KHR</div>
@@ -207,7 +249,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
               <td className={p.c}>{l.lineNo}</td>
               <td>{l.description}</td>
               <td className={p.c}>{money(l.qty)}</td>
-              <td className={p.c}>{l.unit}</td>
+              <td className={p.c}>{billingUnit(l.description, l.unit)}</td>
               {/* Money right-aligned, as in Excel, so it lines up with the totals below. */}
               <td className={p.r}>{money(l.unitPrice)}</td>
               <td className={p.r}>{money(l.subtotal)}</td>
@@ -249,19 +291,19 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
       <div className={p.note}>
         Note: You can make payment by cross cheque to:
         <br />
-        {banks[0]?.accountName}
+        {bank?.accountName}
         <br />
         or Deposit Cash/Cheque payment to bank as below:
-        {banks.map((b, i) => (
-          <Fragment key={i}>
+        {bank && (
+          <>
             <br />
-            {b.bankName}
+            {bank.bankName}
             <br />
-            AC/NAME: {b.accountName}
+            AC/NAME: {bank.accountName}
             <br />
-            AC/NO: {b.accountNo}
-          </Fragment>
-        ))}
+            AC/NO: {bank.accountNo}
+          </>
+        )}
       </div>
 
       <div className={p.signs}>
@@ -343,7 +385,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
               <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
               <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
               <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-              <div className={p.ship}>PKGS: {pkgs(d)}</div>
+              <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
             </>
           ) : (
             <div className={p.ship}>CHARGE: {h(d, 'reference')}</div>
@@ -361,7 +403,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
             <>
               <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
               <div className={p.ship}>VOLUME: {volume(d)}</div>
-              <div className={p.ship}>Container No: {h(d, 'containerNo')}</div>
+              <div className={p.ship}>CTNR NO: {container(d)}</div>
               <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
               <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
             </>
@@ -386,7 +428,7 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
               <td className={p.c}>{l.lineNo}</td>
               <td>{l.description}</td>
               <td className={p.c}>{plain(l.qty)}</td>
-              <td className={p.c}>{l.unit}</td>
+              <td className={p.c}>{billingUnit(l.description, l.unit)}</td>
               <td className={p.r}>{money(l.unitPrice)}</td>
               <td className={p.r}>{money(l.subtotal)}</td>
             </tr>

@@ -1,6 +1,7 @@
 import type { Borders, Font, Workbook, Worksheet } from 'exceljs';
 import {
-  companyBanks,
+  billingUnit,
+  invoiceBank,
   DEFAULT_VAT_PERCENT,
   fmtVatPercent,
   type BillingDoc,
@@ -135,6 +136,9 @@ export const RIEL = '#,##0';
 export const DATE_UPPER = 'dd\\-mmm\\-yyyy';
 export const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
 const h = (d: BillingDoc, k: string) => d.header[k] ?? '';
+/** Container no. and size, in capitals as on the sheet: TCNU5209621 / 40HQ (LCL alone). */
+const container = (d: BillingDoc) =>
+  [h(d, 'containerNo'), h(d, 'containerSize')].filter(Boolean).join(' / ').toUpperCase();
 /** PKGS as printed: the quantity and its unit (629 CTNS). */
 const pkgs = (d: BillingDoc) => [h(d, 'pkgs'), h(d, 'pkgsUnit')].filter(Boolean).join(' ');
 const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -222,7 +226,14 @@ export function put(
   value: Value,
   font: Partial<Font>,
   horizontal: Align = 'left',
-  extra: { numFmt?: string; wrap?: boolean; indent?: number; valign?: 'top' | 'bottom' } = {},
+  extra: {
+    numFmt?: string;
+    wrap?: boolean;
+    /** Keep it on one line, the text made smaller to fit (Excel's "Shrink to fit"). */
+    shrink?: boolean;
+    indent?: number;
+    valign?: 'top' | 'bottom';
+  } = {},
 ) {
   if (c2 > c1) ws.mergeCells(row, c1, row, c2);
   const cell = ws.getCell(row, c1);
@@ -232,6 +243,7 @@ export function put(
     horizontal,
     vertical: extra.valign ?? 'middle',
     wrapText: !!extra.wrap,
+    ...(extra.shrink ? { shrinkToFit: true } : {}),
     ...(extra.indent ? { indent: extra.indent } : {}),
   };
   if (extra.numFmt) cell.numFmt = extra.numFmt;
@@ -401,7 +413,7 @@ function taxOrDisbursement(
     `SHIPPER: ${h(d, 'shipper')}`,
     `CONSIGNEE: ${h(d, 'consignee')}`,
     `HBL: ${h(d, 'hbl')}`,
-    `PKGS: ${pkgs(d)}`,
+    `QUANTITY: ${pkgs(d)}`,
   ];
   const right: (Part[] | string)[] = [
     [
@@ -418,21 +430,27 @@ function taxOrDisbursement(
     '', // one blank line before the shipment details, as on the sheet
     `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
     `VOLUME: ${volume(d)}`,
-    `Container No: ${h(d, 'containerNo')}`,
+    `CTNR NO: ${container(d)}`,
     `POL: ${h(d, 'pol').toUpperCase()}`,
     `POD: ${h(d, 'pod').toUpperCase()}`,
     `Exchange Rate: 1USD = ${Math.round(num(h(d, 'exchangeRate'))).toLocaleString('en-US')} KHR`,
   ];
   const text = (v: Part[] | string) => (typeof v === 'string' ? v : v.map((p) => p.text).join(''));
   const meta = (v: Part[] | string) => (typeof v === 'string' ? v : { richText: v });
+  // The customer name stays on one line (as on the sheet), shrunk to fit.
+  const oneLine = new Set([0]);
   for (let i = 0; i < Math.max(left.length, right.length); i++, r++) {
     const lv = left[i] ?? '';
     const rv = right[i] ?? '';
-    P(r, L, null, ship, 'left', { wrap: true });
+    P(r, L, null, ship, 'left', oneLine.has(i) ? { shrink: true } : { wrap: true });
     P(r, R, null, ship, 'right', { wrap: true });
     if (text(lv)) ws.getCell(r, o + 1).value = meta(lv) as never;
     if (text(rv)) ws.getCell(r, o + 4).value = meta(rv) as never;
-    const lines = Math.max(Math.ceil(text(lv).length / 68), Math.ceil(text(rv).length / 58), 1);
+    const lines = Math.max(
+      oneLine.has(i) ? 1 : Math.ceil(text(lv).length / 68),
+      Math.ceil(text(rv).length / 58),
+      1,
+    );
     ht(r, (i === 3 ? 18 : 15) * lines);
   }
   ht(r, 10);
@@ -479,7 +497,7 @@ function taxOrDisbursement(
       l.lineNo,
       l.description,
       num(l.qty),
-      l.unit ?? '',
+      billingUnit(l.description, l.unit),
       num(l.unitPrice),
       { formula: `ROUND(${C}${r}*${E}${r},2)`, result: num(l.subtotal) },
       // A line the system charges no VAT on keeps its 0; the rest are the VAT % of the sub total.
@@ -558,12 +576,13 @@ function taxOrDisbursement(
   r += 1;
 
   // Payment note
-  const banks = companyBanks(c);
+  // Only the account chosen in Settings → Company is printed.
+  const bank = invoiceBank(c);
   for (const t of [
     'Note: You can make payment by cross cheque to:',
-    banks[0]?.accountName ?? '',
+    bank?.accountName ?? '',
     'or Deposit Cash/Cheque payment to bank as below:',
-    ...banks.flatMap((b) => [b.bankName, `AC/NAME: ${b.accountName}`, `AC/NO: ${b.accountNo}`]),
+    ...(bank ? [bank.bankName, `AC/NAME: ${bank.accountName}`, `AC/NO: ${bank.accountNo}`] : []),
   ]) {
     P(r, ALL, t, f(EN, 7.8));
     ht(r, 11.5);
@@ -626,7 +645,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
           `SHIPPER: ${h(d, 'shipper')}`,
           `CONSIGNEE: ${h(d, 'consignee')}`,
           `HBL: ${h(d, 'hbl')}`,
-          `PKGS: ${pkgs(d)}`,
+          `QUANTITY: ${pkgs(d)}`,
         ]
       : [`CHARGE: ${h(d, 'reference')}`]),
   ];
@@ -643,7 +662,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
       ? [
           `GROSS WEIGHT: ${kgs(h(d, 'grossWeightKg'))}`,
           `VOLUME: ${volume(d)}`,
-          `Container No: ${h(d, 'containerNo')}`,
+          `CTNR NO: ${container(d)}`,
           `POL: ${h(d, 'pol').toUpperCase()}`,
           `POD: ${h(d, 'pod').toUpperCase()}`,
         ]
@@ -681,7 +700,7 @@ function debitNote(ws: Worksheet, d: BillingDoc): string {
       l.lineNo,
       l.description,
       num(l.qty),
-      l.unit ?? '',
+      billingUnit(l.description, l.unit),
       num(l.unitPrice),
       { formula: `ROUND(C${r}*E${r},2)`, result: num(l.subtotal) },
     ];

@@ -47,6 +47,20 @@ export const INCOTERM_LABEL: Record<Incoterm, string> = {
 export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
+/**
+ * What can mark a shipment Completed. Each client picks its own set per direction (all of them
+ * must be in); a client without one uses DEFAULT_COMPLETION.
+ */
+export const COMPLETION_MILESTONES = [
+  'ATD',
+  'ATA',
+  'ARRIVE_FTY',
+  'DO_DATE',
+  'DOCS_RECEIVED',
+  'CLEARED',
+] as const;
+export type CompletionMilestone = (typeof COMPLETION_MILESTONES)[number];
+
 export const CLEARANCE_STATUSES = ['PENDING', 'IN_PROGRESS', 'CLEARED', 'EXCEPTION'] as const;
 export type ClearanceStatus = (typeof CLEARANCE_STATUSES)[number];
 
@@ -166,6 +180,21 @@ export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   COMPLETED: 'Completed',
   IN_PROGRESS: 'In Progress',
   PENDING: 'Pending',
+};
+
+export const COMPLETION_MILESTONE_LABEL: Record<CompletionMilestone, string> = {
+  ATD: 'ATD',
+  ATA: 'ATA',
+  ARRIVE_FTY: 'ETA Factory',
+  DO_DATE: 'DO / EDO Date',
+  DOCS_RECEIVED: 'Received Document Date',
+  CLEARED: 'Customs cleared',
+};
+
+/** The rule every client had before per-client rules: import → ETA Factory, export → ATD. */
+export const DEFAULT_COMPLETION: Record<Direction, readonly CompletionMilestone[]> = {
+  IMPORT: ['ARRIVE_FTY'],
+  EXPORT: ['ATD'],
 };
 
 /** CSS modifier used by the prototype's `.status-tag` / status pill classes. */

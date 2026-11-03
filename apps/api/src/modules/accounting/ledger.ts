@@ -37,6 +37,7 @@ import {
 import { clientCondition } from '../../lib/clientScope';
 import { resequence } from './numbers';
 import { CHEA_JOIN, CHEA_STATUS } from './clearFeePayments';
+import { LEDGER_DATE } from './ledgerDate';
 
 type LedgerInput = z.output<typeof ledgerInputSchema>;
 
@@ -112,11 +113,11 @@ function where(p: ListParams) {
   const c = [sql`true`];
   if (p.month)
     c.push(
-      sql`a.inv_date >= ${`${p.month}-01`}::date AND a.inv_date < (${`${p.month}-01`}::date + interval '1 month')`,
+      sql`${LEDGER_DATE} >= ${`${p.month}-01`}::date AND ${LEDGER_DATE} < (${`${p.month}-01`}::date + interval '1 month')`,
     );
   else if (p.year)
     c.push(
-      sql`a.inv_date >= ${`${p.year}-01-01`}::date AND a.inv_date < (${`${p.year}-01-01`}::date + interval '1 year')`,
+      sql`${LEDGER_DATE} >= ${`${p.year}-01-01`}::date AND ${LEDGER_DATE} < (${`${p.year}-01-01`}::date + interval '1 year')`,
     );
   if (p.clientId) c.push(sql`a.client_id = ${p.clientId}`);
   const scoped = clientCondition(sql`a.client_id`, p.clientIds);
@@ -138,7 +139,7 @@ export async function listLedger(
     db,
     sql`
     ${SELECT}, count(*) OVER () AS total_count ${FROM} ${where(p)}
-    ${orderBy(p.sort, { invDate: sql`a.inv_date`, declareNo: sql`d.declare_no`, client: sql`c.code`, netProfit: sql`a.net_profit` }, sql`date_trunc('month', a.inv_date), a.inv_no NULLS LAST, a.dis_no NULLS LAST, a.dn_no NULLS LAST, d.declare_no`)}
+    ${orderBy(p.sort, { invDate: sql`a.inv_date`, declareNo: sql`d.declare_no`, client: sql`c.code`, netProfit: sql`a.net_profit` }, sql`date_trunc('month', ${LEDGER_DATE}), a.inv_no NULLS LAST, a.dis_no NULLS LAST, a.dn_no NULLS LAST, d.declare_no`)}
     ${paginate(p.page, p.pageSize)}`,
   );
   const [totals] = await queryRows<LedgerSummary>(
@@ -325,7 +326,7 @@ export async function updateLedger(
     for (const k of ['invNo', 'disNo', 'dnNo'] as const)
       if (k in values && (values[k] ?? null) !== before[k])
         throw businessRule(
-          'Invoice numbers are given automatically when the Chea payment is checked. Delete the invoice to release them.',
+          'Invoice numbers are given automatically when the record summary is approved. Delete the invoice to release them.',
         );
     // Clearing optional computed fields restores their defaults.
     if (values.commission === null) {

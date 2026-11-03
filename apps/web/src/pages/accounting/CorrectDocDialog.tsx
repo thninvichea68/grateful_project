@@ -24,6 +24,12 @@ export function CorrectDocDialog({
   const [reason, setReason] = useState('');
   const changed = number.trim().toUpperCase() !== (doc.number ?? '') || date !== doc.date;
   const canSave = changed && reason.trim().length >= 3 && !action.isPending;
+  // Why Save is off, so it never just looks stuck.
+  const missing = !changed
+    ? 'Change the number or the issue date to save a correction.'
+    : reason.trim().length < 3
+      ? 'Type the reason (at least 3 characters) to save.'
+      : null;
 
   const save = async () => {
     await action.mutateAsync({
@@ -88,6 +94,15 @@ export function CorrectDocDialog({
           The Monthly Ledger shows the new number too. Numbers stay unique: one already used is
           refused.
         </p>
+        {missing && (
+          <p
+            className={ui.dialogSub}
+            role="status"
+            style={{ marginTop: 6, color: 'var(--status-pending-fg)', fontWeight: 600 }}
+          >
+            {missing}
+          </p>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
           <button type="button" className="filter-btn" onClick={onClose}>
             Close
