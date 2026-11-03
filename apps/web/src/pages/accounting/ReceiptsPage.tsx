@@ -11,6 +11,7 @@ import { fmtDate, fmtMoney } from '../../lib/format';
 import { BillingSections } from './billingParts';
 import { periodCode, STATEMENT_TITLE } from './billingUi';
 import b from './Billing.module.css';
+import { icons } from '../../layout/icons';
 import { PrintLink } from '../../components/PrintLink';
 
 /**
@@ -159,6 +160,7 @@ export function ReceiptsPage() {
                     {r.status !== 'VOID' && (
                       <>
                         <PrintLink className={b.linkBtn} href={`/print/receipts/${r.id}`}>
+                          {icons.printer({})}
                           Print
                         </PrintLink>
                         {can('accounting:write') && (
@@ -166,9 +168,10 @@ export function ReceiptsPage() {
                             type="button"
                             className={b.linkBtn}
                             data-danger="true"
-                            style={{ marginLeft: 12 }}
+                            style={{ marginLeft: 6 }}
                             onClick={() => void doVoid(r)}
                           >
+                            {icons.close({})}
                             Cancel
                           </button>
                         )}

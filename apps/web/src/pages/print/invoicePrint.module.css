@@ -153,7 +153,7 @@
 }
 .lblMuol {
   font-family: var(--km-title);
-  font-size: calc(8.8pt * var(--fit, 1));
+  font-size: calc(10pt * var(--fit, 1));
   font-weight: 500;
 }
 .custLbl {

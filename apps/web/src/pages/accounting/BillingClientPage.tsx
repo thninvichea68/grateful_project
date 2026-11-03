@@ -368,7 +368,7 @@ const FREIGHT_LABEL: Record<string, string> = {
   RAIL: 'RAIL',
 };
 
-/** A document: number · amount · ✓ when issued; a draft is just yellow. Opens the editor. */
+/** A document: number · amount; a draft is yellow. Opens the editor. */
 function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
   const draft = d.status === 'DRAFT';
   const label = `${PACK_LABEL[d.type]} ${d.number ?? ''}, ${fmtMoney(d.total)}, ${draft ? 'draft (not issued yet)' : 'issued'}`;
@@ -382,7 +382,6 @@ function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
     >
       <b>{d.number ?? 'Draft'}</b>
       <span>{fmtMoney(d.total)}</span>
-      {!draft && <em>✓</em>}
     </Link>
   );
 }
@@ -487,7 +486,8 @@ function StatementPanel({
           className="filter-btn"
           href={`/print/billing/${clientId}?month=${month}&parts=st-${st.kind}`}
         >
-          Print
+          {icons.printer({})}
+          Print Statement
         </PrintLink>
       </div>
       {st.lines.length ? (
@@ -536,10 +536,12 @@ function StatementPanel({
                     )}
                   </td>
                   <td className={b.statusCol}>
-                    {l.draft && (
+                    {l.draft ? (
                       <span className={b.draftTag} title="Not issued yet">
                         draft
                       </span>
+                    ) : (
+                      <span className={`${b.draftTag} ${b.issuedTag}`}>issued</span>
                     )}
                   </td>
                   <td className={b.num}>
@@ -572,6 +574,7 @@ function StatementPanel({
             {r.status !== 'VOID' && (
               <>
                 <PrintLink className={b.linkBtn} href={`/print/receipts/${r.id}`}>
+                  {icons.printer({})}
                   Print
                 </PrintLink>
                 {canWrite && (
@@ -581,6 +584,7 @@ function StatementPanel({
                     data-danger="true"
                     onClick={() => void doVoid(r)}
                   >
+                    {icons.close({})}
                     Cancel
                   </button>
                 )}
@@ -597,8 +601,13 @@ function StatementPanel({
         {due > 0 && (
           <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             {canWrite && (
-              <button type="button" className="btn-create-submit" onClick={onPay}>
-                Record payment
+              <button
+                type="button"
+                className={`btn-create-submit ${b.iconBtn}`}
+                onClick={onPay}
+              >
+                {icons.cash({})}
+                Record Payment
               </button>
             )}
             <PrintLink
@@ -606,7 +615,8 @@ function StatementPanel({
               href={`/print/billing/${clientId}?month=${month}&parts=rc-${st.kind}`}
               title="A receipt for the balance due, to print before the client pays (number, method and signature filled in by hand)"
             >
-              Print receipt
+              {icons.printer({})}
+              Print Receipt
             </PrintLink>
           </div>
         )}

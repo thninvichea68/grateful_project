@@ -609,24 +609,22 @@ function Editor({
                   <thead>
                     <tr>
                       <th style={{ width: 44 }}>#</th>
-                      <th>Description</th>
-                      <th className={dl.num} style={{ width: 84 }}>
-                        Qty
-                      </th>
-                      <th style={{ width: 92 }}>Unit</th>
-                      <th className={dl.num} style={{ width: 116 }}>
-                        Unit price
-                      </th>
+                      {/* Column titles all on the left, as the user reads them across. */}
+                      <th style={{ width: '32%' }}>Description</th>
+                      <th style={{ width: 84 }}>Qty</th>
+                      <th style={{ width: 150 }}>Unit</th>
+                      <th style={{ width: 116 }}>Unit price</th>
                       {cfg.tax ? (
                         <>
-                          <th className={dl.num}>Sub total</th>
-                          <th className={dl.num}>{vatLabel(vatPercent)}</th>
-                          <th className={dl.num}>Amount</th>
+                          <th>Sub total</th>
+                          <th>{vatLabel(vatPercent)}</th>
+                          <th>Amount</th>
                         </>
                       ) : (
                         <>
-                          <th style={{ width: 130 }}>Mark</th>
-                          <th className={dl.num}>Total</th>
+                          {/* Mark takes the spare width; Total keeps to its figure. */}
+                          <th>Mark</th>
+                          <th style={{ width: 140 }}>Total</th>
                         </>
                       )}
                       <th style={{ width: 40 }} aria-label="Remove" />
@@ -643,7 +641,7 @@ function Editor({
                           <td>
                             <span className={dl.no}>{i + 1}</span>
                           </td>
-                          <td style={{ minWidth: 280 }}>
+                          <td style={{ minWidth: 220 }}>
                             <input
                               className="form-field-box"
                               placeholder="Choose or type a fee item"

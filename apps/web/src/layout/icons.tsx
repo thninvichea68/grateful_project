@@ -296,6 +296,14 @@ export const icons = {
       <path d="M6 14h12v7H6z" />
     </svg>
   ),
+  /** A banknote: recording a payment. */
+  cash: (p: IconProps) => (
+    <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 12h.01M18 12h.01" />
+    </svg>
+  ),
   moon: (p: IconProps) => (
     <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />

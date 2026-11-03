@@ -190,13 +190,13 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
         <div className={p.metaRight}>
           <div>
             <span className={p.metaLbl}>
-              {tax ? 'លេខវិក្កយបត្រ / Invoice No:' : 'លេខផ្តល់ប័ត្រ / DIS-No:'}
+              {tax ? 'លេខវិក្កយបត្រ / Invoice No:' : 'លេខវិក្កយបត្រ / DIS-No:'}
             </span>{' '}
             <span className={p.metaVal}>{d.number}</span>
           </div>
           <div>
             <span className={p.metaLbl}>
-              {tax ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date:' : 'ការបញ្ជូនផ្តល់ប័ត្រ / DIS-Date:'}
+              {tax ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date:' : 'កាលបរិច្ឆេទវិក្កយបត្រ / DIS-Date:'}
             </span>{' '}
             <span className={p.metaVal}>{longDate(d.date)}</span>
           </div>

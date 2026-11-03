@@ -479,7 +479,7 @@ function taxOrDisbursement(
   const kmLbl = f(KM, 10);
   const left: (Part[] | string)[] = [
     [
-      { text: 'ឈ្មោះអតិថិជន', font: f(MUOL, 8.8) },
+      { text: 'ឈ្មោះអតិថិជន', font: f(MUOL, 10) },
       { text: ' / Customer:', font: f(EN, 10, { bold: true }) },
       { text: ` ${h(d, 'customerNameKm')}`, font: f(MUOL, 10) },
     ],
@@ -499,12 +499,12 @@ function taxOrDisbursement(
   ];
   const right: (Part[] | string)[] = [
     [
-      { text: tax ? 'លេខវិក្កយបត្រ / Invoice No: ' : 'លេខផ្តល់ប័ត្រ / DIS-No: ', font: kmLbl },
+      { text: tax ? 'លេខវិក្កយបត្រ / Invoice No: ' : 'លេខវិក្កយបត្រ / DIS-No: ', font: kmLbl },
       { text: d.number ?? '', font: val },
     ],
     [
       {
-        text: tax ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date: ' : 'ការបញ្ជូនផ្តល់ប័ត្រ / DIS-Date: ',
+        text: tax ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date: ' : 'កាលបរិច្ឆេទវិក្កយបត្រ / DIS-Date: ',
         font: kmLbl,
       },
       { text: longDate(d.date), font: val },
