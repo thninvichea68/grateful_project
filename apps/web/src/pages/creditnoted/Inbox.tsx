@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { CreditNoteMessage } from '@gs/shared';
 import { useCreditNoteInbox, useMarkInboxRead } from '../../features/accounting';
 import { useToast } from '../../components/Toast';
-import { fmtMoney } from '../../lib/format';
+import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { cnSeq } from './seq';
 import t from '../accounting/CreditNotesReview.module.css';
 import s from './Inbox.module.css';
@@ -146,7 +146,7 @@ export function InboxTable({ search }: { search?: string | undefined }) {
                 )}
               </td>
               <td className={t.mono}>{m.declareNo ?? '-'}</td>
-              <td>{m.date}</td>
+              <td>{fmtDateFull(m.date)}</td>
               <td>{m.quantityText ?? '-'}</td>
               <td>{m.port ?? '-'}</td>
               <td>{m.transportMode ? MODE[m.transportMode] : '-'}</td>

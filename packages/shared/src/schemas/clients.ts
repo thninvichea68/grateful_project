@@ -42,6 +42,7 @@ export interface ClientListItem {
   code: string;
   name: string;
   legalName: string | null;
+  vattin: string | null;
   countryIso2: string;
   countryName: string;
   status: ClientStatus;
@@ -57,7 +58,6 @@ export interface ClientDetail extends ClientListItem {
   legalNameKm: string | null;
   address: string | null;
   addressKm: string | null;
-  vattin: string | null;
   contactName: string | null;
   contactEmail: string | null;
   contactPhone: string | null;

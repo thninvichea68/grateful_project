@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { RecordSummaryMessage } from '@gs/shared';
 import { useMarkRecordSummaryInboxRead, useRecordSummaryInbox } from '../../features/accounting';
 import { useToast } from '../../components/Toast';
-import { fmtMoney } from '../../lib/format';
+import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { inboxIcon, timeAgo } from '../creditnoted/Inbox';
 import t from './CreditNotesReview.module.css';
 import s from '../creditnoted/Inbox.module.css';
@@ -119,7 +119,7 @@ export function RecordSummaryInboxTable({
                 </span>
               </td>
               <td className={t.mono}>{m.declareNo ?? '-'}</td>
-              <td>{m.date}</td>
+              <td>{fmtDateFull(m.date)}</td>
               <td className={t.mono}>{m.invNo ?? '-'}</td>
               <td>{m.quantityText ?? '-'}</td>
               <td>{m.port?.toUpperCase() ?? '-'}</td>

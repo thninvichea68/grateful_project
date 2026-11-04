@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { RememberedOutlet } from './RememberedOutlet';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
-import { titleFor } from './nav';
+import { crumbsFor, titleFor } from './nav';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { applyTheme } from './theme';
 
@@ -91,7 +91,10 @@ export function AppLayout() {
         onToggleCollapse={toggleCollapse}
       />
       <div className="main">
-        <TopBar title={title} onToggleMenu={() => setMobileOpen((o) => !o)} />
+        <TopBar
+          crumbs={crumbsFor(location.pathname)}
+          onToggleMenu={() => setMobileOpen((o) => !o)}
+        />
         <main className="content" id="main-content" tabIndex={-1}>
           <ErrorBoundary resetKey={location.pathname}>
             <RememberedOutlet />

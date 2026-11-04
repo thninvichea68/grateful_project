@@ -10,11 +10,12 @@ import { useNavCounts } from './useNavCounts';
 import { TeamChat } from './chat/TeamChat';
 
 interface Props {
-  title: string;
+  /** Breadcrumb from the sidebar (section › page › tab); the last one is the page itself. */
+  crumbs: string[];
   onToggleMenu: () => void;
 }
 
-export function TopBar({ title, onToggleMenu }: Props) {
+export function TopBar({ crumbs, onToggleMenu }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { can } = useAuth();
@@ -23,7 +24,21 @@ export function TopBar({ title, onToggleMenu }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchBox = useRef<HTMLDivElement>(null);
 
-  // Phone search: focus the field on open; close on Escape, a tap outside, or a new page.
+  // Ctrl+K (⌘K on a Mac) opens the search from any page, or puts the cursor back in it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+        searchBox.current?.querySelector('input')?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Search opens from its button (or Ctrl+K): focus the field; close on Escape, a click
+  // outside, or a new page.
   useEffect(() => {
     if (!searchOpen) return;
     searchBox.current?.querySelector('input')?.focus();
@@ -58,23 +73,30 @@ export function TopBar({ title, onToggleMenu }: Props) {
           {icons.menu({})}
         </button>
         <h1 className="page-title" id="pageTitle">
-          {title}
+          {crumbs.map((c, i) =>
+            i < crumbs.length - 1 ? (
+              <span key={i} className="page-crumb">
+                {c}
+                <span className="page-crumb-sep" aria-hidden="true">
+                  {icons.chevronRight({ width: 16, height: 16 })}
+                </span>
+              </span>
+            ) : (
+              <span key={i}>{c}</span>
+            ),
+          )}
         </h1>
-        {pathname.startsWith('/overview') && (
-          <>
-            <LiveMonthPill />
-            <CustomizeOverviewButton />
-          </>
-        )}
+        {pathname.startsWith('/overview') && <LiveMonthPill />}
       </div>
 
       <div className="topbar-right">
-        {/* Phones: search is an icon that opens the field across the top bar. */}
+        {/* Search opens with Ctrl+K; phones and tablets (no Ctrl key) get this icon instead. */}
         <button
           type="button"
           className="icon-btn search-toggle"
           onClick={() => setSearchOpen((o) => !o)}
           aria-label="Search"
+          aria-keyshortcuts="Control+K"
           aria-expanded={searchOpen}
         >
           {icons.search({})}
@@ -82,6 +104,8 @@ export function TopBar({ title, onToggleMenu }: Props) {
         <div className="topbar-search" ref={searchBox}>
           <GlobalSearch />
         </div>
+
+        {pathname.startsWith('/overview') && <CustomizeOverviewButton />}
 
         <AskAi />
 

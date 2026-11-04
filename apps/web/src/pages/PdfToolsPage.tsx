@@ -47,7 +47,7 @@ const TOOLS: Tool[] = [
     name: 'Edit PDF',
     desc: 'Add text, images, signatures, highlights and drawings, or white out content.',
     group: 'Edit',
-    icon: svg(<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />),
+    icon: svg(<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />),
     Panel: EditPdfTool,
   },
   {

@@ -8,6 +8,14 @@ export function fmtDate(iso: string | null | undefined): string {
   return `${d}-${MON[Number(m) - 1]}-${y.slice(2)}`;
 }
 
+/** As fmtDate, with the full year: 2026-01-01 → 01-JAN-2026. */
+export function fmtDateFull(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}-${MON[Number(m) - 1]}-${y}`;
+}
+
 /** Numbers with thousands separators; trailing zeros of NUMERIC strings removed. */
 export function fmtNum(v: string | number | null | undefined, maxDecimals = 3): string {
   if (v === null || v === undefined || v === '') return '-';

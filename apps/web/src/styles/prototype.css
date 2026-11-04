@@ -463,7 +463,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   align-items: center;
   justify-content: center;
@@ -471,14 +471,24 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   cursor: pointer;
 }
 .page-title {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
   color: var(--text-primary);
   /* Long titles (Analytics) shorten with "…" rather than squeezing the search box. */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Breadcrumb: the section and page before the current one, same size, lighter colour. */
+.page-crumb {
+  color: var(--text-tertiary);
+}
+.page-crumb-sep {
+  display: inline-flex;
+  margin: 0 6px;
+  vertical-align: -2px;
+  color: var(--text-tertiary);
 }
 
 .topbar-right {
@@ -489,7 +499,11 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   flex: 1 1 auto;
   min-width: 0;
 }
-/* Compact top bar: every control is 34px tall to sit evenly in the 52px bar. */
+/* Compact top bar: every control is 34px tall to sit evenly in the 52px bar. The search box,
+   Ask AI, chat and bell are white with a grey border (New Shipment stays the filled button). */
+.topbar :is(.search-box, .ask-ai-btn, .icon-btn) {
+  background: var(--bg-surface);
+}
 .topbar .search-box {
   height: 34px;
   padding: 0 12px;
@@ -523,25 +537,34 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .topbar-left {
   flex: 0 0 auto;
 }
-.topbar-search {
-  flex: 0 1 400px;
-  min-width: 180px;
-}
-.topbar-search .search-box {
-  width: 100%;
-}
 .topbar-right > * {
   flex-shrink: 0;
-}
-.topbar-right > .topbar-search {
-  flex-shrink: 1;
 }
 .ask-ai-btn,
 .topbar-right .new-shipment-btn {
   white-space: nowrap;
 }
-.search-toggle {
-  display: none !important;
+/* Search stays out of sight: Ctrl+K opens the search box floating at the top of the page, with
+   its results below. Phones and tablets (no Ctrl key) get a search icon instead. */
+.topbar .search-toggle {
+  display: none;
+}
+.topbar-search {
+  display: none;
+}
+.topbar.search-open .topbar-search {
+  display: block;
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  z-index: 1000;
+  width: min(600px, calc(100vw - 32px));
+  transform: translateX(-50%);
+}
+.topbar.search-open .topbar-search .search-box {
+  width: 100%;
+  height: 42px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
 }
 /* Laptops: Ask AI and New Shipment shrink to their icons. */
 @media (max-width: 1280px) {
@@ -561,22 +584,24 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
     justify-content: center;
   }
 }
-/* Tablets and phones: search becomes an icon that opens the field across the whole bar. */
+/* Tablets and phones: search is an icon that opens the field across the whole bar. */
 @media (max-width: 900px) {
-  .search-toggle {
-    display: flex !important;
-  }
-  .topbar-search {
-    display: none;
+  .topbar .search-toggle {
+    display: flex;
   }
   .topbar.search-open .topbar-search {
     position: absolute;
     inset: 0;
     z-index: 5;
+    width: auto;
     padding: 0 12px;
     display: flex;
     align-items: center;
+    transform: none;
     background: var(--bg-surface);
+  }
+  .topbar.search-open .topbar-search .search-box {
+    box-shadow: none;
   }
 }
 /* Phones: compact buttons; the Overview's month pill stands in for the title. */
@@ -594,6 +619,10 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   }
   .page-title {
     font-size: 16px;
+  }
+  /* Phones: only the current page. */
+  .page-crumb {
+    display: none;
   }
   /* Overview: the month pill says where you are. */
   .topbar-left:has(.time-pill-btn) .page-title {
@@ -1018,7 +1047,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   height: 40px;
   border-radius: 50%;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1042,7 +1071,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   gap: 7px;
   padding: 8px 16px;
   border-radius: 8px;
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   font-size: 12px;
   font-weight: 600;
@@ -1970,11 +1999,12 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   position: relative;
   flex-shrink: 0;
 }
+/* Card toggles and dropdowns, like every secondary button: white with a grey border. */
 .card-dropdown-trigger {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 12px;

@@ -7,7 +7,7 @@ import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Pager } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { DirectionToggle } from '../../components/DirectionToggle';
-import { fmtMoney } from '../../lib/format';
+import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { NewCreditNoteModal } from './NewCreditNoteModal';
 import { InboxTable, InboxToggle } from './Inbox';
@@ -216,7 +216,7 @@ export function CreditNotedList() {
                       )}
                     </td>
                     <td className={s.mono}>{r.declareNo ?? '-'}</td>
-                    <td>{r.date}</td>
+                    <td>{fmtDateFull(r.date)}</td>
                     <td>{r.quantityText ?? '-'}</td>
                     <td>{r.port ?? '-'}</td>
                     <td>{r.transportMode ? MODE[r.transportMode] : '-'}</td>

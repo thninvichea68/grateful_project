@@ -1,4 +1,4 @@
-/* Settings → Company: header, three labelled sections, Save bar. Full width of the page. */
+/* Settings → Company: header, three side-by-side columns, Save bar. Full width of the page. */
 .card {
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -69,26 +69,31 @@
   resize: none;
 }
 
-/* One section: what it is on the left, its fields on the right. */
-.section {
+/* Three side-by-side columns (identity, address, bank), like the invoice header. The locked
+   fieldset lays its two sections out as if they were direct children. */
+.columns {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 40px;
-  padding: 28px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
 }
-.section + .section {
-  border-top: 1px solid var(--border-subtle);
+.columns > .fieldset {
+  display: contents;
 }
-/* Title row: the icon chip (shared .cx-title-icon) beside the heading. */
-.headTitle,
-.sectionTitle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+/* One column: underlined title, a one-line hint, then its fields stacked. */
+.section {
+  min-width: 0;
+  padding: 24px 28px 28px;
 }
 .headTitle {
+  display: flex;
   align-items: flex-start;
   gap: 14px;
+}
+/* Outlined chip, like the client icon: no fill, text-coloured glyph, so it flips with the theme. */
+.outlineIcon {
+  background: none !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong);
 }
 .headIcon {
   width: 40px !important;
@@ -98,35 +103,41 @@
   width: 20px;
   height: 20px;
 }
-.sectionHead p {
-  padding-left: 46px;
+/* Section title with an accent underline over a full-width hairline. */
+.sectionHead {
+  border-bottom: 1px solid var(--border-subtle);
 }
 .sectionHead h4 {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 -1px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent-primary);
   font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
-.sectionHead p {
-  margin: 8px 0 0;
-  max-width: 280px;
-  font-size: 13px;
-  line-height: 1.6;
+.sectionIcon {
+  width: 30px !important;
+  height: 30px !important;
+}
+.hint {
+  margin: 10px 0 18px;
+  font-size: 12.5px;
+  line-height: 1.55;
   color: var(--text-secondary);
 }
 
 .fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   align-content: start;
 }
-.fields[data-cols='3'] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-/* Bank accounts: stacked, each under an underlined "Account n" heading, Add button below. */
+/* Bank accounts: stacked, each under an "Account n" heading, Add button below. */
 .fields[data-cols='list'] {
-  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
 }
 .bankHead {
@@ -134,20 +145,7 @@
   align-items: center;
   gap: 8px;
   min-height: 28px;
-  margin-bottom: 14px;
-  padding-bottom: 6px;
-  position: relative;
-}
-/* A short accent underline, as wide as the Bank column. */
-.bankHead::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: calc((100% - 48px) / 3);
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent-primary);
+  margin-bottom: 12px;
 }
 .bankNo {
   font-size: 12px;
@@ -199,10 +197,6 @@
   background: var(--bg-surface);
   color: var(--status-error, #dc2626);
 }
-/* Follows the locked fieldset rather than a section, so it draws its own divider. */
-.bankSection {
-  border-top: 1px solid var(--border-subtle);
-}
 /* Show all / Show less, top right of the first account. */
 .bankToggle {
   display: inline-flex;
@@ -234,8 +228,8 @@
 }
 .bankFields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
 }
 .addBank {
   display: inline-flex;
@@ -292,8 +286,8 @@
 }
 .field .textarea {
   display: block;
-  height: 76px;
-  min-height: 76px;
+  height: 96px;
+  min-height: 96px;
   padding: 12px 14px;
   font-family: var(--font-main);
   line-height: 22px;
@@ -324,38 +318,16 @@
   color: var(--text-secondary);
 }
 
-@media (max-width: 1280px) {
-  .section {
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 28px;
+/* Narrow windows: the columns stack, one under the other. */
+@media (max-width: 1100px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .fields[data-cols='3'],
-  .bankFields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .bankHead::after {
-    width: calc((100% - 24px) / 2);
-  }
-}
-@media (max-width: 900px) {
-  .section {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  .sectionHead p {
-    max-width: none;
-    padding-left: 0;
+  .section:not(:first-child) {
+    border-top: 1px solid var(--border-subtle);
   }
 }
 @media (max-width: 600px) {
-  .fields,
-  .fields[data-cols='3'],
-  .bankFields {
-    grid-template-columns: 1fr;
-  }
-  .bankHead::after {
-    width: 120px;
-  }
   .section,
   .head,
   .foot {

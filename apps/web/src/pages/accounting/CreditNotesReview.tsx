@@ -7,9 +7,10 @@ import { ErrorBanner, Modal, Pager, ui } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { DirectionToggle } from '../../components/DirectionToggle';
 import { useToast } from '../../components/Toast';
-import { fmtMoney } from '../../lib/format';
+import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import s from './CreditNotesReview.module.css';
+import { ReviewTabs } from './ReviewTabs';
 
 /** CHECKED is stored as before and shown as "Approved". */
 export const REVIEW: Record<CreditNoteReviewStatus, { label: string; cls: string }> = {
@@ -64,18 +65,6 @@ export const checkIcon = svg(
     <path d="m8.5 12.5 2.5 2.5 4.5-5" />
   </>,
 );
-export const alertIcon = svg(
-  <>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7.5v5.5M12 16.5h.01" />
-  </>,
-);
-export const eyeIcon = svg(
-  <>
-    <path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
-    <circle cx="12" cy="12" r="2.5" />
-  </>,
-);
 
 /**
  * Accounting → Chea Payments: the broker's submitted Credit Note vouchers, for accounting
@@ -111,80 +100,14 @@ export function CreditNotesReview() {
   const open = (id: string) => navigate(`/accounting/credit-notes/${id}`);
   const filtered = !!(q.clientId || q.direction || q.q || q.month || q.year || q.review);
 
-  const stats: {
-    review: '' | CreditNoteReviewStatus;
-    label: string;
-    value?: number;
-    icon: ReactNode;
-    cls: string;
-  }[] = [
-    {
-      review: '',
-      label: 'All records',
-      value: counts?.total,
-      icon: icons.creditnote({ width: 17, height: 17 }),
-      cls: s.neutral!,
-    },
-    {
-      review: 'UNCHECKED',
-      label: 'Unchecked',
-      value: counts?.unchecked,
-      icon: alertIcon,
-      cls: s.unchecked!,
-    },
-    {
-      review: 'REVIEWED',
-      label: 'Reviewed',
-      value: counts?.reviewed,
-      icon: eyeIcon,
-      cls: s.reviewed!,
-    },
-    {
-      review: 'CHECKED',
-      label: 'Approved',
-      value: counts?.checked,
-      icon: checkIcon,
-      cls: s.checked!,
-    },
-    {
-      review: 'REVISED',
-      label: 'Revised',
-      value: counts?.revised,
-      icon: icons.edit({ width: 17, height: 17 }),
-      cls: s.revised!,
-    },
-    // Revised by its maker after submitting, waiting for approval.
-    {
-      review: 'REVISION_REQUESTED',
-      label: 'Request Revise',
-      value: counts?.revisionRequested,
-      icon: icons.send({ width: 17, height: 17 }),
-      cls: s.requested!,
-    },
-  ];
-
   return (
     <section className={`view active ${s.page} ${s.fill}`}>
-      <div className={`${s.stats} ${s.six}`} role="group" aria-label="Filter by status">
-        {stats.map((k) => {
-          const on = (q.review ?? '') === k.review;
-          return (
-            <button
-              key={k.label}
-              type="button"
-              className={`${s.stat} ${k.cls} ${on ? s.statOn : ''}`}
-              aria-pressed={on}
-              onClick={() => set('review', k.review)}
-            >
-              <span className={s.statIcon}>{k.icon}</span>
-              <span className={s.statText}>
-                <span className={s.statLabel}>{k.label}</span>
-                <span className={s.statValue}>{k.value ?? '–'}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <ReviewTabs
+        counts={counts}
+        value={q.review ?? ''}
+        onChange={(review) => set('review', review)}
+        allIcon={icons.creditnote({})}
+      />
 
       <ErrorBanner error={list.error} />
       <div className={s.card}>
@@ -305,7 +228,7 @@ export function CreditNotesReview() {
                     )}
                   </td>
                   <td className={s.mono}>{r.declareNo ?? '-'}</td>
-                  <td>{r.date}</td>
+                  <td>{fmtDateFull(r.date)}</td>
                   <td>{r.quantityText ?? '-'}</td>
                   <td>{r.port ?? '-'}</td>
                   <td>{r.transportMode ? MODE[r.transportMode] : '-'}</td>

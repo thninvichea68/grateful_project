@@ -219,6 +219,8 @@ export interface BillingOverviewRow extends BillingSummary {
   clientId: string;
   clientCode: string;
   clientName: string;
+  /** The client's VAT TIN, shown under its name. */
+  vattin: string | null;
   invoiceTotal: string;
   debitNoteTotal: string;
 }

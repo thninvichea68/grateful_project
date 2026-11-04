@@ -21,7 +21,6 @@ const BLANK = '(Blanks)';
 export function HeaderFilter({
   label,
   kind = 'text',
-  align,
   open,
   onOpen,
   onClose,
@@ -35,6 +34,7 @@ export function HeaderFilter({
 }: {
   label: string;
   kind?: Kind;
+  /** Kept for callers; the chevron always follows the label now. */
   align?: 'right';
   open: boolean;
   onOpen: () => void;
@@ -55,7 +55,7 @@ export function HeaderFilter({
       <button
         ref={btn}
         type="button"
-        className={`${s.head} ${align === 'right' ? s.right : ''} ${filtered || sort ? s.on : ''}`}
+        className={`${s.head} ${filtered || sort ? s.on : ''}`}
         onClick={() => (open ? onClose() : onOpen())}
         aria-haspopup="dialog"
         aria-expanded={open}

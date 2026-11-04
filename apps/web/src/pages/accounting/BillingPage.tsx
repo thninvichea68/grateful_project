@@ -4,6 +4,7 @@ import { useBillingOverview } from '../../features/billing';
 import { ErrorBanner, TableState } from '../../components/ui';
 import { StatTile, StatTiles } from '../../components/StatTiles';
 import { fmtMoney, fmtNum } from '../../lib/format';
+import { icons } from '../../layout/icons';
 import { BillingSections, MonthStepper, StagePill } from './billingParts';
 import { isMonth, monthName, thisMonth } from './billingUi';
 import b from './Billing.module.css';
@@ -25,16 +26,13 @@ export function BillingPage() {
 
   return (
     <section className="view active view-fill">
+      <BillingSections className={b.sectionsTop} />
       <div className="card">
         <div className={b.bar}>
           <MonthStepper
             month={month}
             onChange={(m) => setParams({ month: m }, { replace: true })}
           />
-          <span className={b.barHint}>
-            A shipment counts in the month of its declaration date.
-          </span>
-          <BillingSections className={b.sectionsEnd} />
         </div>
         <ErrorBanner error={overview.error} />
         {t && (
@@ -64,16 +62,27 @@ export function BillingPage() {
           </StatTiles>
         )}
         <div className="plans-table-scroll" style={{ maxHeight: 'none' }}>
-          <table className="data-table-clean">
+          <table className={`data-table-clean ${b.overview}`}>
+            <colgroup>
+              <col style={{ width: '27%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '2%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Client</th>
-                <th className={b.num}>Shipments</th>
+                <th className={b.amt}>Shipments</th>
                 <th>Documents</th>
-                <th className={b.num}>Invoices &amp; DIS</th>
-                <th className={b.num}>Debit notes</th>
-                <th className={b.num}>Received</th>
-                <th className={b.num}>Balance due</th>
+                <th className={b.amt}>Invoices &amp; DIS</th>
+                <th className={b.amt}>Debit notes</th>
+                <th className={b.amt}>Received</th>
+                <th className={b.amt}>Balance due</th>
                 <th>Status</th>
                 <th aria-label="Open" />
               </tr>
@@ -95,12 +104,15 @@ export function BillingPage() {
                   onKeyDown={(e) => e.key === 'Enter' && open(r)}
                 >
                   <td>
-                    <div className={b.clientCell}>
-                      <span className={b.code}>{r.clientCode}</span>
-                      <span className={b.clientName}>{r.clientName}</span>
+                    <div className={b.clientCell} title={r.clientName}>
+                      <span className={b.clientIcon}>{icons.clients({})}</span>
+                      <span className={b.clientText}>
+                        <span className={b.clientName}>{r.clientName}</span>
+                        <span className={b.clientTin}>VATTIN: {r.vattin || '—'}</span>
+                      </span>
                     </div>
                   </td>
-                  <td className={b.num}>{r.shipments}</td>
+                  <td className={b.amt}>{r.shipments}</td>
                   <td>
                     <div className={b.flags}>
                       {(r.issued > 0 || r.manual === 0) && (
@@ -127,10 +139,10 @@ export function BillingPage() {
                       )}
                     </div>
                   </td>
-                  <td className={b.num}>{fmtMoney(r.invoiceTotal)}</td>
-                  <td className={b.num}>{fmtMoney(r.debitNoteTotal)}</td>
-                  <td className={b.num}>{fmtMoney(r.received)}</td>
-                  <td className={`${b.num} ${Number(r.balance) > 0 ? b.due : b.strong}`}>
+                  <td className={b.amt}>{fmtMoney(r.invoiceTotal)}</td>
+                  <td className={b.amt}>{fmtMoney(r.debitNoteTotal)}</td>
+                  <td className={b.amt}>{fmtMoney(r.received)}</td>
+                  <td className={`${b.amt} ${Number(r.balance) > 0 ? b.due : b.strong}`}>
                     {fmtMoney(r.balance)}
                   </td>
                   <td>
@@ -144,16 +156,16 @@ export function BillingPage() {
               {t && rows.length > 1 && (
                 <tr className={b.totalRow}>
                   <td>Total</td>
-                  <td className={b.num}>{t.shipments}</td>
+                  <td className={b.amt}>{t.shipments}</td>
                   <td />
-                  <td className={b.num}>
+                  <td className={b.amt}>
                     {fmtMoney(rows.reduce((s, r) => s + Number(r.invoiceTotal), 0))}
                   </td>
-                  <td className={b.num}>
+                  <td className={b.amt}>
                     {fmtMoney(rows.reduce((s, r) => s + Number(r.debitNoteTotal), 0))}
                   </td>
-                  <td className={b.num}>{fmtMoney(t.received)}</td>
-                  <td className={b.num}>{fmtMoney(t.balance)}</td>
+                  <td className={b.amt}>{fmtMoney(t.received)}</td>
+                  <td className={b.amt}>{fmtMoney(t.balance)}</td>
                   <td colSpan={2} />
                 </tr>
               )}

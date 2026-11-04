@@ -309,6 +309,68 @@ const EXTRA_TITLES: [string, string][] = [
   ['/quotations/', 'Quotation'],
 ];
 
+/** Tabs inside a sidebar page (Client Billing's sections, same as SECTIONS in billingParts). */
+const TABS: [string, string][] = [
+  ['/accounting/billing', 'Clients'],
+  ['/accounting/tax-invoices', 'Tax Invoices'],
+  ['/accounting/disbursements', 'Disbursements'],
+  ['/accounting/debit-notes', 'Debit Notes'],
+  ['/accounting/receipts', 'Receipts'],
+];
+
+/** The last crumb on pages below a list (an editor, a detail page). Longest prefix wins. */
+const DETAILS: [string, string][] = [
+  ['/plans/new', 'Create Shipment'],
+  ['/plans/', 'Shipment Details'],
+  ['/clients/', 'Client Details'],
+  ['/quotations/', 'Quotation'],
+  ['/accounting/billing/', 'Client'],
+  ['/accounting/tax-invoices/', 'Tax Invoice'],
+  ['/accounting/disbursements/', 'Disbursement'],
+  ['/accounting/debit-notes/', 'Debit Note'],
+  ['/accounting/credit-notes/', 'Credit Note'],
+  ['/accounting/record-summaries/', 'Record Summary'],
+  ['/credit-noted/', 'Credit Note'],
+  ['/record-summary/', 'Record Summary'],
+];
+
+const under = (pathname: string, to: string) =>
+  to.endsWith('/')
+    ? pathname.startsWith(to) && pathname.length > to.length
+    : pathname === to || pathname.startsWith(`${to}/`);
+
+/**
+ * The top bar's breadcrumb, from the sidebar: section › page › tab › detail,
+ * e.g. /accounting/billing → Accounting › Client Billing › Clients.
+ */
+export function crumbsFor(pathname: string): string[] {
+  // Sub-items before their parent, so on a tie (/co and its CO Plans) the sub-item wins.
+  const entries = NAV.flatMap((g) =>
+    g.items.flatMap((i) => [
+      ...(i.children ?? []).flatMap((c) =>
+        [c.to, ...(c.alsoActive ?? [])].map((to) => ({ to, trail: [i.label, c.label] })),
+      ),
+      { to: i.to, trail: [i.label] },
+    ]),
+  );
+  const longest = <T extends { to: string }>(list: T[]) =>
+    list
+      .filter((e) => under(pathname, e.to))
+      .reduce<T | undefined>(
+        (best, e) => (!best || e.to.length > best.to.length ? e : best),
+        undefined,
+      );
+
+  const page = longest(entries);
+  if (!page) return [titleFor(pathname)];
+  const trail = [...page.trail];
+  const tab = longest(TABS.map(([to, label]) => ({ to, label })));
+  if (tab) trail.push(tab.label);
+  const detail = longest(DETAILS.map(([to, label]) => ({ to, label })));
+  if (detail) trail.push(detail.label);
+  return trail;
+}
+
 export function titleFor(pathname: string): string {
   const candidates: [string, string][] = [
     ...EXTRA_TITLES,

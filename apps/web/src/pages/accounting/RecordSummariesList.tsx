@@ -6,7 +6,7 @@ import { useLookups } from '../../features/hooks';
 import { ErrorBanner, Pager } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { DirectionToggle } from '../../components/DirectionToggle';
-import { fmtMoney } from '../../lib/format';
+import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { REVIEW } from './CreditNotesReview';
 import { RecordSummaryInboxTable, RecordSummaryInboxToggle } from './RecordSummaryInbox';
@@ -232,7 +232,7 @@ export function RecordSummariesList({ base }: { base: string }) {
                       )}
                     </td>
                     <td className={s.mono}>{d.billTo ?? d.declareNo ?? '-'}</td>
-                    <td>{d.date}</td>
+                    <td>{fmtDateFull(d.date)}</td>
                     <td className={s.mono}>{d.invNo ?? '-'}</td>
                     <td>{d.quantityText ?? '-'}</td>
                     <td>{d.port?.toUpperCase() ?? '-'}</td>

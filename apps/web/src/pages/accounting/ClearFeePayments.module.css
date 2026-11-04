@@ -48,22 +48,17 @@
 .figures b {
   color: var(--text-primary);
 }
+/* The month's balance as coloured text (no background), like the status values. */
 .balance {
-  padding: 3px 10px;
-  border-radius: 8px;
   font-weight: 600;
-  background: var(--bg-subtle);
 }
 .balance[data-tone='due'] {
-  background: var(--status-pending-bg);
   color: var(--status-pending-fg);
 }
 .balance[data-tone='over'] {
-  background: var(--status-progress-bg);
-  color: var(--status-progress-fg);
+  color: var(--accent-blue);
 }
 .balance[data-tone='done'] {
-  background: var(--status-completed-bg);
   color: var(--status-completed-fg);
 }
 

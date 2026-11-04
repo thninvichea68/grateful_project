@@ -400,6 +400,7 @@ export async function overview(month: string, clientIds?: string[]): Promise<Bil
     clientId: m.client.id,
     clientCode: m.client.code,
     clientName: m.client.legalName ?? m.client.name,
+    vattin: m.client.vattin,
     invoiceTotal: m.statements.INVOICE.total,
     debitNoteTotal: m.statements.DEBIT_NOTE.total,
     ...m.summary,

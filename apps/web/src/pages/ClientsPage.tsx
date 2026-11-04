@@ -6,7 +6,9 @@ import { Pill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
 import { SearchBox } from '../components/SearchBox';
 import { fmtDate, fmtMoney } from '../lib/format';
+import { icons } from '../layout/icons';
 import { ClientFormModal } from './clients/ClientFormModal';
+import b from './accounting/Billing.module.css';
 
 export const CLIENT_STATUS_PILL = {
   ACTIVE: { tone: 'completed', label: 'Active' },
@@ -104,9 +106,12 @@ export function ClientsPage() {
                   onKeyDown={(e) => e.key === 'Enter' && navigate(`/clients/${c.id}`)}
                 >
                   <td>
-                    <div className="val-bold">{c.name}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>
-                      {c.code}
+                    <div className={b.clientCell} title={c.legalName ?? c.name}>
+                      <span className={b.clientIcon}>{icons.clients({})}</span>
+                      <span className={b.clientText}>
+                        <span className={b.clientName}>{c.legalName ?? c.name}</span>
+                        <span className={b.clientTin}>VATTIN: {c.vattin || '—'}</span>
+                      </span>
                     </div>
                   </td>
                   <td>{c.countryName}</td>

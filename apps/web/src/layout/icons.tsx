@@ -158,6 +158,11 @@ export const icons = {
       <polyline points="6 9 12 15 18 9" />
     </svg>
   ),
+  chevronRight: (p: IconProps) => (
+    <svg {...base} width={14} height={14} {...p}>
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  ),
   /** Clipboard with a bar chart: Reports (Payroll, MIH, Import & Export). */
   reports: (p: IconProps) => (
     <svg {...base} {...p}>
@@ -290,7 +295,6 @@ export const icons = {
   ),
   edit: (p: IconProps) => (
     <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
-      <path d="M12 20h9" />
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
     </svg>
   ),
@@ -304,6 +308,13 @@ export const icons = {
     <svg {...base} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...p}>
       <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
       <path d="M12 15V4M7 9l5-5 5 5" />
+    </svg>
+  ),
+  /** Eye: preview a document. */
+  eye: (p: IconProps) => (
+    <svg {...base} strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   ),
   printer: (p: IconProps) => (

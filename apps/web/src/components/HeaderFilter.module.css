@@ -17,9 +17,6 @@
 .on {
   color: var(--accent-primary);
 }
-.right {
-  flex-direction: row-reverse;
-}
 .sortIcon {
   display: inline-flex;
   opacity: 0.55;

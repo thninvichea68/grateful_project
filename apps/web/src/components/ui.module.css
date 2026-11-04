@@ -110,6 +110,25 @@
   gap: 6px;
   align-items: center;
 }
+/* Previous / Next: white with a grey border, like the toolbar controls, with ‹ › chevrons. */
+.pagerBtns :global(.filter-btn) {
+  gap: 6px;
+  padding: 0 12px;
+  height: 34px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+.pagerBtns :global(.filter-btn) svg {
+  width: 13px;
+  height: 13px;
+}
+.pagerBtns :global(.filter-btn:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pagerBtns :global(.filter-btn:disabled:hover) {
+  border-color: var(--border-subtle);
+}
 
 .alert {
   border-radius: var(--radius-md);
@@ -226,7 +245,7 @@
   cursor: pointer;
   font-weight: 600;
   color: var(--text-secondary);
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
 }
 .ghostBtn:hover {
   color: var(--text-primary);

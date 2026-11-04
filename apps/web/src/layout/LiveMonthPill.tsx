@@ -14,16 +14,16 @@ export function CustomizeOverviewButton() {
     next.set('customize', '1');
     setParams(next, { replace: true });
   };
+  // A pencil in the top bar, beside Ask AI (styled like the chat and bell buttons).
   return (
     <button
       type="button"
-      className={`time-pill-btn ${s.btn}`}
+      className="icon-btn"
       onClick={open}
-      title="Add or remove Overview widgets"
+      title="Edit widgets"
       aria-label="Edit Overview widgets"
     >
-      {icons.edit({ width: 15, height: 15 })}
-      <span className={s.long}>Edit widgets</span>
+      {icons.edit({})}
     </button>
   );
 }

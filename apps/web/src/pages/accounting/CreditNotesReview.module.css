@@ -1,4 +1,4 @@
-/* Accounting → Chea Payments: status cards (also the filter), then one card: toolbar + table. */
+/* Accounting → Chea Payments: status tabs (also the filter), then one card: toolbar + table. */
 .page {
   display: flex !important;
   flex-direction: column;
@@ -47,73 +47,67 @@
   --tone-bg: #ffedd5;
 }
 
-/* Status cards */
-.stats {
+/* Review statuses as a tab bar (ReviewTabs), like the shipment form's section tabs: uppercase
+   label and count, the picked one cyan and underlined on the bar's rule. */
+.tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border-bottom: 1px solid var(--border-strong);
+  overflow-x: auto;
+  overflow-y: hidden;
 }
-/* Chea Payments and Expense to Clients: Reviewed and Request Revise too. */
-.stats.five {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-.stats.six {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-.stat {
-  display: flex;
+.tab {
+  justify-self: center;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-surface);
+  gap: 8px;
+  padding: 10px 6px 12px;
+  border: none;
+  background: none;
   font-family: var(--font-main);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-.stat:hover {
-  border-color: var(--border-strong);
-}
-.stat:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-.statOn,
-.statOn:hover {
-  border-color: var(--tone);
-}
-.neutral.statOn,
-.neutral.statOn:hover {
-  border-color: var(--accent-primary);
-}
-.statIcon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--tone-bg);
-  color: var(--tone);
-  flex-shrink: 0;
-}
-.statText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.statLabel {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
+  text-transform: uppercase;
   color: var(--text-tertiary);
+  white-space: nowrap;
+  cursor: pointer;
 }
-.statValue {
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 1.1;
+.tab:hover {
+  color: var(--text-primary);
+}
+.tab[aria-selected='true'] {
+  color: var(--accent-primary);
+}
+.tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.tabIcon {
+  display: inline-flex;
+}
+.tabIcon svg {
+  width: 15px;
+  height: 15px;
+}
+.tabCount {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+}
+.tab[aria-selected='true'] .tabCount {
+  color: inherit;
 }
 
 /* The one card: toolbar, table, footer */

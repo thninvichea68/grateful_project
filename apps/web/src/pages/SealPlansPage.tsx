@@ -94,6 +94,14 @@ export function SealPlansPage() {
         <div className="card-header-row">
           <h3 style={{ margin: 0 }}>Seal Plan — Container Shipment Schedule</h3>
           <div className={ui.toolbar}>
+            {/* First and stretching across the free width, like Shipping Plans' search. */}
+            <SearchBox
+              grow
+              placeholder="Search container, seal, SO no…"
+              defaultValue={q}
+              onChange={(e) => set('q', e.target.value.trim())}
+              aria-label="Search seal plans"
+            />
             <select
               className={ui.input}
               value={year}
@@ -134,12 +142,6 @@ export function SealPlansPage() {
                 </option>
               ))}
             </select>
-            <SearchBox
-              placeholder="Search container, seal, SO no…"
-              defaultValue={q}
-              onChange={(e) => set('q', e.target.value.trim())}
-              aria-label="Search seal plans"
-            />
             {can('sealplans:write') && (
               <button type="button" className="new-shipment-btn" onClick={() => setPicking(true)}>
                 + New Seal Plan

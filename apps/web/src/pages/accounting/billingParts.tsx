@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import type { BillingStage } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
+import { icons } from '../../layout/icons';
 import { printInPlace } from '../../lib/printInPlace';
 import { monthName, PACK_PARTS, shiftMonth, STAGE, type PackPart } from './billingUi';
 import b from './Billing.module.css';
 
 /** Client Billing's sections: the month overview and the document and receipt registers. */
 const SECTIONS = [
-  { to: '/accounting/billing', label: 'Clients', end: true },
-  { to: '/accounting/tax-invoices', label: 'Tax Invoices' },
-  { to: '/accounting/disbursements', label: 'Disbursements' },
-  { to: '/accounting/debit-notes', label: 'Debit Notes' },
-  { to: '/accounting/receipts', label: 'Receipts' },
+  { to: '/accounting/billing', label: 'Clients', icon: icons.clients, end: true },
+  { to: '/accounting/tax-invoices', label: 'Tax Invoices', icon: icons.tax },
+  { to: '/accounting/disbursements', label: 'Disbursements', icon: icons.documents },
+  { to: '/accounting/debit-notes', label: 'Debit Notes', icon: icons.creditnote },
+  { to: '/accounting/receipts', label: 'Receipts', icon: icons.cash },
 ];
 export const BILLING_SECTION_PATHS = SECTIONS.map((s) => s.to);
 
@@ -28,6 +30,7 @@ export function BillingSections({ className }: { className?: string }) {
           end={s.end}
           className={({ isActive }) => `${b.section}${isActive ? ` ${b.sectionOn}` : ''}`}
         >
+          {s.icon({ width: 15, height: 15 })}
           {s.label}
         </NavLink>
       ))}
@@ -37,7 +40,8 @@ export function BillingSections({ className }: { className?: string }) {
 
 /**
  * "Print month pack": pick the parts, then the print dialog opens on this page (no new tab).
- * With `record`, one shipment row's documents instead: no parts to pick, the same two outputs.
+ * With `record`, one shipment row's documents instead: no parts to pick, the same two outputs,
+ * and `onPreview` adds "Preview" (the three documents side by side) above them.
  */
 export function PackPrintMenu({
   clientId,
@@ -45,6 +49,7 @@ export function PackPrintMenu({
   record,
   className,
   title,
+  onPreview,
   children,
 }: {
   clientId: string;
@@ -52,18 +57,23 @@ export function PackPrintMenu({
   record?: { id: string; label: string };
   className?: string;
   title?: string;
+  onPreview?: () => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [parts, setParts] = useState<PackPart[]>(PACK_PARTS.map(([k]) => k));
   const box = useRef<HTMLDivElement>(null);
-  // A row's menu sits in a scrolling table, so it is placed fixed under its button.
+  const panel = useRef<HTMLDivElement>(null);
+  // A row's menu sits in a scrolling table, so it is placed fixed under its button and
+  // portalled to <body>: the page's animated wrapper would otherwise offset a fixed box.
   const [at, setAt] = useState<CSSProperties>();
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
       if (
-        e instanceof KeyboardEvent ? e.key === 'Escape' : !box.current?.contains(e.target as Node)
+        e instanceof KeyboardEvent
+          ? e.key === 'Escape'
+          : !box.current?.contains(e.target as Node) && !panel.current?.contains(e.target as Node)
       )
         setOpen(false);
     };
@@ -113,6 +123,61 @@ export function PackPrintMenu({
       setExporting(false);
     }
   };
+  const menu = (
+    <div
+      ref={panel}
+      className={`${b.packPanel}${record ? ` ${b.rowPanel}` : ''}`}
+      style={at}
+      role="dialog"
+      aria-label={record ? `Print ${record.label}` : 'Print month pack'}
+    >
+      {record ? (
+        <>
+          <div className={b.packTitle}>{record.label} · tax invoice, DIS & DN</div>
+          {onPreview && (
+            <button
+              type="button"
+              className={`filter-btn ${b.packGo}`}
+              onClick={() => {
+                setOpen(false);
+                onPreview();
+              }}
+            >
+              {icons.eye({ width: 15, height: 15 })}
+              Preview
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <div className={b.packTitle}>Include</div>
+          {PACK_PARTS.map(([k, label]) => (
+            <label key={k} className={b.packOption}>
+              <input type="checkbox" checked={parts.includes(k)} onChange={() => toggle(k)} />
+              {label}
+            </label>
+          ))}
+        </>
+      )}
+      <button
+        type="button"
+        className={`new-shipment-btn ${b.packGo}`}
+        disabled={!parts.length}
+        onClick={print}
+      >
+        Print / Save as PDF
+      </button>
+      {/* The same parts as one workbook, sheet for sheet like the monthly Excel. */}
+      <button
+        type="button"
+        className={`filter-btn ${b.packGo}`}
+        disabled={!parts.length || exporting}
+        onClick={() => void excel()}
+      >
+        {exporting ? 'Exporting…' : 'Export Excel'}
+      </button>
+    </div>
+  );
   return (
     <div className={b.packMenu} ref={box}>
       <button
@@ -125,45 +190,7 @@ export function PackPrintMenu({
       >
         {children}
       </button>
-      {open && (
-        <div
-          className={`${b.packPanel}${record ? ` ${b.rowPanel}` : ''}`}
-          style={at}
-          role="dialog"
-          aria-label={record ? `Print ${record.label}` : 'Print month pack'}
-        >
-          {record ? (
-            <div className={b.packTitle}>{record.label} · tax invoice, DIS & DN</div>
-          ) : (
-            <>
-              <div className={b.packTitle}>Include</div>
-              {PACK_PARTS.map(([k, label]) => (
-                <label key={k} className={b.packOption}>
-                  <input type="checkbox" checked={parts.includes(k)} onChange={() => toggle(k)} />
-                  {label}
-                </label>
-              ))}
-            </>
-          )}
-          <button
-            type="button"
-            className={`new-shipment-btn ${b.packGo}`}
-            disabled={!parts.length}
-            onClick={print}
-          >
-            Print / Save as PDF
-          </button>
-          {/* The same parts as one workbook, sheet for sheet like the monthly Excel. */}
-          <button
-            type="button"
-            className={`filter-btn ${b.packGo}`}
-            disabled={!parts.length || exporting}
-            onClick={() => void excel()}
-          >
-            {exporting ? 'Exporting…' : 'Export Excel'}
-          </button>
-        </div>
-      )}
+      {open && (record ? createPortal(menu, document.body) : menu)}
     </div>
   );
 }

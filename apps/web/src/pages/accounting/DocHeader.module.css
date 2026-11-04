@@ -26,10 +26,14 @@
   letter-spacing: -0.01em;
   color: var(--text-primary);
 }
-/* The shared card-title chip (.cx-title-icon), a size smaller for these column heads. */
+/* The shared card-title chip (.cx-title-icon), a size smaller for these column heads, outlined
+   like the client icon: no fill, text-coloured glyph, so it flips with the theme. */
 .headIcon {
   width: 30px !important;
   height: 30px !important;
+  background: none !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-strong);
 }
 
 /* Full-width rows; short shipment values (PKGS, weight, ports…) pair up two to a row. */

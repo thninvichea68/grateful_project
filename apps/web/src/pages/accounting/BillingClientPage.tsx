@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type MouseEvent } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
@@ -34,17 +34,6 @@ import { PrintLink } from '../../components/PrintLink';
 
 // The print layouts load only when a row's preview is first opened.
 const RowPreviewModal = lazy(() => import('./RowPreviewModal'));
-
-/**
- * A click on a shipment row away from its declaration, documents and Print button: a click
- * that selected text, or came through a portal (the Print menu), doesn't count either.
- */
-function opensPreview(e: MouseEvent<HTMLTableRowElement>): boolean {
-  const t = e.target as HTMLElement;
-  if (!e.currentTarget.contains(t)) return false;
-  if (t.closest('a, button, input, [data-no-preview]')) return false;
-  return !window.getSelection()?.toString();
-}
 
 /**
  * One client's month, in the order the work is done: (1) each shipment's tax invoice,
@@ -202,18 +191,11 @@ function Workspace({
             </thead>
             <tbody>
               {m.rows.map((r, i) => (
-                <tr
-                  key={r.recordId}
-                  data-preview
-                  data-active={preview?.recordId === r.recordId}
-                  title="Click to preview this shipment's documents"
-                  onClick={(e) => opensPreview(e) && setPreview(r)}
-                >
+                <tr key={r.recordId} data-active={preview?.recordId === r.recordId}>
                   <td>{i + 1}</td>
-                  <td data-no-preview>
+                  <td>
                     <span className={b.declare}>{r.declareNo}</span>
                     <span className={b.small}>
-                      {r.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'} ·{' '}
                       <Link to={`/plans/${r.shipmentId}`}>{r.shipmentReference}</Link>
                     </span>
                   </td>
@@ -243,7 +225,8 @@ function Workspace({
                         month={month}
                         record={{ id: r.recordId, label: r.declareNo }}
                         className={b.rowDots}
-                        title={`Print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
+                        title={`Preview, print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
+                        onPreview={() => setPreview(r)}
                       >
                         {icons.dots({ width: 16, height: 16 })}
                       </PackPrintMenu>

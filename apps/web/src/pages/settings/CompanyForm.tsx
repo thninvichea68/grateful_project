@@ -54,7 +54,10 @@ export function CompanyForm({
   const lockClass = `${s.fieldset}${editing ? '' : ` ${s.viewing}`}`;
   // Only one account is printed on invoices: the one marked, else the first.
   const watched = useWatch({ control, name: 'banks' }) ?? [];
-  const onInvoice = Math.max(0, watched.findIndex((b) => b?.onInvoice));
+  const onInvoice = Math.max(
+    0,
+    watched.findIndex((b) => b?.onInvoice),
+  );
   const chooseInvoiceBank = (i: number) =>
     banks.fields.forEach((_, j) =>
       setValue(`banks.${j}.onInvoice`, j === i, { shouldDirty: true }),
@@ -104,12 +107,14 @@ export function CompanyForm({
   ) => (
     <section className={className}>
       <div className={s.sectionHead}>
-        <div className={s.sectionTitle}>
-          <span className="cx-title-icon">{fi[icon]({ width: 18, height: 18 })}</span>
-          <h4>{title}</h4>
-        </div>
-        <p>{hint}</p>
+        <h4>
+          <span className={`cx-title-icon ${s.outlineIcon} ${s.sectionIcon}`}>
+            {fi[icon]({ width: 16, height: 16 })}
+          </span>
+          {title}
+        </h4>
       </div>
+      <p className={s.hint}>{hint}</p>
       <div className={s.fields} data-cols={cols}>
         {children}
       </div>
@@ -138,7 +143,9 @@ export function CompanyForm({
     <div className={s.card}>
       <header className={s.head}>
         <div className={s.headTitle}>
-          <span className={`cx-title-icon ${s.headIcon}`}>{icons.company({})}</span>
+          <span className={`cx-title-icon ${s.outlineIcon} ${s.headIcon}`}>
+            {icons.company({})}
+          </span>
           <div>
             <h3>Workspace &amp; company</h3>
             <p>Printed on tax invoices, disbursements and other documents.</p>
@@ -168,37 +175,36 @@ export function CompanyForm({
         }
         noValidate
       >
-        <fieldset disabled={locked} className={lockClass}>
+        <div className={s.columns}>
+          <fieldset disabled={locked} className={lockClass}>
+            {section(
+              'building',
+              'Company identity',
+              'The legal name in English and Khmer, as registered, with the tax number.',
+              <>
+                {field('nameEn', 'Company name (English)')}
+                {field('nameKm', 'ឈ្មោះក្រុមហ៊ុន (Khmer)', { khmer: true })}
+                {field('vattin', 'VATTIN', { placeholder: 'e.g. K008-902404873' })}
+                {field('phone', 'Phone', { placeholder: 'e.g. 098 484 414' })}
+              </>,
+            )}
+            {section(
+              'pin',
+              'Address',
+              'The registered address, shown under the company name on each document.',
+              <>
+                {field('addressEn', 'Address (English)', { multiline: true })}
+                {field('addressKm', 'អាស័យដ្ឋាន (Khmer)', { multiline: true, khmer: true })}
+              </>,
+            )}
+          </fieldset>
+          {/* Outside the locked fieldset so the show-all toggle works while viewing. */}
           {section(
-            'building',
-            'Company identity',
-            'The legal name in English and Khmer, as registered, with the tax number.',
-            <>
-              {field('nameEn', 'Company name (English)')}
-              {field('nameKm', 'ឈ្មោះក្រុមហ៊ុន (Khmer)', { khmer: true })}
-              {field('vattin', 'VATTIN', { placeholder: 'e.g. K008-902404873' })}
-              {field('phone', 'Phone', { placeholder: 'e.g. 098 484 414' })}
-            </>,
-          )}
-          {section(
-            'pin',
-            'Address',
-            'The registered address, shown under the company name on each document.',
-            <>
-              {field('addressEn', 'Address (English)', { multiline: true })}
-              {field('addressKm', 'អាស័យដ្ឋាន (Khmer)', { multiline: true, khmer: true })}
-            </>,
-          )}
-        </fieldset>
-        {/* Outside the locked fieldset so the show-all toggle works while viewing. */}
-        {section(
             'bank',
             'Bank details',
             'Where clients pay; only the account marked “On invoices” is printed in the payment section of invoices.',
             <>
-              {banks.fields.length === 0 && (
-                <p className={s.empty}>No bank accounts yet.</p>
-              )}
+              {banks.fields.length === 0 && <p className={s.empty}>No bank accounts yet.</p>}
               {shown.map(({ f: b, i }, row) => (
                 <div key={b.id}>
                   <div className={s.bankHead}>
@@ -269,6 +275,7 @@ export function CompanyForm({
             'list',
             `${s.section} ${s.bankSection}`,
           )}
+        </div>
         {manage && editing && (
           <footer className={s.foot}>
             <span className={s.status} aria-live="polite">

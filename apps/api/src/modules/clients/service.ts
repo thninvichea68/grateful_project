@@ -30,7 +30,7 @@ interface ListParams {
 }
 
 const baseSelect = (withProfit: boolean, extra: SQL = sql``) => sql`
-  SELECT c.id, c.code, c.name, c.legal_name AS "legalName", c.country_iso2 AS "countryIso2", co.name AS "countryName",
+  SELECT c.id, c.code, c.name, c.legal_name AS "legalName", c.vattin, c.country_iso2 AS "countryIso2", co.name AS "countryName",
          c.status, c.commission_usd::text AS "commissionUsd",
          count(s.id)::int AS "shipmentCount",
          (count(s.id) FILTER (WHERE s.status IN ('IN_PROGRESS', 'PENDING')))::int AS "activeShipments",

@@ -29,36 +29,46 @@
 }
 
 /* ---------- Sections: Clients · Tax Invoices · Disbursements · Debit Notes · Receipts ---------- */
+/* Client Billing's sections as one tab bar, like the shipment form's section tabs: uppercase
+   labels spread across the width, the open one cyan and underlined on the bar's rule. */
 .sections {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 8px;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  border-bottom: 1px solid var(--border-strong);
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .section {
-  padding: 6px 12px;
-  border-radius: 8px;
+  justify-self: center;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 6px 12px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-secondary);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
   text-decoration: none;
   white-space: nowrap;
 }
 .section:hover {
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 .sectionOn,
 .sectionOn:hover {
-  background: var(--bg-surface);
   color: var(--accent-primary);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
-.sectionsEnd {
-  margin-left: auto;
+.sectionOn::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-primary);
 }
 .sectionsTop {
   margin-bottom: 12px;
@@ -120,21 +130,57 @@
   gap: 10px;
   flex-wrap: wrap;
 }
-.barHint {
-  font-size: 12.5px;
-  color: var(--text-tertiary);
+/* Clients overview: fixed column shares, every column left-aligned. */
+.overview {
+  table-layout: fixed;
+}
+.amt {
+  text-align: left !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .barActions {
   margin-left: auto;
   display: flex;
   gap: 8px;
 }
+/* The client: its icon, then the name on one line with the VATTIN under it. */
 .clientCell {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 200px;
-  max-width: 300px;
+  min-width: 220px;
+  max-width: 380px;
+}
+.clientIcon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+}
+.clientIcon svg {
+  width: 15px;
+  height: 15px;
+}
+.clientText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.clientText .clientName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clientTin {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 .code {
   display: inline-grid;
@@ -357,55 +403,52 @@
 .cellStack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   align-items: flex-start;
 }
 
-/* A document in a cell: number · amount · state. Issued green, draft amber, typed-in-ledger grey. */
+/* A document in a cell, as text (no background): the number (and its state) over the amount,
+   like the HBL / container cell. The number takes the colour: issued cyan, draft amber,
+   typed-in-ledger grey. */
 .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 9px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
   font-size: 12px;
   white-space: nowrap;
   text-decoration: none;
-  background: var(--status-completed-bg);
   color: var(--text-primary);
 }
 .chip b {
+  grid-area: 1 / 1;
   font-weight: 600;
+  color: var(--status-completed-fg);
 }
 .chip span {
-  color: var(--text-secondary);
-  font-weight: 600;
+  grid-area: 2 / 1 / 3 / -1;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 .chip em {
+  grid-area: 1 / 2;
   font-style: normal;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
 }
-.chip[data-status='DRAFT'] {
-  background: var(--status-pending-bg);
-}
-.chip[data-status='DRAFT'] em {
+.chip[data-status='DRAFT'] :is(b, em) {
   color: var(--status-pending-fg);
 }
-.chip[data-status='MANUAL'] {
-  background: transparent;
-  border-color: var(--border-strong);
-  border-style: dashed;
-}
-.chip[data-status='MANUAL'] em {
+.chip[data-status='MANUAL'] :is(b, em) {
   color: var(--text-tertiary);
 }
-a.chip:hover {
-  border-color: var(--accent-primary);
+a.chip:hover b {
+  text-decoration: underline;
 }
 .addChip {
   display: inline-flex;
@@ -697,10 +740,7 @@ a.chip:hover {
   }
 }
 
-/* A row opens its documents' preview (RowPreviewModal) when clicked outside its links. */
-.docTable tr[data-preview] {
-  cursor: pointer;
-}
+/* The row whose documents are open in the preview (⋯ → Preview). */
 .docTable tr[data-active='true'] td {
   background: var(--bg-subtle);
 }
