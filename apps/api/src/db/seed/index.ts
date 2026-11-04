@@ -1,7 +1,8 @@
 /* eslint-disable no-console -- CLI script: progress goes to the terminal */
 /**
- * pnpm db:seed — wipes and repopulates the database with a realistic, deterministic
- * 2026 dataset so every chart has data on first run. Refuses to run in production.
+ * pnpm db:seed — wipes the database and restores the saved real data from data/snapshot.sql
+ * (refresh it with `pnpm db:snapshot`). With --demo, or when there is no snapshot, it generates
+ * a realistic, deterministic 2026 demo dataset instead. Refuses to run in production.
  */
 import bcrypt from 'bcryptjs';
 import { sql } from 'drizzle-orm';
@@ -33,6 +34,7 @@ import {
   LOOKUPS,
   COMPANY,
 } from './data/reference';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readMasterList } from '../../lib/masterList';
@@ -54,6 +56,38 @@ async function wipe() {
   if (tables) await db.execute(sql.raw(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`));
 }
 
+const SNAPSHOT_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'data',
+  'snapshot.sql',
+);
+
+/** Replaces all data with the saved snapshot, in one transaction so a failure leaves the database as it was. */
+async function restoreSnapshot() {
+  console.log(`Restoring saved data from ${SNAPSHOT_FILE}…`);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`,
+    );
+    const tables = res.rows.map((r) => `"${r.tablename}"`).join(', ');
+    if (tables) await client.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+    await client.query(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  const users = await db.execute<{ n: string }>(sql`SELECT count(*) AS n FROM users`);
+  const shipments = await db.execute<{ n: string }>(sql`SELECT count(*) AS n FROM shipments`);
+  console.log(
+    `\n✔ Seed complete: ${users.rows[0]!.n} users, ${shipments.rows[0]!.n} shipments restored. Sign in with your own accounts.\n`,
+  );
+}
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -65,6 +99,10 @@ async function main() {
     throw new Error(
       'Refusing to seed with NODE_ENV=production (pass --force if you really mean it).',
     );
+  }
+  if (!process.argv.includes('--demo') && fs.existsSync(SNAPSHOT_FILE)) {
+    await restoreSnapshot();
+    return;
   }
   const password = env.SEED_DEFAULT_PASSWORD;
   if (!password)

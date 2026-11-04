@@ -22,7 +22,8 @@
     "db:migrate:prod": "node --env-file=.env apps/api/dist/db/migrate.js",
     "db:init": "pnpm --filter @gs/api db:init",
     "db:init:prod": "node --env-file=.env apps/api/dist/db/init.js",
-    "backup": "node --env-file=.env scripts/backup.mjs"
+    "backup": "node --env-file=.env scripts/backup.mjs",
+    "db:snapshot": "node --env-file=.env scripts/snapshot.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",

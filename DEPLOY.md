@@ -80,7 +80,7 @@ pnpm db:init:prod
 
 `db:init:prod` loads the reference data (roles, customs ports, forwarders, countries, dropdown lists, quotation templates, company details) and asks for the **first Admin** account. It never creates demo data, and running it again changes nothing.
 
-**Do not run `pnpm db:seed` on the production database** — it deletes everything and loads demo data.
+**Do not run `pnpm db:seed` on the production database** — it deletes everything and loads the saved snapshot (`pnpm db:snapshot`), or demo data with `--demo`.
 
 ### A5. Keep it running (starts with Windows)
 

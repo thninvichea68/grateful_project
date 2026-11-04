@@ -31,7 +31,7 @@ All commands below work the same in **PowerShell**, Command Prompt, macOS and Li
 Copy-Item .env.example .env          # macOS/Linux: cp .env.example .env
 # Edit .env: set POSTGRES_PASSWORD, JWT_ACCESS_SECRET and SEED_DEFAULT_PASSWORD
 docker compose up -d --build         # postgres + api + web; the API applies migrations on start
-pnpm docker:seed                     # load the demo dataset (or: docker compose exec api node dist/db/seed/index.js --force)
+pnpm docker:seed                     # load the saved snapshot (or: docker compose exec api node dist/db/seed/index.js --force)
 ```
 
 Open **http://localhost:8080** and sign in (see [Demo accounts](#demo-accounts)).
@@ -66,7 +66,8 @@ Open **http://localhost:5173**. Vite forwards `/api` to the API, so the browser 
 | ---------------------------------------------- | -------------------------------------------------------------------- |
 | `pnpm dev`                                     | API (watch mode) + web (Vite) together                               |
 | `pnpm db:migrate`                              | Apply pending migrations                                             |
-| `pnpm db:seed`                                 | **Wipe** and reload the demo dataset                                 |
+| `pnpm db:snapshot`                             | Save the current data as the seed (`seed/data/snapshot.sql`)         |
+| `pnpm db:seed`                                 | **Wipe** and restore the saved snapshot (`-- --demo`: demo dataset)  |
 | `pnpm db:reset`                                | Drop everything, migrate, seed                                       |
 | `pnpm db:generate`                             | After editing `apps/api/src/db/schema/*`, create a new SQL migration |
 | `pnpm db:studio`                               | Browse the database in Drizzle Studio                                |
@@ -78,7 +79,7 @@ Open **http://localhost:5173**. Vite forwards `/api` to the API, so the browser 
 
 ## Demo accounts
 
-`pnpm db:seed` creates one user per role. The password for all of them is the `SEED_DEFAULT_PASSWORD` value in your `.env`.
+`pnpm db:seed` restores the saved snapshot, so you sign in with the real accounts in it. `pnpm db:seed -- --demo` (or deleting `snapshot.sql`) generates the demo dataset instead, which creates one user per role. The password for all of them is the `SEED_DEFAULT_PASSWORD` value in your `.env`.
 
 | Email                   | Role       | Can                                                                                |
 | ----------------------- | ---------- | ---------------------------------------------------------------------------------- |
