@@ -1,11 +1,14 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ui } from '../../components/ui';
 import { saveBlob } from '../../lib/files';
 import { fmtFileSize } from '../../lib/format';
@@ -199,6 +202,70 @@ export function ChosenFile({
   );
 }
 
+/** A tool a finished PDF can be sent on to. */
+export interface NextTool {
+  id: string;
+  name: string;
+  icon: ReactNode;
+}
+
+/** Tools that take a PDF, and the one open now; set by the PDF Tools page. */
+export const NextToolsContext = createContext<{ current: string; tools: NextTool[] }>({
+  current: '',
+  tools: [],
+});
+
+/** The PDF a finished tool hands to the next one ("Continue with…"). */
+let handoff: File | null = null;
+
+/** File state that starts from a handed-on PDF, if there is one. */
+export function useHandoffFile() {
+  const state = useState<File | null>(() => handoff);
+  // Cleared after mount, not in the initializer: StrictMode runs initializers twice.
+  useEffect(() => {
+    handoff = null;
+  }, []);
+  return state;
+}
+
+/** As useHandoffFile, for tools that take a list of PDFs. */
+export function useHandoffFiles() {
+  const state = useState<File[]>(() => (handoff ? [handoff] : []));
+  useEffect(() => {
+    handoff = null;
+  }, []);
+  return state;
+}
+
+/** Buttons that open another tool with `file` already chosen. */
+function ContinueWith({ file }: { file: OutFile }) {
+  const { current, tools } = useContext(NextToolsContext);
+  const [, setParams] = useSearchParams();
+  const next = tools.filter((t) => t.id !== current);
+  if (!next.length) return null;
+  return (
+    <div className={s.continue}>
+      <div className={s.sectionHeading}>Continue with</div>
+      <div className={s.continueList}>
+        {next.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={s.continueBtn}
+            onClick={() => {
+              handoff = new File([file.blob], file.name, { type: 'application/pdf' });
+              setParams({ tool: t.id });
+            }}
+          >
+            <span className={s.continueIcon}>{t.icon}</span>
+            {t.name}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Output files with per-file download and, for several, one zip. */
 export function Results({
   files,
@@ -259,6 +326,9 @@ export function Results({
           </li>
         ))}
       </ul>
+      {files.length === 1 && files[0]!.name.toLowerCase().endsWith('.pdf') && (
+        <ContinueWith file={files[0]!} />
+      )}
     </div>
   );
 }

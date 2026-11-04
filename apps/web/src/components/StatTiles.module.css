@@ -19,7 +19,7 @@
 }
 .label {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -29,7 +29,7 @@
 }
 .value {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
   white-space: nowrap;
@@ -37,35 +37,18 @@
   text-overflow: ellipsis;
 }
 
-.tile[data-tone] {
-  border-color: transparent;
-}
-.tile[data-tone='success'] {
-  background: var(--status-completed-bg);
-}
+/* A tone colours the figure only; the tile stays white like the others. */
 .tile[data-tone='success'] .value {
   color: var(--status-completed-fg);
-}
-.tile[data-tone='info'] {
-  background: var(--status-progress-bg);
 }
 .tile[data-tone='info'] .value {
   color: var(--status-progress-fg);
 }
-.tile[data-tone='paid'] {
-  background: var(--status-paid-bg);
-}
 .tile[data-tone='paid'] .value {
   color: var(--status-paid-fg);
 }
-.tile[data-tone='warning'] {
-  background: var(--status-pending-bg);
-}
 .tile[data-tone='warning'] .value {
   color: var(--status-pending-fg);
-}
-.tile[data-tone='danger'] {
-  background: var(--status-exception-bg);
 }
 .tile[data-tone='danger'] .value {
   color: var(--status-exception-fg);

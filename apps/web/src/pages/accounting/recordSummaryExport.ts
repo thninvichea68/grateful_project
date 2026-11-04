@@ -7,7 +7,7 @@ import { SHIPMENT_SEPARATOR, pricedLines, recordSummaryHeader } from '../print/P
 /*
  * Excel for a Record Summary, built from what is on screen (the live preview) and laid out
  * like the sheet: letterhead with the logo, the boxed header, the gray item table with live
- * formulas. Same approach as the Credit Noted export.
+ * formulas. Same approach as the Credit Note export.
  */
 
 /** "RecordSummary_I_122050": the declare no. (or the client) names the file. */

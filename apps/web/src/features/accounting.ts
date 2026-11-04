@@ -215,7 +215,7 @@ export function usePrefill(
   });
 }
 
-/** Declarations a new Credit Noted can start from (with or without a ledger row). */
+/** Declarations a new Credit Note can start from (with or without a ledger row). */
 export function useCreditNoteDeclarations(q: string, enabled: boolean) {
   return useQuery({
     queryKey: [...KEY, 'cn-declarations', q],
@@ -227,7 +227,7 @@ export function useCreditNoteDeclarations(q: string, enabled: boolean) {
   });
 }
 
-/** Accounting → Credit Noted: submitted notes with Checked / Unchecked / Revised counts. */
+/** Accounting → Credit Note: submitted notes with Checked / Unchecked / Revised counts. */
 export function useCreditNoteReview(q: Query) {
   return useQuery({
     queryKey: [...KEY, 'cn-review', q],
@@ -240,7 +240,7 @@ export function useCreditNoteReview(q: Query) {
   });
 }
 
-/** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
+/** Sidebar → Credit Note: every credit note (drafts too) with shipment details. */
 export function useCreditNoteList(q: Query) {
   return useQuery({
     queryKey: [...KEY, 'cn-list', q],
@@ -309,7 +309,7 @@ export function useSetRecordSummaryReview() {
   });
 }
 
-/** My Credit Noted inbox (messages from accounting). */
+/** My Credit Note inbox (messages from accounting). */
 export function useCreditNoteInbox(enabled = true) {
   return useQuery({
     queryKey: [...KEY, 'cn-inbox'],

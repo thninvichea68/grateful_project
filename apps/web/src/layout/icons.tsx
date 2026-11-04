@@ -19,21 +19,20 @@ export const icons = {
       <rect x="3" y="14" width="7" height="7" rx="2" />
     </svg>
   ),
-  // A schedule: a calendar with a clock in its corner.
+  /** Cargo ship: Shipping Plans (and shipments in search). */
   plans: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" />
-      <path d="M16 2v4M8 2v4M3 10h5" />
-      <circle cx="16" cy="16" r="6" />
-      <path d="M16 14v2.2l1.6 1" />
+      <path d="M12 10.2V14M12 2v3M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6" />
+      <path d="M19.4 20A11.6 11.6 0 0 0 21 14l-8.2-3.6a2 2 0 0 0-1.6 0L3 14a11.6 11.6 0 0 0 2.8 7.8" />
+      <path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
     </svg>
   ),
+  /** Office building: Clients (the factories). */
   clients: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18z" />
+      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
+      <path d="M10 6h4M10 10h4M10 14h4M10 18h4" />
     </svg>
   ),
   analytics: (p: IconProps) => (
@@ -50,6 +49,21 @@ export const icons = {
       <polyline points="14 2 14 8 20 8" />
     </svg>
   ),
+  /** Folder: Documents in the sidebar (documents stays the single-file icon). */
+  folder: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" />
+    </svg>
+  ),
+  /** Two people: Staff Management → Team members. */
+  team: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
   pdftools: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -57,24 +71,26 @@ export const icons = {
       <path d="M8 13h2.5a1.5 1.5 0 0 1 0 3H8v-5M14 18v-5h2.5M14 15.5h2" />
     </svg>
   ),
+  /** Flag: Follow Up (items flagged to chase). */
   followup: (p: IconProps) => (
     <svg {...base} {...p}>
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7" />
     </svg>
   ),
+  /** Barcode: CDC Master List (the items cleared through customs). */
   cutstock: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-      <rect x="9" y="3" width="6" height="4" rx="1" />
-      <line x1="9" y1="12" x2="15" y2="12" />
-      <line x1="9" y1="16" x2="13" y2="16" />
+      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" />
+      <path d="M8 7v10M12 7v10M16 7v10" />
     </svg>
   ),
+  /** Container with a padlock seal: Seal Plans. */
   seal: (p: IconProps) => (
     <svg {...base} {...p}>
-      <rect x="4" y="11" width="16" height="10" rx="2" />
-      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      <rect x="2" y="2.5" width="16" height="8.5" rx="1.5" />
+      <path d="M6 5.5v2.5M10 5.5v2.5M14 5.5v2.5" />
+      <rect x="12.5" y="16.5" width="9" height="5.5" rx="1.5" />
+      <path d="M14.5 16.5V15a2.5 2.5 0 0 1 5 0v1.5" />
     </svg>
   ),
   /** Certificate with a seal ribbon: CO (certificates of origin). */
@@ -149,41 +165,42 @@ export const icons = {
       <path d="M9 2h6v4H9zM9 18v-3M12 18v-6M15 18v-4" />
     </svg>
   ),
-  /** Receipt: Credit Noted (the broker's payment voucher), as in the accounting engine. */
+  /** Receipt: Credit Note (the broker's payment voucher), as in the accounting engine. */
   creditnote: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M4 2h16v20l-3-2-3 2-3-2-3 2-3-2-3 2V2z" />
       <path d="M8 7h8M8 11h8M8 15h5" />
     </svg>
   ),
-  /** Package: Record Summary, as in the accounting engine. */
+  /** List with a dollar: Record Summary / Expense to Clients. */
   recordsummary: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-      <line x1="12" y1="22.08" x2="12" y2="12" />
+      <path d="M3 6h9M3 12h7M3 18h7" />
+      <path d="M19 9.5c-.4-.9-1.3-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1.2 0-2.1-.6-2.5-1.5M16.5 6.5v13" />
     </svg>
   ),
+  /** Price tag: Quotations. */
   quotations: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="8" y1="13" x2="16" y2="13" />
-      <line x1="8" y1="17" x2="13" y2="17" />
+      <path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
     </svg>
   ),
+  /** Page with an anchor: Operations (Bill of Lading documents). */
   operations: (p: IconProps) => (
     <svg {...base} {...p}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
+      <circle cx="12" cy="10.5" r="1.3" />
+      <path d="M12 11.8V19M10.5 14h3M8.5 16a3.5 3.5 0 0 0 7 0" />
     </svg>
   ),
+  /** ID badge: Staff Management. */
   staff: (p: IconProps) => (
     <svg {...base} {...p}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <circle cx="8" cy="11" r="2.2" />
+      <path d="M5 16a3 3 0 0 1 6 0M14 10h4M14 14h3" />
     </svg>
   ),
   settings: (p: IconProps) => (

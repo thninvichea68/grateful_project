@@ -9,7 +9,7 @@
 .volTitle {
   margin: 0;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .volSub {
   margin-top: 3px;
@@ -72,7 +72,7 @@
 }
 .stat span {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-tertiary);

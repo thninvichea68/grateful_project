@@ -60,7 +60,7 @@ export function ReceiptsPage() {
               Payments received against the account statements. Record a payment from{' '}
               <Link
                 to="/accounting/billing"
-                style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+                style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
               >
                 Client Billing
               </Link>
@@ -140,7 +140,7 @@ export function ReceiptsPage() {
                   <td>
                     <Link
                       to={`/accounting/billing/${r.clientId}?month=${r.month}`}
-                      style={{ color: 'var(--text-primary)', fontWeight: 700 }}
+                      style={{ color: 'var(--text-primary)', fontWeight: 600 }}
                     >
                       {periodCode(r.month)}
                     </Link>

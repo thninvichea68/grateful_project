@@ -31,7 +31,7 @@
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .avatar img {
@@ -48,7 +48,7 @@
 }
 .name {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;

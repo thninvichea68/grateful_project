@@ -23,7 +23,7 @@
 .head {
   padding: 6px 16px 4px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -90,7 +90,7 @@
 .tag {
   flex: none;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   padding: 2px 8px;
   border-radius: 999px;

@@ -3,7 +3,15 @@ import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { ui } from '../../../components/ui';
 import { baseName, openForRender, type OutFile } from '../../../lib/pdfEngine';
 import { applyEdits, type EditItem, type InkItem, type RectItem } from '../../../lib/pdfEdit';
-import { ChosenFile, DropZone, PDF_ACCEPT, Results, RunRow, useRun } from '../parts';
+import {
+  ChosenFile,
+  DropZone,
+  PDF_ACCEPT,
+  Results,
+  RunRow,
+  useHandoffFile,
+  useRun,
+} from '../parts';
 import { SignatureModal } from './SignatureModal';
 import s from './Editor.module.css';
 
@@ -105,7 +113,7 @@ async function loadImage(file: File): Promise<{ src: string; w: number; h: numbe
 }
 
 export function EditPdfTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   if (!file)
     return (
       <DropZone accept={PDF_ACCEPT} label="Choose a PDF to edit" onFiles={([f]) => setFile(f!)} />

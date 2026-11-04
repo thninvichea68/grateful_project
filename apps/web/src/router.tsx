@@ -166,7 +166,7 @@ function PageLoading() {
     <div
       role="status"
       aria-live="polite"
-      style={{ padding: 24, color: 'var(--text-tertiary)', fontSize: 13, fontWeight: 700 }}
+      style={{ padding: 24, color: 'var(--text-tertiary)', fontSize: 13, fontWeight: 600 }}
     >
       Loading…
     </div>
@@ -174,7 +174,7 @@ function PageLoading() {
 }
 
 /**
- * Credit notes open in the two-pane Credit Noted editor, record summaries in the two-pane
+ * Credit notes open in the two-pane Credit Note editor, record summaries in the two-pane
  * Record Summary editor; other types in the generic one.
  */
 function DocEditorRoute() {
@@ -192,7 +192,7 @@ function DocEditorRoute() {
   );
 }
 
-/** Credit notes print for anyone with Credit Noted access (the customs broker too). */
+/** Credit notes print for anyone with Credit Note access (the customs broker too). */
 function PrintDocRoute() {
   const { type } = useParams();
   return (
@@ -221,7 +221,7 @@ function HomeRedirect() {
 
 function DocsListRoute() {
   const { type = '' } = useParams();
-  // Accounting's Credit Noted tab checks the broker's submitted notes.
+  // Accounting's Credit Note tab checks the broker's submitted notes.
   if (type === 'credit-notes') return <CreditNotesReview />;
   // Expense to Clients: accounting's check of Operations' submitted record summaries.
   if (type === 'record-summaries') return <ExpenseToClients />;
@@ -268,7 +268,7 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    // Credit Noted → ⋯ → PDF Pack: every credit note matching the list's filters.
+    // Credit Note → ⋯ → PDF Pack: every credit note matching the list's filters.
     path: '/print/credit-noted-pack',
     element: (
       <RequireAuth>
@@ -483,7 +483,7 @@ export const router = createBrowserRouter([
           },
         ],
       },
-      // Credit Noted and Record Summary are Operations tools: accountants use the Accounting
+      // Credit Note and Record Summary are Operations tools: accountants use the Accounting
       // tabs Chea Payments and Expense to Clients for the same records.
       {
         path: 'credit-noted',
@@ -502,7 +502,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        // Sidebar → Record Summary: the list (like Credit Noted); a row opens the editor.
+        // Sidebar → Record Summary: the list (like Credit Note); a row opens the editor.
         path: 'record-summary',
         element: (
           <RedirectRoles roles={['ACCOUNTANT']} to="/accounting/record-summaries">

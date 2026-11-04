@@ -1,4 +1,4 @@
-/* The header itself: the column name and a down/up sort icon, styled as the <th> text. */
+/* The header itself: the column name and a chevron (up, and both cyan, once filtered or sorted). */
 .head {
   display: inline-flex;
   align-items: center;
@@ -12,7 +12,8 @@
   color: inherit;
   cursor: pointer;
 }
-.head:hover,
+/* Hover tints the chevron; once filtered or sorted, the column name turns cyan with it. */
+.head:hover .sortIcon,
 .on {
   color: var(--accent-primary);
 }
@@ -20,10 +21,11 @@
   flex-direction: row-reverse;
 }
 .sortIcon {
-  position: relative;
   display: inline-flex;
-  opacity: 0.45;
-  transition: opacity 0.15s;
+  opacity: 0.55;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
 }
 .sortIcon svg {
   width: 13px;
@@ -32,25 +34,6 @@
 .head:hover .sortIcon,
 .on .sortIcon {
   opacity: 1;
-}
-.sortIcon path {
-  transition: opacity 0.15s;
-}
-.dim {
-  opacity: 0.3;
-}
-.lit {
-  opacity: 1;
-}
-/* Marks a filtered column. */
-.dot {
-  position: absolute;
-  top: -2px;
-  right: -3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-primary);
 }
 
 /* The filter panel, portalled to <body> and placed under the header. */
@@ -161,7 +144,7 @@
   border-radius: 8px;
   font: inherit;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .ok {

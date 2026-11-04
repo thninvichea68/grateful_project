@@ -20,6 +20,17 @@ const iconProps = {
   'aria-hidden': true,
 } as const;
 
+/** "Remember me" keeps only the email on this device (never the password). */
+const REMEMBER_KEY = 'gs.login.email';
+
+function rememberedEmail(): string {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function LoginPage() {
   const { status, login } = useAuth();
   const navigate = useNavigate();
@@ -27,6 +38,8 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from ?? '/'; // "/" picks the first page the role can open
   const [serverError, setServerError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(() => rememberedEmail() !== '');
+  const [showForgot, setShowForgot] = useState(false);
 
   const {
     register,
@@ -34,7 +47,7 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginInputSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { email: rememberedEmail(), password: '' },
   });
 
   if (status === 'loading') return <FullPageLoader />;
@@ -44,6 +57,12 @@ export function LoginPage() {
     setServerError(null);
     try {
       await login(values);
+      try {
+        if (remember) localStorage.setItem(REMEMBER_KEY, values.email);
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        // Storage blocked (private mode): signing in still works.
+      }
       navigate(from, { replace: true });
     } catch (err) {
       setServerError(
@@ -56,23 +75,15 @@ export function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.hero} aria-hidden="true">
-        <p className={styles.tagline}>Smart logistics for a connected world</p>
-      </div>
+      <img
+        className={styles.logo}
+        src="/logo-full-white.png"
+        alt="Grateful Solutions (Cambodia) Co., Ltd"
+      />
 
       <div className={styles.panel}>
-        <div className={styles.brand}>
-          <img className={styles.logo} src="/logo.png" alt="Grateful Solutions logo" />
-          <div>
-            <div className={styles.brandTitle}>Grateful Solutions</div>
-            <div className={styles.brandSubtitle}>(Cambodia) Co., Ltd</div>
-          </div>
-        </div>
-
         <h1 className={styles.heading}>Sign in</h1>
-        <p className={styles.lede}>
-          Dashboard, shipping plans, customs, accounting and reporting.
-        </p>
+        <p className={styles.lede}>Use your Grateful Solutions work account.</p>
 
         {serverError && (
           <div className={styles.alert} role="alert">
@@ -83,10 +94,6 @@ export function LoginPage() {
         <form onSubmit={onSubmit} noValidate>
           <div className={styles.field}>
             <label className={styles.label} htmlFor="email">
-              <svg {...iconProps}>
-                <rect x="3" y="5" width="18" height="14" rx="2" />
-                <path d="m3 7 9 6 9-6" />
-              </svg>
               Work email
             </label>
             <input
@@ -94,7 +101,7 @@ export function LoginPage() {
               type="email"
               autoComplete="username"
               autoFocus
-              placeholder="Enter your work email"
+              placeholder="name@company.com"
               className={styles.input}
               aria-invalid={!!errors.email}
               aria-describedby={errors.email ? 'email-error' : undefined}
@@ -109,11 +116,6 @@ export function LoginPage() {
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="password">
-              <svg {...iconProps}>
-                <rect x="4" y="10" width="16" height="11" rx="2" />
-                <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                <path d="M12 14.5v2" />
-              </svg>
               Password
             </label>
             <div className={styles.inputWrap}>
@@ -121,7 +123,6 @@ export function LoginPage() {
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
-                placeholder="Enter your password"
                 className={`${styles.input} ${styles.inputWithToggle}`}
                 aria-invalid={!!errors.password}
                 aria-describedby={errors.password ? 'password-error' : undefined}
@@ -156,20 +157,44 @@ export function LoginPage() {
             )}
           </div>
 
+          <div className={styles.options}>
+            <label className={styles.remember}>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              />
+              Remember me
+            </label>
+            <button
+              type="button"
+              className={styles.forgot}
+              onClick={() => setShowForgot((v) => !v)}
+              aria-expanded={showForgot}
+            >
+              Forgot password?
+            </button>
+          </div>
+          {showForgot && (
+            <p className={styles.forgotNote}>Ask an Admin to reset it in Staff &amp; Roles.</p>
+          )}
+
           <button type="submit" className={styles.submit} disabled={isSubmitting}>
-            <svg {...iconProps} width={20} height={20}>
-              <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
-              <path d="M10 17l5-5-5-5" />
-              <path d="M15 12H3" />
-            </svg>
             {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-
-        <p className={styles.footer}>
-          Forgot your password? Ask an Admin to reset it in Staff &amp; Roles.
-        </p>
       </div>
+
+      <footer className={styles.footer}>
+        <h2 className={styles.headline}>
+          Streamlining global trade,
+          <br />
+          together.
+        </h2>
+        <p className={styles.copyright}>
+          © {new Date().getFullYear()} Grateful Solutions (Cambodia) Co., Ltd
+        </p>
+      </footer>
     </main>
   );
 }

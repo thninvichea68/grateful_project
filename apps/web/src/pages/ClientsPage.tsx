@@ -105,19 +105,19 @@ export function ClientsPage() {
                 >
                   <td>
                     <div className="val-bold">{c.name}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 700 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontWeight: 600 }}>
                       {c.code}
                     </div>
                   </td>
                   <td>{c.countryName}</td>
-                  <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.activeShipments}</td>
-                  <td style={{ textAlign: 'center', fontWeight: 700 }}>{c.shipmentCount}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 600 }}>{c.activeShipments}</td>
+                  <td style={{ textAlign: 'center', fontWeight: 600 }}>{c.shipmentCount}</td>
                   <td>{fmtDate(c.lastEta)}</td>
                   {showProfit && (
                     <td
                       style={{
                         textAlign: 'right',
-                        fontWeight: 700,
+                        fontWeight: 600,
                         color:
                           Number(c.netProfitYtd) < 0
                             ? 'var(--status-exception-fg)'

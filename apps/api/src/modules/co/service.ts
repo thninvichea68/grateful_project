@@ -12,7 +12,7 @@ import { assertClientAllowed, assertClientVisible, clientCondition } from '../..
  * Every export invoice of a live shipment, with its CO. Until something is saved for an
  * invoice, its form is the shipment's and so is its CO no. when the shipment has only that
  * invoice (a shipment's CO numbers can't be told apart per invoice); its status is the shipment's
- * CO Status, else "Approve" once the shipment has a CO no. and "Pending" before. The country is the destination, "USA" for the US as on
+ * CO Status, else "Approved" once the shipment has a CO no. and "Pending" before. The country is the destination, "USA" for the US as on
  * the sheet.
  */
 const ROWS = sql`(

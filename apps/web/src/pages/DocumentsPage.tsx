@@ -72,7 +72,7 @@ export function DocumentTable({
                 {d.shipmentId ? (
                   <Link
                     to={`/plans/${d.shipmentId}`}
-                    style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+                    style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {d.shipmentReference}

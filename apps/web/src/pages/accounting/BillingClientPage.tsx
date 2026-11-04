@@ -213,7 +213,7 @@ function Workspace({
                   <td data-no-preview>
                     <span className={b.declare}>{r.declareNo}</span>
                     <span className={b.small}>
-                      {r.direction === 'IMPORT' ? 'Import' : 'Export'} ·{' '}
+                      {r.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'} ·{' '}
                       <Link to={`/plans/${r.shipmentId}`}>{r.shipmentReference}</Link>
                     </span>
                   </td>
@@ -222,7 +222,7 @@ function Workspace({
                     {r.quantity ? `${fmtNum(r.quantity)} ${r.quantityUnit ?? ''}`.trim() : '—'}
                   </td>
                   <td>
-                    <span className={b.declare} style={{ fontWeight: 700 }}>
+                    <span className={b.declare} style={{ fontWeight: 600 }}>
                       {r.hbl ?? '—'}
                     </span>
                     <span className={b.small} title={r.containers ?? undefined}>

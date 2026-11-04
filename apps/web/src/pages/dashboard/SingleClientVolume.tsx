@@ -144,7 +144,7 @@ export function SingleClientVolume({
                     y={y + 10}
                     textAnchor="middle"
                     fontSize={10}
-                    fontWeight={700}
+                    fontWeight={600}
                     fill={
                       p?.key === month && !fullYear
                         ? 'var(--accent-primary)'

@@ -393,6 +393,27 @@
       "when": 1793594580346,
       "tag": "0055_client_completion_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793767662814,
+      "tag": "0056_credit_note_ref_bl_hawb",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793768029728,
+      "tag": "0057_record_summary_ref_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793773847365,
+      "tag": "0058_material_types",
+      "breakpoints": true
     }
   ]
 }

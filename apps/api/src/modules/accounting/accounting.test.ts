@@ -728,7 +728,7 @@ describe('billing documents', () => {
     expect(res.body.totals).toMatchObject({ total: '21.25', vat: '0.00', totalKhr: '85638' });
   });
 
-  it("a shipment's DIS and debit note follow its tax invoice's details", async () => {
+  it("a shipment's tax invoice, DIS and debit note follow each other's details", async () => {
     const h = await as('ACCOUNTANT');
     const rec = await ledgerRow();
     const make = async (type: string) => {
@@ -766,6 +766,22 @@ describe('billing documents', () => {
     expect(dnHeader).toMatchObject({ billTo: 'JR APPAREL (FIXED) CO., LTD', pol: 'CHINA' });
     expect(Number(dnHeader.volumeCbm)).toBe(12.43);
     expect(Number(dnHeader.grossWeightKg)).toBe(3569.58);
+
+    // The other way too: a fix on the debit note reaches the tax invoice and the DIS.
+    await request(app)
+      .put(`/api/v1/accounting/docs/debit-notes/${dn.id}`)
+      .set(h)
+      .send({ ...dn.pre, ...dnHeader, billTo: 'JR APPAREL CO., LTD', hbl: 'HBL-777' })
+      .expect(200);
+    for (const [type, id] of [
+      ['tax-invoices', inv.id],
+      ['disbursements', dis.id],
+    ] as const)
+      expect(await get(type, id)).toMatchObject({
+        customerNameEn: 'JR APPAREL CO., LTD',
+        hbl: 'HBL-777',
+        pol: 'CHINA',
+      });
   });
 
   it('debit notes take the ledger number (one per shipment); credit notes and record summaries prefill from the ledger', async () => {
@@ -1190,7 +1206,7 @@ describe('billing documents', () => {
       .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
       .set(h)
       .send({ reviewStatus: 'CHECKED' });
-    // Approved: numbered straight away, without waiting for its Credit Noted, and the tax
+    // Approved: numbered straight away, without waiting for its Credit Note, and the tax
     // invoice draft made. Only a processing fee, so no debit note and no DN number.
     expect(checked.body).toMatchObject({
       numbered: [{ declareNo: 'I 151809', numbers: [{ kind: 'INV' }, { kind: 'DIS' }] }],
@@ -1208,7 +1224,7 @@ describe('billing documents', () => {
     const invNo = (await summary()).header.invNo;
     expect(invNo).toMatch(/^GS26-/);
 
-    // Its Credit Noted checked later: the numbers and the one tax invoice stay as they are.
+    // Its Credit Note checked later: the numbers and the one tax invoice stay as they are.
     const cnPre = (
       await request(app)
         .get('/api/v1/accounting/docs/credit-notes/prefill')
@@ -1473,7 +1489,7 @@ describe('credit note charge descriptions', () => {
   });
 });
 
-describe('customs broker: Credit Noted only', () => {
+describe('customs broker: Credit Note only', () => {
   it('drafts and submits credit notes; checking puts them in the ledger; sees no other accounting', async () => {
     const declId = await declaration(b.jr.id, 'I 122050', '2026-08-21', 'IMPORT');
     const h = await as('CUSTOMS_BROKER');

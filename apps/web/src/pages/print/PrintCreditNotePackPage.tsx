@@ -9,7 +9,7 @@ import s from './print.module.css';
 import p from './billingPrint.module.css';
 
 /**
- * Credit Noted → ⋯ → PDF Pack: every credit note matching the list's filters, one A4 page
+ * Credit Note → ⋯ → PDF Pack: every credit note matching the list's filters, one A4 page
  * each, for one print / PDF.
  */
 export function PrintCreditNotePackPage() {
@@ -25,7 +25,7 @@ export function PrintCreditNotePackPage() {
     if (!list?.length) return;
     const first = list[0]!.date;
     const last = list[list.length - 1]!.date;
-    document.title = `Credit Noted ${first === last ? first : `${first} – ${last}`} (${list.length})`;
+    document.title = `Credit Note ${first === last ? first : `${first} – ${last}`} (${list.length})`;
   }, [pack.data]);
   const docs = pack.data ?? [];
   useAutoPrint(!!pack.data && pack.data.length > 0 && !lookups.isLoading);

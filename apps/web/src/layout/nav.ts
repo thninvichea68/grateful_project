@@ -102,7 +102,7 @@ export const NAV: NavGroup[] = [
         to: '/documents',
         label: 'Documents',
         title: 'Documents',
-        icon: 'documents',
+        icon: 'folder',
         permission: 'documents:read',
       },
       {
@@ -204,8 +204,8 @@ export const NAV: NavGroup[] = [
       },
       {
         to: '/credit-noted',
-        label: 'Credit Noted',
-        title: 'Credit Noted (Chea Payment)',
+        label: 'Credit Note',
+        title: 'Credit Note (Chea Payment)',
         icon: 'creditnote',
         permission: 'creditnotes:read',
         badge: 'creditNoteInbox',
@@ -253,7 +253,7 @@ export const NAV: NavGroup[] = [
             to: '/staff/members',
             label: 'Team members',
             title: 'Staff Management',
-            icon: 'clients',
+            icon: 'team',
             permission: 'staff:read',
           },
           {

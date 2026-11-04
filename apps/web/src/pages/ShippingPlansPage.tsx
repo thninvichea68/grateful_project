@@ -157,7 +157,16 @@ export function ShippingPlansPage() {
       values={header.openCol === c.key ? colValues.data : undefined}
       loading={colValues.isLoading}
       selected={header.filters[c.key]}
-      sort={filters.sort === c.key ? 'asc' : filters.sort === `-${c.key}` ? 'desc' : undefined}
+      // The default order (newest clearance first) doesn't light its column; a picked sort does.
+      sort={
+        !params.has('sort')
+          ? undefined
+          : filters.sort === c.key
+            ? 'asc'
+            : filters.sort === `-${c.key}`
+              ? 'desc'
+              : undefined
+      }
       onApply={(kept) => header.apply(c.key, kept)}
       onSort={(d) => setParam('sort', d === 'asc' ? c.key : `-${c.key}`)}
     />
@@ -168,7 +177,7 @@ export function ShippingPlansPage() {
     ...prefs,
   };
   return (
-    <section className="view active" id="view-plans">
+    <section className="view active caps-values" id="view-plans">
       <div className="card">
         <div className="card-header-row">
           <div>

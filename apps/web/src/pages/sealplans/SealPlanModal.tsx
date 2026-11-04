@@ -236,6 +236,7 @@ function SealPlanForm({
     <Modal
       title={title}
       width={860}
+      className="caps-values caps-heads"
       onClose={onClose}
       sub={
         standalone ? (
@@ -245,7 +246,7 @@ function SealPlanForm({
             <Link
               to={`/plans/${shipmentId}`}
               onClick={onClose}
-              style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+              style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
             >
               {ref}
             </Link>{' '}

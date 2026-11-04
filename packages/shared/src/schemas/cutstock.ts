@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CUT_STOCK_CATEGORIES, type CutStockCategory } from '../enums';
 import { paginationQuerySchema } from './common';
-import { decimal, optText } from './fields';
+import { decimal, headerFiltersParam, optText } from './fields';
 
 export const CUT_STOCK_CATEGORY_LABEL: Record<CutStockCategory, string> = {
   MACHINERY_EQUIPMENT: 'I. Machineries & Equipments',
@@ -35,6 +35,8 @@ export const cutStockListQuerySchema = paginationQuerySchema.extend({
   category: z.enum(CUT_STOCK_CATEGORIES).optional(),
   condition: z.enum(['OK', 'CHECK', 'OVER']).optional(),
   pageSize: z.coerce.number().int().min(1).max(500).default(500),
+  /** Header filters, Excel style: the values each list column keeps. */
+  filters: headerFiltersParam.optional(),
 });
 
 export interface CutStockRow {

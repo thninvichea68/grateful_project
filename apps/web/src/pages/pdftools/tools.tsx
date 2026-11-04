@@ -32,6 +32,8 @@ import {
   PDF_ACCEPT,
   Results,
   RunRow,
+  useHandoffFile,
+  useHandoffFiles,
   usePdfThumbs,
   useRun,
 } from './parts';
@@ -57,7 +59,7 @@ function usePageCount(file: File | null) {
 const pagesLabel = (n: number | null) => (n === null ? '' : ` · ${n} page${n === 1 ? '' : 's'}`);
 
 export function MergeTool() {
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useHandoffFiles();
   const [out, setOut] = useState<OutFile[]>([]);
   const r = useRun();
   return (
@@ -93,7 +95,7 @@ export function MergeTool() {
 type SplitMode = 'each' | 'single' | 'burst';
 
 export function SplitTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [mode, setMode] = useState<SplitMode>('each');
   const [ranges, setRanges] = useState('');
   const [out, setOut] = useState<OutFile[]>([]);
@@ -162,7 +164,7 @@ interface PageCard extends PagePlan {
 }
 
 export function OrganizeTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [cards, setCards] = useState<PageCard[]>([]);
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -341,7 +343,7 @@ export function OrganizeTool() {
 }
 
 export function RemovePagesTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [text, setText] = useState('');
   const [textError, setTextError] = useState('');
@@ -518,7 +520,7 @@ function uniqueName(name: string, taken: Set<string>) {
 }
 
 export function CompressTool() {
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useHandoffFiles();
   const [level, setLevel] = useState<CompressLevel>('medium');
   const [out, setOut] = useState<OutFile[]>([]);
   const [summary, setSummary] = useState<ReactNode>('');
@@ -687,7 +689,7 @@ export function ImagesToPdfTool() {
 }
 
 export function PdfToImagesTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [format, setFormat] = useState<'png' | 'jpeg'>('jpeg');
   const [dpi, setDpi] = useState(150);
   const [out, setOut] = useState<OutFile[]>([]);
@@ -748,7 +750,7 @@ export function PdfToImagesTool() {
 }
 
 export function PdfToTextTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [ranges, setRanges] = useState('');
   const [text, setText] = useState('');
   const [blank, setBlank] = useState<number[]>([]);
@@ -841,7 +843,7 @@ export function PdfToTextTool() {
 
 /** PDF to Word or Excel: both rebuild the page from its text, so scans have nothing to give. */
 export function PdfConvertTool({ to }: { to: 'docx' | 'xlsx' }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [ranges, setRanges] = useState('');
   const [oneSheet, setOneSheet] = useState(false);
   const [blank, setBlank] = useState<number[]>([]);
@@ -940,7 +942,7 @@ const CORNERS: [Corner, string][] = [
 ];
 
 export function PageNumbersTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [position, setPosition] = useState<Corner>('bottom-center');
   const [format, setFormat] = useState('Page {n} of {total}');
   const [start, setStart] = useState(1);
@@ -1039,7 +1041,7 @@ export function PageNumbersTool() {
 }
 
 export function WatermarkTool() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useHandoffFile();
   const [text, setText] = useState('CONFIDENTIAL');
   const [size, setSize] = useState(60);
   const [color, setColor] = useState('#dc2626');

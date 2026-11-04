@@ -15,6 +15,7 @@ import {
   WatermarkTool,
 } from './pdftools/tools';
 import { EditPdfTool } from './pdftools/editor/EditPdfTool';
+import { NextToolsContext } from './pdftools/parts';
 import s from './pdftools/PdfTools.module.css';
 
 const svg = (d: ReactNode) => (
@@ -188,6 +189,9 @@ const TOOLS: Tool[] = [
 
 const GROUPS = [...new Set(TOOLS.map((t) => t.group))];
 
+/** Tools a finished PDF can go on to ("Continue with…"); Images to PDF takes images. */
+const NEXT_TOOLS = TOOLS.filter((t) => t.id !== 'images-to-pdf');
+
 /** PDF Tools: merge, split, organize, compress and convert, all inside the browser. */
 export function PdfToolsPage() {
   const [params, setParams] = useSearchParams();
@@ -207,7 +211,9 @@ export function PdfToolsPage() {
             </div>
           </div>
           {/* key: switching tools starts from a clean panel */}
-          <tool.Panel key={tool.id} />
+          <NextToolsContext.Provider value={{ current: tool.id, tools: NEXT_TOOLS }}>
+            <tool.Panel key={tool.id} />
+          </NextToolsContext.Provider>
         </div>
       </section>
     );

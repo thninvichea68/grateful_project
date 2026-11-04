@@ -29,7 +29,7 @@ function containers(d: CreditNoteDeclaration) {
   );
 }
 
-/** Pick the customs declaration a new Credit Noted is for; the form fills from its shipment. */
+/** Pick the customs declaration a new Credit Note is for; the form fills from its shipment. */
 export function NewCreditNoteModal({ base, onClose }: { base: string; onClose: () => void }) {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
@@ -42,7 +42,7 @@ export function NewCreditNoteModal({ base, onClose }: { base: string; onClose: (
 
   return (
     <Modal
-      title="New Credit Noted"
+      title="New Credit Note"
       sub="Choose the declaration. Shipper, port, container, house bill and weights fill in from the shipment."
       onClose={onClose}
       width={1800}
@@ -133,7 +133,7 @@ export function NewCreditNoteModal({ base, onClose }: { base: string; onClose: (
               </span>
               <span className={s.cell}>
                 <span className={d.direction === 'IMPORT' ? s.imp : s.exp}>
-                  {d.direction === 'IMPORT' ? 'Import' : 'Export'}
+                  {d.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                 </span>
               </span>
               <span className={s.cell}>
@@ -163,7 +163,7 @@ export function NewCreditNoteModal({ base, onClose }: { base: string; onClose: (
           type="button"
           className="btn-create-submit"
           onClick={() => navigate(`${base}/new`)}
-          title="Start an empty Credit Noted without a declaration"
+          title="Start an empty Credit Note without a declaration"
         >
           Start new
         </button>

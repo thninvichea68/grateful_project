@@ -27,7 +27,7 @@
 }
 .dialogTitle {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -70,7 +70,7 @@
 }
 .pagerInfo {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .pagerCount {
@@ -83,7 +83,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .pagerSelect {
@@ -91,7 +91,7 @@
   padding-left: 12px;
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .pagerInput {
   width: 72px;
@@ -103,7 +103,7 @@
   color: var(--text-primary);
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .pagerBtns {
   display: flex;
@@ -115,7 +115,7 @@
   border-radius: var(--radius-md);
   padding: 10px 14px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.5;
   background: var(--status-exception-bg);
   color: var(--status-exception-fg);
@@ -140,7 +140,7 @@
   display: block;
   margin-top: 4px;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--status-exception-fg);
 }
 
@@ -186,6 +186,27 @@
   flex-shrink: 0;
   white-space: nowrap;
 }
+/* Every control in a toolbar is 36px high (as the ⋯ menu), and the boxes are white like the
+   client dropdown; an applied Filter keeps its cyan tint. */
+.toolbar > :is(.input, select, button),
+.toolbar :global(.card-dropdown-trigger),
+.toolbar :global(.filter-btn) {
+  box-sizing: border-box;
+  height: 36px;
+}
+.toolbar > :is(.input, select),
+.toolbar :global(.card-dropdown-trigger),
+.toolbar :global(.filter-btn:not(.active)) {
+  background-color: var(--bg-surface);
+}
+.toolbar :global(.card-dropdown-trigger),
+.toolbar :global(.filter-btn:not(.active)) {
+  color: var(--text-primary);
+}
+.toolbar :global(.card-dropdown-trigger) {
+  padding: 0 12px;
+  font-size: 12.5px;
+}
 .input {
   font-family: var(--font-main);
   font-size: 12.5px;
@@ -203,7 +224,7 @@
 .ghostBtn {
   composes: input;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   background: var(--bg-subtle);
 }

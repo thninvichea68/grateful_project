@@ -287,7 +287,7 @@ describe('VAT percent from Settings → Invoice Management', () => {
   });
 });
 
-describe('charge line units (credit noted / record summary)', () => {
+describe('charge line units (credit note / record summary)', () => {
   it('bills by the container size, SHIP for air / LCL, SET for the per-set charges', () => {
     const fcl = shipmentChargeUnit({
       transportMode: 'SEA',

@@ -8,5 +8,5 @@
    regular-weight options, whatever the stylesheet order. */
 ul li.add.add {
   color: var(--accent-primary);
-  font-weight: 700;
+  font-weight: 600;
 }

@@ -52,7 +52,7 @@ export const accountingRouter = Router();
 accountingRouter.use(requireAuth);
 
 /**
- * Credit Noted (the customs broker's vouchers) and Record Summary (worked on by Operations)
+ * Credit Note (the customs broker's vouchers) and Record Summary (worked on by Operations)
  * have their own permissions, so those users don't see the rest of accounting; everything
  * else needs accounting access.
  */
@@ -286,7 +286,7 @@ accountingRouter.delete(
   },
 );
 
-/** Declarations to start a Credit Noted from (any declaration, ledger row or not). */
+/** Declarations to start a Credit Note from (any declaration, ledger row or not). */
 accountingRouter.get('/credit-notes/declarations', async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
   res.json(await ledger.creditNoteDeclarations(q, scopeClients(req)));
@@ -312,7 +312,7 @@ accountingRouter.get(
     res.json(await docs.listRecordSummaryReview({ ...q, clientIds: scopeClients(req) }));
   },
 );
-/** Sidebar → Credit Noted: every credit note (drafts too) with shipment details. */
+/** Sidebar → Credit Note: every credit note (drafts too) with shipment details. */
 accountingRouter.get('/credit-notes/list', async (req, res) => {
   const q = parse(creditNoteListQuerySchema, req.query);
   if (q.clientId) assertClientAllowed(req, q.clientId);
@@ -356,7 +356,7 @@ accountingRouter.get('/docs/:type/:id/messages', async (req, res) => {
   res.json(await docs.creditNoteMessagesFor(id));
 });
 
-/* The broker's Credit Noted inbox: messages from accounting addressed to me. */
+/* The broker's Credit Note inbox: messages from accounting addressed to me. */
 accountingRouter.get('/credit-notes/inbox', async (req, res) => {
   res.json(await docs.creditNoteInbox(req.auth!.userId));
 });

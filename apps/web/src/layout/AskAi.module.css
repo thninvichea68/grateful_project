@@ -56,7 +56,7 @@
   display: grid;
   place-items: center;
   font-size: 9.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   color: #fff;
 }
@@ -80,7 +80,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .chipSize {
@@ -132,7 +132,7 @@
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
   color: var(--accent-primary);
   pointer-events: none;
@@ -149,7 +149,7 @@
   color: var(--accent-primary);
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .moreQuestions:hover:not(:disabled) {
@@ -170,7 +170,7 @@
 }
 .followLabel {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);

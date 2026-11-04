@@ -1,4 +1,4 @@
-/* Credit Noted sheet, laid out like the broker's paper voucher (no letterhead). */
+/* Credit Note sheet, laid out like the broker's paper voucher (no letterhead). */
 .cn {
   /* Helvetica throughout; 'GS Khmer' only draws Khmer characters, so it goes first. */
   font-family: 'GS Khmer', 'Helvetica', Arial, sans-serif;

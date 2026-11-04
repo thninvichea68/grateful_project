@@ -57,7 +57,7 @@
   text-align: left;
   font-family: inherit;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -88,7 +88,7 @@
 }
 .figureLabel {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .figureValue {
@@ -96,7 +96,7 @@
   align-items: baseline;
   gap: 4px;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.4px;
   line-height: 1.15;
   color: var(--text-primary);
@@ -127,12 +127,12 @@
 }
 .metalName {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .metalValue {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
@@ -185,7 +185,7 @@
 }
 .sync a {
   color: var(--accent-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 .dot {
   flex-shrink: 0;
@@ -211,7 +211,7 @@
   padding: 2px 8px;
   border-radius: 8px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   background: var(--bg-subtle);
   color: var(--text-secondary);
@@ -227,7 +227,7 @@
 .rowDiff {
   margin-left: 8px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .rowDiff[data-dir='up'] {
   color: var(--status-pending-fg);
@@ -238,7 +238,7 @@
 
 .link {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .link:hover {
@@ -319,12 +319,12 @@
 }
 .weights th {
   text-align: left;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .weights td {
   text-align: right;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .weights td:last-child {

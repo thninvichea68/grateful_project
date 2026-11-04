@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../../auth/AuthProvider';
 import {
   useAddCoForm,
+  useAddMaterial,
   useAddConsignee,
   useAddForwarder,
   useDeleteShipment,
@@ -512,7 +513,7 @@ function ShipmentForm({
   );
 
   return (
-    <section className="view active">
+    <section className="view active caps-values caps-labels">
       <FormProvider {...methods}>
         <form
           className={f.page}
@@ -563,7 +564,7 @@ function ShipmentForm({
                     background: 'var(--status-exception-bg)',
                     color: 'var(--status-exception-fg)',
                     fontSize: 13,
-                    fontWeight: 700,
+                    fontWeight: 600,
                   }}
                 >
                   These invoice items exceed the remaining CDC balance:
@@ -686,7 +687,7 @@ function QuantityField() {
   );
 }
 
-/** A field's label with its icon (FIELD_ICON), in the mockup's sentence case. */
+/** A field's label with its icon (FIELD_ICON), in capitals (ShipmentForm.module.css). */
 function FieldLabel({ name, label }: { name: string; label: string }) {
   const icon = FIELD_ICON[name];
   return (
@@ -864,29 +865,43 @@ function CoFormSelect({ lookups }: { lookups: LookupsResponse }) {
 }
 
 /**
- * The import or export type (Garments…), kept in the material field. A plan workbook import
- * fills it with the CDC groups ("RAW MATERIAL, ACCESSORY"), which stays selectable until changed.
+ * The import or export type (Garments & Apparel…), kept in the material field, with "+ Add new…"
+ * for a type not in the list. A plan workbook import fills it with the CDC groups ("RAW
+ * MATERIAL, ACCESSORY"), which stays selectable until changed.
  */
 function CargoTypeSelect({
   label,
-  options,
+  options: listed,
 }: {
   label: string;
   options: { value: string; label: string }[];
 }) {
-  const current = useWatch<FormValues, 'material'>({ name: 'material' }) ?? '';
+  const { field } = useController<FormValues, 'material'>({ name: 'material' });
+  const { can } = useAuth();
+  const addMaterial = useAddMaterial();
+  const current = field.value ?? '';
+  const options =
+    current && !listed.some((o) => o.value === current)
+      ? [...listed, { value: current, label: current }]
+      : listed;
   return (
-    <Select
-      name="material"
-      label={label}
-      options={
-        current && !options.some((o) => o.value === current)
-          ? [...options, { value: current, label: current }]
-          : options
-      }
-      placeholder="Select type"
-      span={2}
-    />
+    <div className="form-field-group" style={spanStyle(2)}>
+      <FieldLabel name="material" label={label} />
+      <AddNewSelect
+        id="f-material"
+        label={label}
+        placeholder="Select type"
+        value={field.value}
+        onChange={field.onChange}
+        onBlur={field.onBlur}
+        options={options}
+        onCreate={
+          can('shipments:write')
+            ? async (name) => (await addMaterial.mutateAsync({ label: name })).value
+            : undefined
+        }
+      />
+    </div>
   );
 }
 

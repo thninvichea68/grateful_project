@@ -10,7 +10,7 @@
 .title {
   margin: 0;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 /* Title with an info "!" beside it (Tax management). */
@@ -43,7 +43,7 @@
   background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .year button:hover {
@@ -67,7 +67,7 @@
   flex-direction: column;
   gap: 5px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -172,7 +172,7 @@
 }
 .tile small {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--accent-primary);
 }
@@ -208,7 +208,7 @@
   border-radius: 999px;
   font-size: 10.5px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 600;
   background: var(--bg-surface-elevated);
   color: var(--text-tertiary);
   border: 1px solid var(--border-subtle);

@@ -77,7 +77,7 @@ describe('Sidebar', () => {
       'Payroll',
       'MIH',
       'Import & Export',
-      'Credit Noted',
+      'Credit Note',
       'Record Summary',
       'Quotations',
       'Operations',
@@ -117,16 +117,16 @@ describe('Sidebar', () => {
     expect(links()).not.toContain('Payroll');
   });
 
-  it('leaves the Operations tools Credit Noted and Record Summary out for Accountants', () => {
+  it('leaves the Operations tools Credit Note and Record Summary out for Accountants', () => {
     renderAs('ACCOUNTANT');
     expect(links()).toContain('Chea Payments');
-    expect(links()).not.toContain('Credit Noted');
+    expect(links()).not.toContain('Credit Note');
     expect(links()).not.toContain('Record Summary');
   });
 
-  it('gives a Customs Broker only Shipping Plans, Credit Noted and Operations', () => {
+  it('gives a Customs Broker only Shipping Plans, Credit Note and Operations', () => {
     renderAs('CUSTOMS_BROKER');
-    expect(links()).toEqual(['Shipping Plans', 'Credit Noted', 'Operations']);
+    expect(links()).toEqual(['Shipping Plans', 'Credit Note', 'Operations']);
   });
 
   it('hides staff management from Viewers', () => {

@@ -31,7 +31,7 @@
   background: var(--status-completed-bg);
   color: var(--accent-primary);
   font-size: 40px;
-  font-weight: 700;
+  font-weight: 600;
   overflow: hidden;
 }
 .avatar img {
@@ -68,7 +68,7 @@
 .photoText h3 {
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .photoText p {
@@ -98,7 +98,7 @@
 .field > span,
 .readonly span {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -129,7 +129,7 @@
 }
 .readonly b {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   overflow-wrap: anywhere;
   text-align: right;
@@ -147,7 +147,7 @@
   border-radius: 8px;
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -179,7 +179,7 @@
   color: var(--accent-primary);
   font-family: var(--font-main);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .link:hover {
@@ -201,7 +201,7 @@
 .appearance h3 {
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .appearance p {
@@ -228,7 +228,7 @@
   color: var(--text-secondary);
   font-family: var(--font-main);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .themes button svg {

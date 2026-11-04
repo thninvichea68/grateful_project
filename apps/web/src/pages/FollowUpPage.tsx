@@ -165,7 +165,7 @@ export function FollowUpPage() {
                 <td>
                   {r.subject}
                   {r.shipmentReference && (
-                    <div style={{ fontSize: 11.5, fontWeight: 700 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 600 }}>
                       <Link
                         to={`/plans/${r.shipmentId}`}
                         onClick={(e) => e.stopPropagation()}
@@ -179,14 +179,14 @@ export function FollowUpPage() {
                 <td>{r.clientName ?? '-'}</td>
                 <td
                   style={
-                    r.overdue ? { color: 'var(--status-exception-fg)', fontWeight: 700 } : undefined
+                    r.overdue ? { color: 'var(--status-exception-fg)', fontWeight: 600 } : undefined
                   }
                 >
                   {dueLabel(r.dueAt)}
                   {r.overdue ? ' · overdue' : ''}
                 </td>
                 <td>
-                  <span style={{ color: PRIORITY_COLOR[r.priority], fontWeight: 700 }}>
+                  <span style={{ color: PRIORITY_COLOR[r.priority], fontWeight: 600 }}>
                     {r.priority[0]}
                     {r.priority.slice(1).toLowerCase()}
                   </span>

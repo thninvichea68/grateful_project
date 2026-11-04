@@ -17,7 +17,7 @@
   background: var(--bg-surface-elevated);
   border-bottom: 1px solid var(--border-subtle);
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   text-align: left;
@@ -53,7 +53,7 @@
   border-radius: 50%;
   background: var(--bg-subtle);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
@@ -88,7 +88,7 @@
   border-style: solid;
   border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
   background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -130,12 +130,12 @@
   border-top: 1px solid var(--border-subtle);
 }
 .grand span {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary) !important;
 }
 .grand b {
   font-size: 20px;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   letter-spacing: -0.4px;
   color: var(--accent-primary) !important;
 }

@@ -99,7 +99,7 @@ export function CreditNotedRoute({ base }: { base: string }) {
 }
 
 /**
- * Credit Noted (Chea / customs broker payment voucher), laid out like the accounting
+ * Credit Note (Chea / customs broker payment voucher), laid out like the accounting
  * engine: the form on the left, the A4 voucher updating live on the right.
  * "Submit to Monthly" issues it; its total becomes the declaration's Clear Fee.
  */
@@ -128,7 +128,7 @@ function CreditNotedEditor({
     // A blank note bills the company, as the broker's vouchers always do.
     if (!v.billTo && company.data?.nameEn) v.billTo = company.data.nameEn.toUpperCase();
     if (!v.address && company.data?.addressEn) v.address = company.data.addressEn;
-    if (!v.refType) v.refType = 'HOUSE_BILL';
+    if (!v.refType) v.refType = 'BILL_NO';
     // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
     v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
     return v;
@@ -272,7 +272,7 @@ function CreditNotedEditor({
           : await action.mutateAsync({ action: 'create', body: v })
       ) as BillingDoc;
       if (after) await after(saved);
-      else toast(doc ? 'Saved.' : `Credit Noted No. ${cnSeq(saved.number)} saved as a draft.`);
+      else toast(doc ? 'Saved.' : `Credit Note No. ${cnSeq(saved.number)} saved as a draft.`);
       if (!doc) navigate(`${base}/${saved.id}`, { replace: true });
     })();
 
@@ -280,14 +280,14 @@ function CreditNotedEditor({
     save(async (saved) => {
       if (
         !window.confirm(
-          `Submit Credit Noted No. ${cnSeq(saved.number)} to the Monthly Ledger?\n\n` +
+          `Submit Credit Note No. ${cnSeq(saved.number)} to the Monthly Ledger?\n\n` +
             `${fmtMoney(saved.totals.total)} becomes the Clear Fee of declaration ${saved.declareNo ?? '(none)'}, ` +
             `and the credit note can no longer be edited.`,
         )
       )
         return;
       await action.mutateAsync({ action: 'issue', id: saved.id });
-      toast(`Credit Noted No. ${cnSeq(saved.number)} submitted to the Monthly Ledger.`);
+      toast(`Credit Note No. ${cnSeq(saved.number)} submitted to the Monthly Ledger.`);
     });
 
   /**
@@ -299,7 +299,7 @@ function CreditNotedEditor({
       if (!doc) return;
       if (
         !window.confirm(
-          `Resubmit Credit Noted No. ${cnSeq(doc.number)} to accounting?\n\n` +
+          `Resubmit Credit Note No. ${cnSeq(doc.number)} to accounting?\n\n` +
             'It goes back as Request Revise. The Monthly Ledger keeps the approved Clear Fee ' +
             'until accounting approves the revision.',
         )
@@ -307,7 +307,7 @@ function CreditNotedEditor({
         return;
       await action.mutateAsync({ action: 'resubmit', id: doc.id, body: v });
       setReopened(false);
-      toast(`Credit Noted No. ${cnSeq(doc.number)} resubmitted to accounting (Request Revise).`);
+      toast(`Credit Note No. ${cnSeq(doc.number)} resubmitted to accounting (Request Revise).`);
     })();
   const cancelRevise = () => {
     reset(defaults);
@@ -322,9 +322,9 @@ function CreditNotedEditor({
     );
     if (!reason) return;
     await action.mutateAsync({ action: 'void', id: doc.id, body: { reason } });
-    toast('Credit Noted discarded.');
+    toast('Credit Note discarded.');
   };
-  // Accounting's decision, from Accounting → Chea Payments (not the broker's own Credit Noted).
+  // Accounting's decision, from Accounting → Chea Payments (not the broker's own Credit Note).
   const setReview = useSetCreditNoteReview();
   const [revising, setRevising] = useState(false);
   const reviewStatus = doc?.header.reviewStatus as CreditNoteReviewStatus | undefined;
@@ -348,7 +348,7 @@ function CreditNotedEditor({
           toast(
             mine
               ? `${doc.declareNo} approved: ${mine.numbers.map((x) => x.number).join(' · ')} in the Monthly Ledger.`
-              : `${doc.declareNo ?? `Credit Noted No. ${cnSeq(doc.number)}`} approved.`,
+              : `${doc.declareNo ?? `Credit Note No. ${cnSeq(doc.number)}`} approved.`,
           );
         },
       },
@@ -361,7 +361,7 @@ function CreditNotedEditor({
     if (
       !window.confirm(
         voided
-          ? `Delete discarded Credit Noted No. ${cnSeq(doc.number)} for good? This can't be undone.`
+          ? `Delete discarded Credit Note No. ${cnSeq(doc.number)} for good? This can't be undone.`
           : 'Delete this draft?',
       )
     )
@@ -489,9 +489,9 @@ function CreditNotedEditor({
       <div className={s.editor}>
         <header className={s.head}>
           <div className={`${s.headText} ${backRow}`}>
-            <BackLink to={base} label="Credit Noted" />
+            <BackLink to={base} label="Credit Note" />
             <h2>
-              Credit Noted (Chea Payment){' '}
+              Credit Note (Chea Payment){' '}
               {doc?.number && <span className={s.number}>No. {cnSeq(doc.number)}</span>}{' '}
               {doc && (
                 <Pill tone={DOC_STATUS_PILL[doc.status].tone}>{CN_STATUS_LABEL[doc.status]}</Pill>
@@ -587,7 +587,7 @@ function CreditNotedEditor({
         <ErrorBanner error={action.error ?? setReview.error} />
         {supportDocs && doc && (
           <SupportDocumentsModal
-            title={`Credit Noted No. ${cnSeq(doc.number)}`}
+            title={`Credit Note No. ${cnSeq(doc.number)}`}
             link={{ creditNoteId: doc.id }}
             clientId={doc.clientId}
             onClose={() => setSupportDocs(false)}
@@ -667,9 +667,8 @@ function CreditNotedEditor({
                   <span>Ref type / number</span>
                   <div className={s.pair}>
                     <select className="form-select-box" {...register('refType')}>
-                      <option value="HOUSE_BILL">House bill</option>
-                      <option value="BILL_NO">Bill no.</option>
-                      <option value="HAWB_NO">HAWB no.</option>
+                      <option value="BILL_NO">BL No.</option>
+                      <option value="HAWB_NO">HAWB No.</option>
                     </select>
                     <input className="form-field-box" {...register('refNo')} />
                   </div>
@@ -681,7 +680,7 @@ function CreditNotedEditor({
             </section>
 
             <section className={s.card}>
-              <h3>2. Credit noted line items</h3>
+              <h3>2. Credit note line items</h3>
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
               <div className={s.lineHead}>
                 <span>#</span>
@@ -873,7 +872,7 @@ function ReviewBanner({ doc }: { doc?: BillingDoc | undefined }) {
 /** The A4 sheet, scaled down to fit the pane width. */
 export function Preview({
   children,
-  label = 'Credit Noted preview',
+  label = 'Credit Note preview',
 }: {
   children: React.ReactNode;
   label?: string;

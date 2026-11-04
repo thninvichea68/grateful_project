@@ -126,7 +126,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
       <div className="card">
         <div className="card-header-row">
           <div>
-            <h3>{isCn ? 'Credit Noted' : `${cfg.title}s`}</h3>
+            <h3>{isCn ? 'Credit Note' : `${cfg.title}s`}</h3>
             <div className="create-header-desc" style={{ marginTop: 4 }}>
               {isCn
                 ? 'Customs broker payment vouchers. Start one from a declaration; "Submit to Monthly" posts its total as the Clear Fee.'
@@ -236,7 +236,7 @@ function DocsList({ type, base }: { type: BillingDocType; base: string }) {
                   {shipCols && (
                     <td>{d.transportMode ? (MODE[d.transportMode] ?? d.transportMode) : '-'}</td>
                   )}
-                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtMoney(d.total)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(d.total)}</td>
                   <td>
                     <Pill tone={DOC_STATUS_PILL[d.status].tone}>
                       {DOC_STATUS_PILL[d.status].label}

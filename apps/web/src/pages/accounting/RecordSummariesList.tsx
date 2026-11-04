@@ -12,7 +12,7 @@ import { REVIEW } from './CreditNotesReview';
 import { RecordSummaryInboxTable, RecordSummaryInboxToggle } from './RecordSummaryInbox';
 import { RecordSummaryPackMenu } from './RecordSummaryPackMenu';
 import { packFilters, STATUS_FILTER } from './recordSummaryPack';
-// Same look as Credit Noted and Accounting → Chea Payments.
+// Same look as Credit Note and Accounting → Chea Payments.
 import s from './CreditNotesReview.module.css';
 
 const TYPE = 'record-summaries' as const;
@@ -31,7 +31,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'TRUCK', RAIL: 'RAIL' };
 
 /**
- * Sidebar → Record Summary (Operations), laid out like Credit Noted: one card with the
+ * Sidebar → Record Summary (Operations), laid out like Credit Note: one card with the
  * filters, the table and the pager; a row opens the editor at `base`/:id. Accounting checks
  * the submitted ones in Accounting → Expense to Clients.
  */
@@ -226,9 +226,8 @@ export function RecordSummariesList({ base }: { base: string }) {
                     </td>
                     <td>
                       {d.direction && (
-                        <span className={s.type}>
-                          <i className={d.direction === 'IMPORT' ? s.imp : s.exp} />
-                          {d.direction === 'IMPORT' ? 'Import' : 'Export'}
+                        <span className={`${s.type} ${d.direction === 'IMPORT' ? s.imp : s.exp}`}>
+                          {d.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                         </span>
                       )}
                     </td>

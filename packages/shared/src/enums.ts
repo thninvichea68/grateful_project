@@ -118,7 +118,8 @@ export type FollowUpStatus = (typeof FOLLOW_UP_STATUSES)[number];
 export const STAFF_STATUSES = ['ACTIVE', 'ON_LEAVE', 'INACTIVE'] as const;
 export type StaffStatus = (typeof STAFF_STATUSES)[number];
 
-export const CREDIT_NOTE_REF_TYPES = ['HOUSE_BILL', 'BILL_NO', 'HAWB_NO'] as const;
+/** A credit note's reference: the BL no. (sea) or the HAWB no. (air). */
+export const CREDIT_NOTE_REF_TYPES = ['BILL_NO', 'HAWB_NO'] as const;
 export type CreditNoteRefType = (typeof CREDIT_NOTE_REF_TYPES)[number];
 /**
  * Accounting's check of a submitted credit note or record summary. REVISION_REQUESTED ("Request

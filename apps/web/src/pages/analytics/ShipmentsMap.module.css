@@ -236,7 +236,7 @@
 }
 .popFig b {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .popSub {
@@ -308,7 +308,7 @@ span.flag {
 }
 .rank {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   text-align: center;
 }
@@ -329,7 +329,7 @@ span.flag {
 .val b {
   margin-right: 4px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .bar {

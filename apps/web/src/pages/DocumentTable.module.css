@@ -8,7 +8,7 @@
 
 .title {
   all: unset;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
 }
@@ -21,7 +21,7 @@
   margin-top: 8px;
   font-size: 11.5px;
   color: var(--text-tertiary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .actions {

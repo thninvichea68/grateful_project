@@ -19,7 +19,7 @@ export const PERMISSIONS = [
   'cutstock:override',
   'accounting:read',
   'accounting:write',
-  /** Credit Noted (Chea / customs broker payment vouchers), separate from the rest of accounting. */
+  /** Credit Note (Chea / customs broker payment vouchers), separate from the rest of accounting. */
   'creditnotes:read',
   'creditnotes:write',
   /** Record Summary (each shipment's summary sheet), separate so Operations can work on it. */
@@ -85,7 +85,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
     'followups:write',
   ],
   VIEWER: READ_ALL.filter((p) => p !== 'audit:read' && p !== 'staff:read' && p !== 'reports:read'),
-  /** The customs broker (Chea): writes Credit Noted vouchers and can look up shipments. */
+  /** The customs broker (Chea): writes Credit Note vouchers and can look up shipments. */
   CUSTOMS_BROKER: ['shipments:read', 'creditnotes:read', 'creditnotes:write'],
 };
 

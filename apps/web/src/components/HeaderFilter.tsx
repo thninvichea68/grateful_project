@@ -62,7 +62,7 @@ export function HeaderFilter({
         title={filtered ? `${label}: filtered` : `Filter ${label}`}
       >
         <span>{label}</span>
-        <SortIcon sort={sort} filtered={filtered} />
+        <SortIcon on={filtered || !!sort} />
       </button>
       {open &&
         createPortal(
@@ -260,23 +260,21 @@ function Panel({
   );
 }
 
-/** A down and an up arrow side by side; the one matching the sort is lit, a dot marks a filter. */
-function SortIcon({ sort, filtered }: { sort: SortDir | undefined; filtered: boolean }) {
+/** A chevron: down while the column is neither filtered nor sorted, up in cyan once it is. */
+function SortIcon({ on }: { on: boolean }) {
   return (
     <span className={s.sortIcon}>
       <svg
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="2.4"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
       >
-        <path className={sort === 'desc' ? s.lit : sort ? s.dim : undefined} d="M8 4v16M4 16l4 4 4-4" />
-        <path className={sort === 'asc' ? s.lit : sort ? s.dim : undefined} d="M16 20V4M12 8l4-4 4 4" />
+        <path d={on ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
       </svg>
-      {filtered && <span className={s.dot} />}
     </span>
   );
 }

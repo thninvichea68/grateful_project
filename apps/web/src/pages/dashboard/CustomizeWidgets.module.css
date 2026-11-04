@@ -29,7 +29,7 @@
 }
 .text b {
   font-size: 13.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .text small {

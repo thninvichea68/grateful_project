@@ -159,6 +159,7 @@ function RecordSummaryEditor({
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
     if (!doc && !prefill) v.lines = itemsFor(v.direction, shipUnitOf(v));
+    if (!v.refType) v.refType = v.transportMode === 'AIR' ? 'HAWB_NO' : 'BILL_NO';
     // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
     v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
     return v;
@@ -206,7 +207,7 @@ function RecordSummaryEditor({
   const declareNo = String(values.declareNo ?? '') || doc?.declareNo || '';
 
   // Descriptions: suggestions from Settings → Dropdown lists, still free text. Units: a
-  // dropdown of the standard ones and Settings → Dropdown lists → Charge units, as on Credit Noted.
+  // dropdown of the standard ones and Settings → Dropdown lists → Charge units, as on Credit Note.
   const charges = [
     ...new Set([
       ...defaults.lines.map((l) => l.description).filter(Boolean),
@@ -414,7 +415,7 @@ function RecordSummaryEditor({
   const printSheet = (title: string) => {
     if (sheetRef.current) printCreditNote(sheetRef.current, title);
   };
-  // Excel is built from the live preview too, laid out like the sheet (as Credit Noted's is).
+  // Excel is built from the live preview too, laid out like the sheet (as Credit Note's is).
   const [exporting, setExporting] = useState(false);
   const exportExcel = async () => {
     setExporting(true);
@@ -867,7 +868,16 @@ function RecordSummaryEditor({
                     </select>,
                   )}
                 </div>
-                {text('blNo', 'BL / HBL no')}
+                <div className={r.pair}>
+                  {item(
+                    'Ref type',
+                    <select className="form-select-box" {...register('refType')}>
+                      <option value="BILL_NO">BL No.</option>
+                      <option value="HAWB_NO">HAWB No.</option>
+                    </select>,
+                  )}
+                  {text('blNo', 'Number')}
+                </div>
                 {text('containerNo', 'Container no')}
               </div>
               <div className={r.grid3}>

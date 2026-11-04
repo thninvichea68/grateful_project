@@ -181,7 +181,7 @@ lookupsRouter.post('/forwarders', requirePermission('shipments:write'), async (r
  * that already exists is returned as is.
  */
 const quickAdd = (
-  type: 'CHARGE' | 'CHARGE_UNIT' | 'QUANTITY_UNIT' | 'CO_FORM',
+  type: 'CHARGE' | 'CHARGE_UNIT' | 'QUANTITY_UNIT' | 'CO_FORM' | 'MATERIAL',
   path: string,
   permission: Permission,
   min: number,
@@ -216,6 +216,11 @@ const quickAdd = (
 quickAdd('CHARGE', '/charges', 'creditnotes:write', 2, 200);
 quickAdd('CHARGE_UNIT', '/charge-units', 'creditnotes:write', 1, 20);
 quickAdd('QUANTITY_UNIT', '/quantity-units', 'recordsummaries:write', 1, 20);
+// Import / export type, kept as typed ("Furniture"): it is a name, not a code.
+quickAdd('MATERIAL', '/materials', 'shipments:write', 2, 60, (typed) => ({
+  value: typed,
+  label: typed,
+}));
 quickAdd('CO_FORM', '/co-forms', 'shipments:write', 1, 30, (typed) => {
   const value = typed
     .toUpperCase()

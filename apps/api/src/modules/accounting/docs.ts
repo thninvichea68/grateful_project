@@ -560,8 +560,8 @@ export async function updateDoc(
       await tx.delete(cfg.lines).where(eq(col(cfg.lines, cfg.fk), id));
       await writeLines(tx, type, id, input, t.lines, values.vatRate as string);
       if (issued) await issuedToLedger(tx, cfg, await lockDoc(tx, type, id), req);
-      if (type === 'tax-invoices' && input.accountingRecordId)
-        await followTaxInvoice(tx, input.accountingRecordId, values, req);
+      if (isIssueDated(type) && input.accountingRecordId)
+        await followSibling(tx, type, id, input.accountingRecordId, values, req);
       if (
         isIssueDated(type) &&
         !input.accountingRecordId &&
@@ -594,7 +594,7 @@ export async function updateDoc(
   }
 }
 
-/** The shipment details a shipment's DIS and debit note print the same as its tax invoice. */
+/** The shipment details a shipment's tax invoice, DIS and debit note all print the same. */
 const SHIPMENT_FIELDS = [
   'pol',
   'pod',
@@ -609,28 +609,47 @@ const SHIPMENT_FIELDS = [
   'pkgsUnit',
 ] as const;
 
+/** A debit note's customer fields under their tax invoice / DIS names. */
+const DN_CUSTOMER = { billTo: 'customerNameEn', address: 'customerAddress' } as const;
+const CUSTOMER_FIELDS = ['customerNameEn', 'customerNameKm', 'customerAddress', 'customerVattin'];
+
 /**
- * A tax invoice was saved: its shipment's DIS and debit note (not cancelled ones) take its
- * customer and shipment details, so a fix is made once, not three times.
+ * One of a shipment's tax invoice, DIS and debit note was saved: the other two (not cancelled
+ * ones) take its customer and shipment details, so a fix is made once, not three times.
  */
-async function followTaxInvoice(tx: Tx, recordId: string, inv: Row, req: Request): Promise<void> {
+async function followSibling(
+  tx: Tx,
+  source: IssueDatedType,
+  sourceId: string,
+  recordId: string,
+  saved: Row,
+  req: Request,
+): Promise<void> {
   const ship = Object.fromEntries(
-    SHIPMENT_FIELDS.filter((k) => inv[k] !== undefined).map((k) => [k, inv[k]]),
+    SHIPMENT_FIELDS.filter((k) => saved[k] !== undefined).map((k) => [k, saved[k]]),
   );
-  const customer: Record<'disbursements' | 'debit-notes', Row> = {
-    disbursements: Object.fromEntries(
-      ['customerNameEn', 'customerNameKm', 'customerAddress', 'customerVattin']
-        .filter((k) => inv[k] !== undefined)
-        .map((k) => [k, inv[k]]),
-    ),
-    'debit-notes': {
-      ...(inv.customerNameEn !== undefined ? { billTo: inv.customerNameEn } : {}),
-      ...(inv.customerAddress !== undefined ? { address: inv.customerAddress } : {}),
-    },
-  };
-  for (const type of ['disbursements', 'debit-notes'] as const) {
+  // The customer under the tax invoice / DIS names, whichever document it came from.
+  const from: Row =
+    source === 'debit-notes'
+      ? Object.fromEntries(
+          Object.entries(DN_CUSTOMER)
+            .filter(([dn]) => saved[dn] !== undefined)
+            .map(([dn, k]) => [k, saved[dn]]),
+        )
+      : Object.fromEntries(
+          CUSTOMER_FIELDS.filter((k) => saved[k] !== undefined).map((k) => [k, saved[k]]),
+        );
+  const customer = (type: IssueDatedType): Row =>
+    type === 'debit-notes'
+      ? Object.fromEntries(
+          Object.entries(DN_CUSTOMER)
+            .filter(([, k]) => from[k] !== undefined)
+            .map(([dn, k]) => [dn, from[k]]),
+        )
+      : from;
+  for (const type of ISSUE_DATED) {
     const cfg = CONFIG[type];
-    const set = { ...ship, ...customer[type] };
+    const set = { ...ship, ...customer(type) };
     if (!Object.keys(set).length) continue;
     const docs = (await tx
       .select()
@@ -643,6 +662,7 @@ async function followTaxInvoice(tx: Tx, recordId: string, inv: Row, req: Request
       )
       .for('update')) as Row[];
     for (const doc of docs) {
+      if (doc.id === sourceId) continue;
       const changed = Object.fromEntries(
         Object.entries(set).filter(([k, v]) =>
           // 12.43 and 12.430 are the same weight / volume.
@@ -665,7 +685,7 @@ async function followTaxInvoice(tx: Tx, recordId: string, inv: Row, req: Request
           entityId: doc.id as string,
           before: Object.fromEntries(Object.keys(changed).map((k) => [k, doc[k]])),
           after: changed,
-          reason: 'Follows its tax invoice',
+          reason: `Follows its ${BILLING_LABEL[source].toLowerCase()}`,
         },
         req,
       );
@@ -1156,11 +1176,39 @@ export async function correctIssuedDoc(
       // (it orders the numbers), and the runs are put back in date order. A typed number is
       // left as typed. (A move to another year would change the number's run: not done here.)
       const sameYear = date !== oldDate && date.slice(0, 4) === oldDate.slice(0, 4);
-      if (sameYear && doc.accountingRecordId)
+      if (sameYear && doc.accountingRecordId) {
         await tx
           .update(accountingRecords)
           .set({ invDate: date, updatedById: req.auth!.userId })
           .where(eq(accountingRecords.id, doc.accountingRecordId as string));
+        // The shipment's other documents (not cancelled ones) are dated the same.
+        for (const other of ISSUE_DATED.filter((t) => t !== type)) {
+          const o = CONFIG[other];
+          const moved = (await tx
+            .update(o.table)
+            .set({ [o.dateCol]: date } as never)
+            .where(
+              and(
+                eq(col(o.table, 'accountingRecordId'), doc.accountingRecordId as string),
+                sql`${col(o.table, 'status')} <> 'VOID'`,
+                sql`${col(o.table, o.dateCol)} <> ${date}`,
+              ),
+            )
+            .returning({ id: col(o.table, 'id') })) as { id: string }[];
+          for (const m of moved)
+            await audit(
+              tx,
+              {
+                action: 'UPDATE',
+                entity: o.sqlTable,
+                entityId: m.id,
+                after: { date },
+                reason: `Follows its ${BILLING_LABEL[type].toLowerCase()}: ${input.reason}`,
+              },
+              req,
+            );
+        }
+      }
       if (sameYear && number === oldNumber) await resequence(tx, req);
       await audit(
         tx,
@@ -1517,13 +1565,15 @@ export async function listColumnValues(
   p: ListParams,
 ): Promise<string[]> {
   const col = listColumns(type)[column];
+  // Document numbers list newest first, as the table does.
+  const dir = sql.raw(column === 'number' ? 'DESC' : 'ASC');
   const rows = await queryRows<{ v: string }>(
     db,
     sql`SELECT v FROM (
           SELECT DISTINCT coalesce(${col.value}, '') AS v, ${col.order} AS o
           ${LIST_FROM(type)}
           ${whereAll(listWhere(type, p, column))}
-        ) x ORDER BY o NULLS LAST, v LIMIT 2000`,
+        ) x ORDER BY o ${dir} NULLS LAST, v ${dir} LIMIT 2000`,
   );
   return [...new Set(rows.map((r) => r.v))];
 }
@@ -1680,7 +1730,7 @@ export async function releaseInvoiceSet(
 /* ---------- Accounting's check of submitted credit notes ---------- */
 
 /**
- * Submitted (issued) credit notes for Accounting → Credit Noted, with the shipment's
+ * Submitted (issued) credit notes for Accounting → Credit Note, with the shipment's
  * direction and mode, plus Checked / Unchecked / Revised counts for the same filters.
  */
 export async function listCreditNoteReview(p: {
@@ -1693,7 +1743,7 @@ export async function listCreditNoteReview(p: {
   month?: number | undefined;
   year?: number | undefined;
   review?: string | undefined;
-  /** The broker's own list (sidebar → Credit Noted): drafts and void too, optionally one status. */
+  /** The broker's own list (sidebar → Credit Note): drafts and void too, optionally one status. */
   allStatuses?: boolean;
   status?: string | undefined;
 }): Promise<Paginated<CreditNoteReviewRow> & { counts: CreditNoteReviewCounts }> {
@@ -1813,7 +1863,7 @@ export async function setCreditNoteReview(
       .where(eq(creditNotes.id, id));
     // …and every approved shipment still waiting gets its INV / DIS / DN numbers.
     const numbered = reviewStatus === 'CHECKED' ? await numberEligible(tx, req) : [];
-    // Revised: the broker hears about it in their Credit Noted inbox. An approval needs no
+    // Revised: the broker hears about it in their Credit Note inbox. An approval needs no
     // action from them, so it is not sent.
     if (reviewStatus === 'REVISED')
       await tx.execute(sql`

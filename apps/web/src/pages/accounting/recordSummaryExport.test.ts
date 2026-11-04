@@ -12,7 +12,7 @@ vi.stubGlobal(
   vi.fn(async () => ({ ok: false })),
 );
 const { exportRecordSummaryExcel, recordSummaryFileName } = await import('./recordSummaryExport');
-const { transportLabel } = await import('../print/PrintDocPage');
+const { transportLabel, recordSummaryHeader } = await import('../print/PrintDocPage');
 
 const doc = {
   id: 'x',
@@ -74,6 +74,16 @@ describe('Record Summary', () => {
     expect(transportLabel('AIR', 'NONE')).toBe('BY AIR');
     expect(transportLabel('ROAD', 'LCL')).toBe('BY TRUCK: LCL');
     expect(transportLabel('ROAD', 'FCL')).toBe('BY TRUCK: CY / CY');
+  });
+
+  it('labels the number BL NO or HAWB NO as chosen; an untyped one by its freight', () => {
+    const label = (header: object) =>
+      recordSummaryHeader({ ...doc, header: { ...doc.header, ...header } } as BillingDoc, '', '')
+        .find(([, v]) => v === '274995778')?.[0];
+    expect(label({})).toBe('BL NO:');
+    expect(label({ refType: 'HAWB_NO' })).toBe('HAWB NO:');
+    expect(label({ transportMode: 'AIR' })).toBe('HAWB NO:');
+    expect(label({ transportMode: 'AIR', refType: 'BILL_NO' })).toBe('BL NO:');
   });
 
   it('exports the sheet as on screen: letterhead, header box, gray table with formulas', async () => {

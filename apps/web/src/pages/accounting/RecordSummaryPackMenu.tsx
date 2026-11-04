@@ -6,7 +6,7 @@ import { icons } from '../../layout/icons';
 import { printInPlace } from '../../lib/printInPlace';
 import { exportRecordSummaryPackExcel } from './recordSummaryExport';
 import { loadRecordSummaryPack, PACK_FILTERS, type PackFilters } from './recordSummaryPack';
-// Same look as Credit Noted's ⋯.
+// Same look as Credit Note's ⋯.
 import m from '../creditnoted/PackMenu.module.css';
 
 /**

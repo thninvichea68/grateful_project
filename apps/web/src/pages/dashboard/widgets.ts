@@ -41,7 +41,7 @@ export const WIDGETS: WidgetDef[] = [
   },
   {
     id: 'accounts',
-    label: 'Key Logistics Accounts',
+    label: 'Shipments breakdown',
     sub: 'Clients and their shipments in the period',
   },
   { id: 'ports', label: 'Port of Discharge', sub: 'Shipments by port' },

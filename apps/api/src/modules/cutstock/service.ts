@@ -9,6 +9,7 @@ import {
   type CutStockOption,
   type CutStockRow,
   type CutStockSummary,
+  type HeaderFilters,
   type Paginated,
 } from '@gs/shared';
 import type { Request } from 'express';
@@ -16,7 +17,7 @@ import type { z } from 'zod';
 import { db } from '../../db/client';
 import { clients, cutStockItems } from '../../db/schema';
 import { audit } from '../../lib/audit';
-import { businessRule, conflict, notFound } from '../../lib/errors';
+import { badRequest, businessRule, conflict, notFound } from '../../lib/errors';
 import {
   likePattern,
   orderBy,
@@ -27,6 +28,12 @@ import {
   isoTs,
 } from '../../lib/listing';
 import { readMasterList } from '../../lib/masterList';
+import {
+  columnOrder,
+  headerFilterConds,
+  headerFilterValuesQuery,
+  type FilterColumns,
+} from '../../lib/headerFilter';
 
 const rowSelect = (extra: SQL = sql``) => sql`
   SELECT i.id, i.client_id AS "clientId", i.line_no AS "lineNo", i.declare_ref AS "declareRef", i.category, i.name,
@@ -45,10 +52,37 @@ interface ListParams {
   page: number;
   pageSize: number;
   sort?: string | undefined;
+  filters?: HeaderFilters | undefined;
 }
 
-function where(p: Omit<ListParams, 'page' | 'pageSize' | 'sort'>) {
-  const conds = [sql`i.deleted_at IS NULL`, sql`i.client_id = ${p.clientId}`];
+const num = (e: string) => ({ value: sql.raw(`${e}::text`), order: sql.raw(e) });
+/** Header filters (Excel style), keyed as the web's CDC Master List columns. */
+const CUT_COLUMNS: FilterColumns = {
+  lineNo: { value: sql`i.line_no::text`, order: sql`i.category, i.line_no` },
+  name: { value: sql`i.name` },
+  newOrUsed: { value: sql`i.new_or_used` },
+  unit: { value: sql`i.unit` },
+  qty: num('i.qty'),
+  unitPrice: num('i.unit_price'),
+  totalPrice: num('round(i.qty * i.unit_price, 2)'),
+  importedQty: num('b.imported_qty'),
+  importedValue: num('b.imported_value'),
+  importedNw: num('b.imported_nw'),
+  balance: num('b.balance'),
+  balancePct: num('b.balance_pct'),
+  condition: { value: sql`b.condition::text` },
+  declareRef: { value: sql`i.declare_ref` },
+};
+const CUT_SORTS = Object.fromEntries(
+  Object.entries(CUT_COLUMNS).map(([k, c]) => [k, columnOrder(c)]),
+);
+
+function where(p: Omit<ListParams, 'page' | 'pageSize' | 'sort'>, except?: string) {
+  const conds = [
+    sql`i.deleted_at IS NULL`,
+    sql`i.client_id = ${p.clientId}`,
+    ...headerFilterConds(CUT_COLUMNS, p.filters, except),
+  ];
   if (p.category) conds.push(sql`i.category = ${p.category}`);
   if (p.condition === 'OVER') conds.push(sql`b.balance < 0`);
   else if (p.condition) conds.push(sql`b.condition = ${p.condition}`);
@@ -68,7 +102,7 @@ export async function listCutStock(
     db,
     sql`
     ${rowSelect(sql`, count(*) OVER () AS total_count`)} ${where(p)}
-    ${orderBy(p.sort, { lineNo: sql`i.category, i.line_no`, name: sql`i.name`, balance: sql`b.balance`, balancePct: sql`b.balance_pct`, qty: sql`i.qty` }, sql`i.category, i.line_no`)}
+    ${orderBy(p.sort, CUT_SORTS, sql`i.category, i.line_no`)}
     ${paginate(p.page, p.pageSize)}`,
   );
   const [s] = await queryRows<CutStockSummary>(
@@ -82,6 +116,23 @@ export async function listCutStock(
     WHERE i.deleted_at IS NULL AND i.client_id = ${p.clientId}`,
   );
   return { ...toPaginated(rows, p.page, p.pageSize), summary: s! };
+}
+
+/** A column's values for its header filter, under the list's other filters ('' = blanks). */
+export async function listCutStockColumnValues(
+  column: string,
+  p: Omit<ListParams, 'page' | 'pageSize' | 'sort'>,
+): Promise<string[]> {
+  const col = Object.hasOwn(CUT_COLUMNS, column) ? CUT_COLUMNS[column] : undefined;
+  if (!col) throw badRequest('Unknown column');
+  const rows = await queryRows<{ v: string }>(
+    db,
+    headerFilterValuesQuery(
+      col,
+      sql`FROM cut_stock_items i JOIN cut_stock_balances b ON b.item_id = i.id ${where(p, column)}`,
+    ),
+  );
+  return [...new Set(rows.map((r) => r.v))];
 }
 
 export async function cutStockOptions(

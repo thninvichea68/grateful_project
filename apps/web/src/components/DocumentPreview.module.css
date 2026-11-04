@@ -47,7 +47,7 @@
 }
 .title {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -144,7 +144,7 @@
 }
 .csv th {
   background: #f3f4f6;
-  font-weight: 700;
+  font-weight: 600;
 }
 .more {
   margin-top: 14px;
@@ -156,7 +156,7 @@
   padding: 60px 0;
   text-align: center;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .notice {
@@ -212,7 +212,7 @@
   border: none;
   background: transparent;
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -227,7 +227,7 @@
 .pages {
   padding: 0 10px 0 12px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   border-right: 1px solid var(--border-subtle);
 }

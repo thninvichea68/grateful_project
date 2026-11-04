@@ -4,7 +4,7 @@ import { useSealPlanShipments } from '../../features/hooks';
 import { ErrorBanner, Modal } from '../../components/ui';
 import { SearchBox } from '../../components/SearchBox';
 import { fmtDate } from '../../lib/format';
-// Same look as the Credit Noted declaration picker.
+// Same look as the Credit Note declaration picker.
 import s from '../creditnoted/NewCreditNoteModal.module.css';
 
 const COLUMNS =
@@ -61,6 +61,7 @@ export function NewSealPlanModal({
       sub="Choose an export CY/CY shipment. Factory, SO no., port, vessel, ETD and containers fill in from it."
       onClose={onClose}
       width={1500}
+      className="caps-values caps-heads"
     >
       <div className={s.toolbar}>
         <div className={s.search}>

@@ -8,7 +8,7 @@ import { loadCreditNotePack, PACK_FILTERS, type PackFilters } from './creditNote
 import m from './PackMenu.module.css';
 
 /**
- * Credit Noted → ⋯: the credit notes matching the list's filters (every page) as one
+ * Credit Note → ⋯: the credit notes matching the list's filters (every page) as one
  * PDF (one A4 page each, through the print dialog) or one Excel workbook (one sheet each).
  */
 export function PackMenu({ filters, count }: { filters: PackFilters; count: number }) {

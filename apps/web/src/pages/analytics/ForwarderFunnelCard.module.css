@@ -4,7 +4,7 @@
   border-radius: 999px;
   background: var(--status-completed-bg);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
   white-space: nowrap;
 }

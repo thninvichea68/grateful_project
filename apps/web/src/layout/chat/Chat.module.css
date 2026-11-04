@@ -125,7 +125,7 @@
   color: var(--text-primary);
   font-family: inherit;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .newGroupBtn:hover {
@@ -208,7 +208,7 @@
   background: var(--accent-primary);
   color: #041b2d;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 20px;
   text-align: center;
 }
@@ -221,7 +221,7 @@
 .listLabel {
   padding: 12px 10px 4px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -343,7 +343,7 @@
   background: var(--bg-subtle);
   color: var(--text-secondary);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
 }
 .system {
@@ -394,7 +394,7 @@
 .sender {
   margin-bottom: 2px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .text {
@@ -513,7 +513,7 @@
   min-width: 0;
   max-width: 100%;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
 }
 .fileName > span {
@@ -535,7 +535,7 @@
   background: #64748b;
   color: #fff;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .fileBadge[data-ext='PDF'] {
   background: #e11d48;
@@ -660,7 +660,7 @@
   background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
   color: var(--accent-primary);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   pointer-events: none;
 }
 
@@ -685,7 +685,7 @@
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .packs button[aria-selected='true'] {
@@ -760,7 +760,7 @@
   color: var(--accent-primary);
   font-family: inherit;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .linkBtn:hover:not(:disabled) {
@@ -787,7 +787,7 @@
   border-radius: 8px;
   font-family: inherit;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -814,7 +814,7 @@
   justify-content: space-between;
   min-height: 32px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -869,7 +869,7 @@
   background: var(--status-completed-bg);
   color: var(--accent-primary);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .leaveBtn {
   display: inline-flex;
@@ -883,7 +883,7 @@
   color: var(--accent-rose);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .leaveBtn:hover {
@@ -925,7 +925,7 @@
 }
 .field > span {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -988,7 +988,7 @@
   background: var(--accent-amber);
   color: #3b2300;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .mentions {
   margin: 0 14px;
@@ -1013,7 +1013,7 @@
   background: var(--status-completed-bg);
 }
 .at {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .row[data-mine] .at {

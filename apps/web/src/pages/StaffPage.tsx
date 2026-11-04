@@ -42,7 +42,7 @@ const AREAS: Record<string, { label: string; desc: string }> = {
   clients: { label: 'Clients', desc: 'Client list and details' },
   cutstock: { label: 'CDC Master List', desc: 'Licensed items and balances' },
   accounting: { label: 'Accounting', desc: 'Ledger, invoices and notes' },
-  creditnotes: { label: 'Credit Noted', desc: 'Customs broker credit notes' },
+  creditnotes: { label: 'Credit Note', desc: 'Customs broker credit notes' },
   recordsummaries: { label: 'Record Summary', desc: 'Shipment record summaries' },
   quotations: { label: 'Quotations', desc: 'Quotation builder' },
   reports: { label: 'Reports', desc: 'Payroll, MIH and Import & Export' },
@@ -207,7 +207,7 @@ export function StaffPage() {
                             style={{
                               fontSize: 11.5,
                               color: 'var(--text-tertiary)',
-                              fontWeight: 700,
+                              fontWeight: 600,
                             }}
                           >
                             {m.email}

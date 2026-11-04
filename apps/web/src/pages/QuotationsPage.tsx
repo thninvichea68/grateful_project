@@ -87,7 +87,7 @@ export function QuotationsPage() {
                 gap: 6,
                 alignItems: 'center',
                 fontSize: 12.5,
-                fontWeight: 700,
+                fontWeight: 600,
               }}
             >
               <input

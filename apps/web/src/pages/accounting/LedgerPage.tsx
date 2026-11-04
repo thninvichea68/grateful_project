@@ -71,7 +71,7 @@ const docNo = (
     <Link
       to={`/accounting/${type}/${d.id}`}
       onClick={(e) => e.stopPropagation()}
-      style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+      style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
     >
       {value}
     </Link>
@@ -341,7 +341,7 @@ export function LedgerPage() {
                   <td
                     style={{
                       textAlign: 'right',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       color:
                         Number(r.netProfit) < 0
                           ? 'var(--status-exception-fg)'
@@ -356,7 +356,7 @@ export function LedgerPage() {
                 </tr>
               ))}
               {t && t.rows > 0 && (
-                <tr style={{ fontWeight: 700 }}>
+                <tr style={{ fontWeight: 600 }}>
                   <td colSpan={13}>Total</td>
                   {[
                     t.clearFee,

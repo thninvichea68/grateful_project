@@ -105,7 +105,7 @@ const BANK: Bank[] = [
     pages: ['accounting/credit-notes'],
   },
   {
-    q: 'How do I create a Credit Noted voucher?',
+    q: 'How do I create a Credit Note voucher?',
     perm: 'creditnotes:write',
     pages: ['credit-noted'],
   },

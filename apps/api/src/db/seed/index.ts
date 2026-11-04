@@ -382,17 +382,18 @@ async function main() {
 
       const material =
         direction === 'EXPORT'
-          ? 'Garments'
+          ? 'Garments & Apparel'
           : rng.weighted(
               [
-                ['Fabric', 55],
-                ['Trims & Accessories', 30],
-                ['Machinery', 10],
-                ['Packing Material', 5],
+                // Garments & Apparel imports are trims and accessories (zippers, labels…).
+                ['Textiles & Fabrics', 55],
+                ['Garments & Apparel', 35],
+                ['Machinery & Equipment', 10],
               ] as const,
               (x) => x[1],
             )[0];
-      const unit = direction === 'EXPORT' ? 'CTNS' : material === 'Fabric' ? 'ROLLS' : 'PKGS';
+      const unit =
+        direction === 'EXPORT' ? 'CTNS' : material === 'Textiles & Fabrics' ? 'ROLLS' : 'PKGS';
 
       const ctnCount =
         loadType === 'FCL'
@@ -447,13 +448,13 @@ async function main() {
                 'GIRLS HOODIE KNITTED 60 COTTON 40 POLYESTER',
                 'MENS WOVEN SHORTS 100 NYLON',
               ])
-            : material === 'Fabric'
+            : material === 'Textiles & Fabrics'
               ? rng.pick([
                   'KNIT FABRIC 100 POLYESTER',
                   'COTTON JERSEY ROLLS',
                   'NYLON SPANDEX FABRIC',
                 ])
-              : material === 'Machinery'
+              : material === 'Machinery & Equipment'
                 ? 'SEWING MACHINE PARTS'
                 : rng.pick(['ZIPPERS AND BUTTONS', 'ELASTIC BAND', 'WOVEN LABELS', 'POLY BAGS']);
         for (let ln = 1; ln <= lineCount; ln++) {
@@ -470,9 +471,9 @@ async function main() {
             htsCode:
               direction === 'EXPORT'
                 ? rng.pick(['6104.62', '6109.10', '6110.20', '6105.10', '6203.42', '6204.62'])
-                : material === 'Fabric'
+                : material === 'Textiles & Fabrics'
                   ? rng.pick(['6006.32', '5208.52', '5407.61'])
-                  : material === 'Machinery'
+                  : material === 'Machinery & Equipment'
                     ? '8452.90'
                     : rng.pick(['9607.11', '5807.10', '3923.21']),
             pcs: String(pcs),
@@ -651,7 +652,7 @@ async function main() {
       if (
         p.clientCode === 'JR' &&
         sh.direction === 'IMPORT' &&
-        (sh.material === 'Machinery' || sh.material === 'Trims & Accessories') &&
+        (sh.material === 'Machinery & Equipment' || sh.material === 'Garments & Apparel') &&
         d === 0
       ) {
         const picks = new Set<string>();

@@ -72,7 +72,7 @@ export function ImportModal({
         </label>
       </div>
       {preview && (
-        <div style={{ marginTop: 16, fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+        <div style={{ marginTop: 16, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           Preview: {preview.created} new, {preview.updated} changed, {preview.unchanged} unchanged.
           {preview.errors.length > 0 && (
             <ul

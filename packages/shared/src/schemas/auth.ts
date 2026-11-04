@@ -45,7 +45,7 @@ export const navCountsSchema = z.object({
   openFollowUps: z.number().int(),
   overdueFollowUps: z.number().int(),
   unreadNotifications: z.number().int(),
-  /** Unread messages from accounting in my Credit Noted inbox. */
+  /** Unread messages from accounting in my Credit Note inbox. */
   creditNoteInbox: z.number().int(),
   recordSummaryInbox: z.number().int(),
 });

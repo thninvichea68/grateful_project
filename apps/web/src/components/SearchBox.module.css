@@ -8,11 +8,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
+  /* 36px and white, like the other toolbar controls. */
+  box-sizing: border-box;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-canvas);
+  background: var(--bg-surface);
   cursor: text;
   transition: border-color 0.15s ease;
 }

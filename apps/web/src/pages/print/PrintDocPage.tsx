@@ -99,13 +99,13 @@ const plain = (v: string | number | null | undefined) =>
     : Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 });
 
 /**
- * The label/value pairs in a Credit Noted's header, left and right columns. Shared by the
+ * The label/value pairs in a Credit Note's header, left and right columns. Shared by the
  * printed sheet and the Excel export so both always show the same thing.
  */
 export function creditNoteHeader(d: BillingDoc, portName: string | undefined) {
   const refLabel =
-    { HOUSE_BILL: 'HOUSE BILL', BILL_NO: 'Bl NO', HAWB_NO: 'HAWB NO' }[
-      h(d, 'refType') as 'HOUSE_BILL'
+    { BILL_NO: 'BL NO', HAWB_NO: 'HAWB NO' }[
+      h(d, 'refType') as 'BILL_NO'
     ] ?? 'REF';
   const left: [string, string][] = [
     ['BILL TO:', h(d, 'billTo')],
@@ -125,7 +125,7 @@ export function creditNoteHeader(d: BillingDoc, portName: string | undefined) {
   return { left, right };
 }
 
-/** Credit Noted sheet (no letterhead, like the broker's voucher); also the editor's live preview. */
+/** Credit Note sheet (no letterhead, like the broker's voucher); also the editor's live preview. */
 export function CreditNote({ d }: { d: BillingDoc }) {
   const lookups = useLookups();
   const port = lookups.data?.ports.find((p) => p.id === h(d, 'portId'));
@@ -142,7 +142,7 @@ export function CreditNote({ d }: { d: BillingDoc }) {
   );
   return (
     <div className={cn.cn}>
-      <div className={cn.title}>CREDIT NOTED</div>
+      <div className={cn.title}>CREDIT NOTE</div>
       <div className={cn.head}>
         {kv(left, cn.kv)}
         {kv(right, `${cn.kv} ${cn.right}`)}
@@ -218,7 +218,13 @@ export function recordSummaryHeader(
     ['DEBIT NOTE NO:', h(d, 'dnNo')],
     ['QUANTITY:', h(d, 'quantityText')],
     ['CTNR NO:', `${h(d, 'containerNo')}${size ? ` (${size.replace(/^(\d+)/, "$1' ")})` : ''}`],
-    ['BL NO:', h(d, 'blNo')],
+    [
+      // Older summaries have no type: by air the number is the HAWB.
+      (h(d, 'refType') || (h(d, 'transportMode') === 'AIR' ? 'HAWB_NO' : 'BILL_NO')) === 'HAWB_NO'
+        ? 'HAWB NO:'
+        : 'BL NO:',
+      h(d, 'blNo'),
+    ],
     ['GROSS WEIGHT:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
     ['DECLARE NO:', h(d, 'declareNo')],
     // A number, or a note such as "NON" printed as typed.

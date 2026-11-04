@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CUT_STOCK_CATEGORIES, CUT_STOCK_CATEGORY_LABEL } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
-import { useCutStock, useLookups } from '../features/hooks';
+import { useCutStock, useCutStockColumnValues, useLookups } from '../features/hooks';
+import { HeaderFilter } from '../components/HeaderFilter';
+import { useHeaderFilters } from '../components/useHeaderFilters';
 import { TableState, ui } from '../components/ui';
 import { SearchBox } from '../components/SearchBox';
 import { StatTile, StatTiles } from '../components/StatTiles';
@@ -17,6 +19,31 @@ const COND_STYLE = {
   OK: { color: 'var(--status-completed-fg)' },
   CHECK: { color: 'var(--status-exception-fg)' },
 } as const;
+
+const num = (decimals?: number) =>
+  ({ kind: 'number', format: (v: string) => fmtNum(v, decimals) }) as const;
+/** The table's columns, keyed as the API's header filters (cutstock/service.ts CUT_COLUMNS). */
+const COLS: {
+  key: string;
+  label: string;
+  kind?: 'number' | 'date';
+  format?: (v: string) => string;
+}[] = [
+  { key: 'lineNo', label: 'No', kind: 'number' },
+  { key: 'name', label: 'Item' },
+  { key: 'newOrUsed', label: 'Type' },
+  { key: 'unit', label: 'Unit' },
+  { key: 'qty', label: 'Quantity', ...num() },
+  { key: 'unitPrice', label: 'Unit Price', ...num(2) },
+  { key: 'totalPrice', label: 'Total Price', ...num(2) },
+  { key: 'importedQty', label: 'Imported Qty', ...num() },
+  { key: 'importedValue', label: 'Imported Price', ...num(2) },
+  { key: 'importedNw', label: 'N.W', ...num(2) },
+  { key: 'balance', label: 'Balance', ...num() },
+  { key: 'balancePct', label: 'Balance %', kind: 'number', format: (v) => fmtPct(v) },
+  { key: 'condition', label: 'Condition' },
+  { key: 'declareRef', label: 'Declare No' },
+];
 
 export function CutStockPage() {
   const { can, user } = useAuth();
@@ -36,14 +63,18 @@ export function CutStockPage() {
   const q = params.get('q') ?? '';
   const category = params.get('category') ?? '';
   const condition = params.get('condition') ?? '';
-  const list = useCutStock({
+  const sort = params.get('sort') ?? 'lineNo';
+  const header = useHeaderFilters(params, setParams);
+  const query = {
     clientId,
     q: q || undefined,
     category: category || undefined,
     condition: condition || undefined,
-    pageSize: 500,
-    sort: 'lineNo',
-  });
+    filters: header.raw,
+  };
+  const list = useCutStock({ ...query, pageSize: 500, sort });
+  // The open header filter's values come from the list's other filters.
+  const colValues = useCutStockColumnValues(header.openCol, query);
   const client = clients.find((c) => c.id === clientId);
   const s = list.data?.summary;
 
@@ -103,11 +134,7 @@ export function CutStockPage() {
               <option value="OVER">Over-imported (below zero)</option>
             </select>
             {user?.role === 'ADMIN' && clientId && (
-              <button
-                type="button"
-                className="new-shipment-btn"
-                onClick={() => setOpenItem('new')}
-              >
+              <button type="button" className="new-shipment-btn" onClick={() => setOpenItem('new')}>
                 + Add Item
               </button>
             )}
@@ -119,9 +146,7 @@ export function CutStockPage() {
                   .catch(() => toast('Export failed. Try again.'))
                   .finally(() => setExporting(false));
               }}
-              onImport={
-                can('cutstock:write') && clientId ? () => setImporting(true) : undefined
-              }
+              onImport={can('cutstock:write') && clientId ? () => setImporting(true) : undefined}
               exportHint={`${client?.name ?? 'This client'}'s master list · .xlsx`}
               importHint="CDC master list workbook · .xlsx"
             />
@@ -156,20 +181,33 @@ export function CutStockPage() {
           <table className="data-table-clean cutstock-table">
             <thead>
               <tr>
-                <th>No</th>
-                <th>Item</th>
-                <th>Type</th>
-                <th>Unit</th>
-                <th>Quantity</th>
-                <th>Unit Price</th>
-                <th>Total Price</th>
-                <th>Imported Qty</th>
-                <th>Imported Price</th>
-                <th>N.W</th>
-                <th>Balance</th>
-                <th>Balance %</th>
-                <th>Condition</th>
-                <th>Declare No</th>
+                {COLS.map((c) => (
+                  <th key={c.key}>
+                    <HeaderFilter
+                      label={c.label}
+                      kind={c.kind}
+                      format={c.format}
+                      open={header.openCol === c.key}
+                      onOpen={() => header.setOpenCol(c.key)}
+                      onClose={header.close}
+                      values={header.openCol === c.key ? colValues.data : undefined}
+                      loading={colValues.isLoading}
+                      selected={header.filters[c.key]}
+                      sort={
+                        // The default order (by No) doesn't light its column; a picked sort does.
+                        !params.has('sort')
+                          ? undefined
+                          : sort === c.key
+                            ? 'asc'
+                            : sort === `-${c.key}`
+                              ? 'desc'
+                              : undefined
+                      }
+                      onApply={(kept) => header.apply(c.key, kept)}
+                      onSort={(d) => set('sort', d === 'asc' ? c.key : `-${c.key}`)}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -179,7 +217,7 @@ export function CutStockPage() {
                 error={list.error}
                 empty={list.data?.data.length === 0}
                 emptyText={
-                  q || category || condition
+                  q || category || condition || header.active
                     ? 'No items match these filters.'
                     : 'No master list for this client yet. Use “Import Excel” to load it.'
                 }
@@ -204,7 +242,7 @@ export function CutStockPage() {
                   <td>{fmtNum(r.importedNw, 2)}</td>
                   <td
                     style={{
-                      fontWeight: 700,
+                      fontWeight: 600,
                       color:
                         Number(r.balance) < 0
                           ? 'var(--status-exception-fg)'
@@ -214,7 +252,7 @@ export function CutStockPage() {
                     {fmtNum(r.balance)}
                   </td>
                   <td>{fmtPct(r.balancePct)}</td>
-                  <td style={{ fontWeight: 700, ...COND_STYLE[r.condition] }}>{r.condition}</td>
+                  <td style={{ fontWeight: 600, ...COND_STYLE[r.condition] }}>{r.condition}</td>
                   <td>{r.declareRef}</td>
                 </tr>
               ))}

@@ -37,9 +37,7 @@ import {
   ChartState,
   CLIENT_COLORS,
   barGradient,
-  changePct,
   dash,
-  MIN_YEAR_BASE,
   MONTHS,
   MONTHS_LONG,
   monthLabel,
@@ -50,6 +48,7 @@ import { WorldMap } from './WorldMap';
 import { SingleClientVolume } from './SingleClientVolume';
 import acc from './AccountsCard.module.css';
 import { fi } from '../plans/formIcons';
+import { icons } from '../../layout/icons';
 export { KpiRow } from './KpiRow';
 
 /* ------------------------------ Shipment Summary ------------------------------ */
@@ -130,16 +129,6 @@ export function ShipmentSummaryCard({
             <i style={{ background: SS_IMPORT }} /> Import
             <i style={{ background: SS_EXPORT }} /> Export
           </span>
-          <CardDropdown
-            label="Highlight month"
-            value={selected}
-            onChange={setSelected}
-            options={data.map((d) => ({
-              value: d.month,
-              label: `${MONTHS_LONG[Number(d.month.slice(5, 7)) - 1]}: ${d.future ? '—' : d.total}`,
-              disabled: d.future,
-            }))}
-          />
         </div>
       </div>
       <div className="ss-chart-wrap">
@@ -190,7 +179,7 @@ export function ShipmentSummaryCard({
                   tickLine={false}
                   axisLine={false}
                   width={44}
-                  tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--text-tertiary)' }}
+                  tick={{ fontSize: 10, fontWeight: 600, fill: 'var(--text-tertiary)' }}
                 />
                 <Tooltip
                   content={<SummaryTooltip year={year} />}
@@ -331,19 +320,15 @@ function CountUp({ value, format }: { value: number; format: (v: number) => stri
 const YEAR_TO_DATE = 'ytd';
 
 /**
- * Net profit for the Overview's period: the figure, the change on the period before, and
- * its split by client. A single month compares with the month before; a whole-year
- * Overview shows January to date against the same stretch of the year before.
+ * Net profit for the Overview's period (a month, or January to date for a whole year) and
+ * its split by client. Comparisons and trends are for the Analytics page.
  */
 export function ProfitCard({
   profit,
   fullYear = false,
-  lastYearShipments,
 }: {
   profit: ProfitSummary;
   fullYear?: boolean;
-  /** Shipments over the same stretch last year: too few and January to date gets no change. */
-  lastYearShipments?: number;
 }) {
   const month = fullYear ? YEAR_TO_DATE : profit.currentMonth;
   const whole = month === YEAR_TO_DATE;
@@ -358,22 +343,6 @@ export function ProfitCard({
         .filter((m) => toDate(m.month))
         .reduce((t, m) => t + Math.round(Number(m.netProfit) * 100), 0) / 100
     : Number(profit.monthly[idx]?.netProfit ?? 0);
-  const prevMonth = idx > 0 ? profit.monthly[idx - 1]! : null;
-  // January's "month before" is last December: only known for the current month.
-  const prevValue = whole
-    ? Number(profit.lastYearToDate)
-    : prevMonth
-      ? Number(prevMonth.netProfit)
-      : month === profit.currentMonth
-        ? Number(profit.lastMonth)
-        : null;
-  const thinYear = whole && lastYearShipments !== undefined && lastYearShipments < MIN_YEAR_BASE;
-  const ch = prevValue === null || thinYear ? null : changePct(value, prevValue);
-  const prevLabel = whole
-    ? `Jan – ${lastShort} ${profit.year - 1}`
-    : prevMonth
-      ? MONTH_NAMES[Number(prevMonth.month.slice(5, 7)) - 1]
-      : 'December';
 
   // Each client's profit over the period (their months added up for January to date).
   const rows = Object.values(
@@ -400,19 +369,6 @@ export function ProfitCard({
   const [hoverId, setHover] = useState<string | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
   const hovered = clients.find((c) => c.clientId === hoverId) ?? null;
-  const unbilledRows = profit.unbilled.filter((u) => inPeriod(u.month));
-  const unbilled = unbilledRows.length
-    ? {
-        entries: unbilledRows.reduce((t, u) => t + u.entries, 0),
-        costs: unbilledRows.reduce((t, u) => t + Number(u.costs), 0),
-      }
-    : undefined;
-
-  // The year's months so far, as mini columns beside the figure (hover shows one).
-  const trend = profit.monthly.filter((m) => toDate(m.month));
-  const trendMax = Math.max(1, ...trend.map((m) => Math.abs(Number(m.netProfit))));
-  const [trendHover, setTrendHover] = useState<string | null>(null);
-  const trendShown = trend.find((m) => m.month === trendHover);
   // The legend lists the top clients; the rest fold into one line.
   const LEGEND_MAX = 4;
   const shownClients = clients.slice(0, LEGEND_MAX);
@@ -424,86 +380,14 @@ export function ProfitCard({
       <div className={dash.profitHead}>
         <div className="rc-header">
           <div className="rc-title">Total Net Profit</div>
-          <div className="rc-subtitle">
-            {periodName} · all clients
-            {!whole && ` · ${profit.year} to date ${fmtMoney(profit.total)}`}
-          </div>
+          <div className="rc-subtitle">{periodName}</div>
         </div>
-      </div>
-      <div className={`rc-top-hero ${dash.profitHero}`}>
-        <div className="rc-metric-left">
-          <div
-            className="rc-total-amount"
-            style={value < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
-          >
-            {fmtMoney(Math.round(counted * 100) / 100)}
-          </div>
-          <div className="rc-trend-pill">
-            {!thinYear && (
-              <span
-                className="rc-pill-badge"
-                style={
-                  ch && !ch.up
-                    ? {
-                        background: 'var(--status-exception-bg)',
-                        color: 'var(--status-exception-fg)',
-                      }
-                    : undefined
-                }
-              >
-                {ch?.text ?? '—'}
-              </span>
-            )}
-            <span className="rc-pill-text">
-              {thinYear ? `not enough data in ${profit.year - 1}` : `vs ${prevLabel}`}
-            </span>
-          </div>
-          {unbilled && (
-            <div
-              className={dash.mutedNote}
-              title="Ledger entries with costs but no INV, DIS or DN yet. They count once billed."
-            >
-              Provisional: {unbilled.entries} not billed yet ({fmtMoney(unbilled.costs)} costs not
-              counted)
-            </div>
-          )}
+        <div
+          className={`rc-total-amount ${dash.profitAmount}`}
+          style={value < 0 ? { color: 'var(--status-exception-fg)' } : undefined}
+        >
+          {fmtMoney(Math.round(counted * 100) / 100)}
         </div>
-        {trend.length > 1 && (
-          <div className={dash.profitTrend} onMouseLeave={() => setTrendHover(null)}>
-            <div className={dash.profitTrendBars}>
-              {trend.map((m, i) => {
-                const v = Number(m.netProfit);
-                return (
-                  <span
-                    key={m.month}
-                    data-now={
-                      (whole ? m.month === profit.currentMonth : m.month === month) || undefined
-                    }
-                    data-neg={v < 0 || undefined}
-                    data-dim={(trendHover && trendHover !== m.month) || undefined}
-                    style={
-                      {
-                        '--h': `${Math.max(6, (Math.abs(v) / trendMax) * 100)}%`,
-                        '--d': `${i * 40}ms`,
-                      } as CSSProperties
-                    }
-                    onMouseEnter={() => setTrendHover(m.month)}
-                  />
-                );
-              })}
-            </div>
-            <div className={dash.profitTrendCap}>
-              {trendShown ? (
-                <>
-                  {MONTHS[Number(trendShown.month.slice(5, 7)) - 1]}{' '}
-                  <b>{fmtMoney(trendShown.netProfit)}</b>
-                </>
-              ) : (
-                `Jan – ${lastShort} by month`
-              )}
-            </div>
-          </div>
-        )}
       </div>
       <div className={`rc-main-body ${dash.profitBody}`}>
         <div className={`rc-donut-wrapper ${dash.profitPie}`}>
@@ -845,7 +729,7 @@ export function AccountsCard({
           <span className={acc.titleChip}>
             <fi.users />
           </span>
-          Key Logistics Accounts
+          Shipments breakdown
         </h3>
         {single ? (
           pick && (
@@ -854,20 +738,18 @@ export function AccountsCard({
             </div>
           )
         ) : (
-          <div className="accounts-seg-control" role="tablist">
-            {(['all', 'import', 'export'] as const).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={type === t}
-                className={`accounts-seg-btn ${acc.segBtn}${type === t ? ' active' : ''}`}
-                onClick={() => setType(t)}
-              >
-                {t === 'import' ? <fi.importBox /> : t === 'export' ? <fi.exportBox /> : null}
-                {t === 'all' ? 'All' : t === 'import' ? 'Import' : 'Export'}
-              </button>
-            ))}
-          </div>
+          // One click steps All → Import → Export, like Forwarder Statistics.
+          <CardToggle
+            label="Shipments"
+            value={type}
+            onChange={setType}
+            triggerClass="forwarder-filter-trigger"
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'import', label: 'Import' },
+              { value: 'export', label: 'Export' },
+            ]}
+          />
         )}
       </div>
       <div className="accounts-table-wrap">
@@ -912,9 +794,7 @@ export function AccountsCard({
                           to={`/clients/${a.clientId}`}
                           className={`accounts-name ${acc.nameLink}`}
                         >
-                          <span className={acc.nameChip}>
-                            <fi.building />
-                          </span>
+                          <span className={acc.nameChip}>{icons.clients({})}</span>
                           {a.name}
                         </Link>
                       </td>
@@ -924,7 +804,7 @@ export function AccountsCard({
                       <td
                         style={{
                           textAlign: 'center',
-                          fontWeight: 700,
+                          fontWeight: 600,
                           color: 'var(--text-primary)',
                         }}
                       >
@@ -933,7 +813,7 @@ export function AccountsCard({
                       <td
                         style={{
                           textAlign: 'center',
-                          fontWeight: 700,
+                          fontWeight: 600,
                           color: 'var(--text-primary)',
                         }}
                       >
@@ -942,7 +822,7 @@ export function AccountsCard({
                       <td
                         style={{
                           textAlign: 'center',
-                          fontWeight: 700,
+                          fontWeight: 600,
                           color: 'var(--text-primary)',
                         }}
                       >
@@ -1175,11 +1055,24 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
 
 type ForwarderMetric = 'imports' | 'exports';
 
+/** Chart label: drops legal/generic words ("CO., LTD", "(CAMBODIA)", "LOGISTICS"…), then the first word if still long. */
+export function shortForwarderName(name: string): string {
+  const short = name
+    .replace(/\b(co\.?,?\s*ltd\.?|ltd\.?|inc\.?|corp\.?|plc)/gi, ' ')
+    .replace(/\(?\bcambodia\b\)?/gi, ' ')
+    .replace(/\b(logi?ts?ics|logistics|global forwarding|services?|forwarding)\b/gi, ' ')
+    .replace(/[\s,.]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!short) return name;
+  return short.length > 16 ? short.split(' ')[0]! : short;
+}
+
 export function ForwarderCard({ filters }: { filters: { from: string; to: string } }) {
   const [metric, setMetric] = useState<ForwarderMetric>('imports');
   const q = useForwarders(filters);
   const data = (q.data ?? []).slice(0, 6).map((f) => ({
-    name: f.name.replace(' Logistics', '').replace('Global Forwarding', ''),
+    name: shortForwarderName(f.name),
     v: f[metric] ?? 0,
   }));
   return (
@@ -1215,7 +1108,7 @@ export function ForwarderCard({ filters }: { filters: { from: string; to: string
               <PolarGrid stroke="var(--border-subtle)" />
               <PolarAngleAxis
                 dataKey="name"
-                tick={{ fontSize: 10.5, fontWeight: 700, fill: 'var(--text-secondary)' }}
+                tick={{ fontSize: 10.5, fontWeight: 600, fill: 'var(--text-secondary)' }}
               />
               <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 'auto']} />
               <Tooltip

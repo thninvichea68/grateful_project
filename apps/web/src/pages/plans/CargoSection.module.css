@@ -57,7 +57,7 @@
 .headTitle {
   flex-shrink: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -76,7 +76,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -169,7 +169,7 @@
 }
 .box > span {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--text-primary);
   white-space: nowrap;
@@ -215,14 +215,14 @@
   border-color: var(--status-exception-fg);
 }
 .strong {
-  font-weight: 700;
+  font-weight: 600;
 }
 /* The invoice amount: the accent-tinted box. */
 .fobBox > b {
   border-color: color-mix(in srgb, var(--accent-primary) 25%, var(--border-subtle));
   background: color-mix(in srgb, var(--status-progress-bg) 70%, var(--bg-surface));
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .err {
@@ -237,7 +237,7 @@
 .panelTitle {
   margin-bottom: 10px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -258,7 +258,7 @@
   padding: 9px 10px;
   background: var(--bg-inset, var(--bg-subtle));
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -337,7 +337,7 @@
 .lineTotal {
   padding-right: 10px !important;
   text-align: right;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   white-space: nowrap;
 }
@@ -391,7 +391,7 @@ select.cell {
   display: block;
   padding: 0 6px 4px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .balance[data-over='true'] {
@@ -420,13 +420,13 @@ select.cell {
 .descLbl {
   flex-shrink: 0;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--accent-primary);
 }
 .descInner .cell {
-  font-weight: 700;
+  font-weight: 600;
 }
 .descInner .cell:hover,
 .descInner .cell:focus {
@@ -530,7 +530,7 @@ select.cell {
   background: var(--status-progress-bg);
   font: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
   cursor: pointer;
 }

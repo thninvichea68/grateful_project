@@ -81,7 +81,7 @@
 .panelHead h4 {
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .panelHead p {
@@ -92,7 +92,7 @@
   color: var(--text-tertiary);
 }
 .panelHead p b {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .panelIcon {
@@ -121,7 +121,7 @@
   background: none;
   font-family: var(--font-main);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -184,7 +184,7 @@
   border-radius: 8px;
   text-align: center;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--text-secondary);
   background: var(--bg-subtle);
@@ -196,7 +196,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .tick {
@@ -243,7 +243,7 @@
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--status-pending-fg);
 }
 .resetLink {
@@ -251,7 +251,7 @@
   border: 0;
   background: none;
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
   cursor: pointer;
 }
@@ -291,7 +291,7 @@
   background: none;
   font-family: var(--font-main);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   white-space: nowrap;
   overflow: hidden;
@@ -341,7 +341,7 @@
   justify-content: space-between;
   gap: 12px;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .scopePanel .segment {
@@ -358,7 +358,7 @@
 }
 .area b {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .area span {
@@ -381,7 +381,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   cursor: pointer;
   user-select: none;
@@ -474,7 +474,7 @@
   background: var(--bg-surface-elevated);
   text-align: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .matrix thead th:first-child {
@@ -502,7 +502,7 @@
 }
 .groupRow b {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .groupRow span {
@@ -598,7 +598,7 @@
 }
 .custom {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--status-pending-fg);
 }
 .muted {

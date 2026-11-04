@@ -30,7 +30,7 @@
 }
 .total {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   fill: var(--text-primary);
 }

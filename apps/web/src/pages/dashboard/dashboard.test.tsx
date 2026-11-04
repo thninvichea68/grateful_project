@@ -72,7 +72,7 @@ describe('PortCard', () => {
 });
 
 describe('KpiRow', () => {
-  it('renders values from the API with change vs last month', () => {
+  it('renders the figures from the API, without comparisons', () => {
     const k: KpiResponse = {
       period: { from: '2026-10-01', to: '2026-10-31' },
       previousPeriod: { from: '2026-09-01', to: '2026-09-30' },
@@ -86,16 +86,15 @@ describe('KpiRow', () => {
     };
     render(
       <MemoryRouter>
-        <KpiRow k={k} monthly={[]} />
+        <KpiRow k={k} />
       </MemoryRouter>,
     );
     expect(screen.getByText('20')).toBeInTheDocument();
-    expect(screen.getByText('↘ 4.8%')).toBeInTheDocument();
-    expect(screen.getByText('↗ 50.0%')).toBeInTheDocument();
     expect(screen.getByText('17')).toBeInTheDocument();
     expect(screen.getByText('still pending')).toBeInTheDocument();
+    expect(screen.queryByText(/vs last|%|not enough data/)).not.toBeInTheDocument();
   });
-  it('drops the year-on-year change when last year had too few shipments', () => {
+  it('names the card for a whole year', () => {
     const k: KpiResponse = {
       period: { from: '2026-01-01', to: '2026-10-31' },
       previousPeriod: { from: '2025-01-01', to: '2025-10-31' },
@@ -109,10 +108,10 @@ describe('KpiRow', () => {
     };
     render(
       <MemoryRouter>
-        <KpiRow k={k} monthly={[]} fullYear />
+        <KpiRow k={k} fullYear />
       </MemoryRouter>,
     );
-    expect(screen.getAllByText('not enough data last year')).toHaveLength(3);
-    expect(screen.queryByText(/15233/)).not.toBeInTheDocument();
+    expect(screen.getByText('Total Shipments This Year')).toBeInTheDocument();
+    expect(screen.getByText('460')).toBeInTheDocument();
   });
 });

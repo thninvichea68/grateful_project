@@ -266,7 +266,7 @@ export const debitNoteLines = pgTable(
   (t) => [index('debit_note_lines_doc_idx').on(t.debitNoteId)],
 );
 
-/** "Credit Noted" — the Chea payment voucher. */
+/** "Credit Note" — the Chea payment voucher. */
 export const creditNotes = pgTable('credit_notes', {
   ...docHeader(),
   cnNo: text('cn_no').notNull().unique(),
@@ -285,7 +285,7 @@ export const creditNotes = pgTable('credit_notes', {
   /** VAT percent on the processing fee line. */
   vatRate: vatRate(),
   total: money('total').notNull().default('0'),
-  /** Accounting's check of the submitted note (Accounting → Credit Noted). */
+  /** Accounting's check of the submitted note (Accounting → Credit Note). */
   reviewStatus: creditNoteReviewEnum('review_status').notNull().default('UNCHECKED'),
   reviewedBy: uuid('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
@@ -315,6 +315,8 @@ export const recordSummaries = pgTable('record_summaries', {
   declareNo: text('declare_no'),
   summaryDate: date('summary_date').notNull(),
   quantityText: text('quantity_text'),
+  /** What bl_no holds: the BL no. or (by air) the HAWB no. */
+  refType: creditNoteRefTypeEnum('ref_type'),
   blNo: text('bl_no'),
   containerNo: text('container_no'),
   containerSize: containerSizeEnum('container_size'),
@@ -403,7 +405,7 @@ export const clearFeePayments = pgTable(
 
 /**
  * Accounting → broker messages about a credit note ("Revised" with what to fix; older rows may be
- * "Checked", no longer sent). Shown in the broker's Credit Noted inbox.
+ * "Checked", no longer sent). Shown in the broker's Credit Note inbox.
  */
 export const creditNoteMessages = pgTable(
   'credit_note_messages',

@@ -83,8 +83,7 @@ export function OverviewPage() {
   return (
     <section className="view active" id="view-overview">
       <ErrorBanner error={summary.error} />
-      {on('kpis') &&
-        (s ? <KpiRow k={s.kpis} monthly={s.monthly} fullYear={s.fullYear} /> : <KpiRowSkeleton />)}
+      {on('kpis') && (s ? <KpiRow k={s.kpis} fullYear={s.fullYear} /> : <KpiRowSkeleton />)}
 
       {cards > 0 && (
         <div className={`ov-grid-3col${flow ? ' ov-flow' : ''}`}>
@@ -102,7 +101,6 @@ export function OverviewPage() {
               key={`${s.month}${s.fullYear ? '-year' : ''}`}
               profit={s.profit}
               fullYear={s.fullYear}
-              lastYearShipments={s.fullYear ? s.kpis.previous.total : undefined}
             />
           )}
           {clientsShown && (

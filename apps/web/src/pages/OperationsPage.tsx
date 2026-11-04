@@ -135,7 +135,7 @@ export function OperationsPage() {
                     <Link
                       to={`/plans/${r.shipmentId}`}
                       onClick={(e) => e.stopPropagation()}
-                      style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+                      style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
                     >
                       {r.shipmentReference}
                     </Link>
@@ -143,7 +143,7 @@ export function OperationsPage() {
                   <td>{r.hblNo ?? '-'}</td>
                   <td>{r.clientCode}</td>
                   <td>{r.direction}</td>
-                  <td>
+                  <td style={{ textTransform: 'uppercase' }}>
                     {CLEARANCE_STATUS_LABEL[r.clearanceStatus as ClearanceStatus] ??
                       r.clearanceStatus}
                   </td>
@@ -151,7 +151,7 @@ export function OperationsPage() {
                     {r.ledgerId ? (
                       (r.invNo ?? 'Entered')
                     ) : (
-                      <span style={{ color: 'var(--status-pending-fg)', fontWeight: 700 }}>
+                      <span style={{ color: 'var(--status-pending-fg)', fontWeight: 600 }}>
                         Not yet
                       </span>
                     )}
@@ -160,7 +160,7 @@ export function OperationsPage() {
                   <td
                     style={{
                       textAlign: 'center',
-                      fontWeight: 700,
+                      fontWeight: 600,
                       color: r.documents ? 'var(--text-primary)' : 'var(--text-tertiary)',
                     }}
                   >

@@ -64,7 +64,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     etdPort: '',
     quantity: '',
     quantityUnit: direction === 'EXPORT' ? 'CTNS' : '',
-    material: direction === 'EXPORT' ? 'Garments' : '',
+    material: direction === 'EXPORT' ? 'Garments & Apparel' : '',
     bookingNo: '',
     hblNo: '',
     vesselName: '',

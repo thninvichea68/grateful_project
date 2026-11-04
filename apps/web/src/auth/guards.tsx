@@ -16,7 +16,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 /**
  * Sends the listed roles to their own page for the same records (`to` may hold `:id`), e.g. an
- * accountant opening Credit Noted lands in Accounting → Chea Payments.
+ * accountant opening Credit Note lands in Accounting → Chea Payments.
  */
 export function RedirectRoles({
   roles,

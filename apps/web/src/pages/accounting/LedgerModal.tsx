@@ -205,7 +205,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
             <Link
               to={`/plans/${row.shipmentId}`}
               onClick={onClose}
-              style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+              style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
             >
               {row.shipmentReference}
             </Link>{' '}
@@ -302,7 +302,7 @@ export function LedgerModal({ row, onClose }: { row: LedgerRow | null; onClose: 
             borderRadius: 8,
             background: 'var(--bg-subtle)',
             fontSize: 13,
-            fontWeight: 700,
+            fontWeight: 600,
           }}
         >
           <span>
@@ -430,7 +430,7 @@ function DocumentsMenu({
               <b style={{ fontSize: 13 }}>
                 {BILLING_DOC_LABEL[d.type]} {d.number ?? ''}
               </b>
-              <small style={{ color: DOC_TONE[d.status], fontWeight: 700 }}>
+              <small style={{ color: DOC_TONE[d.status], fontWeight: 600 }}>
                 {d.status.toLowerCase()}
               </small>
             </Link>

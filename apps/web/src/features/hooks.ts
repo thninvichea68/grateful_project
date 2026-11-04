@@ -72,6 +72,16 @@ export function useAddCoForm() {
   });
 }
 
+/** "+ Add new…" in a shipment's Import / Export Type: stored as typed. */
+export function useAddMaterial() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { label: string }) =>
+      api<{ value: string; label: string }>('/lookups/materials', { method: 'POST', json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.lookups }),
+  });
+}
+
 /* ---------- Clients ---------- */
 export function useClients(query: Query) {
   return useQuery({
@@ -353,6 +363,15 @@ export function useDeleteSealPlan() {
 
 /* ---------- Cut stock ---------- */
 export type CutStockList = Paginated<CutStockRow> & { summary: CutStockSummary };
+
+/** A CDC Master List column's values for its header filter. */
+export function useCutStockColumnValues(column: string | null, query: Query) {
+  return useQuery({
+    queryKey: [...queryKeys.cutStock, 'values', column, query],
+    queryFn: () => api<string[]>('/cut-stock/values', { query: { ...query, column } }),
+    enabled: !!column && !!query.clientId,
+  });
+}
 
 export function useCutStock(query: Query & { clientId?: string }, enabled = true) {
   return useQuery({

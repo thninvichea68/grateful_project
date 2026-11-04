@@ -11,12 +11,15 @@ export function Modal({
   onClose,
   children,
   width = 560,
+  className,
 }: {
   title: string;
   sub?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   width?: number;
+  /** Extra class on the dialog, e.g. caps-values. */
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -34,7 +37,7 @@ export function Modal({
   return createPortal(
     <div className={s.overlay} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
-        className={s.dialog}
+        className={className ? `${s.dialog} ${className}` : s.dialog}
         style={{ maxWidth: width }}
         role="dialog"
         aria-modal="true"

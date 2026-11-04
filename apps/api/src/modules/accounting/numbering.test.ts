@@ -530,6 +530,27 @@ describe('a shipment approved late with an earlier INV date', () => {
     expect((await a.row()).disNo).toBe('DIS002');
   });
 
+  it('a corrected date moves the shipment’s other documents with it', async () => {
+    const s = await shipment(b.jr.id, 'E 72', '2026-10-27'); // → 28 Oct
+    const inv = await draft('tax-invoices', s.recordId);
+    const dis = await draft('disbursements', s.recordId);
+    const dn = await draft('debit-notes', s.recordId);
+    expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
+    expect((await acc('post', `/docs/debit-notes/${dn.id}/issue`)).status).toBe(200);
+
+    const ok = await acc('post', `/docs/debit-notes/${dn.id}/correct`, {
+      body: { date: '2026-10-29', reason: 'Date issued in error' },
+    });
+    expect(ok.status).toBe(200);
+    for (const [type, id] of [
+      ['tax-invoices', inv.id],
+      ['disbursements', dis.id],
+      ['debit-notes', dn.id],
+    ] as const)
+      expect((await doc(type, id)).date).toBe('2026-10-29');
+    expect((await s.row()).invDate).toBe('2026-10-29');
+  });
+
   it('a late October shipment moves November’s INV and DIS numbers', async () => {
     const nov = await shipment(b.jr.id, 'E 95', '2026-11-04');
     const oct = await shipment(b.jr.id, 'E 96', '2026-10-27');

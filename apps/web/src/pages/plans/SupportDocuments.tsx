@@ -21,7 +21,7 @@ export function SupportDocumentsModal({
   clientId,
   onClose,
 }: {
-  /** e.g. "SHP-26-0155" or "Credit Noted No. 28". */
+  /** e.g. "SHP-26-0155" or "Credit Note No. 28". */
   title: string;
   link: SupportLink;
   clientId: string;

@@ -14,7 +14,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--tone) 14%, transparent);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: color-mix(in srgb, var(--tone) 80%, var(--text-primary));
   white-space: nowrap;
@@ -24,7 +24,7 @@
 }
 .miniHead {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-tertiary);

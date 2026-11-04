@@ -216,6 +216,7 @@ export async function prefill(
         summaryDate,
         vatRate,
         quantityText: ship.pkgs && `${ship.pkgs} ${ship.pkgsUnit ?? ''}`.trim(),
+        refType: c.transportMode === 'AIR' ? 'HAWB_NO' : 'BILL_NO',
         blNo: c.hbl,
         containerNo: c.containers,
         containerSize: c.containerSize,
@@ -269,7 +270,7 @@ export async function summaryLines(
 }
 
 /**
- * A draft Credit Noted (the customs broker's payment voucher) for a declaration. It bills
+ * A draft Credit Note (the customs broker's payment voucher) for a declaration. It bills
  * Grateful Solutions; the shipper is the client's factory. Works with or without a Monthly
  * Ledger row (submitting it creates one when missing).
  */
@@ -334,7 +335,7 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
     shipper: c.shipper,
     portId: c.portId,
     containerNo,
-    refType: 'HOUSE_BILL',
+    refType: c.transportMode === 'AIR' ? 'HAWB_NO' : 'BILL_NO',
     refNo: c.hbl,
     quantityText: c.quantity ? `${n(c.quantity)} ${c.quantityUnit ?? ''}`.trim() : null,
     grossWeightKg: n(c.gw),

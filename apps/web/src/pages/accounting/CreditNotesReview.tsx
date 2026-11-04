@@ -78,8 +78,8 @@ export const eyeIcon = svg(
 );
 
 /**
- * Accounting → Chea Payments: the broker's submitted Credit Noted vouchers, for accounting
- * to check off. Drafts stay with the broker (sidebar → Credit Noted) until submitted.
+ * Accounting → Chea Payments: the broker's submitted Credit Note vouchers, for accounting
+ * to check off. Drafts stay with the broker (sidebar → Credit Note) until submitted.
  * The four stat cards double as the status filter.
  */
 export function CreditNotesReview() {
@@ -299,9 +299,8 @@ export function CreditNotesReview() {
                   </td>
                   <td>
                     {r.direction && (
-                      <span className={s.type}>
-                        <i className={r.direction === 'IMPORT' ? s.imp : s.exp} />
-                        {r.direction === 'IMPORT' ? 'Import' : 'Export'}
+                      <span className={`${s.type} ${r.direction === 'IMPORT' ? s.imp : s.exp}`}>
+                        {r.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                       </span>
                     )}
                   </td>
@@ -388,7 +387,7 @@ export function ReviseModal({
         />
       </label>
       <p className={s.reviseNote}>
-        The broker gets this in their Credit Noted inbox. The credit note goes back to them as a
+        The broker gets this in their Credit Note inbox. The credit note goes back to them as a
         draft and its Clear Fee leaves the Monthly Ledger until they submit it again.
       </p>
       <div className={ui.actions}>

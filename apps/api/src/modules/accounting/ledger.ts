@@ -239,7 +239,7 @@ export async function declarationOptions(
 }
 
 /**
- * Declarations a Credit Noted can start from: all of them (ledger row or not), newest first,
+ * Declarations a Credit Note can start from: all of them (ledger row or not), newest first,
  * flagged when a live (non-void) credit note already exists for the declare no.
  */
 export async function creditNoteDeclarations(

@@ -23,16 +23,6 @@
   width: 17px;
   height: 17px;
 }
-.segBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.segBtn svg {
-  width: 14px;
-  height: 14px;
-  opacity: 0.75;
-}
 .th {
   display: inline-flex;
   align-items: center;
@@ -86,7 +76,7 @@
   place-items: center;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   color: var(--accent-primary);
   background: var(--status-completed-bg);
@@ -103,7 +93,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -123,7 +113,7 @@
 }
 .total b {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -1px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -178,7 +168,7 @@
   border-radius: 2px;
 }
 .flowLegend b {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -198,14 +188,14 @@
 }
 .modeLabel {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .modeVal {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.5px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -213,7 +203,7 @@
 .modeVal small {
   margin-left: 4px;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0;
   color: var(--text-tertiary);
 }

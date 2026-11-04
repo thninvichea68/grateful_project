@@ -221,7 +221,7 @@ export interface DeclarationOption {
   direction: 'IMPORT' | 'EXPORT';
 }
 
-/** A declaration in the "New Credit Noted" picker, with the shipment details the form copies. */
+/** A declaration in the "New Credit Note" picker, with the shipment details the form copies. */
 export interface CreditNoteDeclaration extends DeclarationOption {
   clientName: string;
   transportMode: 'SEA' | 'AIR' | 'ROAD' | 'RAIL';
@@ -253,7 +253,7 @@ export const BILLING_DOC_LABEL: Record<BillingDocType, string> = {
   'tax-invoices': 'Tax Invoice',
   disbursements: 'Disbursement',
   'debit-notes': 'Debit Note',
-  'credit-notes': 'Credit Noted',
+  'credit-notes': 'Credit Note',
   'record-summaries': 'Record Summary',
 };
 
@@ -361,6 +361,10 @@ export const recordSummaryInputSchema = z.object({
   declareNo: optText(30),
   summaryDate: isoDate,
   quantityText: optText(60),
+  refType: z
+    .enum(CREDIT_NOTE_REF_TYPES)
+    .nullish()
+    .transform((v) => v ?? null),
   blNo: optText(60),
   containerNo: optText(120),
   containerSize,
@@ -417,7 +421,7 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}$/)
     .optional(),
-  /** Record Summary's filters (like Credit Noted's): a year, a month of any year, a shipment. */
+  /** Record Summary's filters (like Credit Note's): a year, a month of any year, a shipment. */
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   monthOfYear: z.coerce.number().int().min(1).max(12).optional(),
   direction: z.enum(DIRECTIONS).optional(),
@@ -425,7 +429,7 @@ export const billingDocListQuerySchema = paginationQuerySchema.extend({
   review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
 });
 
-/** Accounting → Credit Noted: submitted credit notes waiting for (or past) accounting's check. */
+/** Accounting → Credit Note: submitted credit notes waiting for (or past) accounting's check. */
 export const creditNoteReviewQuerySchema = paginationQuerySchema.extend({
   clientId: z.string().uuid().optional(),
   direction: z.enum(DIRECTIONS).optional(),
@@ -434,7 +438,7 @@ export const creditNoteReviewQuerySchema = paginationQuerySchema.extend({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   review: z.enum(CREDIT_NOTE_REVIEW_STATUSES).optional(),
 });
-/** Sidebar → Credit Noted: every credit note, by document status. */
+/** Sidebar → Credit Note: every credit note, by document status. */
 export const creditNoteListQuerySchema = creditNoteReviewQuerySchema.omit({ review: true }).extend({
   status: z.enum(BILLING_DOC_STATUSES).optional(),
 });
@@ -453,7 +457,7 @@ export const creditNoteReviewInputSchema = z
     path: ['message'],
   });
 
-/** A message from accounting in the broker's Credit Noted inbox. */
+/** A message from accounting in the broker's Credit Note inbox. */
 export interface CreditNoteMessage {
   id: string;
   creditNoteId: string;

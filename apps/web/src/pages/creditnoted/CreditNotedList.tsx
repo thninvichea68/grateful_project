@@ -34,7 +34,7 @@ const statusOf = (r: CreditNoteReviewRow): { label: string; cls: string } =>
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MODE: Record<string, string> = { SEA: 'SEA', AIR: 'AIR', ROAD: 'LAND', RAIL: 'RAIL' };
 
-/** Sidebar → Credit Noted: the broker's vouchers, drafts and submitted. */
+/** Sidebar → Credit Note: the broker's vouchers, drafts and submitted. */
 export function CreditNotedList() {
   const { can } = useAuth();
   const navigate = useNavigate();
@@ -147,7 +147,7 @@ export function CreditNotedList() {
           )}
           {can('creditnotes:write') && (
             <button type="button" className={s.newBtn} onClick={() => setPicking(true)}>
-              {icons.plus({ width: 15, height: 15 })} New Credit Noted
+              {icons.plus({ width: 15, height: 15 })} New Credit Note
             </button>
           )}
           {!inboxView && (
@@ -192,7 +192,7 @@ export function CreditNotedList() {
                       <span>
                         {filtered
                           ? 'Try another client, month or status.'
-                          : 'Start one with “New Credit Noted” and pick the declaration.'}
+                          : 'Start one with “New Credit Note” and pick the declaration.'}
                       </span>
                     </td>
                   </tr>
@@ -210,9 +210,8 @@ export function CreditNotedList() {
                     </td>
                     <td>
                       {r.direction && (
-                        <span className={s.type}>
-                          <i className={r.direction === 'IMPORT' ? s.imp : s.exp} />
-                          {r.direction === 'IMPORT' ? 'Import' : 'Export'}
+                        <span className={`${s.type} ${r.direction === 'IMPORT' ? s.imp : s.exp}`}>
+                          {r.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                         </span>
                       )}
                     </td>

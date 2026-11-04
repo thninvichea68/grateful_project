@@ -148,7 +148,7 @@
 /* Pie / ring / gauge centres: text sized to the hole (chart-center-typography.ts) */
 .bklit .\@container\/chart-center { container-type: inline-size; container-name: chart-center; }
 .bklit .size-full { width: 100%; height: 100%; }
-.bklit .font-bold { font-weight: 700; }
+.bklit .font-bold { font-weight: 600; }
 .bklit .text-2xl { font-size: 1.5rem; line-height: 2rem; }
 .bklit .leading-none { line-height: 1; }
 .bklit .leading-tight { line-height: 1.25; }

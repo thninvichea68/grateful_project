@@ -107,7 +107,7 @@ button {
 }
 .brand-text .title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.2px;
   line-height: 1.2;
   color: var(--text-primary);
@@ -219,7 +219,7 @@ nav.menu {
 }
 .menu-heading {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -235,7 +235,7 @@ nav.menu {
   padding: 7px 10px;
   border-radius: var(--radius-md);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -263,7 +263,7 @@ nav.menu {
 .menu-item.active {
   background: var(--accent-primary);
   color: #041b2d;
-  font-weight: 700;
+  font-weight: 600;
   box-shadow: none;
 }
 .menu-item.active svg {
@@ -277,7 +277,7 @@ nav.menu {
 .menu-item .item-badge {
   margin-left: auto;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   background: var(--accent-rose);
   color: #fff;
   border-radius: 8px;
@@ -316,7 +316,7 @@ nav.menu {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   /* Same contrast as the main menu items, not a faded tint. */
   color: var(--text-secondary);
   cursor: pointer;
@@ -339,7 +339,7 @@ nav.menu {
 .submenu-item.active {
   background: rgba(6, 182, 212, 0.15);
   color: var(--accent-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 .submenu-item.has-icon::before {
   display: none;
@@ -472,7 +472,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .page-title {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.5px;
   color: var(--text-primary);
   /* Long titles (Analytics) shorten with "…" rather than squeezing the search box. */
@@ -655,7 +655,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -765,7 +765,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .ai-panel-title .name {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .ai-panel-title .sub {
@@ -777,7 +777,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: none;
   color: var(--accent-primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   padding: 6px 8px;
   border-radius: 8px;
@@ -880,7 +880,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .ai-msg.assistant a {
   color: var(--accent-primary);
-  font-weight: 700;
+  font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -927,7 +927,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: var(--status-exception-fg);
 }
 .ai-error-q {
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
@@ -940,7 +940,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: transparent;
   color: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .ai-retry:disabled {
@@ -1045,7 +1045,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1075,7 +1075,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--accent-primary);
   color: #041b2d;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
 }
 .filter-btn.active .filter-count {
@@ -1138,7 +1138,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--accent-primary);
   color: #041b2d;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   box-shadow: none;
   transition: all 0.15s ease;
@@ -1281,7 +1281,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .card-header-row h3 {
   white-space: nowrap;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -1306,7 +1306,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .ov-top-row h1 {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.6px;
 }
 .time-pill-btn {
@@ -1318,7 +1318,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -1361,7 +1361,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .modern-kpi-card .kpi-label {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: -0.1px;
 }
@@ -1394,7 +1394,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .modern-kpi-card .kpi-val {
   font-size: 36px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -1.2px;
   color: var(--text-primary);
   line-height: 1.1;
@@ -1406,12 +1406,12 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .meta-positive {
   color: var(--accent-lime-bright);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .meta-sub {
@@ -1617,7 +1617,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .accounts-card-header h3 {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -1636,7 +1636,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   padding: 6px 14px;
   border-radius: 8px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   border: none;
@@ -1668,7 +1668,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .accounts-table th {
   text-align: left;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text-tertiary);
@@ -1692,13 +1692,13 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 
 .accounts-name {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-size: 14px;
 }
 
 .accounts-val-bold {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-size: 14px;
 }
@@ -1725,14 +1725,14 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .rc-title {
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.4px;
   color: var(--text-primary);
 }
 
 .rc-subtitle {
-  font-size: 11px;
-  color: var(--text-tertiary);
+  font-size: 12.5px;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -1752,7 +1752,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .rc-total-amount {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -1.2px;
   color: var(--text-primary);
   line-height: 1;
@@ -1772,7 +1772,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: rgba(16, 185, 129, 0.14);
   color: #34d399;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.2px;
 }
 
@@ -1830,14 +1830,14 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .rc-donut-center-text .pct {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1;
 }
 
 .rc-donut-center-text .tag {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--text-secondary);
   letter-spacing: 0.8px;
@@ -1877,7 +1877,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   align-items: center;
   gap: 9px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1;
 }
@@ -1921,7 +1921,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .rc-client-val {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.2px;
   line-height: 1.1;
@@ -1961,7 +1961,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .world-map-title {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -1978,7 +1978,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.2px;
   padding: 5px 12px;
   border-radius: 8px;
@@ -2026,7 +2026,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
@@ -2038,7 +2038,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .card-dropdown-item.active {
   background: var(--accent-primary);
   color: #041b2d;
-  font-weight: 700;
+  font-weight: 600;
 }
 .card-dropdown-item.active svg {
   display: block;
@@ -2100,7 +2100,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .filter-menu-header .filter-menu-title {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   display: flex;
   align-items: center;
@@ -2157,7 +2157,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   align-items: center;
   justify-content: space-between;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -2178,7 +2178,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: none;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
   cursor: pointer;
 }
@@ -2187,7 +2187,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .filter-col-title .filter-mini-link {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
   color: var(--accent-lime-bright);
@@ -2216,7 +2216,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
@@ -2279,7 +2279,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
@@ -2405,7 +2405,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-radius: 8px;
   padding: 7px 16px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
   border: 1px solid var(--border-subtle);
@@ -2537,7 +2537,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-radius: 8px;
   background: var(--bg-subtle);
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .world-country-row[data-top] .c-rank {
@@ -2554,11 +2554,11 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .world-country-row[data-top] .c-name {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 .world-country-row .c-val {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.2px;
   font-variant-numeric: tabular-nums;
 }
@@ -2601,7 +2601,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .port-card-header h3 {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -2693,7 +2693,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .port-legend-item b {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .port-legend-item:hover,
@@ -2711,17 +2711,17 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .port-legend-item[data-kind='imp'] i,
 .port-tip [data-kind='imp'] i,
 .port-seg[data-kind='imp'] {
-  background: linear-gradient(90deg, #06b6d4 0%, #38bdf8 100%);
+  background: #06b6d4;
 }
 .port-legend-item[data-kind='exp'] i,
 .port-tip [data-kind='exp'] i,
 .port-seg[data-kind='exp'] {
-  background: linear-gradient(90deg, #6366f1 0%, #818cf8 100%);
+  background: #2563eb;
 }
 
 .port-bar-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--text-tertiary);
   text-align: right;
@@ -2757,16 +2757,12 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-radius: 0 6px 6px 0;
   overflow: hidden;
   transform-origin: left center;
-  transition:
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.25s ease,
-    filter 0.25s ease;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Hover grows the bar a little; no glow, the colours stay flat. */
 .port-bar-row:hover .port-bar-fill,
 .port-bar-row:focus-visible .port-bar-fill {
   transform: scaleY(1.12);
-  filter: brightness(1.08) saturate(1.1);
-  box-shadow: 0 6px 18px -6px rgba(14, 165, 233, 0.55);
 }
 .port-seg {
   flex-basis: 0;
@@ -2813,7 +2809,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .port-tip-title {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
@@ -2857,7 +2853,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   left: calc(100% + 8px);
   transform: translateY(-50%);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
@@ -2893,7 +2889,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   display: flex;
   justify-content: center;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .port-chart-xaxis span:first-child {
@@ -2936,7 +2932,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .forwarder-card-title h3 {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--text-primary);
 }
@@ -2959,12 +2955,12 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .forwarder-radar-label {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   fill: var(--text-tertiary);
   text-anchor: middle;
 }
 .forwarder-radar-label .val {
-  font-weight: 700;
+  font-weight: 600;
   fill: var(--text-primary);
 }
 
@@ -2983,7 +2979,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .create-header-title {
   font-size: 21px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.2px;
   margin-bottom: 6px;
@@ -3023,7 +3019,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   -webkit-appearance: none;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
@@ -3056,7 +3052,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .ship-cap {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -3108,7 +3104,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: #041b2d;
   border: none;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 9px 26px;
   border-radius: 8px;
   cursor: pointer;
@@ -3136,7 +3132,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: var(--text-secondary);
   border: 1px solid var(--border-strong);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 9px 20px;
   border-radius: 8px;
   cursor: pointer;
@@ -3154,7 +3150,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: var(--status-exception-fg);
   border: 1px solid var(--border-strong);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 9px 20px;
   border-radius: 8px;
   cursor: pointer;
@@ -3190,7 +3186,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   align-items: center;
   gap: 9px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -3230,7 +3226,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   gap: 8px;
   padding: 15px 10px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.1px;
   text-align: center;
   cursor: pointer;
@@ -3259,7 +3255,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   height: 18px;
   border-radius: 50%;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   flex-shrink: 0;
   background: var(--bg-subtle);
   color: var(--text-tertiary);
@@ -3341,7 +3337,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -3391,7 +3387,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .cargo-head-cell {
   padding: 0 10px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -3452,7 +3448,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-bottom-color: var(--accent-primary);
 }
 .cargo-cell-strong {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
 }
 .cargo-cell-num {
@@ -3472,7 +3468,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: var(--text-tertiary);
 }
 .cargo-sum-fob {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
 }
 .cargo-sum-fob.is-empty {
@@ -3544,7 +3540,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   gap: 8px;
   padding: 0 10px 12px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -3567,7 +3563,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .cargo-line-head > div {
   padding: 0 10px 4px;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -3579,7 +3575,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .cargo-line-total {
   padding: 8px 10px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: right;
   color: var(--accent-primary);
   white-space: nowrap;
@@ -3624,7 +3620,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: 0;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 6px 0;
   cursor: pointer;
   transition: color 0.15s ease;
@@ -3654,7 +3650,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-totals-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
   align-self: center;
@@ -3667,14 +3663,14 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-total-item span:first-child {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .cargo-total-item span:last-child {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
@@ -3694,7 +3690,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 10px 18px;
   border-radius: 8px;
   cursor: pointer;
@@ -3738,7 +3734,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cx-title h3 {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.1px;
 }
@@ -3823,7 +3819,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cx-lbl {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -3845,7 +3841,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-surface);
 }
 .cx-f .cargo-cell-strong {
-  font-weight: 700;
+  font-weight: 600;
 }
 .cx-chips {
   display: flex;
@@ -3867,7 +3863,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .cx-chip .cargo-sum {
   padding: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .cx-chip.cx-chip-fob {
@@ -3914,7 +3910,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cx-line-group-title {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--accent-primary);
@@ -3947,7 +3943,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-radius: 8px;
   background: var(--status-completed-bg);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: right;
   min-height: 38px;
 }
@@ -4131,7 +4127,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-totals-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -4145,7 +4141,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-total-item span:first-child {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
@@ -4153,7 +4149,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-total-item span:last-child {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.2px;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
@@ -4205,7 +4201,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   grid-column: 1/-1;
   padding: 0;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -4215,14 +4211,14 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cargo-total-item span:first-child {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .cargo-total-item span:last-child {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.2px;
@@ -4266,7 +4262,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   gap: 10px;
   grid-column: 1/-1;
   font-size: 13px !important;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.2px !important;
   text-transform: none !important;
   color: var(--text-primary) !important;
@@ -4281,7 +4277,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--status-completed-bg);
   color: var(--accent-primary);
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .cargo-totals .cargo-total-item {
   justify-content: space-between;
@@ -4373,7 +4369,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cx-desc-row .cargo-cell {
   width: 100%;
-  font-weight: 700;
+  font-weight: 600;
   background: var(--bg-surface);
   border-color: transparent;
 }
@@ -4399,7 +4395,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cx-sum-label {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -4408,7 +4404,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   padding: 0 11px;
   text-align: right;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -4438,7 +4434,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 
 .form-field-group label {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -4502,7 +4498,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 }
 .cdc-lines-table th {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
   color: var(--text-secondary);
@@ -4552,7 +4548,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: transparent;
   color: var(--accent-primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 .cdc-add-line-btn:hover {
@@ -4585,7 +4581,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .addnew-modal h4 {
   margin: 0 0 4px 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .addnew-modal p {
@@ -4620,7 +4616,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   border-radius: 8px;
   padding: 8px 14px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   font-family: inherit;
 }
@@ -4634,7 +4630,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   color: #fff;
 }
 .addnew-select option.addnew-option {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Generic clean tables */
@@ -4645,7 +4641,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .data-table-clean th {
   text-align: left;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   color: var(--text-tertiary);
@@ -4665,7 +4661,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-subtle);
 }
 .val-bold {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 /* Long free text in a table cell (e.g. a shipment's remark): one line, cut with "…". */
@@ -4683,7 +4679,7 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   background: var(--bg-surface-elevated);
   border: 1px solid var(--border-subtle);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
   cursor: help;
 }
@@ -4752,33 +4748,29 @@ th.frozen-col.frozen-col-edge {
     0 1px 0 0 var(--border-subtle);
 }
 
+/* A status as coloured text in capitals (no pill background), like the CDC Master List's Condition. */
 .status-tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 .status-tag.completed {
-  background: var(--status-completed-bg);
   color: var(--status-completed-fg);
 }
+/* The same blue as EXPORT in the accounting lists. */
 .status-tag.progress {
-  background: var(--status-progress-bg);
-  color: var(--status-progress-fg);
+  color: var(--accent-blue);
 }
 .status-tag.pending {
-  background: var(--status-pending-bg);
   color: var(--status-pending-fg);
 }
 .status-tag.exception {
-  background: var(--status-exception-bg);
   color: var(--status-exception-fg);
 }
 .status-tag.neutral {
-  background: var(--bg-subtle);
   color: var(--text-tertiary);
 }
 
@@ -4789,12 +4781,12 @@ th.frozen-col.frozen-col-edge {
   background: var(--status-progress-bg);
   color: var(--status-progress-fg);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .cutstock-cat-row td {
   background: var(--bg-subtle);
   color: var(--text-secondary);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4803,11 +4795,11 @@ th.frozen-col.frozen-col-edge {
 }
 .cutstock-balance-pos {
   color: var(--status-completed-fg);
-  font-weight: 700;
+  font-weight: 600;
 }
 .cutstock-balance-neg {
   color: var(--status-exception-fg);
-  font-weight: 700;
+  font-weight: 600;
 }
 .cutstock-table td,
 .cutstock-table th {
@@ -4935,7 +4927,7 @@ th.frozen-col.frozen-col-edge {
   padding: 7px 14px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -4973,7 +4965,7 @@ th.frozen-col.frozen-col-edge {
   border-color: var(--border-strong);
 }
 .tab-box .tb-title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 13px;
   color: var(--text-primary);
 }
@@ -5000,7 +4992,7 @@ th.frozen-col.frozen-col-edge {
   color: var(--text-secondary);
   padding: 10px 12px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--border-subtle);
@@ -5018,7 +5010,7 @@ th.frozen-col.frozen-col-edge {
   color: var(--accent-lime-bright);
   font-family: var(--font-main);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 5px 8px;
   border-radius: 8px;
   width: 110px;
@@ -5047,7 +5039,7 @@ th.frozen-col.frozen-col-edge {
   border-radius: var(--radius-sm);
   padding: 12px 16px;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5193,7 +5185,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-kpi-card .an-kpi-label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .an-kpi-card .an-kpi-dot {
@@ -5204,7 +5196,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-kpi-card .an-kpi-val {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.5px;
   margin-bottom: 8px;
 }
@@ -5218,7 +5210,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-kpi-card .an-kpi-meta .meta-positive {
   color: var(--accent-emerald);
-  font-weight: 700;
+  font-weight: 600;
 }
 .an-mini-bar-track {
   height: 6px;
@@ -5248,7 +5240,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-section-title-row h3 {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .an-section-title-row .an-section-sub {
   font-size: 12px;
@@ -5269,7 +5261,7 @@ th.frozen-col.frozen-col-edge {
   background: transparent;
   color: var(--text-secondary);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 6px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -5336,7 +5328,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-grouped-label {
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-tertiary);
 }
 .an-legend-row {
@@ -5351,7 +5343,7 @@ th.frozen-col.frozen-col-edge {
   align-items: center;
   gap: 6px;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .an-legend-swatch {
@@ -5390,12 +5382,12 @@ th.frozen-col.frozen-col-edge {
 }
 .an-donut-center .val {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .an-donut-center .lbl {
   font-size: 9.5px;
   color: var(--text-tertiary);
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
 }
 .an-donut-legend {
@@ -5414,7 +5406,7 @@ th.frozen-col.frozen-col-edge {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .an-donut-legend-dot {
@@ -5424,7 +5416,7 @@ th.frozen-col.frozen-col-edge {
   flex-shrink: 0;
 }
 .an-donut-legend-val {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -5442,7 +5434,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-hbar-name {
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -5455,7 +5447,7 @@ th.frozen-col.frozen-col-edge {
   background: var(--bg-subtle);
   color: var(--text-tertiary);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -5463,7 +5455,7 @@ th.frozen-col.frozen-col-edge {
 }
 .an-hbar-val {
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .an-hbar-track {
@@ -5489,7 +5481,7 @@ table.an-detail-table {
 table.an-detail-table th {
   text-align: left;
   font-size: 10.5px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: var(--text-tertiary);
@@ -5508,7 +5500,7 @@ table.an-detail-table tr:last-child td {
   border-bottom: none;
 }
 table.an-detail-table .an-client-name {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 table.an-detail-table td.center {

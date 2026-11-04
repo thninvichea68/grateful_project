@@ -10,7 +10,7 @@ export function FullPageLoader({ label = 'Loading your workspace…' }: { label?
         minHeight: '100vh',
         color: 'var(--text-secondary)',
         fontSize: 13,
-        fontWeight: 700,
+        fontWeight: 600,
       }}
     >
       {label}

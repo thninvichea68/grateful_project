@@ -231,12 +231,12 @@ export function CutStockItemModal({
                       <Link
                         to={`/plans/${m.shipmentId}`}
                         onClick={onClose}
-                        style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+                        style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
                       >
                         {m.shipmentReference}
                       </Link>
                     </td>
-                    <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>
                       {fmtNum(m.qty)} {d.unit}
                     </td>
                     <td style={{ fontSize: 12 }}>

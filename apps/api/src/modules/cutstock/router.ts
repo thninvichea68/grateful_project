@@ -27,6 +27,19 @@ cutStockRouter.get('/', requirePermission('cutstock:read'), async (req, res) => 
   res.json(await svc.listCutStock(q));
 });
 
+// A column's values for its header filter, under the list's other filters.
+cutStockRouter.get('/values', requirePermission('cutstock:read'), async (req, res) => {
+  const {
+    column,
+    page: _p,
+    pageSize: _s,
+    sort: _o,
+    ...q
+  } = parse(cutStockListQuerySchema.extend({ column: z.string().max(40) }), req.query);
+  assertClientVisible(req, q.clientId, 'Client', 'cutstock');
+  res.json(await svc.listCutStockColumnValues(column, q));
+});
+
 /** Item picker for CDC lines (any role that can edit shipments). */
 cutStockRouter.get('/options', requirePermission('shipments:read'), async (req, res) => {
   const { clientId, q } = parse(

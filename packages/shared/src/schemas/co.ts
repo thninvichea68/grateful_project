@@ -12,8 +12,8 @@ export type CoStatus = (typeof CO_STATUSES)[number];
 export const CO_STATUS_LABEL: Record<CoStatus, string> = {
   PENDING: 'Pending',
   DRAFT: 'Draft',
-  SUBMIT: 'Submit',
-  APPROVE: 'Approve',
+  SUBMIT: 'Submitted',
+  APPROVE: 'Approved',
 };
 
 const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM');

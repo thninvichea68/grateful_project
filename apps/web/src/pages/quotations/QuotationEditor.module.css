@@ -26,7 +26,7 @@
 .sectionHead h4 {
   margin: 0;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .sectionHead p {
@@ -108,7 +108,7 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-subtle);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.4px;
   text-align: left;
   text-transform: uppercase;
@@ -199,7 +199,7 @@
   background: transparent;
   font-family: var(--font-main);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent-primary);
   cursor: pointer;
 }

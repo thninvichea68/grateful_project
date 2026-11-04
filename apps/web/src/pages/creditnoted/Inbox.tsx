@@ -45,7 +45,7 @@ export function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 }
 
-/** Toolbar button that switches the Credit Noted table to the inbox (with the unread count). */
+/** Toolbar button that switches the Credit Note table to the inbox (with the unread count). */
 export function InboxToggle({ active, onClick }: { active: boolean; onClick: () => void }) {
   const inbox = useCreditNoteInbox();
   const unread = inbox.data?.unread ?? 0;
@@ -140,9 +140,8 @@ export function InboxTable({ search }: { search?: string | undefined }) {
               </td>
               <td>
                 {m.direction && (
-                  <span className={t.type}>
-                    <i className={m.direction === 'IMPORT' ? t.imp : t.exp} />
-                    {m.direction === 'IMPORT' ? 'Import' : 'Export'}
+                  <span className={`${t.type} ${m.direction === 'IMPORT' ? t.imp : t.exp}`}>
+                    {m.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                   </span>
                 )}
               </td>

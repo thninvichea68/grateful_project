@@ -238,9 +238,8 @@ export function ExpenseToClients() {
                     <span className={s.client}>{r.clientName.toUpperCase()}</span>
                   </td>
                   <td>
-                    <span className={s.type}>
-                      <i className={r.direction === 'IMPORT' ? s.imp : s.exp} />
-                      {r.direction === 'IMPORT' ? 'Import' : 'Export'}
+                    <span className={`${s.type} ${r.direction === 'IMPORT' ? s.imp : s.exp}`}>
+                      {r.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                     </span>
                   </td>
                   <td className={s.mono}>{r.declareNo ?? '-'}</td>

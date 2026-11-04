@@ -5,7 +5,7 @@ import { creditNoteHeader, pricedLines } from '../print/PrintDocPage';
 import { addPrintFonts } from '../print/printFonts';
 
 /*
- * Print, PDF and Excel for a Credit Noted, built from what is on screen (the live preview),
+ * Print, PDF and Excel for a Credit Note, built from what is on screen (the live preview),
  * so a draft can be printed or exported as it stands.
  */
 
@@ -181,7 +181,7 @@ function addCreditNoteSheet(
   // Title
   ws.mergeCells(r, 1, r, 8);
   Object.assign(ws.getCell(r, 1), {
-    value: 'CREDIT NOTED',
+    value: 'CREDIT NOTE',
     font: font({ size: 16, bold: true, underline: true }),
     alignment: { horizontal: 'center', vertical: 'middle' },
   });

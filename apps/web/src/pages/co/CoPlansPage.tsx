@@ -3,7 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CO_STATUS_LABEL, CO_STATUSES, type CoRow, type CoStatus } from '@gs/shared';
 import { useLookups } from '../../features/hooks';
 import { useCoList } from '../../features/co';
+import { HeaderFilter } from '../../components/HeaderFilter';
 import { TableState, ui } from '../../components/ui';
+import { useLocalHeaderFilters, type LocalColumn } from '../../components/useLocalHeaderFilters';
 import { Pill } from '../../components/StatusPill';
 import { icons } from '../../layout/icons';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
@@ -20,6 +22,38 @@ const TONE: Record<CoStatus, 'neutral' | 'pending' | 'progress' | 'completed'> =
 };
 /** "2026-07" → "07-2026", as the CO RECORD sheet shows the month. */
 export const sheetMonth = (m: string) => `${m.slice(5, 7)}-${m.slice(0, 4)}`;
+
+const asDate = { kind: 'date', format: fmtDate } as const;
+const asCount = { kind: 'number', align: 'right', format: (v: string) => fmtNum(v, 0) } as const;
+/** The table's columns, with what each one's header filter keeps. */
+const FILTER_COLS: LocalColumn<CoRow>[] = [
+  { key: 'month', label: 'Month', kind: 'date', format: sheetMonth, value: (r) => r.month },
+  { key: 'form', label: 'Form', value: (r) => r.form },
+  { key: 'mode', label: 'Mode', value: (r) => r.mode },
+  { key: 'country', label: 'Country', value: (r) => r.country },
+  // As the cell shows it: the invoice's own CO no., else the shipment's (in grey).
+  { key: 'coNo', label: 'CO No.', value: (r) => r.coNo ?? r.shipmentCoNo },
+  { key: 'coDate', label: 'Date CO', ...asDate, value: (r) => r.coDate },
+  { key: 'invoiceNo', label: 'Inv No.', value: (r) => r.invoiceNo },
+  { key: 'invoiceDate', label: 'Date Inv', ...asDate, value: (r) => r.invoiceDate },
+  { key: 'pcs', label: 'PCS', ...asCount, value: (r) => String(r.pcs) },
+  { key: 'ctns', label: 'CNTS', ...asCount, value: (r) => String(r.ctns) },
+  {
+    key: 'amount',
+    label: 'Amount',
+    kind: 'number',
+    align: 'right',
+    format: fmtMoney,
+    value: (r) => String(r.amount),
+  },
+  { key: 'atd', label: 'ATD Date', ...asDate, value: (r) => r.atd },
+  {
+    key: 'status',
+    label: 'Status',
+    format: (v) => CO_STATUS_LABEL[v as CoStatus] ?? v,
+    value: (r) => r.status,
+  },
+];
 
 export function CoStatusPill({ status }: { status: CoStatus }) {
   return <Pill tone={TONE[status]}>{CO_STATUS_LABEL[status]}</Pill>;
@@ -55,7 +89,10 @@ export function CoPlansPage() {
     status: status || undefined,
     all: all || undefined,
   });
-  const rows = useMemo(() => list.data ?? [], [list.data]);
+  const loaded = useMemo(() => list.data ?? [], [list.data]);
+  const header = useLocalHeaderFilters(loaded, FILTER_COLS, params, setParams);
+  // The totals and the Excel export follow the header filters.
+  const rows = header.rows;
   const totals = useMemo(
     () =>
       rows.reduce(
@@ -149,19 +186,11 @@ export function CoPlansPage() {
           <table className="data-table-clean seal-plan-table co-plan-table">
             <thead>
               <tr>
-                <th>Month</th>
-                <th>Form</th>
-                <th>Mode</th>
-                <th>Country</th>
-                <th>CO No.</th>
-                <th>Date CO</th>
-                <th>Inv No.</th>
-                <th>Date Inv</th>
-                <th className="num">PCS</th>
-                <th className="num">CNTS</th>
-                <th className="num">Amount</th>
-                <th>ATD Date</th>
-                <th>Status</th>
+                {FILTER_COLS.map((c) => (
+                  <th key={c.key} className={c.align ? 'num' : undefined}>
+                    <HeaderFilter {...header.headProps(c)} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -171,9 +200,11 @@ export function CoPlansPage() {
                 error={list.error}
                 empty={rows.length === 0}
                 emptyText={
-                  all
-                    ? 'No export invoices dated in these months.'
-                    : 'No export invoices with a CO form in these months. Tick “All export invoices” to see the rest.'
+                  header.active
+                    ? 'No invoices match these filters.'
+                    : all
+                      ? 'No export invoices dated in these months.'
+                      : 'No export invoices with a CO form in these months. Tick “All export invoices” to see the rest.'
                 }
               />
               {rows.map((r) => (

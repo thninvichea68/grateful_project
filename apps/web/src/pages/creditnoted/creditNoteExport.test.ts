@@ -21,7 +21,7 @@ const doc = {
     shipper: 'JR APPAREL',
     containerNo: "TCLU1700780 (1X20'GP)",
     declareNo: 'I 95116',
-    refType: 'HOUSE_BILL',
+    refType: 'BILL_NO',
     refNo: 'HIP26932472',
     grossWeightKg: '2380.67',
     cbm: '24.237',
@@ -51,7 +51,7 @@ const doc = {
   totals: { subtotal: '156.00', vat: '0', total: '156.00' },
 } as unknown as BillingDoc;
 
-describe('Credit Noted Excel export', () => {
+describe('Credit Note Excel export', () => {
   it('names the file after the house bill', () => {
     expect(creditNoteFileName(doc)).toBe('CreditNote_HIP26932472');
     expect(creditNoteFileName({ ...doc, header: {} } as BillingDoc)).toBe('CreditNote_CN26-001');
@@ -70,7 +70,7 @@ describe('Credit Noted Excel export', () => {
     );
     const ws = wb.getWorksheet('Credit Note')!;
 
-    expect(ws.getCell('A1').value).toBe('CREDIT NOTED');
+    expect(ws.getCell('A1').value).toBe('CREDIT NOTE');
     expect(ws.getCell('B3').value).toBe('GRATEFUL SOLUTIONS (CAMBODIA) CO., LTD.');
     expect(ws.getCell('B6').value).toBe('SIHANOUKVILLE');
     // The address breaks after "Tuol Sangke II", like the sample sheet; the house bill
@@ -83,7 +83,7 @@ describe('Credit Noted Excel export', () => {
     expect(ws.getCell('E4').alignment).toMatchObject({ vertical: 'middle' });
     expect(ws.getCell('F4').alignment).toMatchObject({ vertical: 'middle' });
     expect(ws.getCell('E3').alignment).toMatchObject({ vertical: 'top' });
-    expect(ws.getCell('E4').value).toBe('HOUSE BILL:');
+    expect(ws.getCell('E4').value).toBe('BL NO:');
     expect(ws.getCell('F5').value).toBe('12-Oct-2026');
     expect(ws.getCell('F7').value).toBe('2,380.67 KGS');
 
@@ -143,6 +143,6 @@ describe('Credit Noted Excel export', () => {
       'CN26-003 KHS2609038',
       'CN26-001 I 95116 2',
     ]);
-    expect(wb.getWorksheet('CN26-002 E 41101')!.getCell('A1').value).toBe('CREDIT NOTED');
+    expect(wb.getWorksheet('CN26-002 E 41101')!.getCell('A1').value).toBe('CREDIT NOTE');
   });
 });

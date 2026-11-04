@@ -100,7 +100,7 @@ export const DOC_CONFIG: Record<
   'credit-notes': {
     numberField: 'cnNo',
     dateField: 'cnDate',
-    title: 'Credit Noted',
+    title: 'Credit Note',
     tax: false,
     khr: false,
     fields: [
@@ -117,9 +117,8 @@ export const DOC_CONFIG: Record<
         label: 'Ref type',
         type: 'select',
         options: () => [
-          { value: 'HOUSE_BILL', label: 'House bill' },
-          { value: 'BILL_NO', label: 'Bill no.' },
-          { value: 'HAWB_NO', label: 'HAWB no.' },
+          { value: 'BILL_NO', label: 'BL No.' },
+          { value: 'HAWB_NO', label: 'HAWB No.' },
         ],
       },
       { name: 'refNo', label: 'Ref number' },
@@ -173,7 +172,16 @@ export const DOC_CONFIG: Record<
       },
       { name: 'portId', label: 'Port', type: 'select', options: ports },
       { name: 'quantityText', label: 'Quantity' },
-      { name: 'blNo', label: 'BL No.' },
+      {
+        name: 'refType',
+        label: 'Ref type',
+        type: 'select',
+        options: () => [
+          { value: 'BILL_NO', label: 'BL No.' },
+          { value: 'HAWB_NO', label: 'HAWB No.' },
+        ],
+      },
+      { name: 'blNo', label: 'BL / HAWB No.' },
       { name: 'containerNo', label: 'Container No.' },
       {
         name: 'containerSize',

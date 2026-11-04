@@ -17,7 +17,7 @@ const KIND: Record<SearchHitKind, { label: string; icon: IconName }> = {
   'tax-invoice': { label: 'Tax Invoice', icon: 'accounting' },
   disbursement: { label: 'Disbursement', icon: 'accounting' },
   'debit-note': { label: 'Debit Note', icon: 'accounting' },
-  'credit-note': { label: 'Credit Noted', icon: 'creditnote' },
+  'credit-note': { label: 'Credit Note', icon: 'creditnote' },
   'record-summary': { label: 'Record Summary', icon: 'recordsummary' },
   quotation: { label: 'Quotation', icon: 'quotations' },
 };

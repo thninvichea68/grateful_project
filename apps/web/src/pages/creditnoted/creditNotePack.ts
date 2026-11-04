@@ -1,7 +1,7 @@
 import type { BillingDoc, CreditNoteReviewRow, Paginated } from '@gs/shared';
 import { api } from '../../lib/api';
 
-/** The Credit Noted list's filters (URL params), as the PDF and Excel packs take them. */
+/** The Credit Note list's filters (URL params), as the PDF and Excel packs take them. */
 export const PACK_FILTERS = ['status', 'clientId', 'direction', 'month', 'year', 'q'] as const;
 export type PackFilters = Partial<Record<(typeof PACK_FILTERS)[number], string>>;
 

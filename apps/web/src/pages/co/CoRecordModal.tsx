@@ -90,7 +90,7 @@ export function CoRecordModal({ row, onClose }: { row: CoRow; onClose: () => voi
           <Link
             to={`/plans/${row.shipmentId}`}
             onClick={onClose}
-            style={{ color: 'var(--accent-primary)', fontWeight: 700 }}
+            style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
           >
             {row.reference}
           </Link>{' '}

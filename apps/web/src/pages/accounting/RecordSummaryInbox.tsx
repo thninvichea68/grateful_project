@@ -36,7 +36,7 @@ export function RecordSummaryInboxToggle({
 }
 
 /**
- * Accounting's Expense to Clients "Revise" messages as table rows, as in the Credit Noted
+ * Accounting's Expense to Clients "Revise" messages as table rows, as in the Credit Note
  * inbox (approvals need no action, so they are not sent). Accepting one opens the summary so
  * Operations can update it.
  */
@@ -114,9 +114,8 @@ export function RecordSummaryInboxTable({
                 <span className={t.client}>{m.clientName.toUpperCase()}</span>
               </td>
               <td>
-                <span className={t.type}>
-                  <i className={m.direction === 'IMPORT' ? t.imp : t.exp} />
-                  {m.direction === 'IMPORT' ? 'Import' : 'Export'}
+                <span className={`${t.type} ${m.direction === 'IMPORT' ? t.imp : t.exp}`}>
+                  {m.direction === 'IMPORT' ? 'IMPORT' : 'EXPORT'}
                 </span>
               </td>
               <td className={t.mono}>{m.declareNo ?? '-'}</td>

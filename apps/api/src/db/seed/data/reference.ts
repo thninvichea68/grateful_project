@@ -204,7 +204,19 @@ export const VESSELS = [
 
 export const LOOKUPS: Record<string, string[]> = {
   QUANTITY_UNIT: ['ROLLS', 'PKGS', 'CTNS', 'PCS', 'SETS', 'PALLETS', 'BALES'],
-  MATERIAL: ['Fabric', 'Trims & Accessories', 'Machinery', 'Packing Material', 'Garments'],
+  // Import / export types; users add their own from the shipment form ("+ Add new…").
+  MATERIAL: [
+    'Garments & Apparel',
+    'Footwear',
+    'Textiles & Fabrics',
+    'Vehicles & Automotive',
+    'Machinery & Equipment',
+    'Electronics & Electrical Goods',
+    'Food & Beverages',
+    'Agricultural Products',
+    'Chemicals',
+    'Pharmaceuticals & Medical Supplies',
+  ],
   // The MoC CO system's form list, by code (shown as "Form AB"; CRF is the CO Reference Form).
   CO_FORM: [
     'A',

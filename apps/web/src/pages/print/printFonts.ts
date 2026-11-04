@@ -9,7 +9,7 @@ const KHMER = 'U+1780-17FF, U+19E0-19FF, U+200B-200D, U+25CC';
 
 /**
  * Registers the faces in a document. Script-added fonts aren't in the page's stylesheets, so
- * a print frame (Credit Noted / Record Summary "Print" and "PDF File") needs its own copy.
+ * a print frame (Credit Note / Record Summary "Print" and "PDF File") needs its own copy.
  */
 export function addPrintFonts(doc: Document): FontFace[] {
   const win = doc.defaultView as (Window & typeof globalThis) | null;

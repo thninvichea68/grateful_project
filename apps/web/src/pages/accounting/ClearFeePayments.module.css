@@ -35,7 +35,7 @@
   transform: rotate(90deg);
 }
 .title {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .figures {
@@ -51,7 +51,7 @@
 .balance {
   padding: 3px 10px;
   border-radius: 8px;
-  font-weight: 700;
+  font-weight: 600;
   background: var(--bg-subtle);
 }
 .balance[data-tone='due'] {

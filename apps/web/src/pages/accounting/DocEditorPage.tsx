@@ -144,7 +144,7 @@ function Loader({
 
 /**
  * The form resolver for documents with a standard list of items to price (Record Summary,
- * Credit Noted): an empty price is saved as 0, so the line stays in the editor but off the
+ * Credit Note): an empty price is saved as 0, so the line stays in the editor but off the
  * sheet until priced (see pricedLines).
  */
 export function priceOrZeroResolver(type: BillingDocType) {

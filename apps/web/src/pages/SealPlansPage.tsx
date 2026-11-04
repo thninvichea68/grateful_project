@@ -1,8 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
+import type { SealPlanRow } from '@gs/shared';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useLookups, useSealPlans } from '../features/hooks';
+import { HeaderFilter } from '../components/HeaderFilter';
 import { TableState, ui } from '../components/ui';
+import { useLocalHeaderFilters, type LocalColumn } from '../components/useLocalHeaderFilters';
 import { SearchBox } from '../components/SearchBox';
 import { fmtDate } from '../lib/format';
 import { NewSealPlanModal } from './sealplans/NewSealPlanModal';
@@ -12,6 +15,38 @@ import { fmtTare, groupByMonth, monthHeading, MONTHS } from './sealplans/sealPla
 
 const COLS = 21;
 const dash = (v: string | null) => v || '-';
+const asDate = { kind: 'date', format: fmtDate } as const;
+
+/** The columns after No., with what each one's header filter keeps. */
+const FILTER_COLS: LocalColumn<SealPlanRow>[] = [
+  { key: 'invNo', label: 'GS Inv No.', value: (r) => r.invNo },
+  { key: 'client', label: 'Client', value: (r) => r.clientCode },
+  { key: 'carrier', label: 'Carrier', value: (r) => r.carrier },
+  { key: 'bookingNo', label: 'SO No.', value: (r) => r.bookingNo },
+  { key: 'port', label: 'Port', value: (r) => r.portName },
+  { key: 'destination', label: 'Destination', value: (r) => r.destination ?? r.destinationCountry },
+  { key: 'containerNo', label: 'Container No.', value: (r) => r.containerNo },
+  { key: 'size', label: 'Size', value: (r) => r.size },
+  { key: 'linerSeal', label: 'Carrier Seal', value: (r) => r.linerSeal },
+  { key: 'customsSeal', label: 'Customs Seal', value: (r) => r.customsSeal },
+  { key: 'vessel', label: 'Vessel', value: (r) => r.vesselName },
+  {
+    key: 'tare',
+    label: 'Tare Weight',
+    kind: 'number',
+    align: 'right',
+    format: fmtTare,
+    value: (r) => r.tareWeightKg,
+  },
+  { key: 'etd', label: 'ETD', ...asDate, value: (r) => r.etd },
+  { key: 'truckBy', label: 'Truck By', value: (r) => r.truckBy },
+  { key: 'driverPhone', label: 'Driver Phone', value: (r) => r.driverPhone },
+  { key: 'truckNo', label: 'Truck No.', value: (r) => r.truckNo },
+  { key: 'deliverTo', label: 'Deliver To', value: (r) => r.deliverTo },
+  { key: 'loadingDate', label: 'Date', ...asDate, value: (r) => r.loadingDate },
+  { key: 'depot', label: 'Depot', value: (r) => r.depot },
+  { key: 'other', label: 'Other', value: (r) => r.other },
+];
 
 /**
  * Seal Plan — container shipment schedule: every container of an export shipment, by the month
@@ -43,10 +78,18 @@ export function SealPlansPage() {
     setParams(next, { replace: true });
   };
 
-  const groups = useMemo(() => groupByMonth(list.data ?? []), [list.data]);
+  const all = useMemo(() => list.data ?? [], [list.data]);
+  const header = useLocalHeaderFilters(all, FILTER_COLS, params, setParams);
+  // Sorted within each month: the months keep the list's order.
+  const groups = useMemo(() => {
+    const order = new Map<string, number>();
+    for (const r of all) if (!order.has(r.month)) order.set(r.month, order.size);
+    const byMonth = [...header.rows].sort((a, b) => order.get(a.month)! - order.get(b.month)!);
+    return groupByMonth(byMonth);
+  }, [all, header.rows]);
 
   return (
-    <section className="view active" id="view-sealplans">
+    <section className="view active caps-values caps-heads" id="view-sealplans">
       <div className="card">
         <div className="card-header-row">
           <h3 style={{ margin: 0 }}>Seal Plan — Container Shipment Schedule</h3>
@@ -113,26 +156,11 @@ export function SealPlansPage() {
             <thead>
               <tr>
                 <th>No.</th>
-                <th>GS Inv No.</th>
-                <th>Client</th>
-                <th>Carrier</th>
-                <th>SO No.</th>
-                <th>Port</th>
-                <th>Destination</th>
-                <th>Container No.</th>
-                <th>Size</th>
-                <th>Carrier Seal</th>
-                <th>Customs Seal</th>
-                <th>Vessel</th>
-                <th style={{ textAlign: 'right' }}>Tare Weight</th>
-                <th>ETD</th>
-                <th>Truck By</th>
-                <th>Driver Phone</th>
-                <th>Truck No.</th>
-                <th>Deliver To</th>
-                <th>Date</th>
-                <th>Depot</th>
-                <th>Other</th>
+                {FILTER_COLS.map((c) => (
+                  <th key={c.key} style={c.align ? { textAlign: c.align } : undefined}>
+                    <HeaderFilter {...header.headProps(c)} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -140,9 +168,9 @@ export function SealPlansPage() {
                 cols={COLS}
                 loading={list.isLoading}
                 error={list.error}
-                empty={list.data?.length === 0}
+                empty={!!list.data && groups.length === 0}
                 emptyText={
-                  q || clientId || month
+                  q || clientId || month || header.active
                     ? 'No containers match these filters.'
                     : `No seal plans in ${year} yet. Containers of export CY/CY Shipping Plans appear here; “+ New Seal Plan” adds one.`
                 }
