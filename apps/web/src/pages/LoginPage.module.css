@@ -1,6 +1,6 @@
 /*
- * Sign-in page: the port photo full screen, the logo top left, a plain white card in the
- * middle and the headline + copyright bottom left.
+ * Sign-in page: the port photo full screen, a plain white card in the middle with the logo
+ * centered at its top, and the headline + copyright bottom left.
  * The page keeps its own light palette whatever the app theme is.
  */
 .page {
@@ -18,7 +18,7 @@
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 120px 24px;
+  padding: 48px 24px 120px;
   color-scheme: light;
   background:
     linear-gradient(rgba(8, 20, 36, 0.55), rgba(8, 20, 36, 0.55)),
@@ -26,11 +26,10 @@
 }
 
 .logo {
-  position: absolute;
-  top: 32px;
-  left: 40px;
-  height: 84px;
+  display: block;
+  height: 72px;
   width: auto;
+  margin: 0 auto 24px;
 }
 
 .panel {
@@ -224,13 +223,10 @@
 
 @media (max-width: 560px) {
   .page {
-    padding: 112px 16px 72px;
+    padding: 32px 16px 72px;
   }
   .logo {
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 52px;
+    height: 56px;
   }
   .panel {
     padding: 28px 22px 24px;

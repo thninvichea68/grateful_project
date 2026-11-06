@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import 'country-flag-icons/3x2/flags.css';
+import '../styles/flags.css';
 import s from './CountrySelect.module.css';
 
 export interface CountryOption {

@@ -126,6 +126,11 @@ documentsRouter.get('/', requirePermission('documents:read'), async (req, res) =
   if (q.clientId) c.push(sql`d.client_id = ${q.clientId}`);
   if (q.creditNoteId) c.push(sql`d.credit_note_id = ${q.creditNoteId}`);
   if (q.recordSummaryId) c.push(sql`d.record_summary_id = ${q.recordSummaryId}`);
+  if (q.attachedTo === 'client')
+    c.push(
+      sql`d.client_id IS NOT NULL AND d.shipment_id IS NULL AND d.credit_note_id IS NULL AND d.record_summary_id IS NULL`,
+    );
+  if (q.attachedTo === 'company') c.push(sql`d.company`);
   const scoped = clientCondition(DOC_CLIENT, scopeClients(req));
   if (scoped) c.push(scoped);
   if (q.q) {

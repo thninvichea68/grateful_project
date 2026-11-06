@@ -1,0 +1,116 @@
+/* Client Details sidebar: the client's attachments, one compact row each. */
+.count {
+  margin-left: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+.muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-elevated);
+  transition: border-color 0.15s;
+}
+.row:hover {
+  border-color: var(--border-strong);
+}
+.item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-family: var(--font-main);
+  text-align: left;
+  cursor: pointer;
+}
+.item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.text b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item:hover .text b {
+  color: var(--accent-primary);
+}
+.text small {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.download {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.download:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.more {
+  display: block;
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.more:hover {
+  text-decoration: underline;
+}

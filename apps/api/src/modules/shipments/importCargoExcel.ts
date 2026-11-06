@@ -15,6 +15,7 @@ type Field =
   | 'invoiceNo'
   | 'invoiceDate'
   | 'description'
+  | 'ctns'
   | 'pcs'
   | 'unit'
   | 'netWeightKg'
@@ -45,6 +46,13 @@ const COLUMNS: { field: Field; header: string; width: number; note: string; matc
     match: ['item name', 'description'],
   },
   {
+    field: 'ctns',
+    header: 'PKGS',
+    width: 9,
+    note: 'Number of packages (in the shipment’s Quantity Pkgs unit, e.g. CTNS, ROLLS).',
+    match: ['pkg', 'pkgs', 'packages', 'ctns', 'quantity pkgs'],
+  },
+  {
     field: 'pcs',
     header: 'QUANTITY',
     width: 12,
@@ -55,7 +63,7 @@ const COLUMNS: { field: Field; header: string; width: number; note: string; matc
     field: 'unit',
     header: 'CDC UNIT',
     width: 9,
-    note: 'Must be the unit on the CDC master list (SET, MTR, KGS…).',
+    note: 'Filled in from the CDC Master List sheet when you choose the ITEM.',
     match: ['unit'],
   },
   {
@@ -76,7 +84,7 @@ const COLUMNS: { field: Field; header: string; width: number; note: string; matc
     field: 'fobUnitPrice',
     header: 'UNIT PRICE',
     width: 11,
-    note: 'USD per CDC unit. Empty: the master list price.',
+    note: 'USD per CDC unit, filled in from the CDC Master List sheet when you choose the ITEM. Type over it for another price; empty: the master list price.',
     match: ['price', 'unit price (usd)'],
   },
 ];
@@ -113,14 +121,16 @@ async function masterList(clientId: string) {
 function cellText(cell: ExcelJS.Cell): string {
   const v = cell.value;
   if (v === null || v === undefined) return '';
-  if (typeof v === 'object' && 'result' in v)
+  // A formula reads as its saved result; one never calculated (no result saved) reads as empty.
+  if (typeof v === 'object' && ('result' in v || 'formula' in v || 'sharedFormula' in v))
     return String((v as ExcelJS.CellFormulaValue).result ?? '').trim();
   return (cell.text ?? String(v)).trim();
 }
 
 function cellRaw(cell: ExcelJS.Cell): unknown {
   const v = cell.value;
-  if (v && typeof v === 'object' && 'result' in v) return (v as ExcelJS.CellFormulaValue).result;
+  if (v && typeof v === 'object' && ('result' in v || 'formula' in v || 'sharedFormula' in v))
+    return (v as ExcelJS.CellFormulaValue).result;
   return v;
 }
 
@@ -174,12 +184,35 @@ export async function buildImportCargoTemplate(
         error: `This item is not on ${client.code}'s CDC master list.`,
       };
 
+  // CDC UNIT and UNIT PRICE look the chosen ITEM up on the master list sheet, so only the item
+  // is picked; the price can still be typed over. Tinted, as they fill themselves in.
+  if (items.length) {
+    const letter = (f: Field) => ws.getColumn(COLUMNS.findIndex((c) => c.field === f) + 1).letter;
+    const item = letter('description');
+    const last = items.length + 1;
+    const lookup = (r: number, refCol: string) =>
+      `IF($${item}${r}="","",IFERROR(INDEX('CDC Master List'!$${refCol}$2:$${refCol}$${last},` +
+      `MATCH($${item}${r},'CDC Master List'!$A$2:$A$${last},0)),""))`;
+    const auto: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF6FF' } };
+    for (let r = 2; r <= 500; r++)
+      for (const [f, refCol] of [
+        ['unit', 'B'],
+        ['fobUnitPrice', 'E'],
+      ] as const) {
+        const c = ws.getCell(`${letter(f)}${r}`);
+        c.value = { formula: lookup(r, refCol) } as ExcelJS.CellFormulaValue;
+        c.fill = auto;
+      }
+    // Excel works the formulas out when the file is opened (ExcelJS saves no results).
+    wb.calcProperties = { fullCalcOnLoad: true };
+  }
+
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());
   return { buffer, fileName: `${client.code} Import Invoice Template.xlsx` };
 }
 
 /**
- * Reads an import workbook (INV, DATE, ITEM, QUANTITY, CDC UNIT, NW.KGS, GW.KGS, UNIT PRICE)
+ * Reads an import workbook (INV, DATE, ITEM, PKGS, QUANTITY, CDC UNIT, NW.KGS, GW.KGS, UNIT PRICE)
  * into invoices. Blank INV cells continue the invoice above. Each ITEM must be on the client's
  * CDC master list with the same CDC UNIT; its CDC no. and material come from there. When any
  * row does not match, nothing is returned and `errors` lists every such row.
@@ -224,7 +257,10 @@ export async function parseImportCargoWorkbook(
     return empty(
       `No header row found. Use the import template columns: ${COLUMNS.map((c) => c.header).join(', ')}.`,
     );
-  const missing = COLUMNS.filter((c) => !columns.has(c.field)).map((c) => c.header);
+  // PKGS came later: a sheet without it still reads, with no packages on its items.
+  const missing = COLUMNS.filter((c) => c.field !== 'ctns' && !columns.has(c.field)).map(
+    (c) => c.header,
+  );
   if (missing.length)
     return empty(
       `The sheet is missing ${missing.join(', ')}. Use the import template columns: ${COLUMNS.map((c) => c.header).join(', ')}.`,
@@ -257,7 +293,7 @@ export async function parseImportCargoWorkbook(
       }
       return String(Number(n.toFixed(decimals)));
     };
-    const lineFields: Field[] = ['description', 'pcs', 'netWeightKg', 'grossWeightKg'];
+    const lineFields: Field[] = ['description', 'ctns', 'pcs', 'netWeightKg', 'grossWeightKg'];
     if (!lineFields.some((f) => text(f)) && !text('invoiceNo')) continue; // blank row
     rowsRead++;
 
@@ -287,12 +323,11 @@ export async function parseImportCargoWorkbook(
     if (!name) errors.push({ row: r, message: 'ITEM is empty.' });
     else if (!item)
       errors.push({ row: r, message: `"${name}" is not on ${client.code}'s CDC master list.` });
-    else if (unit !== item.unit.toUpperCase())
+    // An empty CDC UNIT (e.g. its formula never worked out) takes the master list's unit.
+    else if (unit && unit !== item.unit.toUpperCase())
       errors.push({
         row: r,
-        message: unit
-          ? `"${item.name}" is counted in ${item.unit} on the CDC master list, not ${unit}.`
-          : `CDC UNIT is empty; "${item.name}" is counted in ${item.unit}.`,
+        message: `"${item.name}" is counted in ${item.unit} on the CDC master list, not ${unit}.`,
       });
     const pcs = num('pcs', 3, 'QUANTITY');
     if (!pcs || Number(pcs) === 0) errors.push({ row: r, message: 'QUANTITY is empty or 0.' });
@@ -302,6 +337,7 @@ export async function parseImportCargoWorkbook(
       description: item.name,
       material: materialOf(item.category),
       unit: item.unit,
+      ctns: num('ctns', 0, 'PKGS') ?? '',
       pcs: pcs ?? '0',
       netWeightKg: num('netWeightKg', 3, 'NW.KGS') ?? '0',
       grossWeightKg: num('grossWeightKg', 3, 'GW.KGS') ?? '0',

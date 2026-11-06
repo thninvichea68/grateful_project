@@ -1,4 +1,13 @@
-import { pgTable, text, uuid, bigint, index, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  uuid,
+  bigint,
+  boolean,
+  index,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   id,
@@ -35,6 +44,8 @@ export const documents = pgTable(
     recordSummaryId: uuid('record_summary_id').references(() => recordSummaries.id, {
       onDelete: 'set null',
     }),
+    /** Grateful's own files (Settings → Workspace & company → Attachments). */
+    company: boolean('company').notNull().default(false),
     uploadedById: uuid('uploaded_by_id').references(() => users.id, { onDelete: 'set null' }),
     ...timestamps,
     ...softDelete,

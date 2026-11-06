@@ -544,6 +544,33 @@ describe('documents', () => {
     // The library's own limit (20 MB) still applies to files not linked to a shipment.
     expect((await attach(big)).status).toBe(201);
   });
+
+  it("lists a client's own attachments and the company's apart from support documents", async () => {
+    const h = await as('OPERATOR');
+    const pdf = Buffer.from('%PDF-1.4\n');
+    const shipment = await api('post', '/shipments')
+      .set(h)
+      .send({ clientId: b.jr.id, direction: 'IMPORT', transportMode: 'SEA', loadType: 'LCL' });
+    const post = (fields: Record<string, string>) => {
+      const req = api('post', '/documents').set(h);
+      for (const [k, v] of Object.entries(fields)) void req.field(k, v);
+      return req.attach('file', pdf, { filename: 'f.pdf', contentType: 'application/pdf' });
+    };
+    expect((await post({ title: 'Client licence', clientId: b.jr.id })).status).toBe(201);
+    expect(
+      (await post({ title: 'Shipment BL', clientId: b.jr.id, shipmentId: shipment.body.id }))
+        .status,
+    ).toBe(201);
+    expect((await post({ title: 'Patent certificate', company: 'true' })).status).toBe(201);
+    expect((await post({ title: 'Loose file' })).status).toBe(201);
+
+    const titles = async (q: Record<string, string>) =>
+      ((await api('get', '/documents').query(q).set(h)).body.data as { title: string }[]).map(
+        (d) => d.title,
+      );
+    expect(await titles({ attachedTo: 'client', clientId: b.jr.id })).toEqual(['Client licence']);
+    expect(await titles({ attachedTo: 'company' })).toEqual(['Patent certificate']);
+  });
 });
 
 describe('quotations', () => {

@@ -49,6 +49,10 @@
     transform 0.12s ease,
     visibility 0s 0.12s;
 }
+.wrap[data-align='end'] .tip {
+  left: auto;
+  right: -8px;
+}
 .wrap:hover .tip,
 .icon:focus-visible + .tip {
   opacity: 1;

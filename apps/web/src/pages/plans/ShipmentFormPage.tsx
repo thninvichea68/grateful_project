@@ -13,6 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
   CLEARANCE_STATUS_LABEL,
+  clearanceStatusFor,
   clearanceStatusOf,
   COMPLETION_MILESTONE_LABEL,
   CONTAINER_SIZES,
@@ -55,16 +56,20 @@ import {
   DEFAULT_BROKER,
   emptyForm,
   fromDetail,
+  toNum,
   type FormValues,
 } from './formModel';
 import f from './ShipmentForm.module.css';
-import { FIELD_ICON, fi, type FormIcon } from './formIcons';
+import { fi, type FormIcon } from './formIcons';
 
 interface Step {
   label: string;
   /** Top-level form fields shown in this step (used to jump to the first error). */
   fields: (keyof FormValues)[];
-  render: () => ReactNode;
+  /** `general` is the General Information card, for a tab that places it itself. */
+  render: (general: ReactNode) => ReactNode;
+  /** The tab lays out the General Information card itself (an import's first tab). */
+  placesGeneral?: boolean;
 }
 
 type Choice = { value: string; label: string };
@@ -140,9 +145,9 @@ function ShipmentForm({
     handleSubmit,
     formState: { errors, isDirty },
   } = methods;
-  const [direction, transportMode, loadType, clientId, decls] = useWatch({
+  const [direction, transportMode, loadType, clientId, decls, storedClearance] = useWatch({
     control,
-    name: ['direction', 'transportMode', 'loadType', 'clientId', 'declarations'],
+    name: ['direction', 'transportMode', 'loadType', 'clientId', 'declarations', 'clearanceStatus'],
   });
   const [step, setStep] = useState(0);
   const [violations, setViolations] = useState<OverImportViolation[] | null>(null);
@@ -203,8 +208,8 @@ function ShipmentForm({
   }, [clientId, direction, detail, lookups.clients, methods, setValue]);
 
   const steps = useMemo(
-    () => buildSteps(direction, transportMode, lookups, detail),
-    [direction, transportMode, lookups, detail],
+    () => buildSteps(direction, transportMode, lookups, detail, readOnly),
+    [direction, transportMode, lookups, detail, readOnly],
   );
   const current = Math.min(step, steps.length - 1);
   const isLast = current === steps.length - 1;
@@ -295,7 +300,7 @@ function ShipmentForm({
 
   // Worked out from the dates and declarations as they are typed (the server does the same).
   const shipStatus = useLiveShipmentStatus(control, lookups).status;
-  const clearStatus = clearanceStatusOf({ declarations: decls });
+  const clearStatus = clearanceStatusFor({ clearanceStatus: storedClearance, declarations: decls });
   const clientName =
     lookups.clients.find((c) => c.id === clientId)?.name ?? detail?.clientName ?? '';
   const metaParts = [
@@ -306,6 +311,26 @@ function ShipmentForm({
   ].filter(Boolean);
   // Editing an existing record: save from any step. New record: walk the steps, create at the end.
   const canSaveHere = !!detail || isLast;
+
+  // Ctrl+S (⌘S on a Mac) does what the Save button does; when it can't save, it says why
+  // instead of opening the browser's "Save page" dialog.
+  const saveShortcut = useRef<() => void>(() => {});
+  saveShortcut.current = () => {
+    if (!can('shipments:write')) toast('View only: this shipment cannot be changed.');
+    else if (readOnly) toast('Choose Edit in the ⋯ menu to make changes.');
+    else if (!canSaveHere) toast('Fill in each tab; the shipment is created on the last one.');
+    else if (!save.isPending) void submit();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's')
+        return;
+      e.preventDefault();
+      if (!e.repeat) saveShortcut.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const updatedAt =
     detail &&
@@ -425,8 +450,8 @@ function ShipmentForm({
                     : save.isPending
                       ? 'Saving…'
                       : detail
-                        ? 'Save changes'
-                        : 'Create shipment'
+                        ? 'Save changes (Ctrl+S)'
+                        : 'Create shipment (Ctrl+S)'
             }
           >
             {fi.save({})}
@@ -446,9 +471,26 @@ function ShipmentForm({
     </div>
   );
 
+  // The card is half the page wide (Parties sits beside it): the shipment number on its own
+  // row, then two fields a row. Imports and exports alike.
+  const half = true;
+  const referenceField = (
+    <div className="form-field-group" style={spanStyle(half ? 'full' : 2)}>
+      <FieldLabel name="reference" label="Shipment Number" />
+      <input
+        id="f-reference"
+        className={`form-field-box ${f.refBox}`}
+        value={detail?.reference ?? ''}
+        placeholder="Assigned when the shipment is created"
+        readOnly
+        tabIndex={-1}
+      />
+    </div>
+  );
   const generalCard = (
-    <Card title="General Information" icon="idCard">
-      <div className="form-field-group" style={spanStyle(2)}>
+    <Card title="General Information" icon="idCard" cols={half ? 2 : 4}>
+      {half && referenceField}
+      <div className="form-field-group" style={spanStyle(half ? 1 : 2)}>
         <FieldLabel name="clientId" label="Client" />
         <select
           id="f-clientId"
@@ -470,29 +512,19 @@ function ShipmentForm({
             ))}
         </select>
       </div>
-      <div className="form-field-group" style={spanStyle(2)}>
-        <FieldLabel name="reference" label="Shipment Number" />
-        <input
-          id="f-reference"
-          className={`form-field-box ${f.refBox}`}
-          value={detail?.reference ?? ''}
-          placeholder="Assigned when the shipment is created"
-          readOnly
-          tabIndex={-1}
-        />
-      </div>
+      {!half && referenceField}
       <Select
         name="direction"
         label="Shipment Type"
         options={DIRECTIONS}
         onChange={() => setStep(0)}
-        span={2}
+        span={half ? 1 : 2}
       />
       <Select
         name="transportMode"
         label="Freight Method"
         options={FREIGHT}
-        span={2}
+        span={half ? 1 : 2}
         // Switching away from Air: pick CY / CY so Sea and Truck have terms.
         onChange={() => loadType === 'NONE' && setValue('loadType', 'FCL')}
       />
@@ -508,7 +540,12 @@ function ShipmentForm({
         options={INCOTERMS.map((t) => ({ value: t, label: `${t} – ${INCOTERM_LABEL[t]}` }))}
         placeholder="Select incoterm"
       />
-      <Field name="receivedDocumentDate" label="Received Document Date" type="date" span={2} />
+      <Field
+        name="receivedDocumentDate"
+        label="Received Document Date"
+        type="date"
+        span={half ? 1 : 2}
+      />
     </Card>
   );
 
@@ -528,6 +565,7 @@ function ShipmentForm({
           {/* ---------- Header, then where the shipment has got to, then the form's tabs ---------- */}
           {header}
           <Milestones direction={direction} />
+          <CargoQuantityFromInvoices />
           <nav className={f.tabs} role="tablist" aria-label="Form sections">
             {steps.map((s, i) => (
               <button
@@ -552,7 +590,7 @@ function ShipmentForm({
             <div className={f.stack}>
               {/* ---------- General information: client, shipment number and the shipment
                   choices, on the first tab only ---------- */}
-              {current === 0 && generalCard}
+              {current === 0 && !steps[0]!.placesGeneral && generalCard}
 
               <ErrorBanner error={violations ? null : (save.error ?? del.error)} />
               {violations && (
@@ -581,7 +619,7 @@ function ShipmentForm({
                 </div>
               )}
 
-              {steps[current]!.render()}
+              {steps[current]!.render(generalCard)}
             </div>
           </fieldset>
         </form>
@@ -598,20 +636,39 @@ function ShipmentForm({
   );
 }
 
-// By air both directions track the air waybills (MAWB in the booking no., HAWB in the HBL no.).
+// By air both directions track the air waybills (HAWB in the HBL no., MAWB in the booking no.).
 const MILESTONES = {
   IMPORT: ['Received INV & PL', 'HBL', 'ETA Port', 'Clearance', 'Arrive Factory'],
   EXPORT: ['Received INV & PL', 'Booking', 'ETD', 'Clearance', 'Departed'],
-  AIR_IMPORT: ['Received INV & PL', 'MAWB / HAWB', 'ETA Port', 'Clearance', 'Arrive Factory'],
-  AIR_EXPORT: ['Received INV & PL', 'MAWB / HAWB', 'ETD', 'Clearance', 'Departed'],
+  AIR_IMPORT: ['Received INV & PL', 'HAWB / MAWB', 'ETA Port', 'Clearance', 'Arrive Factory'],
+  AIR_EXPORT: ['Received INV & PL', 'HAWB / MAWB', 'ETD', 'Clearance', 'Departed'],
 };
 
 /**
  * The shipment's progress, read from what has been filled in. Import: an invoice no., the HBL
  * no., the ETA Port date, a cleared declaration and the ETA Factory date. Export: an invoice
  * no., the booking / SO no., the ETD, a cleared declaration and the ATD. By air the second is
- * a MAWB or HAWB no. The first one still missing is the current milestone.
+ * a HAWB or MAWB no. The first one still missing is the current milestone.
  */
+/**
+ * A shipment's Cargo Quantity is the Pkgs (an export's CTNS) total of its invoice lines, kept in
+ * step as lines change (on any tab). Until a line has Pkgs the saved quantity stays: most older
+ * imports only have the quantity typed on the shipment.
+ */
+function CargoQuantityFromInvoices() {
+  const { control, getValues, setValue } = useFormContext<FormValues>();
+  const invoices = useWatch({ control, name: 'invoices' });
+  const pkgs = (invoices ?? []).reduce(
+    (n, inv) => n + (inv.lines ?? []).reduce((m, l) => m + toNum(l.ctns), 0),
+    0,
+  );
+  useEffect(() => {
+    if (pkgs <= 0 || toNum(getValues('quantity')) === pkgs) return;
+    setValue('quantity', String(pkgs), { shouldDirty: true, shouldValidate: true });
+  }, [pkgs, getValues, setValue]);
+  return null;
+}
+
 function Milestones({ direction }: { direction: FormValues['direction'] }) {
   const { control } = useFormContext<FormValues>();
   const [invoices, hblNo, eta, arriveFty, bookingNo, etd, atd, declarations, mode] = useWatch({
@@ -674,25 +731,10 @@ const spanStyle = (span?: Span): CSSProperties | undefined =>
   span === 'full' ? { gridColumn: '1 / -1' } : span ? { gridColumn: `span ${span}` } : undefined;
 
 /** Quantity, with its unit (CTNS…) shown as a tag inside the box. */
-function QuantityField() {
-  const unit = useWatch<FormValues, 'quantityUnit'>({ name: 'quantityUnit' });
-  return (
-    <Field
-      name="quantity"
-      label="Quantity"
-      placeholder="0"
-      decimals={3}
-      suffix={unit || undefined}
-    />
-  );
-}
-
-/** A field's label with its icon (FIELD_ICON), in capitals (ShipmentForm.module.css). */
+/** A field's label, in capitals (ShipmentForm.module.css). */
 function FieldLabel({ name, label }: { name: string; label: string }) {
-  const icon = FIELD_ICON[name];
   return (
     <label htmlFor={`f-${name}`} className={f.label}>
-      {icon && fi[icon]({})}
       {label}
     </label>
   );
@@ -707,6 +749,8 @@ function Field({
   decimals,
   suffix,
   rows,
+  hideLabel,
+  readOnly,
 }: {
   name: keyof FormValues;
   label: string;
@@ -719,6 +763,10 @@ function Field({
   suffix?: string;
   /** A text box this many lines tall (e.g. the remark), instead of a one-line field. */
   rows?: number;
+  /** No label above the box (the card title already names it); screen readers still get it. */
+  hideLabel?: boolean;
+  /** Filled in by the form (e.g. Cargo Quantity from the invoices): shown, not typed. */
+  readOnly?: boolean;
 }) {
   const {
     register,
@@ -727,11 +775,12 @@ function Field({
   const err = errors[name] as { message?: string } | undefined;
   return (
     <div className="form-field-group" style={spanStyle(span)}>
-      <FieldLabel name={name} label={label} />
+      {!hideLabel && <FieldLabel name={name} label={label} />}
       <div className={suffix ? f.affix : f.plain}>
         {rows ? (
           <textarea
             id={`f-${name}`}
+            aria-label={hideLabel ? label : undefined}
             rows={rows}
             className={`form-field-box ${f.textarea}`}
             placeholder={placeholder ?? label}
@@ -742,9 +791,11 @@ function Field({
           <NumberInput
             id={`f-${name}`}
             decimals={decimals}
-            className="form-field-box"
+            className={readOnly ? `form-field-box ${f.refBox} ${f.autoBox}` : 'form-field-box'}
             placeholder={placeholder ?? label}
             {...register(name)}
+            readOnly={readOnly}
+            tabIndex={readOnly ? -1 : undefined}
             aria-invalid={!!err}
           />
         ) : (
@@ -766,7 +817,7 @@ function Field({
 }
 
 /** An export's Shipper: the client's legal name in English (an older value stays selectable). */
-function ExportShipperSelect({ lookups }: { lookups: LookupsResponse }) {
+function ExportShipperSelect({ lookups, span = 2 }: { lookups: LookupsResponse; span?: Span }) {
   const [clientId, current] = useWatch<FormValues, ['clientId', 'shipperName']>({
     name: ['clientId', 'shipperName'],
   });
@@ -781,7 +832,7 @@ function ExportShipperSelect({ lookups }: { lookups: LookupsResponse }) {
       label="Shipper"
       options={names.map((v) => ({ value: v, label: v }))}
       placeholder="Select shipper"
-      span={2}
+      span={span}
     />
   );
 }
@@ -790,18 +841,26 @@ function ExportShipperSelect({ lookups }: { lookups: LookupsResponse }) {
  * Broker: us by default, or any broker already used on a shipment; "+ Add New" types another
  * (it is kept as text on the shipment, so it joins the list once saved).
  */
-function BrokerSelect({ lookups }: { lookups: LookupsResponse }) {
+function BrokerSelect({
+  lookups,
+  label = 'Broker',
+  span = 2,
+}: {
+  lookups: LookupsResponse;
+  label?: string;
+  span?: Span;
+}) {
   const { field } = useController<FormValues, 'broker'>({ name: 'broker' });
   const current = field.value ?? '';
   const names = [DEFAULT_BROKER, ...lookups.brokers, ...(current.trim() ? [current] : [])].filter(
     (v, i, all) => all.findIndex((x) => x.toLowerCase() === v.toLowerCase()) === i,
   );
   return (
-    <div className="form-field-group" style={spanStyle(2)}>
-      <FieldLabel name="broker" label="Broker" />
+    <div className="form-field-group" style={spanStyle(span)}>
+      <FieldLabel name="broker" label={label} />
       <AddNewSelect
         id="f-broker"
-        label="Broker"
+        label={label}
         placeholder="Select broker"
         addFirst
         value={field.value}
@@ -869,12 +928,28 @@ function CoFormSelect({ lookups }: { lookups: LookupsResponse }) {
  * for a type not in the list. A plan workbook import fills it with the CDC groups ("RAW
  * MATERIAL, ACCESSORY"), which stays selectable until changed.
  */
+/** What each import / export type covers, shown in brackets in its list (not saved). */
+const MATERIAL_HINT: Record<string, string> = {
+  'Garments & Apparel': 'Clothing, shirts, trousers, jackets, uniforms',
+  Footwear: 'Shoes, sneakers, sandals, boots',
+  'Textiles & Fabrics': 'Fabric, yarn, thread, cotton, polyester',
+  'Vehicles & Automotive': 'Cars, motorbikes, trucks, spare parts',
+  'Machinery & Equipment': 'Industrial machines, sewing machines, tools',
+  'Electronics & Electrical Goods': 'Phones, computers, cables, appliances',
+  'Food & Beverages': 'Packaged food, drinks, snacks',
+  'Agricultural Products': 'Rice, cassava, rubber, fruit, seeds',
+  Chemicals: 'Dyes, solvents, resins, industrial chemicals',
+  'Pharmaceuticals & Medical Supplies': 'Medicines, masks, gloves, medical devices',
+};
+
 function CargoTypeSelect({
   label,
   options: listed,
+  span = 2,
 }: {
   label: string;
   options: { value: string; label: string }[];
+  span?: Span;
 }) {
   const { field } = useController<FormValues, 'material'>({ name: 'material' });
   const { can } = useAuth();
@@ -885,7 +960,7 @@ function CargoTypeSelect({
       ? [...listed, { value: current, label: current }]
       : listed;
   return (
-    <div className="form-field-group" style={spanStyle(2)}>
+    <div className="form-field-group" style={spanStyle(span)}>
       <FieldLabel name="material" label={label} />
       <AddNewSelect
         id="f-material"
@@ -894,7 +969,7 @@ function CargoTypeSelect({
         value={field.value}
         onChange={field.onChange}
         onBlur={field.onBlur}
-        options={options}
+        options={options.map((o) => ({ ...o, hint: MATERIAL_HINT[o.value] }))}
         onCreate={
           can('shipments:write')
             ? async (name) => (await addMaterial.mutateAsync({ label: name })).value
@@ -1010,25 +1085,35 @@ function StatusTile({
 
 /** The status under the chosen client's completion rule, as the form is filled in. */
 function useLiveShipmentStatus(control: Control<FormValues>, lookups: LookupsResponse) {
-  const [clientId, direction, atd, ata, arriveFty, doDate, receivedDocumentDate, declarations] =
-    useWatch({
-      control,
-      name: [
-        'clientId',
-        'direction',
-        'atd',
-        'ata',
-        'arriveFty',
-        'doDate',
-        'receivedDocumentDate',
-        'declarations',
-      ],
-    });
+  const [
+    clientId,
+    direction,
+    atd,
+    ata,
+    arriveFty,
+    doDate,
+    receivedDocumentDate,
+    declarations,
+    clearanceStatus,
+  ] = useWatch({
+    control,
+    name: [
+      'clientId',
+      'direction',
+      'atd',
+      'ata',
+      'arriveFty',
+      'doDate',
+      'receivedDocumentDate',
+      'declarations',
+      'clearanceStatus',
+    ],
+  });
   const client = lookups.clients.find((c) => c.id === clientId);
   const custom = direction === 'IMPORT' ? client?.importCompleteOn : client?.exportCompleteOn;
   const rule = custom?.length ? custom : DEFAULT_COMPLETION[direction];
   const status = shipmentStatusOf(
-    { direction, atd, ata, arriveFty, doDate, receivedDocumentDate, declarations },
+    { direction, atd, ata, arriveFty, doDate, receivedDocumentDate, declarations, clearanceStatus },
     rule,
   );
   return { status, rule };
@@ -1046,17 +1131,53 @@ function ShipmentStatusField({ lookups }: { lookups: LookupsResponse }) {
       tone={TONE[status]!}
       value={SHIPMENT_STATUS_LABEL[status]}
     >
-      Completed once {done} {rule.length > 1 ? 'are' : 'is'} in, In Progress once a declaration is
-      recorded, otherwise Pending.
+      {status === 'EXCEPTION' ? (
+        'Exception while the shipment is marked as one we don’t clear (switch at the top right).'
+      ) : (
+        <>
+          Completed once {done} {rule.length > 1 ? 'are' : 'is'} in, In Progress once a declaration
+          is recorded, otherwise Pending.
+        </>
+      )}
     </StatusTile>
   );
 }
 
-/** The clearance status is not chosen either: it follows from the customs declarations. */
+/**
+ * The Shipment Status card's top-right switch: Exception, for a shipment we don't clear. It
+ * sets the clearance status (kept until switched off), and with it the shipment's status.
+ */
+function ExceptionSwitch() {
+  const { control, setValue } = useFormContext<FormValues>();
+  const [declarations, stored] = useWatch({ control, name: ['declarations', 'clearanceStatus'] });
+  return (
+    <label className={f.exceptionToggle} title="For a shipment we don't clear">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={stored === 'EXCEPTION'}
+        onChange={(e) =>
+          setValue(
+            'clearanceStatus',
+            e.target.checked ? 'EXCEPTION' : clearanceStatusOf({ declarations }),
+            { shouldDirty: true },
+          )
+        }
+      />
+      <span className={f.exceptionTrack} aria-hidden />
+      <b>Exception</b>
+    </label>
+  );
+}
+
+/**
+ * The clearance status follows from the customs declarations, except Exception: switched on by
+ * hand (ExceptionSwitch) for a shipment we don't clear, and kept until it is switched off.
+ */
 function ClearanceStatusField() {
   const { control } = useFormContext<FormValues>();
-  const declarations = useWatch({ control, name: 'declarations' });
-  const status = clearanceStatusOf({ declarations });
+  const [declarations, stored] = useWatch({ control, name: ['declarations', 'clearanceStatus'] });
+  const status = clearanceStatusFor({ clearanceStatus: stored, declarations });
   return (
     <StatusTile
       icon="badge"
@@ -1064,8 +1185,9 @@ function ClearanceStatusField() {
       tone={TONE[status]!}
       value={CLEARANCE_STATUS_LABEL[status]}
     >
-      Customs Cleared once a declaration has its Declare No. and Date, In Progress once a Declare
-      No. is entered, otherwise Pending Review.
+      {status === 'EXCEPTION'
+        ? 'Marked as Exception by hand. Switch it off to go back to the automatic status.'
+        : 'Customs Cleared once a declaration has its Declare No. and Date, In Progress once a Declare No. is entered, otherwise Pending Review.'}
     </StatusTile>
   );
 }
@@ -1075,11 +1197,14 @@ function Card({
   title,
   icon,
   cols = 4,
+  action,
   children,
 }: {
   title: string;
   icon: FormIcon;
   cols?: number;
+  /** At the top right of the card, e.g. Shipment Status's Exception switch. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -1089,6 +1214,7 @@ function Card({
           <span className="cx-title-icon">{fi[icon]({ width: 18, height: 18 })}</span>
           <h3>{title}</h3>
         </div>
+        {action}
       </div>
       <div className={f.grid} style={{ '--cols': cols } as CSSProperties}>
         {children}
@@ -1100,9 +1226,11 @@ function Card({
 function PartiesFields({
   lookups,
   which,
+  span = 2,
 }: {
   lookups: LookupsResponse;
   which: 'consignee' | 'forwarder';
+  span?: Span;
 }) {
   const { control } = useFormContext<FormValues>();
   const { field: consignee } = useController<FormValues, 'consigneeId'>({ name: 'consigneeId' });
@@ -1116,7 +1244,7 @@ function PartiesFields({
       (a, b) => Number(b.clientId === clientId) - Number(a.clientId === clientId),
     );
     return (
-      <div className="form-field-group" style={spanStyle(2)}>
+      <div className="form-field-group" style={spanStyle(span)}>
         <FieldLabel name="consigneeId" label="Consignee" />
         <AddNewSelect
           id="f-consigneeId"
@@ -1136,7 +1264,7 @@ function PartiesFields({
     );
   }
   return (
-    <div className="form-field-group" style={spanStyle(2)}>
+    <div className="form-field-group" style={spanStyle(span)}>
       <FieldLabel name="forwarderId" label="Forwarder" />
       <AddNewSelect
         id="f-forwarderId"
@@ -1172,13 +1300,10 @@ function ExportSchedule() {
       </Card>
     );
   return (
-    <>
-      <Card title="Schedule" icon="calendar" cols={2}>
-        <Field name="etd" label="ETD" type="date" />
-        <Field name="atd" label="ATD (Actual Departure)" type="date" />
-      </Card>
-      <ContainersCard />
-    </>
+    <Card title="Schedule" icon="calendar" cols={2}>
+      <Field name="etd" label="ETD" type="date" />
+      <Field name="atd" label="ATD (Actual Departure)" type="date" />
+    </Card>
   );
 }
 
@@ -1186,6 +1311,7 @@ function ContainersCard() {
   const {
     control,
     register,
+    getValues,
     formState: { errors },
   } = useFormContext<FormValues>();
   const loadType = useWatch({ control, name: 'loadType' });
@@ -1194,18 +1320,47 @@ function ContainersCard() {
   const arr = useFieldArray({ control, name: 'containers' });
   const errs = errors.containers as unknown as
     (Record<number, Record<string, { message?: string }>> & { message?: string }) | undefined;
-  if (loadType !== 'FCL')
+  const lcl = loadType === 'LCL';
+  // LCL containers are optional: switching to LCL drops the untouched blank rows, so the card
+  // starts empty (its "+ Add Container" is at the top right).
+  useEffect(() => {
+    if (!lcl) return;
+    const rows = getValues('containers') ?? [];
+    if (rows.length && rows.every((c) => !c.containerNo?.trim() && !c.linerSeal?.trim()))
+      arr.replace([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lcl]);
+  if (loadType !== 'FCL' && !lcl)
     return (
       <Card title="Containers" icon="container" cols={1}>
         <p className={f.note}>
-          Containers are recorded for CY / CY (FCL) shipments only. Change Shipping Terms on the
-          Shipment Information tab to add them.
+          Containers are recorded for CY / CY (FCL) and LCL shipments only. Change Shipping Terms on
+          the Shipment Information tab to add them.
         </p>
       </Card>
     );
   return (
-    <Card title="Containers" icon="container" cols={1}>
+    <Card
+      title="Containers"
+      icon="container"
+      cols={1}
+      // At the top right, level with the title, as on Customs Declarations.
+      action={
+        <div className="cargo-actions">
+          <button
+            type="button"
+            className="cargo-btn cargo-btn-primary"
+            onClick={() => arr.append(blankContainer())}
+          >
+            + Add Container
+          </button>
+        </div>
+      }
+    >
       <div>
+        {lcl && arr.fields.length === 0 && (
+          <p className={f.note}>Optional for LCL: add the container if you know it.</p>
+        )}
         {arr.fields.length > 0 && (
           <div className="cdc-lines-wrap">
             <table className="cdc-lines-table">
@@ -1283,13 +1438,6 @@ function ContainersCard() {
           </div>
         )}
         <FieldError message={errs?.message} />
-        <button
-          type="button"
-          className="cdc-add-line-btn"
-          onClick={() => arr.append(blankContainer())}
-        >
-          + Add Container
-        </button>
       </div>
     </Card>
   );
@@ -1302,35 +1450,45 @@ function buildSteps(
   mode: FormValues['transportMode'],
   lookups: LookupsResponse,
   detail: ShipmentDetail | undefined,
+  readOnly: boolean,
 ): Step[] {
   const ports = lookups.ports.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }));
   const units = lookups.values.QUANTITY_UNIT.map((v) => ({ value: v.value, label: v.label }));
   const materials = lookups.values.MATERIAL.map((v) => ({ value: v.value, label: v.label }));
 
   const statusCard = (
-    <Card title="Shipment Status" icon="activity" cols={2}>
+    <Card title="Shipment Status" icon="activity" cols={2} action={<ExceptionSwitch />}>
       <ShipmentStatusField lookups={lookups} />
       <ClearanceStatusField />
     </Card>
   );
+  // An import's sits in half the page: the number on its own row, then date and amount.
   const thcCard = (
-    <Card title="Invoice / THC" icon="receipt">
-      <Field name="thcHblNo" label="Invoice / THC No." span={2} />
+    <Card title="Invoice / THC" icon="receipt" cols={2}>
+      <Field name="thcHblNo" label="Invoice / THC No." span="full" />
       <Field name="thcHblDate" label="Invoice / THC Date" type="date" />
       <Field name="thcHblAmount" label="Amount (USD)" placeholder="0.00" decimals={2} />
     </Card>
   );
   // By air there is no vessel, voyage or container, and the bills are air waybills.
   const air = mode === 'AIR';
+  const hblDateLabel = air ? 'HAWB / MAWB Date' : 'HBL Date';
   const remarkCard = (
     <Card title="Remark" icon="message" cols={1}>
-      <Field name="remark" label="Remark" span="full" placeholder="Optional note" rows={5} />
+      <Field
+        name="remark"
+        label="Remark"
+        span="full"
+        placeholder="Optional note"
+        rows={5}
+        hideLabel
+      />
     </Card>
   );
 
   if (direction === 'EXPORT') {
-    // The same four tabs as an import: the shipment, its cargo invoices, its booking and
-    // departure, then customs.
+    // The same four tabs as an import, in the same open sections (no card boxes, two a row):
+    // the shipment, its cargo invoices, its booking and departure, then customs.
     return [
       {
         label: 'Shipment Information',
@@ -1346,37 +1504,47 @@ function buildSteps(
           'material',
           'receivedDocumentDate',
         ],
-        render: () => (
-          <>
-            <Card title="Parties & Destination" icon="users">
-              <ExportShipperSelect lookups={lookups} />
-              <PartiesFields lookups={lookups} which="consignee" />
-              <PartiesFields lookups={lookups} which="forwarder" />
-              <BrokerSelect lookups={lookups} />
+        // General Information | Parties, then Cargo | Quantity & Unit.
+        placesGeneral: true,
+        render: (general) => (
+          <div className={`${f.columns} ${f.open}`}>
+            {general}
+            <Card title="Parties" icon="users" cols={1}>
+              <ExportShipperSelect lookups={lookups} span={1} />
+              <PartiesFields lookups={lookups} which="consignee" span={1} />
+              <PartiesFields lookups={lookups} which="forwarder" span={1} />
+              <BrokerSelect lookups={lookups} label="Customs Broker" span={1} />
             </Card>
-            {/* Laid out like an import's: destination and export type, then quantity and unit. */}
-            <Card title="Cargo" icon="box">
+            <Card title="Cargo" icon="box" cols={2}>
               <CountryField
                 name="destinationCountryIso2"
                 label="Destination Country"
                 countries={lookups.countries}
-                span={2}
+                span={1}
               />
-              <CargoTypeSelect label="Export Type" options={materials} />
-              <QuantityField />
+              <CargoTypeSelect label="Export Type" options={materials} span={1} />
+            </Card>
+            <Card title="Quantity & Unit" icon="box" cols={2}>
+              <Field
+                name="quantity"
+                // Filled in from the invoices' CTNS total (Cargo, Pricing & FOB), as on an import.
+                label="Quantity Pkgs (Automatic)"
+                placeholder="0"
+                decimals={3}
+                readOnly
+              />
               <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
             </Card>
-          </>
+          </div>
         ),
       },
       {
         label: 'Cargo, Pricing & FOB',
-        fields: ['invoices', 'thcHblNo', 'thcHblDate', 'thcHblAmount'],
+        fields: ['invoices'],
         render: () => (
-          <>
-            <CargoSection shipmentId={detail?.id} />
-            {thcCard}
-          </>
+          <div className={f.open}>
+            <CargoSection shipmentId={detail?.id} readOnly={readOnly} />
+          </div>
         ),
       },
       {
@@ -1385,7 +1553,7 @@ function buildSteps(
           'bookingNo',
           'crd',
           'hblNo',
-          'clearancePortId',
+          'hblDate',
           'etd',
           'atd',
           'flightNo',
@@ -1399,43 +1567,71 @@ function buildSteps(
           'coNumber',
           'coStatus',
         ],
+        // Schedule | Vessel, Booking | Containers, then Certificate of Origin. By air:
+        // Schedule | Air Waybill, then Certificate of Origin. The clearance port is with the
+        // customs declarations (last tab), as on an import.
         render: () => (
-          <>
+          <div className={`${f.columns} ${f.open}`}>
             <ExportSchedule />
-            <Card title="Booking & Clearance" icon="file">
-              <Field name="bookingNo" label={air ? 'MAWB No.' : 'Booking / SO No.'} span={2} />
-              <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} span={2} />
-              <Field name="crd" label="CRD" type="date" span={2} />
-              <Select
-                name="clearancePortId"
-                label="Clearance Port"
-                options={ports}
-                placeholder="Select port"
-                span={2}
-              />
+            {!air && (
+              <Card title="Vessel" icon="ship" cols={2}>
+                <Field name="vesselName" label="Vessel Name" />
+                <Field name="voyageNo" label="Voyage No." />
+              </Card>
+            )}
+            <Card title={air ? 'Air Waybill' : 'Booking'} icon={air ? 'plane' : 'file'} cols={2}>
+              {/* By air the HAWB comes first, then the MAWB. */}
+              {air ? (
+                <>
+                  <Field name="hblNo" label="HAWB No." />
+                  <Field name="bookingNo" label="MAWB No." />
+                </>
+              ) : (
+                <>
+                  <Field name="bookingNo" label="Booking / SO No." />
+                  <Field name="hblNo" label="HBL No." />
+                </>
+              )}
+              <Field name="hblDate" label={hblDateLabel} type="date" />
+              <Field name="crd" label="CRD" type="date" />
             </Card>
-            <Card
-              title={air ? 'Certificate of Origin' : 'Vessel & Certificate of Origin'}
-              icon={air ? 'file' : 'ship'}
-            >
-              {!air && <Field name="vesselName" label="Vessel Name" span={2} />}
-              {!air && <Field name="voyageNo" label="Voyage No." span={2} />}
+            {!air && <ContainersCard />}
+            <Card title="Certificate of Origin" icon="file" cols={2}>
               <CoFormSelect lookups={lookups} />
-              <Field name="coNumber" label="CO Number" span={2} />
               <CoStatusSelect />
+              <Field name="coNumber" label="CO Number" span="full" />
             </Card>
-          </>
+          </div>
         ),
       },
       {
         label: 'Customs Declaration',
-        fields: ['declarations', 'remark'],
+        fields: [
+          'clearancePortId',
+          'declarations',
+          'thcHblNo',
+          'thcHblDate',
+          'thcHblAmount',
+          'remark',
+        ],
+        // Customs Declarations | Invoice / THC, then Remark | Shipment Status.
         render: () => (
-          <>
-            <DeclarationsSection original={detail} />
+          <div className={`${f.columns} ${f.open}`}>
+            <DeclarationsSection
+              original={detail}
+              port={
+                <Select
+                  name="clearancePortId"
+                  label="Clearance Port"
+                  options={ports}
+                  placeholder="Select port"
+                />
+              }
+            />
+            {thcCard}
             {remarkCard}
             {statusCard}
-          </>
+          </div>
         ),
       },
     ];
@@ -1456,37 +1652,49 @@ function buildSteps(
         'material',
         'receivedDocumentDate',
       ],
-      render: () => (
-        <>
-          <Card title="Parties" icon="users">
-            <Field name="shipperName" label="Shipper Name" span={2} placeholder="Supplier name" />
-            <PartiesFields lookups={lookups} which="consignee" />
-            <PartiesFields lookups={lookups} which="forwarder" />
-            <BrokerSelect lookups={lookups} />
+      // Open sections (no card box), two a row: General Information | Parties, then
+      // Cargo | Quantity & Unit.
+      placesGeneral: true,
+      render: (general) => (
+        <div className={`${f.columns} ${f.open}`}>
+          {general}
+          <Card title="Parties" icon="users" cols={1}>
+            <Field name="shipperName" label="Shipper Name" placeholder="Supplier name" />
+            <PartiesFields lookups={lookups} which="consignee" span={1} />
+            <PartiesFields lookups={lookups} which="forwarder" span={1} />
+            <BrokerSelect lookups={lookups} label="Customs Broker" span={1} />
           </Card>
-          {/* Origin and import type on one row; quantity and unit share the half below. */}
-          <Card title="Cargo" icon="box">
+          <Card title="Cargo" icon="box" cols={2}>
             <CountryField
               name="originCountryIso2"
               label="Origin Country"
               countries={lookups.countries}
-              span={2}
+              span={1}
             />
-            <CargoTypeSelect label="Import Type" options={materials} />
-            <QuantityField />
+            <CargoTypeSelect label="Import Type" options={materials} span={1} />
+          </Card>
+          <Card title="Quantity & Unit" icon="box" cols={2}>
+            <Field
+              name="quantity"
+              // Filled in from the invoices' Pkgs total (Item, Costing & Forwarding).
+              label="Quantity Pkgs (Automatic)"
+              placeholder="0"
+              decimals={3}
+              readOnly
+            />
             <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
           </Card>
-        </>
+        </div>
       ),
     },
     {
       label: 'Item, Costing & Forwarding',
-      fields: ['invoices', 'thcHblNo', 'thcHblDate', 'thcHblAmount'],
+      fields: ['invoices'],
+      // An open section like the other tabs (no box around the invoices).
       render: () => (
-        <>
-          <CargoSection shipmentId={detail?.id} />
-          {thcCard}
-        </>
+        <div className={f.open}>
+          <CargoSection shipmentId={detail?.id} readOnly={readOnly} />
+        </div>
       ),
     },
     {
@@ -1494,6 +1702,7 @@ function buildSteps(
       fields: [
         'bookingNo',
         'hblNo',
+        'hblDate',
         'doDate',
         'eta',
         'arriveFty',
@@ -1502,37 +1711,50 @@ function buildSteps(
         'containers',
         'loadType',
       ],
+      // Open sections like the first tab, two a row: Schedule | Vessel, then Bill of Lading &
+      // Delivery Order | Containers. By air: Schedule | Air Waybill.
       render: () => (
-        <>
+        <div className={`${f.columns} ${f.open}`}>
           <Card title="Schedule" icon="calendar" cols={2}>
             <Field name="eta" label="ETA Port" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>
-          {!air && <ContainersCard />}
+          {/* The clearance port is with the customs declarations (last tab). */}
+          {!air && (
+            <Card title="Vessel" icon="ship" cols={2}>
+              <Field name="vesselName" label="Vessel Name" />
+              <Field name="voyageNo" label="Voyage No." />
+            </Card>
+          )}
+          {/* The bill's number on its own row, then its dates. */}
           <Card
             title={air ? 'Air Waybill & Delivery Order' : 'Bill of Lading & Delivery Order'}
             icon={air ? 'plane' : 'file'}
-            cols={air ? 3 : 2}
+            cols={2}
           >
+            <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} span={air ? 1 : 'full'} />
             {air && <Field name="bookingNo" label="MAWB No." />}
-            <Field name="hblNo" label={air ? 'HAWB No.' : 'HBL No.'} />
-            <Field name="doDate" label="DO / EDO Date" type="date" />
+            <Field name="hblDate" label={hblDateLabel} type="date" />
+            <Field name="doDate" label="DO / EDO Released Date" type="date" />
           </Card>
-          {/* The clearance port is with the customs declarations (last tab). */}
-          {!air && (
-            <Card title="Vessel" icon="ship">
-              <Field name="vesselName" label="Vessel Name" span={2} />
-              <Field name="voyageNo" label="Voyage No." span={2} />
-            </Card>
-          )}
-        </>
+          {!air && <ContainersCard />}
+        </div>
       ),
     },
     {
       label: 'Weights & Declaration',
-      fields: ['clearancePortId', 'declarations', 'remark'],
+      fields: [
+        'clearancePortId',
+        'declarations',
+        'thcHblNo',
+        'thcHblDate',
+        'thcHblAmount',
+        'remark',
+      ],
+      // Open sections like the first tab: Customs Declarations | Invoice / THC, then
+      // Remark | Shipment Status.
       render: () => (
-        <>
+        <div className={`${f.columns} ${f.open}`}>
           <DeclarationsSection
             original={detail}
             port={
@@ -1544,9 +1766,10 @@ function buildSteps(
               />
             }
           />
+          {thcCard}
           {remarkCard}
           {statusCard}
-        </>
+        </div>
       ),
     },
   ];

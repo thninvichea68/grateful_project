@@ -60,6 +60,16 @@ const emptyByType = <T>(make: () => T): Record<BillingPackType, T> => ({
   disbursements: make(),
   'debit-notes': make(),
 });
+/**
+ * Clients (by code) whose invoice statement shows the tax invoice and the disbursement
+ * amounts in columns of their own, with their total, and the first month of that layout.
+ */
+const AMOUNT_COLUMNS: Record<string, string> = { JR: '2026-10' };
+const amountColumns = (clientCode: string, month: string) => {
+  const from = AMOUNT_COLUMNS[clientCode];
+  return !!from && month >= from;
+};
+
 /** "NON" (no house bill) and blanks don't identify a shipment on a statement. */
 const realRef = (v: string | null | undefined) =>
   v && v.trim() && v.trim().toUpperCase() !== 'NON' ? v.trim() : null;
@@ -193,8 +203,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     const numbered = BILLING_PACK_TYPES.some((t) => typed[t][0]);
     const none = emptyByType(() => false);
     for (const type of BILLING_PACK_TYPES)
-      none[type] =
-        numbered && !typed[type][0] && typed[type][1] === 0 && !docsByType[type].length;
+      none[type] = numbered && !typed[type][0] && typed[type][1] === 0 && !docsByType[type].length;
     return {
       recordId: l.recordId,
       invDate: l.invDate,
@@ -229,8 +238,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   // anything else its BL / HBL. The declare no. when neither is there.
   const refOf = (r: (typeof rows)[number], docs: DocPart[]) =>
     (r._cy
-      ? realRef(docs[0]?.containerNo) ?? realRef(r.containers)
-      : realRef(docs[0]?.hbl) ?? realRef(r.hbl)) ?? r.declareNo;
+      ? (realRef(docs[0]?.containerNo) ?? realRef(r.containers))
+      : (realRef(docs[0]?.hbl) ?? realRef(r.hbl))) ?? r.declareNo;
   for (const r of rows) {
     const inv = issued(r._docs, 'tax-invoices');
     const dis = issued(r._docs, 'disbursements');
@@ -258,6 +267,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         dnNo: null,
         ref,
         amount: money(cents),
+        invAmount: invPart ? money(invPart.cents) : null,
+        disAmount: disPart ? money(disPart.cents) : null,
         manual: !!(invPart && 'manual' in invPart) || !!(disPart && 'manual' in disPart),
         draft: isDraft(inv) || isDraft(dis),
         cents,
@@ -272,6 +283,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         dnNo: dn.number,
         ref: refOf(r, [dn]),
         amount: dn.total,
+        invAmount: null,
+        disAmount: null,
         manual: false,
         draft: dn.status === 'DRAFT',
         cents: toCents(dn.total),
@@ -284,6 +297,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
         dnNo: r.manual['debit-notes'].number,
         ref: refOf(r, []),
         amount: r.manual['debit-notes'].total,
+        invAmount: null,
+        disAmount: null,
         manual: true,
         draft: false,
         cents: toCents(r.manual['debit-notes'].total),
@@ -297,6 +312,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       dnNo: d.type === 'debit-notes' ? d.number : null,
       ref: realRef(d.hbl) ?? realRef(d.reference) ?? 'NON',
       amount: d.total,
+      invAmount: d.type === 'tax-invoices' ? d.total : null,
+      disAmount: d.type === 'disbursements' ? d.total : null,
       manual: false,
       draft: d.status === 'DRAFT',
       cents: toCents(d.total),
@@ -360,6 +377,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   return {
     client,
     month,
+    amountColumns: amountColumns(client.code, month),
     rows: rows.map(({ _docs, _cy, ...r }) => r),
     others: others.map((d) => ({ ...slot(d), reference: d.reference })),
     statements,
@@ -435,7 +453,8 @@ export async function createDrafts(
   const created: BillingDraftsResult['created'] = [];
   for (const r of m.rows)
     for (const type of BILLING_PACK_TYPES) {
-      if (!input.types.includes(type) || r.docs[type].length || r.manual[type] || r.none[type]) continue;
+      if (!input.types.includes(type) || r.docs[type].length || r.manual[type] || r.none[type])
+        continue;
       const draft = await prefill(type, r.recordId);
       let copiedFrom: string | null = null;
       // A checked record summary's lines win over copying the last document.

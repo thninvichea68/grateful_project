@@ -73,6 +73,8 @@ export const shipments = pgTable(
     // Booking / BL / vessel
     bookingNo: text('booking_no'),
     hblNo: text('hbl_no'),
+    /** The HBL's date (by air: the HAWB / MAWB date). */
+    hblDate: date('hbl_date'),
     vesselName: text('vessel_name'),
     voyageNo: text('voyage_no'),
 

@@ -1,0 +1,1 @@
+ALTER TABLE "documents" ADD COLUMN "company" boolean DEFAULT false NOT NULL;

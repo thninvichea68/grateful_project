@@ -438,9 +438,9 @@ describe('shipping plan Excel import', () => {
         'Export Declarations:4: Ref 7 is not on the Exports sheet.',
       ]),
     );
-    // Containers on an LCL shipment: the form's own rule.
+    // Containers on an LCL shipment are allowed (optional), as on the form.
     expect(msgs.some((m: string) => m.includes('Containers are only recorded for CY/CY'))).toBe(
-      true,
+      false,
     );
     const none = await request(app)
       .get('/api/v1/shipments')

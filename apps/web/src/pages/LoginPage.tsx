@@ -75,13 +75,12 @@ export function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <img
-        className={styles.logo}
-        src="/logo-full-white.png"
-        alt="Grateful Solutions (Cambodia) Co., Ltd"
-      />
-
       <div className={styles.panel}>
+        <img
+          className={styles.logo}
+          src="/logo-full.png"
+          alt="Grateful Solutions (Cambodia) Co., Ltd"
+        />
         <h1 className={styles.heading}>Sign in</h1>
         <p className={styles.lede}>Use your Grateful Solutions work account.</p>
 

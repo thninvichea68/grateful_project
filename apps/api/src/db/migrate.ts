@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { ROLE_CODES, ROLE_DEFAULT_PERMISSIONS, ROLE_LABEL } from '@gs/shared';
 import { db, pool } from './client';
@@ -38,6 +39,14 @@ async function main() {
     .returning({ code: roles.code });
   // eslint-disable-next-line no-console
   if (added.length) console.log(`✔ Added roles: ${added.map((r) => r.code).join(', ')}`);
+  // Shipments whose clearance is an Exception (set by hand) take the Exception status too.
+  // After migrating for the same reason: 0061 adds that shipment_status value.
+  const flagged = await db.execute(
+    sql`UPDATE shipments SET status = 'EXCEPTION'
+         WHERE clearance_status = 'EXCEPTION' AND status <> 'EXCEPTION'`,
+  );
+  // eslint-disable-next-line no-console
+  if (flagged.rowCount) console.log(`✔ ${flagged.rowCount} shipment(s) set to Exception`);
   await pool.end();
 }
 

@@ -198,6 +198,16 @@ input:is(
   )::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
+/* The browser hides the calendar icon while a date field is disabled or read-only; keep it, so
+   every date box looks the same whether the record is being edited or only viewed. */
+input:is([type='date'], [type='month'], [type='week'], [type='datetime-local']):is(
+    :disabled,
+    [readonly]
+  )::-webkit-calendar-picker-indicator {
+  visibility: visible;
+  cursor: default;
+  pointer-events: none;
+}
 /* No selected-text look on the month / day / year segment; the field's focus ring still shows. */
 input::-webkit-datetime-edit-day-field:focus,
 input::-webkit-datetime-edit-month-field:focus,

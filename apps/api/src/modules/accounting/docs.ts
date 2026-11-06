@@ -1791,7 +1791,11 @@ export async function listCreditNoteReview(p: {
           t.quantity_text AS "quantityText", po.short_name AS port, t.total::text AS total,
           t.status, t.review_status AS "reviewStatus", count(*) OVER () AS total_count
         ${from} ${whereAll(c)}
-        ORDER BY t.cn_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
+        -- By number, newest first: CN26-037 is year 26, no. 37 (the counter restarts each year).
+        -- [0-9], not a backslash class: the sql tag drops backslashes.
+        ORDER BY substring(t.cn_no from '^CN([0-9]+)-')::int DESC NULLS FIRST,
+                 substring(t.cn_no from '([0-9]+)$')::int DESC NULLS FIRST,
+                 t.cn_date DESC, t.created_at DESC ${paginate(p.page, p.pageSize)}`,
   );
   return { ...toPaginated(rows, p.page, p.pageSize), counts: counts! };
 }

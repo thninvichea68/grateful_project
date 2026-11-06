@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { KpiResponse, PortRow } from '@gs/shared';
 import { changePct, niceMax, HBarList } from './parts';
 
@@ -91,8 +92,40 @@ describe('KpiRow', () => {
     );
     expect(screen.getByText('20')).toBeInTheDocument();
     expect(screen.getByText('17')).toBeInTheDocument();
-    expect(screen.getByText('still pending')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /17 pending/ })).toBeInTheDocument();
     expect(screen.queryByText(/vs last|%|not enough data/)).not.toBeInTheDocument();
+  });
+  it('links the pending count to those shipments on Shipping Plans', async () => {
+    const k: KpiResponse = {
+      period: { from: '2026-10-01', to: '2026-10-31' },
+      previousPeriod: { from: '2026-09-01', to: '2026-09-30' },
+      total: 20,
+      imports: 9,
+      exports: 11,
+      cleared: 18,
+      clearancePending: 2,
+      exceptions: 0,
+      previous: { total: 0, imports: 0, exports: 0, cleared: 0 },
+    };
+    let url = '';
+    function Where() {
+      const l = useLocation();
+      url = l.pathname + l.search;
+      return null;
+    }
+    render(
+      <MemoryRouter>
+        <KpiRow k={k} />
+        <Where />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /2 pending/ }));
+    const u = new URL(url, 'http://x');
+    expect(u.pathname).toBe('/plans');
+    expect(u.searchParams.get('month')).toBe('2026-10');
+    expect(JSON.parse(u.searchParams.get('f')!)).toEqual({
+      clearanceStatus: ['PENDING', 'IN_PROGRESS'],
+    });
   });
   it('names the card for a whole year', () => {
     const k: KpiResponse = {

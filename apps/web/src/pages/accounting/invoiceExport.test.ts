@@ -407,4 +407,63 @@ describe('Month pack Excel', () => {
     // No document sheets: the statement keeps the amounts as values.
     expect(wb.getWorksheet('Statement INV')!.getCell('G16').value).toBe(882.2);
   });
+
+  it('JR: the invoice statement has Amount Invoice / Amount Dis / Total columns', () => {
+    const line = { ...pack.statements.INVOICE!.lines[0]!, invAmount: '266.2', disAmount: '616' };
+    const jr = {
+      ...pack,
+      amountColumns: true,
+      statements: {
+        ...pack.statements,
+        INVOICE: {
+          ...pack.statements.INVOICE!,
+          lines: [
+            line,
+            {
+              ...line,
+              date: '2026-09-30',
+              invNo: null,
+              disNo: 'DIS469',
+              ref: 'SHSIN6100043',
+              invAmount: null,
+              disAmount: '472',
+              amount: '472',
+            },
+          ],
+          total: '1354.2',
+        },
+      },
+    } as BillingPack;
+    const wb = new ExcelJS.Workbook();
+    buildPackWorkbook(wb, jr, company, null, '2026-09', ['docs', 'st-INVOICE'], '', '2026-10-03');
+    const st = wb.getWorksheet('Statement INV')!;
+    expect(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((c) => st.getCell(`${c}14`).value)).toEqual(
+      [
+        'NO:',
+        'DATE',
+        'INV NUMBER',
+        'DIS NUMBER',
+        'REF #',
+        'AMOUNT INV (USD)',
+        'AMOUNT DIS (USD)',
+        'TOTAL:',
+      ],
+    );
+    expect(st.getCell('E16').value).toBe('COSU6464276980');
+    expect(st.getCell('F16').value).toMatchObject({
+      formula: "'GS26-360 & DIS403'!H29",
+      result: 266.2,
+    });
+    expect(st.getCell('G16').value).toMatchObject({
+      formula: "'GS26-360 & DIS403'!P29",
+      result: 616,
+    });
+    expect(st.getCell('H16').value).toMatchObject({ formula: 'SUM(F16:G16)', result: 882.2 });
+    // A line with no tax invoice: a dash in its column.
+    expect(st.getCell('F17').value).toBe('-');
+    expect(st.getCell('G17').value).toBe(472);
+    expect(st.getCell('H17').value).toMatchObject({ formula: 'SUM(F17:G17)', result: 472 });
+    expect(text(st.getCell('B19').value)).toBe('BALANCE AS  SEP-2026');
+    expect(st.getCell('H19').value).toMatchObject({ formula: 'SUM(H16:H18)', result: 1354.2 });
+  });
 });

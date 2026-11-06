@@ -8,7 +8,12 @@ import {
 import type { CompanyInfo } from '../../features/accounting';
 import { api } from '../../lib/api';
 import { saveBlob } from '../../lib/files';
-import { checklistRows, statementReceipts, type ReceiptView } from '../print/PrintBillingPage';
+import {
+  checklistRows,
+  statementHeads,
+  statementReceipts,
+  type ReceiptView,
+} from '../print/PrintBillingPage';
 import { periodCode, periodRange, type PackPart } from './billingUi';
 import {
   a4Sheet,
@@ -140,8 +145,16 @@ function statementSheet(
     top: 10,
     bottom: 10,
   });
-  ws.columns = inv ? px(40, 95, 110, 110, 200, 70, 108) : px(40, 100, 140, 250, 80, 123);
-  const n = inv ? 7 : 6;
+  // JR: the invoice statement's amounts in Invoice / Dis / Total columns, no Currency.
+  const split = inv && pack.amountColumns;
+  ws.columns = split
+    ? px(36, 86, 92, 96, 140, 106, 96, 92)
+    : inv
+      ? px(40, 95, 110, 110, 200, 70, 108)
+      : px(40, 100, 140, 250, 80, 123);
+  const n = split ? 8 : inv ? 7 : 6;
+  // The last column before the amounts (REF).
+  const refCol = inv ? 5 : 4;
   const ALL: [number, number] = [1, n];
   // Printed for checking before the documents are issued.
   stamp(ws, 1, n, st.drafts > 0 ? 'DRAFT' : 'ISSUED');
@@ -158,7 +171,7 @@ function statementSheet(
   // Bill to: the name in bold over the address, in the left 62%.
   const name = (pack.client.legalName ?? pack.client.name).toUpperCase();
   const address = (pack.client.address ?? '').toUpperCase();
-  const span: [number, number] = [1, inv ? 5 : 4];
+  const span: [number, number] = [1, refCol];
   put(ws, r, span, name, f(EN, 9, { bold: true }));
   height(ws, r, 14);
   put(ws, r + 1, span, address, f(EN, 8), 'left', { wrap: true, valign: 'top' });
@@ -167,9 +180,7 @@ function statementSheet(
   r += 3;
 
   // A boxed table: ruled heading cells, open rows, the balance between a thin and a heavy rule.
-  const heads = inv
-    ? ['No:', 'Date', 'INV Number', 'DISBURSEMENT', 'REF #', 'Currency', 'Amount']
-    : ['NO:', 'DATE', 'DN NUMBER', 'REF NO:', 'CURRENCY', 'AMOUNT'];
+  const heads = statementHeads(st.kind, pack.amountColumns);
   const cell = f(EN, 8.5);
   heads.forEach((t, i) =>
     Object.assign(put(ws, r, [i + 1, i + 1], t, cell, 'center'), { border: box() }),
@@ -187,11 +198,37 @@ function statementSheet(
   st.lines.forEach((l, i) => {
     // A shipment billed on its disbursement only has no tax invoice: "NON".
     const docs = inv ? [l.invNo || 'NON', l.disNo ?? ''] : [l.dnNo ?? ''];
-    const values = [i + 1, dateCell(l.date), ...docs, l.ref ?? 'NON', 'USD'];
+    const values = [i + 1, dateCell(l.date), ...docs, l.ref ?? 'NON', ...(split ? [] : ['USD'])];
     values.forEach((v, j) =>
       put(ws, r, [j + 1, j + 1], v, cell, 'center', j === 1 ? { numFmt: 'dd\\-mmm\\-yyyy' } : {}),
     );
     // Linked to the documents' sheets when they are in the workbook.
+    const linked = (no: string | null, value: string | null) => {
+      const ref = no ? totals.get(no) : undefined;
+      // No amount of that kind on the line: a dash, as on the printed statement.
+      if (!value) return '-';
+      return ref ? { formula: ref, result: num(value) } : num(value);
+    };
+    if (split) {
+      const [fc, gc] = [ws.getColumn(n - 2).letter, ws.getColumn(n - 1).letter];
+      put(ws, r, [n - 2, n - 2], linked(l.invNo, l.invAmount), cell, 'right', { numFmt: MONEY3 });
+      put(ws, r, [n - 1, n - 1], linked(l.disNo, l.disAmount), cell, 'right', { numFmt: MONEY3 });
+      put(
+        ws,
+        r,
+        [n, n],
+        { formula: `SUM(${fc}${r}:${gc}${r})`, result: num(l.amount) },
+        cell,
+        'right',
+        {
+          numFmt: MONEY3,
+        },
+      );
+      sides(r);
+      height(ws, r, 14);
+      r += 1;
+      return;
+    }
     const nums = (inv ? [l.invNo, l.disNo] : [l.dnNo]).filter((x): x is string => !!x);
     const refs = nums.map((x) => totals.get(x));
     const amount =
@@ -211,7 +248,7 @@ function statementSheet(
   put(
     ws,
     r,
-    [2, n - 2],
+    [2, refCol],
     {
       richText: [
         { text: 'BALANCE AS  ', font: bold },

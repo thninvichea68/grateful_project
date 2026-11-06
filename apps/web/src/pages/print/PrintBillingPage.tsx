@@ -144,7 +144,13 @@ export function PrintPackPage() {
     if (on(`st-${kind}`) && d.statements[kind].lines.length)
       sheets.push(
         <div className={`${s.sheet} ${p.statementSheet}`} key={`st-${kind}`}>
-          <StatementSheet client={d.client} month={month} st={d.statements[kind]} c={c} />
+          <StatementSheet
+            client={d.client}
+            month={month}
+            st={d.statements[kind]}
+            c={c}
+            amountColumns={d.amountColumns}
+          />
         </div>,
       );
   for (let i = 0; i < receipts.length; i += 2)
@@ -210,30 +216,55 @@ export function PrintReceiptPage() {
   );
 }
 
+/**
+ * A statement's headings, as on the Excel ST-INV (mixed case) and STA-DN (capitals). With
+ * amount columns (JR) the invoice statement's Currency and Amount become the tax invoice's
+ * amount, the disbursement's and their total.
+ */
+export function statementHeads(kind: StatementKind, amountColumns = false): string[] {
+  if (kind === 'DEBIT_NOTE') return ['NO:', 'DATE', 'DN NUMBER', 'REF NO:', 'CURRENCY', 'AMOUNT'];
+  // JR's layout is headed in capitals throughout, the disbursement column "DIS NUMBER".
+  if (amountColumns)
+    return [
+      'NO:',
+      'DATE',
+      'INV NUMBER',
+      'DIS NUMBER',
+      'REF #',
+      'AMOUNT INV (USD)',
+      'AMOUNT DIS (USD)',
+      'TOTAL:',
+    ];
+  return ['No:', 'Date', 'INV Number', 'DISBURSEMENT', 'REF #', 'Currency', 'Amount'];
+}
+
 /** Account statement, laid out like the Excel ST-INV / STA-DN sheets. */
 export function StatementSheet({
   client,
   month,
   st,
   c,
+  amountColumns = false,
 }: {
   client: BillingClient;
   month: string;
   st: BillingStatement;
   c: CompanyInfo;
+  /** The invoice statement's amounts in Invoice / Dis / Total columns (JR). */
+  amountColumns?: boolean;
 }) {
   const inv = st.kind === 'INVOICE';
-  // Columns before Currency and Amount: No, Date, (INV, DIS | DN), REF.
+  const split = inv && amountColumns;
+  // Columns before the amounts: No, Date, (INV, DIS | DN), REF.
   const before = inv ? 5 : 4;
-  // The Excel sheets' headings: ST-INV in mixed case, STA-DN in capitals.
-  const heads = inv
-    ? ['No:', 'Date', 'INV Number', 'DISBURSEMENT', 'REF #', 'Currency', 'Amount']
-    : ['NO:', 'DATE', 'DN NUMBER', 'REF NO:', 'CURRENCY', 'AMOUNT'];
+  const heads = statementHeads(st.kind, amountColumns);
+  // Cells between the balance label and the total: Currency, or the invoice and dis amounts.
+  const gap = split ? 2 : 1;
   const total = (label: ReactNode, value: string, cls?: string) => (
     <tr className={cls}>
       <td />
       <td colSpan={before - 1}>{label}</td>
-      <td />
+      <td colSpan={gap} />
       <td className={p.r}>{money3(value)}</td>
     </tr>
   );
@@ -274,12 +305,19 @@ export function StatementSheet({
                 <td className={p.c}>{l.dnNo}</td>
               )}
               <td className={p.c}>{l.ref ?? 'NON'}</td>
-              <td className={p.c}>USD</td>
+              {split ? (
+                <>
+                  <td className={p.r}>{l.invAmount ? money3(l.invAmount) : '-'}</td>
+                  <td className={p.r}>{l.disAmount ? money3(l.disAmount) : '-'}</td>
+                </>
+              ) : (
+                <td className={p.c}>USD</td>
+              )}
               <td className={p.r}>{money3(l.amount)}</td>
             </tr>
           ))}
           <tr className={p.stGap}>
-            <td colSpan={before + 2} />
+            <td colSpan={before + gap + 1} />
           </tr>
           {total(
             <>

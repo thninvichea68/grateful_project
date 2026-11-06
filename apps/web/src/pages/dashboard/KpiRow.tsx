@@ -32,6 +32,16 @@ const ICONS = {
   export: svg(
     <path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />,
   ),
+  clock: svg(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>,
+    13,
+    2.2,
+  ),
+  chevron: svg(<path d="m9 6 6 6-6 6" />, 13, 2.4),
+  check: svg(<path d="m5 12 5 5 9-10" />, 13, 2.4),
   shield: svg(
     <>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -70,11 +80,25 @@ function Card({
       <div className={s.body}>
         <div className={s.figures}>
           <div className={s.value}>{value.toLocaleString()}</div>
-          {meta && <div className={s.meta}>{meta}</div>}
         </div>
+        {/* Beside the figure, not under it, so every card's number sits at the same height. */}
+        {meta && <div className={s.meta}>{meta}</div>}
       </div>
     </div>
   );
+}
+
+/**
+ * Shipping Plans filtered to clearance Pending / In progress (as the KPI counts them), in the
+ * KPI's month when it covers one month, else every month (the plans list has no year range).
+ */
+function pendingQuery(period: KpiResponse['period']) {
+  const month = period.from.slice(0, 7);
+  const q = new URLSearchParams({
+    month: month === period.to.slice(0, 7) ? month : 'all',
+    f: JSON.stringify({ clearanceStatus: ['PENDING', 'IN_PROGRESS'] }),
+  });
+  return q.toString();
 }
 
 export function KpiRow({
@@ -117,12 +141,20 @@ export function KpiRow({
         label="Customs Cleared"
         value={k.cleared}
         meta={
-          <>
-            <span className={s.delta} data-warn={k.clearancePending > 0}>
-              {k.clearancePending}
-            </span>
-            <span className={s.sub}>still pending</span>
-          </>
+          k.clearancePending > 0 ? (
+            <button
+              type="button"
+              className={s.pending}
+              onClick={() => toPlans(pendingQuery(k.period))}
+              title="Open the shipments still waiting for customs clearance"
+            >
+              {ICONS.clock}
+              <b>{k.clearancePending.toLocaleString()}</b> pending
+              {ICONS.chevron}
+            </button>
+          ) : (
+            <span className={s.allClear}>{ICONS.check} All cleared</span>
+          )
         }
         onOpen={() => toPlans('status=IN_PROGRESS')}
       />

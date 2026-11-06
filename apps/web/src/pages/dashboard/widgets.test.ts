@@ -32,6 +32,20 @@ describe('Overview widgets', () => {
     expect(result.current.customized).toBe(false);
   });
 
+  it('offers Shipments per Client off by default, to swap in for Total Net Profit', () => {
+    const { result } = renderHook(() => useOverviewWidgets('u1', true));
+    expect([result.current.shown('clientTrend'), result.current.shown('profit')]).toEqual([
+      false,
+      true,
+    ]);
+    act(() => result.current.toggle('profit'));
+    act(() => result.current.toggle('clientTrend'));
+    expect([result.current.shown('clientTrend'), result.current.shown('profit')]).toEqual([
+      true,
+      false,
+    ]);
+  });
+
   it('never shows profit without accounting access, even if stored', () => {
     localStorage.setItem('gs:overview-widgets:u1', JSON.stringify({ profit: true }));
     expect(renderHook(() => useOverviewWidgets('u1', false)).result.current.shown('profit')).toBe(

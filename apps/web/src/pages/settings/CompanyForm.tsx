@@ -9,6 +9,8 @@ import { api } from '../../lib/api';
 import { formResolver } from '../../lib/zodForm';
 import { fi, type FormIcon } from '../plans/formIcons';
 import s from './CompanyForm.module.css';
+import { InfoTip } from '../../components/InfoTip';
+import { AttachmentsButton } from '../plans/SupportDocuments';
 
 /**
  * Settings → Company: the details printed on tax invoices, disbursements and other documents,
@@ -113,8 +115,10 @@ export function CompanyForm({
           </span>
           {title}
         </h4>
+        <InfoTip label={`About ${title.toLowerCase()}`} symbol="?" align="end">
+          {hint}
+        </InfoTip>
       </div>
-      <p className={s.hint}>{hint}</p>
       <div className={s.fields} data-cols={cols}>
         {children}
       </div>
@@ -151,17 +155,20 @@ export function CompanyForm({
             <p>Printed on tax invoices, disbursements and other documents.</p>
           </div>
         </div>
-        {manage && !editing && (
-          <button
-            type="button"
-            className={s.editBtn}
-            onClick={() => setEditing(true)}
-            aria-label="Edit company details"
-            title="Edit company details"
-          >
-            {icons.edit({})}
-          </button>
-        )}
+        <div className={s.headActions}>
+          <AttachmentsButton attachedTo="company" title="Workspace & company" />
+          {manage && !editing && (
+            <button
+              type="button"
+              className={s.editBtn}
+              onClick={() => setEditing(true)}
+              aria-label="Edit company details"
+              title="Edit company details"
+            >
+              {icons.edit({})}
+            </button>
+          )}
+        </div>
       </header>
       <ErrorBanner error={save.error} />
       <form

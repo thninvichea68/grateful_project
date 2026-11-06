@@ -116,10 +116,10 @@ export function creditNoteHeader(d: BillingDoc, portName: string | undefined) {
   ];
   const right: [string, string][] = [
     ['DECLARE NO:', h(d, 'declareNo')],
+    ['DECLARE DATE:', longDate(d.date)],
     [`${refLabel}:`, h(d, 'refNo')],
-    ['DATE:', longDate(d.date)],
-    ["Q'TY:", h(d, 'quantityText')],
-    ['G.W:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
+    ['QUANTITY:', h(d, 'quantityText')],
+    ['GROSS WEIGHT:', h(d, 'grossWeightKg') && `${plain(h(d, 'grossWeightKg'))} KGS`],
     ['CBM:', plain(h(d, 'cbm'))],
   ];
   return { left, right };
@@ -229,7 +229,7 @@ export function recordSummaryHeader(
     ['DECLARE NO:', h(d, 'declareNo')],
     // A number, or a note such as "NON" printed as typed.
     ['CBM:', Number.isFinite(Number(h(d, 'cbm'))) ? plain(h(d, 'cbm')) : h(d, 'cbm')],
-    ['DATE:', d.date ? longDate(d.date) : ''],
+    ['DECLARE DATE:', d.date ? longDate(d.date) : ''],
     ['FORWARDER:', forwarder?.toUpperCase() ?? ''],
   ];
 }

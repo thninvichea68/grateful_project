@@ -457,7 +457,7 @@ export async function liveConsignments(f: Filters, limit = 8): Promise<LiveConsi
            fw.name AS "forwarderName", p.name AS "clearancePortName", to_char(s.eta, 'YYYY-MM-DD') AS eta, s.status, s.clearance_status AS "clearanceStatus"
     FROM shipments s JOIN clients c ON c.id = s.client_id
     LEFT JOIN forwarders fw ON fw.id = s.forwarder_id LEFT JOIN ports p ON p.id = s.clearance_port_id
-    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'PENDING')
+    ${shipWhere({ ...f, from: undefined, to: undefined })} AND s.status IN ('IN_PROGRESS', 'PENDING', 'EXCEPTION')
     ORDER BY CASE WHEN s.clearance_status = 'EXCEPTION' THEN 0 WHEN s.status = 'IN_PROGRESS' THEN 1 ELSE 2 END,
              abs(s.eta - (now() AT TIME ZONE ${env.BUSINESS_TIMEZONE})::date) NULLS LAST
     LIMIT ${limit}`,

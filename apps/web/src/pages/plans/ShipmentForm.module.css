@@ -3,8 +3,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  /* The whole width of the screen, import and export alike (no 1400px cap). */
+  width: 100%;
   padding-bottom: 8px;
 }
 
@@ -101,7 +101,7 @@
   flex-shrink: 0;
   color: var(--text-secondary);
 }
-/* Field labels: icon + name in capitals, as the rest of the shipping plan. */
+/* Field labels: the name in capitals, as the rest of the shipping plan. */
 .page label.label {
   display: flex;
   align-items: center;
@@ -160,6 +160,77 @@
   line-height: 1.5;
   color: var(--text-tertiary);
 }
+/* Shipment Status card, top right: the Exception switch (a shipment we don't clear). */
+.exceptionToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.exceptionToggle:hover {
+  border-color: var(--border-strong);
+}
+.exceptionToggle:has(input:checked) {
+  border-color: var(--status-exception-fg);
+  background: var(--status-exception-bg);
+}
+.exceptionToggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.exceptionToggle b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.exceptionTrack {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.15s;
+}
+.exceptionTrack::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.15s;
+}
+.exceptionToggle input:checked + .exceptionTrack {
+  background: var(--status-exception-fg);
+}
+.exceptionToggle input:checked + .exceptionTrack::after {
+  transform: translateX(14px);
+}
+.exceptionToggle input:focus-visible + .exceptionTrack {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+/* Viewing (not editing): the switch shows the state but can't be changed. */
+.exceptionToggle:has(input:disabled) {
+  cursor: default;
+  opacity: 0.75;
+}
 
 /* Customs declarations: equal columns across the card (Clearance Port · Declare No. · Date). */
 .declGrid {
@@ -167,8 +238,8 @@
   grid-template-columns: repeat(var(--decl-cols, 2), minmax(0, 1fr));
   gap: 20px 18px;
 }
-.declGrid[data-cols='3'] {
-  --decl-cols: 3;
+.declPort {
+  margin-bottom: 20px;
 }
 /* A later declaration's heading: "Declaration 2" and its Remove button. */
 .declHead {
@@ -234,6 +305,45 @@
   grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
   gap: 18px;
 }
+/* An import's first tab: General Information over Cargo on the left, Parties on the right. */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.columns > :global(.cx-card) {
+  margin-top: 0;
+}
+/* The shipment page sits on white, and its boxes are light gray so they stand out. */
+:global(.content):has(.page) {
+  background: var(--bg-surface);
+}
+.page :is(:global(.form-field-box), :global(.form-select-box)) {
+  background-color: var(--bg-inset);
+}
+.page :is(:global(.form-field-box), :global(.form-select-box)):focus {
+  background-color: var(--bg-surface);
+}
+/* Open sections: no card box, the title over a rule, more room between the rows of sections. */
+.columns.open {
+  gap: 36px 48px;
+}
+/* The containers table fits its half of the page instead of scrolling sideways. */
+.open :global(.cdc-lines-table) {
+  min-width: 0;
+}
+.open :global(.cx-card) {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+.open :global(.cx-card) > :global(.cx-card-head) {
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--border-strong);
+}
 .note {
   font-size: 12.5px;
   color: var(--text-tertiary);
@@ -262,6 +372,9 @@
 @media (max-width: 1000px) {
   .grid {
     --cols: 2 !important;
+  }
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 640px) {
@@ -492,6 +605,11 @@
 .refBox {
   color: var(--text-secondary);
   cursor: default;
+}
+/* Worked out by the form (Quantity Pkgs (Automatic)): the cursor says it can't be typed in.
+   !important: viewing a shipment resets its disabled fields to the default cursor. */
+.autoBox {
+  cursor: not-allowed !important;
 }
 
 /* Viewing a saved shipment (or view-only): fields read normally, not greyed out. */

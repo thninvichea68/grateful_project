@@ -294,6 +294,7 @@ function Workspace({
               <StatementPanel
                 key={k}
                 st={m.statements[k]}
+                amountColumns={m.amountColumns}
                 month={month}
                 clientId={m.client.id}
                 canWrite={canWrite}
@@ -434,12 +435,15 @@ function DocCell({
 
 function StatementPanel({
   st,
+  amountColumns,
   month,
   clientId,
   canWrite,
   onPay,
 }: {
   st: BillingStatement;
+  /** JR: the invoice and disbursement amounts in columns of their own, then the total. */
+  amountColumns: boolean;
   month: string;
   clientId: string;
   canWrite: boolean;
@@ -448,6 +452,7 @@ function StatementPanel({
   const toast = useToast();
   const voidReceipt = useVoidReceipt();
   const inv = st.kind === 'INVOICE';
+  const split = inv && amountColumns;
   const due = Number(st.balance);
   const total = Number(st.total);
   const doVoid = async (r: OfficialReceipt) => {
@@ -490,7 +495,13 @@ function StatementPanel({
                 )}
                 <th>Ref</th>
                 <th className={b.statusCol}>Status</th>
-                <th className={b.num}>Amount</th>
+                {split && (
+                  <>
+                    <th className={b.num}>Invoice</th>
+                    <th className={b.num}>Dis</th>
+                  </>
+                )}
+                <th className={b.num}>{split ? 'Total' : 'Amount'}</th>
               </tr>
             </thead>
             <tbody>
@@ -527,6 +538,12 @@ function StatementPanel({
                       <span className={`${b.draftTag} ${b.issuedTag}`}>issued</span>
                     )}
                   </td>
+                  {split && (
+                    <>
+                      <td className={b.num}>{l.invAmount ? fmtMoney(l.invAmount) : '—'}</td>
+                      <td className={b.num}>{l.disAmount ? fmtMoney(l.disAmount) : '—'}</td>
+                    </>
+                  )}
                   <td className={b.num}>
                     <b>{fmtMoney(l.amount)}</b>
                   </td>
@@ -584,11 +601,7 @@ function StatementPanel({
         {due > 0 && (
           <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             {canWrite && (
-              <button
-                type="button"
-                className={`btn-create-submit ${b.iconBtn}`}
-                onClick={onPay}
-              >
+              <button type="button" className={`btn-create-submit ${b.iconBtn}`} onClick={onPay}>
                 {icons.cash({})}
                 Record Payment
               </button>

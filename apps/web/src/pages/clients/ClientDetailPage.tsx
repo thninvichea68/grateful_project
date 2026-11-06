@@ -4,15 +4,22 @@ import { BackLink, backRow } from '../../components/BackLink';
 import { useAuth } from '../../auth/AuthProvider';
 import { useClient, useDeleteClient, useLookups, useSaveClient } from '../../features/hooks';
 import { Pill } from '../../components/StatusPill';
-import { ErrorBanner, ui } from '../../components/ui';
+import { ErrorBanner } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { CLIENT_STATUS_PILL } from '../ClientsPage';
 import { ClientFormModal } from './ClientFormModal';
+import { ClientMoreMenu } from './ClientMoreMenu';
 import { PartiesCard } from './PartiesCard';
 import { RemarksCard } from './RemarksCard';
+import { AttachmentsCard } from './AttachmentsCard';
 import s from './ClientDetailPage.module.css';
+
+/** A field the client record leaves blank. */
+function Empty() {
+  return <span className={s.empty}>Not set</span>;
+}
 
 export function ClientDetailPage() {
   const { id = '' } = useParams();
@@ -72,60 +79,54 @@ export function ClientDetailPage() {
       <div className={s.head}>
         <div className={backRow}>
           <BackLink to="/clients" label="Clients" />
-          <div className={s.title}>{c.name}</div>
-          <div className={s.sub}>
-            {c.code} · {country} ·{' '}
+          <div className={s.titleRow}>
+            <h2 className={s.title}>{c.name}</h2>
             <Pill tone={CLIENT_STATUS_PILL[c.status].tone}>
               {CLIENT_STATUS_PILL[c.status].label}
             </Pill>
           </div>
-          {/* Where to go from here: the client's shipments and CDC master list. */}
-          <div className={s.quickLinks}>
-            <Link to={`/plans?clientId=${c.id}`} className={s.quickLink}>
-              {icons.plans({ width: 14, height: 14 })}
-              Shipping Plans
-            </Link>
-            {c.cutStockItems ? (
-              <Link to={`/cutstock?clientId=${c.id}`} className={s.quickLink}>
-                {icons.cutstock({ width: 14, height: 14 })}
-                CDC master list <span className={s.quickCount}>{c.cutStockItems}</span>
-              </Link>
-            ) : (
-              <span
-                className={`${s.quickLink} ${s.quickLinkOff}`}
-                title="Import one from the Cut Stock page"
-              >
-                {icons.cutstock({ width: 14, height: 14 })}
-                No CDC master list
-              </span>
-            )}
+          <div className={s.sub}>
+            {c.code} · {country} · Client since {fmtDate(c.createdAt)}
           </div>
         </div>
-        {can('clients:write') && (
-          <div className={ui.toolbar}>
-            <button
-              type="button"
-              className={ui.ghostBtn}
-              onClick={() => void toggleActive()}
-              disabled={save.isPending}
+        {/* Where to go from here (the client's shipments and CDC master list), then actions. */}
+        <div className={s.actions}>
+          <Link to={`/plans?clientId=${c.id}`} className={s.quickLink}>
+            {icons.plans({ width: 14, height: 14 })}
+            Shipping Plans
+          </Link>
+          {c.cutStockItems ? (
+            <Link to={`/cutstock?clientId=${c.id}`} className={s.quickLink}>
+              {icons.cutstock({ width: 14, height: 14 })}
+              CDC master list <span className={s.quickCount}>{c.cutStockItems}</span>
+            </Link>
+          ) : (
+            <span
+              className={`${s.quickLink} ${s.quickLinkOff}`}
+              title="Import one from the Cut Stock page"
             >
-              {c.status === 'INACTIVE' ? 'Reactivate' : 'Deactivate'}
-            </button>
-            {c.shipmentCount === 0 && c.cutStockItems === 0 && (
-              <button
-                type="button"
-                className={ui.dangerBtn}
-                onClick={() => void remove()}
-                disabled={del.isPending}
-              >
-                Delete
+              {icons.cutstock({ width: 14, height: 14 })}
+              No CDC master list
+            </span>
+          )}
+          {can('clients:write') && (
+            <>
+              <span className={s.divider} aria-hidden />
+              <button type="button" className="new-shipment-btn" onClick={() => setEditing(true)}>
+                {icons.edit({ width: 14, height: 14 })}
+                Edit client
               </button>
-            )}
-            <button type="button" className="new-shipment-btn" onClick={() => setEditing(true)}>
-              Edit client
-            </button>
-          </div>
-        )}
+              <ClientMoreMenu
+                inactive={c.status === 'INACTIVE'}
+                busy={save.isPending || del.isPending}
+                onToggleActive={() => void toggleActive()}
+                onDelete={
+                  c.shipmentCount === 0 && c.cutStockItems === 0 ? () => void remove() : undefined
+                }
+              />
+            </>
+          )}
+        </div>
       </div>
       <ErrorBanner error={save.error ?? del.error} />
 
@@ -136,11 +137,15 @@ export function ClientDetailPage() {
           <div className={s.statValue}>{c.activeShipments}</div>
         </div>
         <Link to={`/plans?clientId=${c.id}&direction=IMPORT`} className={`${s.stat} ${s.statLink}`}>
-          <div className={s.statLabel}>Imports →</div>
+          <div className={s.statLabel}>
+            Imports {icons.chevronRight({ width: 12, height: 12, className: s.statArrow })}
+          </div>
           <div className={s.statValue}>{c.importCount}</div>
         </Link>
         <Link to={`/plans?clientId=${c.id}&direction=EXPORT`} className={`${s.stat} ${s.statLink}`}>
-          <div className={s.statLabel}>Exports →</div>
+          <div className={s.statLabel}>
+            Exports {icons.chevronRight({ width: 12, height: 12, className: s.statArrow })}
+          </div>
           <div className={s.statValue}>{c.exportCount}</div>
         </Link>
         {c.netProfitYtd !== undefined ? (
@@ -162,38 +167,69 @@ export function ClientDetailPage() {
             <div className="card-header-row">
               <h3>Details</h3>
             </div>
-            <dl className={s.facts}>
-              <dt>Legal name</dt>
-              <dd>{c.legalName ?? '-'}</dd>
-              {c.legalNameKm && (
-                <>
+            {/* Company and Contact side by side; the English and Khmer address below them. */}
+            <div className={s.groups}>
+              <section className={s.group}>
+                <h4 className={s.groupTitle}>Company</h4>
+                <dl className={s.facts}>
+                  <dt>Legal name</dt>
+                  <dd>{c.legalName ?? <Empty />}</dd>
                   <dt>Khmer name</dt>
-                  <dd>{c.legalNameKm}</dd>
-                </>
-              )}
-              <dt>VATTIN</dt>
-              <dd>{c.vattin ?? '-'}</dd>
-              <dt>Address</dt>
-              <dd>{c.address ?? '-'}</dd>
-              {c.addressKm && (
-                <>
-                  <dt>Khmer address</dt>
-                  <dd>{c.addressKm}</dd>
-                </>
-              )}
-              <dt>Contact</dt>
-              <dd>
-                {[c.contactName, c.contactEmail, c.contactPhone].filter(Boolean).join(' · ') || '-'}
-              </dd>
-              <dt>Commission (CM)</dt>
-              <dd>{fmtMoney(c.commissionUsd)} per declaration</dd>
-              <dt>Client since</dt>
-              <dd>{fmtDate(c.createdAt)}</dd>
-            </dl>
+                  <dd lang="km">{c.legalNameKm ?? <Empty />}</dd>
+                  <dt>VATTIN</dt>
+                  <dd className={s.mono}>{c.vattin ?? <Empty />}</dd>
+                </dl>
+              </section>
+              <section className={s.group}>
+                <h4 className={s.groupTitle}>Contact &amp; billing</h4>
+                <dl className={s.facts}>
+                  <dt>Contact</dt>
+                  <dd>{c.contactName ?? <Empty />}</dd>
+                  <dt>Email</dt>
+                  <dd>
+                    {c.contactEmail ? (
+                      <a className={s.link} href={`mailto:${c.contactEmail}`}>
+                        {c.contactEmail}
+                      </a>
+                    ) : (
+                      <Empty />
+                    )}
+                  </dd>
+                  <dt>Phone</dt>
+                  <dd>
+                    {c.contactPhone ? (
+                      <a className={s.link} href={`tel:${c.contactPhone.replace(/\s+/g, '')}`}>
+                        {c.contactPhone}
+                      </a>
+                    ) : (
+                      <Empty />
+                    )}
+                  </dd>
+                  <dt>Commission</dt>
+                  <dd>
+                    {fmtMoney(c.commissionUsd)} <span className={s.unit}>per declaration</span>
+                  </dd>
+                </dl>
+              </section>
+              <section className={`${s.group} ${s.groupWide}`}>
+                <h4 className={s.groupTitle}>Address</h4>
+                <div className={s.addresses}>
+                  <div className={s.addressBox}>
+                    <span className={s.addressLang}>English</span>
+                    <p>{c.address ?? <Empty />}</p>
+                  </div>
+                  <div className={s.addressBox}>
+                    <span className={s.addressLang}>Khmer</span>
+                    <p lang="km">{c.addressKm ?? <Empty />}</p>
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
         <div className={s.column}>
           <RemarksCard clientId={c.id} />
+          <AttachmentsCard clientId={c.id} title={c.name} />
         </div>
       </div>
 

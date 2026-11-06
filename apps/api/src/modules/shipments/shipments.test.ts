@@ -550,6 +550,7 @@ describe('shipments', () => {
       'ctnr',
       'ctnrSize',
       'freight',
+      'terms',
       'reference',
       'client',
       'consignee',

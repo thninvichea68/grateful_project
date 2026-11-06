@@ -153,6 +153,8 @@ export const documentMetaSchema = z.object({
   /** A credit note's or record summary's support document (⋯ → Upload support documents). */
   creditNoteId: optUuid,
   recordSummaryId: optUuid,
+  /** Grateful's own file (form data sends "true"). */
+  company: z.preprocess((v) => v === true || v === 'true', z.boolean()).optional(),
 });
 
 export const documentListQuerySchema = paginationQuerySchema.extend({
@@ -161,6 +163,11 @@ export const documentListQuerySchema = paginationQuerySchema.extend({
   clientId: z.string().uuid().optional(),
   creditNoteId: z.string().uuid().optional(),
   recordSummaryId: z.string().uuid().optional(),
+  /**
+   * client: the client's own attachments (with clientId; not a shipment's, credit note's or
+   * record summary's). company: Grateful's own files.
+   */
+  attachedTo: z.enum(['client', 'company']).optional(),
 });
 
 export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {

@@ -414,6 +414,34 @@
       "when": 1793773847365,
       "tag": "0058_material_types",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793812177626,
+      "tag": "0059_document_company",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793842538896,
+      "tag": "0060_shipment_hbl_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793935916490,
+      "tag": "0061_shipment_status_exception",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793955990233,
+      "tag": "0062_vfl_sak_item_pkgs",
+      "breakpoints": true
     }
   ]
 }

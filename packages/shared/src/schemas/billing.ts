@@ -148,6 +148,9 @@ export interface StatementLine {
   /** HBL, else the declaration (or, for a debit note without a shipment, its reference). */
   ref: string | null;
   amount: string;
+  /** Invoice statement: the tax invoice's and the disbursement's parts of `amount`. */
+  invAmount: string | null;
+  disAmount: string | null;
   /** Comes from numbers typed in the Monthly Ledger, not an issued document. */
   manual: boolean;
   /** Its document (or one of them) is still a draft: shown, and printed, marked DRAFT. */
@@ -208,6 +211,11 @@ export interface BillingClient {
 export interface BillingClientMonth {
   client: BillingClient;
   month: string;
+  /**
+   * The invoice statement shows "Amount Invoice", "Amount Dis" and "Total" columns in place
+   * of Currency and Amount (JR, from 2026-10).
+   */
+  amountColumns: boolean;
   rows: BillingShipmentRow[];
   /** Documents of the month tied to no shipment, e.g. a monthly service-fee debit note. */
   others: (BillingDocSlot & { reference: string | null })[];

@@ -171,6 +171,8 @@ type StatusFacts = {
   declarations?:
     | { declareNo?: string | null | undefined; declareDate?: string | null | undefined }[]
     | undefined;
+  /** Exception here (set by hand: a shipment we don't clear) makes the status Exception too. */
+  clearanceStatus?: ClearanceStatus | null | undefined;
 };
 
 const milestoneMet: Record<CompletionMilestone, (s: StatusFacts) => boolean> = {
@@ -184,6 +186,7 @@ const milestoneMet: Record<CompletionMilestone, (s: StatusFacts) => boolean> = {
 
 /**
  * A shipment's status, worked out from its data:
+ * Exception — its clearance status was set to Exception by hand (a shipment we don't clear);
  * Completed — every milestone of the client's rule is in (by default an import's ETA Factory
  * date, an export's ATD);
  * In Progress — not completed, but a customs declaration is recorded;
@@ -193,6 +196,7 @@ export function shipmentStatusOf(
   s: StatusFacts,
   rule: readonly CompletionMilestone[] | null | undefined = null,
 ): ShipmentStatus {
+  if (s.clearanceStatus === 'EXCEPTION') return 'EXCEPTION';
   const need = rule?.length ? rule : DEFAULT_COMPLETION[s.direction];
   if (need.every((m) => milestoneMet[m](s))) return 'COMPLETED';
   if (s.declarations?.some((d) => d.declareNo?.trim())) return 'IN_PROGRESS';
@@ -238,6 +242,19 @@ export function clearanceStatusOf(s: {
   return 'PENDING';
 }
 
+/**
+ * The clearance status to store and show: Exception is chosen by hand (a shipment we don't
+ * clear) and stays until it is turned off; every other status follows from the declarations.
+ */
+export function clearanceStatusFor(s: {
+  clearanceStatus?: ClearanceStatus | null | undefined;
+  declarations?:
+    | { declareNo?: string | null | undefined; declareDate?: string | null | undefined }[]
+    | undefined;
+}): ClearanceStatus {
+  return s.clearanceStatus === 'EXCEPTION' ? 'EXCEPTION' : clearanceStatusOf(s);
+}
+
 export const shipmentInputSchema = z
   .object({
     clientId: z.string().uuid('Choose a client'),
@@ -263,6 +280,7 @@ export const shipmentInputSchema = z
     material: optText(60),
     bookingNo: optText(60),
     hblNo: optText(60),
+    hblDate: optDate,
     vesselName: optText(80),
     voyageNo: optText(30),
     crd: optDate,
@@ -294,11 +312,12 @@ export const shipmentInputSchema = z
         path: ['loadType'],
         message: 'Air freight has no CY/CY or LCL load type',
       });
-    if (s.loadType !== 'FCL' && s.containers.length)
+    // FCL records its containers; LCL may too (optional), air and loose cargo never do.
+    if (s.loadType === 'NONE' && s.containers.length)
       ctx.addIssue({
         code: 'custom',
         path: ['containers'],
-        message: 'Containers are only recorded for CY/CY (FCL) shipments',
+        message: 'Containers are only recorded for CY/CY (FCL) or LCL shipments',
       });
     if (s.etd && s.eta && s.etd > s.eta)
       ctx.addIssue({ code: 'custom', path: ['eta'], message: 'ETA cannot be before ETD' });
@@ -334,8 +353,12 @@ export const shipmentInputSchema = z
       'Declaration',
     );
   })
-  // The statuses are never entered: they follow from the dates and declarations.
-  .transform((s) => ({ ...s, status: shipmentStatusOf(s), clearanceStatus: clearanceStatusOf(s) }));
+  // The statuses follow from the dates and declarations; only a clearance Exception is chosen.
+  .transform((s) => ({
+    ...s,
+    status: shipmentStatusOf(s),
+    clearanceStatus: clearanceStatusFor(s),
+  }));
 export type ShipmentInput = z.input<typeof shipmentInputSchema>;
 export type ShipmentInputParsed = z.output<typeof shipmentInputSchema>;
 
@@ -462,6 +485,8 @@ export interface ShipmentDetail {
   incoterm: Incoterm | null;
   bookingNo: string | null;
   hblNo: string | null;
+  /** The HBL's date; by air, the HAWB / MAWB date. */
+  hblDate: string | null;
   vesselName: string | null;
   voyageNo: string | null;
   crd: string | null;
@@ -564,6 +589,8 @@ export interface ImportCargoExcelParseResult {
       description: string | null;
       material: string | null;
       unit: string | null;
+      /** PKGS; empty when the sheet has none. */
+      ctns: string;
       pcs: string;
       netWeightKg: string;
       grossWeightKg: string;

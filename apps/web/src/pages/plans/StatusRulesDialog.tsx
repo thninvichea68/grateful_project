@@ -17,7 +17,7 @@ const HINT: Record<CompletionMilestone, string> = {
   ATD: 'The ship or flight has actually left',
   ATA: 'It has actually arrived at the port',
   ARRIVE_FTY: 'It has reached the factory',
-  DO_DATE: 'The delivery order (DO / EDO) is dated',
+  DO_DATE: 'The delivery order (DO / EDO) has a released date',
   DOCS_RECEIVED: 'The shipping documents were received',
   CLEARED: 'A declaration has its number and date',
 };

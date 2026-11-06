@@ -41,17 +41,32 @@ describe('shipment status', () => {
     expect(clearanceStatusOf({ declarations: [{ declareDate: '2026-10-02' }] })).toBe('PENDING');
   });
 
+  const base = {
+    clientId: '00000000-0000-4000-8000-000000000000',
+    direction: 'EXPORT',
+    transportMode: 'SEA',
+    loadType: 'LCL',
+    atd: '2026-09-04',
+  } as const;
+
   it('is worked out on save; a status sent in is ignored', () => {
     const parsed = shipmentInputSchema.parse({
-      clientId: '00000000-0000-4000-8000-000000000000',
-      direction: 'EXPORT',
-      transportMode: 'SEA',
-      loadType: 'LCL',
+      ...base,
       status: 'EXCEPTION',
-      clearanceStatus: 'EXCEPTION',
-      atd: '2026-09-04',
+      clearanceStatus: 'CLEARED',
     });
     expect(parsed.status).toBe('COMPLETED');
     expect(parsed.clearanceStatus).toBe('PENDING');
+  });
+
+  it('keeps a clearance Exception chosen by hand, even with a cleared declaration', () => {
+    const parsed = shipmentInputSchema.parse({
+      ...base,
+      clearanceStatus: 'EXCEPTION',
+      declarations: [{ declareNo: 'E 1001', declareDate: '2026-09-03' }],
+    });
+    expect(parsed.clearanceStatus).toBe('EXCEPTION');
+    // The shipment's own status follows: Exception, not Completed.
+    expect(parsed.status).toBe('EXCEPTION');
   });
 });

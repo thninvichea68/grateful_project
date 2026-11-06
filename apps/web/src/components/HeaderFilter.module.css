@@ -9,7 +9,8 @@
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
-  color: inherit;
+  /* Full-strength text (near-black in light) rather than the table head's muted grey. */
+  color: var(--text-primary);
   cursor: pointer;
 }
 /* Hover tints the chevron; once filtered or sorted, the column name turns cyan with it. */

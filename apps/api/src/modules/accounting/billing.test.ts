@@ -184,10 +184,14 @@ describe('client billing: a client month', () => {
         dnNo: null,
         ref: 'CXDU0264562',
         amount: '903.45',
+        invAmount: '266.20',
+        disAmount: '637.25',
         manual: true,
         draft: false,
       },
     ]);
+    // JR's Invoice / Dis / Total columns start in October.
+    expect(m.amountColumns).toBe(false);
     expect(m.statements.DEBIT_NOTE).toMatchObject({ total: '707.50', balance: '707.50' });
     // The second shipment has nothing yet: the month is not invoiced.
     expect(m.summary).toMatchObject({
@@ -486,6 +490,24 @@ describe('official receipts', () => {
       (await acc('get', '/receipts', { query: { status: 'VOID', q: 'or26' } })).body.data,
     ).toHaveLength(1);
     expect((await acc('get', `/receipts/${first.body.id}`)).body.status).toBe('VOID');
+  });
+
+  it('JR from October: one invoice statement, its amounts in Invoice / Dis columns', async () => {
+    const typed = { invNo: 'GS26-393', disNo: 'DIS437', invRevenue: '242', disTotal: '637.25' };
+    await shipment(b.jr.id, 'E 264562', '2026-10-01', { ledger: typed });
+    await shipment(b.jyx.id, 'I 5', '2026-10-01', {
+      direction: 'IMPORT',
+      ledger: { ...typed, invNo: 'GS26-394', disNo: 'DIS438' },
+    });
+    const m = (await month(b.jr.id, '2026-10')).body;
+    expect(m.amountColumns).toBe(true);
+    expect(Object.keys(m.statements).sort()).toEqual(['DEBIT_NOTE', 'INVOICE']);
+    expect(m.statements.INVOICE.lines).toMatchObject([
+      { invNo: 'GS26-393', disNo: 'DIS437', invAmount: '266.20', disAmount: '637.25' },
+    ]);
+    expect(m.statements.INVOICE.total).toBe('903.45');
+    // Other clients keep Currency / Amount.
+    expect((await month(b.jyx.id, '2026-10')).body.amountColumns).toBe(false);
   });
 
   it('validates amounts and dates', async () => {

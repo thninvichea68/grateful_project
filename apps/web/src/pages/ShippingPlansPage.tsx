@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SHIPMENT_STATUS_LABEL, type ShipmentStatus } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
@@ -6,6 +6,7 @@ import { useLookups, useShipmentColumnValues, useShipments } from '../features/h
 import { ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
 import { SearchBox } from '../components/SearchBox';
+import { MonthInput, currentMonth } from '../components/MonthInput';
 import { HeaderFilter } from '../components/HeaderFilter';
 import { useHeaderFilters } from '../components/useHeaderFilters';
 import { useToast } from '../components/Toast';
@@ -46,13 +47,26 @@ export function ShippingPlansPage() {
   const [exporting, setExporting] = useState(false);
   const header = useHeaderFilters(params, setParams);
 
+  // A plain visit (sidebar, or only direction/sort in the link) opens on this month.
+  // Links that bring a search, client or status keep every month so their counts match.
+  // "All months" is kept in the URL as month=all so Clear doesn't snap back.
+  const rawMonth = params.get('month');
+  const autoMonth =
+    rawMonth === null && !params.get('q') && !params.has('clientId') && !params.get('status');
+  useEffect(() => {
+    if (!autoMonth) return;
+    const next = new URLSearchParams(params);
+    next.set('month', currentMonth());
+    setParams(next, { replace: true });
+  }, [autoMonth, params, setParams]);
+
   const filters = {
     clientId: params.getAll('clientId'),
     // Always Import or Export (Import unless the link asks for Export).
     direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
     // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
-    month: params.get('month') ?? '',
+    month: rawMonth === 'all' ? '' : (rawMonth ?? (autoMonth ? currentMonth() : '')),
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
     // Newest customs clearance (declaration) date first, unless another order is picked.
@@ -200,11 +214,10 @@ export function ShippingPlansPage() {
                 e.target.value.trim() !== filters.q && setParam('q', e.target.value.trim())
               }
             />
-            <input
-              type="month"
-              className={ui.input}
+            <MonthInput
               value={filters.month}
-              onChange={(e) => setParam('month', e.target.value)}
+              onChange={(v) => setParam('month', v || 'all')}
+              placeholder="All months"
               aria-label="Declaration month"
               title="Declaration month"
             />

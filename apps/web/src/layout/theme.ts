@@ -7,15 +7,15 @@ const listeners = new Set<() => void>();
 
 function read(): Theme {
   try {
-    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
+    return localStorage.getItem(KEY) === 'dark' ? 'dark' : 'light';
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 
 let current: Theme = read();
 
-/** Put the theme on <html> (light is the data-theme attribute; dark is the default). */
+/** Put the theme on <html> (light, the default, is the data-theme attribute; dark has none). */
 export function applyTheme(theme: Theme = current) {
   if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
   else document.documentElement.removeAttribute('data-theme');

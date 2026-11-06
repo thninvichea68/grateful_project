@@ -7,6 +7,7 @@ import { HeaderFilter } from '../../components/HeaderFilter';
 import { TableState, ui } from '../../components/ui';
 import { useLocalHeaderFilters, type LocalColumn } from '../../components/useLocalHeaderFilters';
 import { Pill } from '../../components/StatusPill';
+import { MonthRangeInput } from '../../components/MonthRangeInput';
 import { icons } from '../../layout/icons';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 import { CoRecordModal } from './CoRecordModal';
@@ -108,26 +109,11 @@ export function CoPlansPage() {
         <div className="card-header-row">
           <h3 style={{ margin: 0 }}>CO Plans — Certificates of Origin</h3>
           <div className={ui.toolbar}>
-            <input
-              className={ui.input}
-              type="month"
-              value={from}
-              max={to}
-              onChange={(e) => set({ from: e.target.value })}
-              aria-label="From month"
-            />
-            <input
-              className={ui.input}
-              type="month"
-              value={to}
-              onChange={(e) =>
-                set(
-                  e.target.value && e.target.value < from
-                    ? { to: e.target.value, from: e.target.value }
-                    : { to: e.target.value },
-                )
-              }
-              aria-label="To month"
+            <MonthRangeInput
+              from={from}
+              to={to}
+              onChange={(f, t) => set({ from: f, to: t })}
+              aria-label="Months"
             />
             <select
               className={ui.input}

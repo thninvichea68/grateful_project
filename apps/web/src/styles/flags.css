@@ -1,0 +1,8 @@
+/* Flag overrides for country-flag-icons: load after 'country-flag-icons/3x2/flags.css'. The
+   extra attribute selector outranks the package's rule whatever the stylesheet order. */
+
+/* Cambodia: the official flag (Wikimedia Flag_of_Cambodia.svg), not the package's
+   simplified temple. */
+[class].flag\:KH {
+  background-image: url('../assets/flags/KH.svg');
+}

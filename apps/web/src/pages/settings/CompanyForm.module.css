@@ -13,6 +13,11 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 /* The pencil that unlocks the form, top right. */
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .editBtn {
   display: grid;
   flex-shrink: 0;
@@ -105,7 +110,16 @@
 }
 /* Section title with an accent underline over a full-width hairline. */
 .sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
   border-bottom: 1px solid var(--border-subtle);
+}
+/* The section's description sits in the "?" at the right of its title. */
+.sectionHead > span {
+  margin-bottom: 10px;
 }
 .sectionHead h4 {
   display: inline-flex;
@@ -122,12 +136,6 @@
 .sectionIcon {
   width: 30px !important;
   height: 30px !important;
-}
-.hint {
-  margin: 10px 0 18px;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--text-secondary);
 }
 
 .fields {

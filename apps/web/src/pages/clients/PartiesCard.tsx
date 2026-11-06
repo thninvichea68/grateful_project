@@ -18,22 +18,66 @@ type Party =
   | { kind: 'supplier'; id: string | null; name: string; address: string | null }
   | { kind: 'consignee'; id: string; name: string; address: string | null };
 
-/** Tiles shown before "Show all"; the search box appears past this many too. */
-const PREVIEW = 12;
+/** Rows shown before "Show all". */
+const PREVIEW = 25;
+
+const TABS = {
+  supplier: {
+    label: 'Suppliers',
+    icon: icons.upload,
+    sub: "Shippers on this client's imports",
+    empty: 'No suppliers yet. Shipper names on imports appear here.',
+  },
+  consignee: {
+    label: 'Consignees',
+    icon: icons.consignees,
+    sub: "Receivers on this client's exports",
+    empty: 'None linked to this client.',
+  },
+} as const;
 
 /**
- * Client Details: the client's Suppliers (import shippers) and Consignees, each a full-width
- * card of address tiles that wrap instead of scrolling; the INV + PL letterhead prints them
- * (Shipping Plans → Export INV + PL).
+ * Client Details: the client's Suppliers (import shippers) and Consignees in one tabbed card,
+ * one compact row each, with search and a "missing address" filter; the INV + PL letterhead
+ * prints the addresses (Shipping Plans → Export INV + PL).
  */
 export function PartiesCard({ client }: { client: ClientDetail }) {
   const { can } = useAuth();
   const editable = can('clients:write');
   /** A row, or the kind a "+ Add" creates. */
   const [open, setOpen] = useState<Party | Party['kind'] | null>(null);
+  const [tab, setTab] = useState<Party['kind']>('supplier');
+  const [q, setQ] = useState('');
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [all, setAll] = useState(false);
   const toast = useToast();
   const delSupplier = useDeleteSupplier(client.id);
   const delConsignee = useDeleteConsignee(client.id);
+
+  const lists: Record<Party['kind'], Party[]> = {
+    supplier: client.suppliers.map((x) => ({ kind: 'supplier' as const, ...x })),
+    consignee: client.consignees.map((x) => ({ kind: 'consignee' as const, ...x })),
+  };
+  const rows = lists[tab];
+  const missing = rows.filter((p) => !p.address).length;
+  const needle = q.trim().toLowerCase();
+  const matches = rows.filter(
+    (p) =>
+      (!missingOnly || !p.address) &&
+      (!needle ||
+        p.name.toLowerCase().includes(needle) ||
+        (p.address ?? '').toLowerCase().includes(needle)),
+  );
+  const shown = all || needle ? matches : matches.slice(0, PREVIEW);
+  const deleting = tab === 'supplier' ? delSupplier.isPending : delConsignee.isPending;
+  const meta = TABS[tab];
+
+  const switchTab = (k: Party['kind']) => {
+    setTab(k);
+    setQ('');
+    setMissingOnly(false);
+    setAll(false);
+  };
 
   const remove = async (p: Party) => {
     const msg =
@@ -47,31 +91,121 @@ export function PartiesCard({ client }: { client: ClientDetail }) {
   };
 
   return (
-    <>
-      <PartyList
-        title="Suppliers"
-        sub="Shippers on this client's imports"
-        rows={client.suppliers.map((x) => ({ kind: 'supplier' as const, ...x }))}
-        empty="No suppliers yet. Shipper names on imports appear here."
-        editable={editable}
-        deleting={delSupplier.isPending}
-        error={delSupplier.error}
-        onAdd={() => setOpen('supplier')}
-        onOpen={setOpen}
-        onDelete={(p) => void remove(p)}
-      />
-      <PartyList
-        title="Consignees"
-        sub="Receivers on this client's exports"
-        rows={client.consignees.map((x) => ({ kind: 'consignee' as const, ...x }))}
-        empty="None linked to this client."
-        editable={editable}
-        deleting={delConsignee.isPending}
-        error={delConsignee.error}
-        onAdd={() => setOpen('consignee')}
-        onOpen={setOpen}
-        onDelete={(p) => void remove(p)}
-      />
+    <div className="card">
+      <ErrorBanner error={delSupplier.error ?? delConsignee.error} />
+      <div className={s.tabs} role="tablist" aria-label="Parties">
+        {(Object.keys(TABS) as Party['kind'][]).map((k) => {
+          const n = lists[k].filter((p) => !p.address).length;
+          return (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              className={s.tab}
+              aria-selected={tab === k}
+              onClick={() => switchTab(k)}
+            >
+              <span className={s.tabIcon}>{TABS[k].icon({})}</span>
+              {TABS[k].label}
+              <span className={s.count}>{lists[k].length}</span>
+              {n > 0 && (
+                <span className={s.tabWarn} title={`${n} without address`}>
+                  {n}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={s.toolbar}>
+        <span className={s.sub}>{meta.sub}</span>
+        <div className={s.tools}>
+          {rows.length > 0 && (
+            <SearchBox
+              className={s.search}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={`Search ${meta.label.toLowerCase()}`}
+              aria-label={`Search ${meta.label.toLowerCase()}`}
+            />
+          )}
+          {missing > 0 && (
+            <button
+              type="button"
+              className={s.chip}
+              aria-pressed={missingOnly}
+              onClick={() => setMissingOnly((x) => !x)}
+            >
+              Missing address <span className={s.chipCount}>{missing}</span>
+            </button>
+          )}
+          {editable && (
+            <button type="button" className="filter-btn" onClick={() => setOpen(tab)}>
+              + Add
+            </button>
+          )}
+        </div>
+      </div>
+
+      {rows.length === 0 && <div className={s.empty}>{meta.empty}</div>}
+      {rows.length > 0 && matches.length === 0 && (
+        <div className={s.empty}>
+          No {meta.label.toLowerCase()} match{needle ? ` "${q.trim()}"` : ''}.
+        </div>
+      )}
+      {shown.length > 0 && (
+        <ul className={s.list}>
+          {shown.map((p) => (
+            <li key={`${p.kind}:${p.id ?? p.name}`} className={s.row}>
+              <button
+                type="button"
+                className={s.item}
+                disabled={!editable}
+                onClick={() => setOpen(p)}
+                title={editable ? 'Set the address' : undefined}
+              >
+                <b className={s.name}>{p.name}</b>
+                {p.address ? (
+                  <span className={s.address} title={p.address}>
+                    {p.address.replace(/\s*\n\s*/g, ', ')}
+                  </span>
+                ) : (
+                  <span className={s.noAddress}>No address</span>
+                )}
+              </button>
+              {editable && (
+                <div className={s.actions}>
+                  <button
+                    type="button"
+                    className={s.iconBtn}
+                    onClick={() => setOpen(p)}
+                    aria-label={`Edit ${p.name}`}
+                    title="Edit address"
+                  >
+                    {icons.edit({ width: 14, height: 14 })}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${s.iconBtn} ${s.delete}`}
+                    onClick={() => void remove(p)}
+                    disabled={deleting}
+                    aria-label={`Delete ${p.name}`}
+                    title="Delete"
+                  >
+                    {icons.trash({ width: 14, height: 14 })}
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!needle && matches.length > PREVIEW && (
+        <button type="button" className={s.more} onClick={() => setAll((x) => !x)}>
+          {all ? 'Show fewer' : `Show all ${matches.length}`}
+        </button>
+      )}
       {open && (
         <AddressModal
           clientId={client.id}
@@ -79,117 +213,6 @@ export function PartiesCard({ client }: { client: ClientDetail }) {
           kind={typeof open === 'string' ? open : open.kind}
           onClose={() => setOpen(null)}
         />
-      )}
-    </>
-  );
-}
-
-function PartyList({
-  title,
-  sub,
-  rows,
-  empty,
-  editable,
-  deleting,
-  error,
-  onAdd,
-  onOpen,
-  onDelete,
-}: {
-  title: string;
-  sub: string;
-  rows: Party[];
-  empty: string;
-  editable: boolean;
-  deleting: boolean;
-  error: unknown;
-  onAdd: () => void;
-  onOpen: (p: Party) => void;
-  onDelete: (p: Party) => void;
-}) {
-  const [q, setQ] = useState('');
-  const [all, setAll] = useState(false);
-  const needle = q.trim().toLowerCase();
-  const matches = needle
-    ? rows.filter(
-        (p) =>
-          p.name.toLowerCase().includes(needle) ||
-          (p.address ?? '').toLowerCase().includes(needle),
-      )
-    : rows;
-  const shown = all || needle ? matches : matches.slice(0, PREVIEW);
-  const missing = rows.filter((p) => !p.address).length;
-
-  return (
-    <div className="card">
-      <ErrorBanner error={error} />
-      <div className={s.head}>
-        <div className={s.titleBlock}>
-          <h3>
-            {title} <span className={s.count}>{rows.length}</span>
-          </h3>
-          <span className={s.sub}>
-            {sub}
-            {missing > 0 && <span className={s.missing}> · {missing} without address</span>}
-          </span>
-        </div>
-        <div className={s.tools}>
-          {rows.length > PREVIEW && (
-            <SearchBox
-              className={s.search}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={`Search ${title.toLowerCase()}`}
-              aria-label={`Search ${title.toLowerCase()}`}
-            />
-          )}
-          {editable && (
-            <button type="button" className="filter-btn" onClick={onAdd}>
-              + Add
-            </button>
-          )}
-        </div>
-      </div>
-      {rows.length === 0 && <span className={s.muted}>{empty}</span>}
-      {rows.length > 0 && matches.length === 0 && (
-        <span className={s.muted}>No {title.toLowerCase()} match "{q.trim()}".</span>
-      )}
-      <div className={s.grid}>
-        {shown.map((p) => (
-          <div key={`${p.kind}:${p.id ?? p.name}`} className={s.tile}>
-            <button
-              type="button"
-              className={s.item}
-              disabled={!editable}
-              onClick={() => onOpen(p)}
-              title={editable ? 'Set the address' : undefined}
-            >
-              <b>{p.name}</b>
-              {p.address ? (
-                <span className={s.address}>{p.address}</span>
-              ) : (
-                <span className={s.noAddress}>No address</span>
-              )}
-            </button>
-            {editable && (
-              <button
-                type="button"
-                className={s.delete}
-                onClick={() => onDelete(p)}
-                disabled={deleting}
-                aria-label={`Delete ${p.name}`}
-                title="Delete"
-              >
-                {icons.trash({ width: 14, height: 14 })}
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      {!needle && matches.length > PREVIEW && (
-        <button type="button" className={s.more} onClick={() => setAll((x) => !x)}>
-          {all ? 'Show fewer' : `Show all ${matches.length}`}
-        </button>
       )}
     </div>
   );

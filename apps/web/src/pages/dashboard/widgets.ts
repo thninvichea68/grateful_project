@@ -4,6 +4,7 @@ export type WidgetId =
   | 'kpis'
   | 'shipments'
   | 'profit'
+  | 'clientTrend'
   | 'clients'
   | 'map'
   | 'accounts'
@@ -30,6 +31,11 @@ export const WIDGETS: WidgetDef[] = [
     accounting: true,
   },
   {
+    id: 'clientTrend',
+    label: 'Shipments per Client',
+    sub: 'One client’s shipments month by month, picked from a list',
+  },
+  {
     id: 'clients',
     label: 'Shipments by Client',
     sub: 'Each client’s share of the period’s shipments',
@@ -54,10 +60,11 @@ export const widgetsFor = (canProfit: boolean) => WIDGETS.filter((w) => canProfi
 
 /**
  * Shown before anyone customizes: all of them, except that Total Net Profit takes Shipments by
- * Client's place for accounting (the Overview as it always was).
+ * Client's place for accounting (the Overview as it always was). Shipments per Client is
+ * opt-in: it shares that place, e.g. instead of Total Net Profit.
  */
 export const shownByDefault = (id: WidgetId, canProfit: boolean) =>
-  id === 'clients' ? !canProfit : true;
+  id === 'clientTrend' ? false : id === 'clients' ? !canProfit : true;
 
 type Choices = Partial<Record<WidgetId, boolean>>;
 const key = (userId: string) => `gs:overview-widgets:${userId}`;

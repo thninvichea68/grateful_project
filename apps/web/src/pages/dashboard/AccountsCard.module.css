@@ -11,9 +11,10 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 13%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+  /* As on the Clients tab: no fill, grey border, text-coloured glyph (black in light). */
+  color: var(--text-primary);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .titleChip {
   width: 32px;
@@ -41,17 +42,14 @@
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  transition: box-shadow 0.15s ease;
 }
 .nameChip svg {
   width: 14px;
   height: 14px;
 }
 .nameLink:hover .nameChip {
-  background: var(--accent-primary);
-  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--text-primary);
 }
 
 /* Key Logistics Accounts with a single client: summary instead of a one-row table. */
@@ -69,17 +67,18 @@
 }
 .badge {
   flex-shrink: 0;
-  min-width: 42px;
+  width: 42px;
   height: 42px;
-  padding: 0 8px;
   display: grid;
   place-items: center;
   border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: var(--accent-primary);
-  background: var(--status-completed-bg);
+  /* The building, as before each client name in the table: no fill, grey border, black glyph. */
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.badge svg {
+  width: 20px;
+  height: 20px;
 }
 .who {
   flex: 1;

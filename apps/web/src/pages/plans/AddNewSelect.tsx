@@ -4,7 +4,8 @@ import { ErrorBanner } from '../../components/ui';
 import cs from '../../components/CountrySelect.module.css';
 import s from './AddNewSelect.module.css';
 
-type Option = { value: string; label: string };
+/** `hint`: a short note shown after the label in the list (not in the box), and searched. */
+type Option = { value: string; label: string; hint?: string };
 const ADD = '__add__';
 
 /**
@@ -61,7 +62,7 @@ export function AddNewSelect({
     const q = query.trim().toLowerCase();
     const hits = q
       ? options
-          .filter((o) => o.label.toLowerCase().includes(q))
+          .filter((o) => `${o.label} ${o.hint ?? ''}`.toLowerCase().includes(q))
           .sort(
             (a, b) =>
               Number(!a.label.toLowerCase().startsWith(q)) -
@@ -69,7 +70,7 @@ export function AddNewSelect({
           )
       : options;
     if (!onCreate) return hits;
-    const add = { value: ADD, label: '' };
+    const add: Option = { value: ADD, label: '' };
     return addFirst ? [add, ...hits] : [...hits, add];
   }, [options, query, onCreate, addFirst]);
 
@@ -222,7 +223,10 @@ export function AddNewSelect({
                   pick(o);
                 }}
               >
-                <span className={s.label}>{o.value === ADD ? addText : o.label}</span>
+                <span className={s.label}>
+                  {o.value === ADD ? addText : o.label}
+                  {o.hint && <span className={s.hint}> ({o.hint})</span>}
+                </span>
               </li>
             ))}
             {rows.length === 0 && (

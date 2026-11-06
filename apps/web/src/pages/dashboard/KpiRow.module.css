@@ -46,9 +46,10 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: var(--tone);
-  background: color-mix(in srgb, var(--tone) 15%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 25%, transparent);
+  /* No fill, grey border, text-coloured glyph (black in light), as on the Clients tab. */
+  color: var(--text-primary);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .label {
   flex: 1;
@@ -104,31 +105,47 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 9px;
   font-size: 12px;
   white-space: nowrap;
 }
-.delta {
+/* Customs Cleared: the shipments still waiting, as a link to them on Shipping Plans. */
+.pending {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
-  border-radius: 8px;
-  font-size: 11.5px;
+  gap: 6px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--status-pending-fg) 30%, transparent);
+  border-radius: 999px;
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pending b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pending svg:last-child {
+  margin-left: -2px;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+.pending:hover svg:last-child {
+  transform: translateX(2px);
+}
+.pending:focus-visible {
+  outline: 2px solid var(--status-pending-fg);
+  outline-offset: 2px;
+}
+.allClear {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--status-completed-fg);
-  background: var(--status-completed-bg);
-}
-.delta[data-up='false'] {
-  color: var(--status-exception-fg);
-  background: var(--status-exception-bg);
-}
-.delta[data-warn='true'] {
-  color: var(--status-pending-fg);
-  background: var(--status-pending-bg);
-}
-.sub {
-  font-weight: 600;
-  color: var(--text-tertiary);
 }
 
 .skeleton {

@@ -9,11 +9,13 @@ const defaultRule = (direction: 'IMPORT' | 'EXPORT') =>
   )}]::text[]`;
 
 /**
- * The shipment status rule (shipmentStatusOf in @gs/shared), in SQL: Completed once every
- * milestone of the client's rule for that direction is in (without one: an import's ETA Factory
- * date, an export's ATD); In Progress once a declaration is recorded; otherwise Pending.
+ * The shipment status rule (shipmentStatusOf in @gs/shared), in SQL: Exception when its
+ * clearance status was set to Exception by hand; Completed once every milestone of the client's
+ * rule for that direction is in (without one: an import's ETA Factory date, an export's ATD);
+ * In Progress once a declaration is recorded; otherwise Pending.
  */
 export const shipmentStatusSql = sql`CASE
+    WHEN s.clearance_status = 'EXCEPTION' THEN 'EXCEPTION'
     WHEN NOT EXISTS (
       SELECT 1 FROM unnest(COALESCE(
         (SELECT NULLIF(CASE WHEN s.direction = 'IMPORT' THEN c.import_complete_on

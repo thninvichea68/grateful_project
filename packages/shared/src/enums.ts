@@ -44,7 +44,8 @@ export const INCOTERM_LABEL: Record<Incoterm, string> = {
 };
 
 /** Worked out from the shipment's dates and declarations (see shipmentStatusOf), never chosen. */
-export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING'] as const;
+/** EXCEPTION: a shipment we don't clear (its clearance status set to Exception by hand). */
+export const SHIPMENT_STATUSES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'EXCEPTION'] as const;
 export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
 
 /**
@@ -181,13 +182,14 @@ export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   COMPLETED: 'Completed',
   IN_PROGRESS: 'In Progress',
   PENDING: 'Pending',
+  EXCEPTION: 'Exception',
 };
 
 export const COMPLETION_MILESTONE_LABEL: Record<CompletionMilestone, string> = {
   ATD: 'ATD',
   ATA: 'ATA',
   ARRIVE_FTY: 'ETA Factory',
-  DO_DATE: 'DO / EDO Date',
+  DO_DATE: 'DO / EDO Released Date',
   DOCS_RECEIVED: 'Received Document Date',
   CLEARED: 'Customs cleared',
 };
@@ -199,10 +201,14 @@ export const DEFAULT_COMPLETION: Record<Direction, readonly CompletionMilestone[
 };
 
 /** CSS modifier used by the prototype's `.status-tag` / status pill classes. */
-export const SHIPMENT_STATUS_PILL: Record<ShipmentStatus, 'completed' | 'progress' | 'pending'> = {
+export const SHIPMENT_STATUS_PILL: Record<
+  ShipmentStatus,
+  'completed' | 'progress' | 'pending' | 'exception'
+> = {
   COMPLETED: 'completed',
   IN_PROGRESS: 'progress',
   PENDING: 'pending',
+  EXCEPTION: 'exception',
 };
 
 export const STATEMENT_KIND_LABEL: Record<StatementKind, string> = {

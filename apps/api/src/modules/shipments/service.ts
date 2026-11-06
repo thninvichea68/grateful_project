@@ -198,8 +198,9 @@ const PLAN_COLUMNS: FilterColumns = {
       sql`SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order`,
     ),
   },
-  // "SEA/FCL": the web shows it as its freight method label.
-  freight: { value: sql`s.transport_mode::text || '/' || s.load_type::text` },
+  // SEA / AIR / ROAD (shown as TRUCK), and the terms apart: FCL (CY/CY) / LCL; NONE = blank.
+  freight: text('s.transport_mode::text'),
+  terms: { value: sql`NULLIF(s.load_type::text, 'NONE')` },
   reference: text('s.reference'),
   client: text('c.code'),
   consignee: text('cn.name'),
@@ -265,6 +266,16 @@ const PLAN_SORTS = {
   ...SORTS,
 };
 
+/**
+ * The list's order. Newest clearance first (the page's default) puts the undeclared
+ * shipments, the live ones still pending, on top, newest added first, rather than after
+ * every cleared one on the last page.
+ */
+const planOrder = (sort: string | undefined, fallback: SQL) =>
+  sort === '-clearanceDate'
+    ? sql`ORDER BY ${clearanceDate()} DESC NULLS FIRST, s.created_at DESC, s.reference DESC`
+    : orderBy(sort, PLAN_SORTS, fallback);
+
 /** A column's values for its header filter, under the list's other filters ('' = blanks). */
 export async function listShipmentColumnValues(
   column: string,
@@ -294,7 +305,7 @@ export async function listShipments(
     SELECT s.id, count(*) OVER () AS total_count
     ${PLAN_FROM}
     ${planWhere(f)}
-    ${orderBy(f.sort, PLAN_SORTS, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
+    ${planOrder(f.sort, sql`${shipmentDate()} DESC NULLS LAST, s.reference DESC`)}
     ${paginate(f.page, f.pageSize)}`,
   );
   if (!page.length) return toPaginated([], f.page, f.pageSize);
@@ -319,7 +330,7 @@ export async function listShipmentsForExport(
 ): Promise<ShipmentListItem[]> {
   return queryRows<ShipmentListItem>(
     db,
-    sql`${listSelect()} ${planWhere(f)} ${orderBy(f.sort, PLAN_SORTS, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
+    sql`${listSelect()} ${planWhere(f)} ${planOrder(f.sort, sql`${shipmentDate()} DESC NULLS LAST`)} LIMIT ${limit}`,
   );
 }
 
@@ -406,6 +417,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     incoterm: r.incoterm as Incoterm | null,
     bookingNo: r.bookingNo,
     hblNo: r.hblNo,
+    hblDate: r.hblDate,
     vesselName: r.vesselName,
     voyageNo: r.voyageNo,
     crd: r.crd,

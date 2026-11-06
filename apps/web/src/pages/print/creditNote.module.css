@@ -17,7 +17,7 @@
 }
 .head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 210px;
+  grid-template-columns: minmax(0, 1fr) 240px;
   gap: 24px;
   margin-bottom: 14px;
 }
@@ -29,8 +29,9 @@
   font-weight: 700;
   align-content: start;
 }
+/* Wide enough for "GROSS WEIGHT:" and "DECLARE DATE:". */
 .right {
-  grid-template-columns: 80px minmax(0, 1fr);
+  grid-template-columns: 108px minmax(0, 1fr);
 }
 .kv dt {
   margin: 0;

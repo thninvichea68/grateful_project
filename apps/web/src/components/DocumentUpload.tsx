@@ -23,6 +23,7 @@ export function DocumentUploadModal({
   creditNoteId,
   recordSummaryId,
   clientId,
+  company = false,
   defaultCategory = 'OTHER',
   doc,
   maxMb = 20,
@@ -32,6 +33,8 @@ export function DocumentUploadModal({
   creditNoteId?: string;
   recordSummaryId?: string;
   clientId?: string;
+  /** Grateful's own file (Settings → Workspace & company → Attachments): no client. */
+  company?: boolean;
   defaultCategory?: DocumentCategory;
   doc?: DocumentRow;
   /** The largest file allowed (a shipment's support documents: 10 MB). */
@@ -59,7 +62,8 @@ export function DocumentUploadModal({
     if (shipmentId) fd.append('shipmentId', shipmentId);
     if (creditNoteId) fd.append('creditNoteId', creditNoteId);
     if (recordSummaryId) fd.append('recordSummaryId', recordSummaryId);
-    if (client) fd.append('clientId', client);
+    if (company) fd.append('company', 'true');
+    else if (client) fd.append('clientId', client);
     return api('/documents', { method: 'POST', body: fd });
   }, [['documents'], ['operations']]);
   const tooBig = !!file && file.size > maxMb * 1024 * 1024;
@@ -71,7 +75,11 @@ export function DocumentUploadModal({
           ? `${doc.originalName} · ${fmtFileSize(doc.sizeBytes)}`
           : shipmentId || creditNoteId || recordSummaryId
             ? `Kept with this ${shipmentId ? 'shipment' : creditNoteId ? 'credit note' : 'record summary'}; it also shows in the Document Library.`
-            : 'Add a file to the document library and link it to a client.'
+            : company
+              ? 'Kept with the company details; it also shows in the Document Library.'
+              : clientId
+                ? 'Kept with this client; it also shows in the Document Library.'
+                : 'Add a file to the document library and link it to a client.'
       }
       onClose={onClose}
       width={560}
@@ -130,7 +138,7 @@ export function DocumentUploadModal({
             placeholder="e.g. Signed, Verified"
           />
         </div>
-        {!clientId && (
+        {!clientId && !company && (
           <div className="form-field-group" style={{ gridColumn: 'span 2' }}>
             <label htmlFor="up-client">Client</label>
             <select

@@ -11,7 +11,6 @@ import { fmtDateFull, fmtMoney } from '../../lib/format';
 import { icons } from '../../layout/icons';
 import { NewCreditNoteModal } from './NewCreditNoteModal';
 import { InboxTable, InboxToggle } from './Inbox';
-import { cnSeq } from './seq';
 import { PackMenu } from './PackMenu';
 import { packFilters } from './creditNotePack';
 import { REVIEW } from '../accounting/CreditNotesReview';
@@ -163,6 +162,7 @@ export function CreditNotedList() {
               <thead>
                 <tr>
                   <th>No.</th>
+                  <th>CN No.</th>
                   <th>Client</th>
                   <th>Type</th>
                   <th>Declare No.</th>
@@ -177,14 +177,14 @@ export function CreditNotedList() {
               <tbody>
                 {list.isLoading && (
                   <tr>
-                    <td colSpan={10} className={s.empty}>
+                    <td colSpan={11} className={s.empty}>
                       Loading…
                     </td>
                   </tr>
                 )}
                 {list.data?.data.length === 0 && (
                   <tr>
-                    <td colSpan={10} className={s.empty}>
+                    <td colSpan={11} className={s.empty}>
                       <span className={s.emptyIcon}>
                         {icons.creditnote({ width: 22, height: 22 })}
                       </span>
@@ -197,14 +197,16 @@ export function CreditNotedList() {
                     </td>
                   </tr>
                 )}
-                {list.data?.data.map((r) => (
+                {list.data?.data.map((r, i) => (
                   <tr
                     key={r.id}
                     tabIndex={0}
                     onClick={() => open(r.id)}
                     onKeyDown={(e) => e.key === 'Enter' && open(r.id)}
                   >
-                    <td className={s.cn}>{cnSeq(r.number)}</td>
+                    {/* Row position, as on Record Summary; the voucher number beside it. */}
+                    <td className={s.cn}>{(q.page - 1) * q.pageSize + i + 1}</td>
+                    <td className={s.mono}>{r.number ?? '-'}</td>
                     <td>
                       <span className={s.client}>{r.clientName.toUpperCase()}</span>
                     </td>

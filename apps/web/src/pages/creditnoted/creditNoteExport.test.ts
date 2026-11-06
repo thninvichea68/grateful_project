@@ -83,8 +83,11 @@ describe('Credit Note Excel export', () => {
     expect(ws.getCell('E4').alignment).toMatchObject({ vertical: 'middle' });
     expect(ws.getCell('F4').alignment).toMatchObject({ vertical: 'middle' });
     expect(ws.getCell('E3').alignment).toMatchObject({ vertical: 'top' });
-    expect(ws.getCell('E4').value).toBe('BL NO:');
-    expect(ws.getCell('F5').value).toBe('12-Oct-2026');
+    // Right column: DECLARE NO, DECLARE DATE, BL NO, QUANTITY, GROSS WEIGHT, CBM.
+    expect(ws.getCell('E4').value).toBe('DECLARE DATE:');
+    expect(ws.getCell('F4').value).toBe('12-Oct-2026');
+    expect(ws.getCell('E5').value).toBe('BL NO:');
+    expect(ws.getCell('E7').value).toBe('GROSS WEIGHT:');
     expect(ws.getCell('F7').value).toBe('2,380.67 KGS');
 
     // Table header, two lines with formulas, and the TOTAL row.

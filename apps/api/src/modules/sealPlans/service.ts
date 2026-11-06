@@ -222,8 +222,8 @@ export async function saveSealPlan(
         .set({ containerNo: key, linerSeal, customsSeal, ...(size ? { size } : {}) })
         .where(eq(containers.id, ctr.id));
     } else {
-      if (ship.loadType !== 'FCL')
-        throw businessRule('Containers are only recorded for CY/CY (FCL) shipments');
+      if (ship.loadType === 'NONE')
+        throw businessRule('Containers are only recorded for CY/CY (FCL) or LCL shipments');
       const [{ n } = { n: 0 }] = await queryRows<{ n: number }>(
         tx,
         sql`SELECT coalesce(max(sort_order) + 1, 0)::int AS n FROM containers WHERE shipment_id = ${shipmentId}`,

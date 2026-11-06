@@ -3,7 +3,7 @@ import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { type ShipmentDetail } from '@gs/shared';
 import { FieldError } from '../../components/ui';
 import { maskDeclareNo } from '../../lib/declareNo';
-import { FIELD_ICON, fi } from './formIcons';
+import { fi } from './formIcons';
 import sf from './ShipmentForm.module.css';
 import { blankDeclaration, type FormValues } from './formModel';
 
@@ -93,12 +93,12 @@ export function DeclarationsSection({
                 )}
               </div>
             )}
-            {/* Equal columns across the card; declarations take the Clearance Port on save. */}
-            <div className={sf.declGrid} data-cols={port ? 3 : 2}>
-              {port && (di === 0 ? port : <div aria-hidden="true" />)}
+            {/* The Clearance Port (an import's) on its own row above the first declaration;
+                every declaration takes it on save. */}
+            {port && di === 0 && <div className={sf.declPort}>{port}</div>}
+            <div className={sf.declGrid}>
               <div className="form-field-group">
                 <label htmlFor={`d-${di}-no`} className={sf.label}>
-                  {fi[FIELD_ICON.declareNo!]({})}
                   Declare No.
                 </label>
                 <input
@@ -116,7 +116,6 @@ export function DeclarationsSection({
               </div>
               <div className="form-field-group">
                 <label htmlFor={`d-${di}-date`} className={sf.label}>
-                  {fi[FIELD_ICON.declareDate!]({})}
                   Declare Date
                 </label>
                 <input

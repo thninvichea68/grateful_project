@@ -5,6 +5,7 @@ import 'leaflet.markercluster';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'country-flag-icons/3x2/flags.css';
+import '../../styles/flags.css';
 import type { CountryRow } from '@gs/shared';
 import type { FeatureCollection } from 'geojson';
 import { feature } from 'topojson-client';

@@ -162,7 +162,7 @@ function addCreditNoteSheet(
     { width: 42 }, //   B  DESCRIPTION
     { width: 9 }, //    C  Q'TY
     { width: 12 }, //   D  UNIT
-    { width: 12 }, //   E  PRICE
+    { width: 15 }, //   E  PRICE; also the right header labels ("GROSS WEIGHT:")
     { width: 13 }, //   F  SUBTOTAL
     { width: 12 }, //   G  MARK (left half)
     { width: 16 }, //   H  MARK (right half)
@@ -217,7 +217,7 @@ function addCreditNoteSheet(
       });
     };
     pair([1, 2, 4], left[i], leftLines.join('\n'), 'top');
-    // The house bill sits beside the two-line address: centred on it, not stuck to the top.
+    // The row beside the two-line address (DECLARE DATE): centred on it, not stuck to the top.
     pair([5, 6, 8], right[i], right[i]?.[1] ?? '', leftLines.length > 1 ? 'middle' : 'top');
     if (leftLines.length > 1) ws.getRow(row).height = 15 * leftLines.length;
   }

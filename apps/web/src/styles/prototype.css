@@ -2148,15 +2148,15 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  background: none;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
 }
 .filter-menu-close:hover {
   color: var(--text-primary);
-  border-color: var(--border-strong);
+  border-color: var(--text-tertiary);
 }
 .filter-menu-close svg {
   width: 13px;
@@ -3755,8 +3755,10 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: var(--status-completed-bg);
-  color: var(--accent-primary);
+  /* Outlined: no fill, grey border, text-coloured glyph (black in light). */
+  background: none;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4278,76 +4280,68 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   }
 }
 
-/* shipment total v3: tile row on a soft strip */
+/* shipment total v4: one flat band, styled like an invoice's Invoice Total row */
 .cargo-totals {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(210px, 1.5fr) !important;
-  gap: 14px 12px !important;
-  align-items: stretch !important;
-  padding: 16px 18px 18px !important;
-  border-radius: 8px !important;
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 36px !important;
+  margin-top: 16px;
+  padding: 13px 18px !important;
+  border: 0 !important;
+  border-top: 1.5px solid var(--border-strong) !important;
+  border-radius: 0 0 8px 8px !important;
+  background: color-mix(in srgb, var(--status-pending-bg) 70%, var(--bg-surface));
 }
 .cargo-totals-label {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  grid-column: 1/-1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 200px;
+  padding: 0;
   font-size: 13px !important;
   font-weight: 600;
   letter-spacing: 0.2px !important;
-  text-transform: none !important;
+  text-transform: uppercase !important;
   color: var(--text-primary) !important;
+  white-space: nowrap;
 }
-.cargo-totals-label::before {
-  content: '\03A3';
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--status-completed-bg);
-  color: var(--accent-primary);
-  font-size: 15px;
-  font-weight: 600;
+.cargo-totals-count {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-tertiary);
 }
 .cargo-totals .cargo-total-item {
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  background: none;
 }
 .cargo-totals .cargo-total-item span:first-child {
   font-size: 10px;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.6px;
+  color: var(--text-tertiary);
 }
 .cargo-totals .cargo-total-item span:last-child {
-  font-size: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-primary);
 }
 .cargo-totals .cargo-total-fob {
-  padding: 12px 18px;
+  margin-left: auto;
+  padding: 0;
+  min-width: 0;
   text-align: right;
-  background: var(--bg-surface);
+  background: none;
 }
 .cargo-totals .cargo-total-fob span:last-child {
-  font-size: 26px;
+  font-size: 16px;
   color: var(--accent-primary);
-}
-/* Import has four totals before the amount (export has five): fill the row with them. */
-.cargo-totals.cargo-totals-import {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(240px, 1.6fr) !important;
-}
-.cargo-totals .cargo-total-fob span:last-child {
   white-space: nowrap;
-}
-@media (max-width: 1000px) {
-  .cargo-totals,
-  .cargo-totals.cargo-totals-import {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-  .cargo-totals .cargo-total-fob {
-    grid-column: 1/-1;
-    text-align: left;
-  }
 }
 
 /* line rows: labels only on the first line; line total styled like the other cells */

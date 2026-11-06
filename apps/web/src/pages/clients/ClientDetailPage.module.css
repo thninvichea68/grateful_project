@@ -22,25 +22,52 @@
   gap: 18px;
   margin-top: 18px;
 }
+/* Header: back · name + status / code · country · since, then links and actions on the right. */
 .head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 12px 16px;
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
+}
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .title {
+  margin: 0;
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.6px;
+  line-height: 1.2;
   color: var(--text-primary);
 }
 .sub {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: 3px;
   font-weight: 600;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--border-subtle);
+}
+/* ⋯ menu: Delete client in red. */
+.menuDanger,
+.menuDanger small {
+  color: var(--status-exception-fg) !important;
 }
 .stats {
   display: grid;
@@ -58,7 +85,7 @@
 }
 /* One segment of the strip, divided from the next by a line. */
 .stat {
-  padding: 14px 18px;
+  padding: 10px 18px;
   border-left: 1px solid var(--border-subtle);
   color: inherit;
   text-decoration: none;
@@ -80,37 +107,45 @@
   outline-offset: -2px;
 }
 .statLabel {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-tertiary);
 }
+/* Imports / Exports: a chevron that nudges right on hover. */
+.statArrow {
+  transition: transform 0.15s;
+}
+.statLink:hover .statArrow {
+  transform: translateX(2px);
+}
 .statValue {
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 600;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
   color: var(--text-primary);
-  margin-top: 4px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
-/* Header chips: Shipping Plans, CDC master list. */
-.quickLinks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
+/* Header links: Shipping Plans, CDC master list (button height, beside Edit client). */
 .quickLink {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  height: 34px;
+  padding: 0 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--bg-surface);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: border-color 0.15s, color 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
 }
 a.quickLink:hover {
   border-color: var(--accent-primary);
@@ -126,10 +161,38 @@ a.quickLink:hover {
   background: var(--bg-subtle);
   font-size: 11px;
 }
+/* Details card: Company | Contact & billing, then Address full width. */
+.groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 28px;
+}
+@media (max-width: 760px) {
+  .groups {
+    grid-template-columns: 1fr;
+  }
+}
+.group {
+  min-width: 0;
+}
+.groupWide {
+  grid-column: 1 / -1;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+.groupTitle {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
 .facts {
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 10px 16px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 9px 14px;
+  margin: 0;
   font-size: 13px;
 }
 .facts dt {
@@ -137,8 +200,61 @@ a.quickLink:hover {
   font-weight: 600;
 }
 .facts dd {
+  margin: 0;
   color: var(--text-primary);
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+}
+.unit {
+  color: var(--text-tertiary);
+}
+.link {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.link:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+.empty {
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+/* English and Khmer address, side by side. */
+.addresses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .addresses {
+    grid-template-columns: 1fr;
+  }
+}
+.addressBox {
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-surface-elevated);
+}
+.addressLang {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+.addressBox p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-line;
   overflow-wrap: anywhere;
 }
 .list {

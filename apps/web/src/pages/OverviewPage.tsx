@@ -6,6 +6,7 @@ import { ErrorBanner } from '../components/ui';
 import {
   AccountsCard,
   ClientShareCard,
+  ClientTrendCard,
   CountryMapCard,
   ForwarderCard,
   KpiRow,
@@ -67,17 +68,20 @@ export function OverviewPage() {
   // stands in, as it always has.
   const profitShown = on('profit') && !!s?.profit;
   const clientsShown = on('clients') || (on('profit') && !s?.profit);
+  const trendShown = on('clientTrend');
   const cards = [
     on('shipments'),
     profitShown,
+    trendShown,
     clientsShown,
     on('map'),
     on('accounts'),
     on('ports'),
     on('forwarders'),
   ].filter(Boolean).length;
-  // The six cards as they come fill the grid's named areas; any other set flows in order.
-  const flow = cards !== 6 || (profitShown && clientsShown);
+  // Six cards with one in the second slot (profit, per client or by client) fill the grid's
+  // named areas; any other set flows in order.
+  const flow = cards !== 6 || [profitShown, trendShown, clientsShown].filter(Boolean).length > 1;
   const nothing = !on('kpis') && !cards && !on('live');
 
   return (
@@ -101,6 +105,15 @@ export function OverviewPage() {
               key={`${s.month}${s.fullYear ? '-year' : ''}`}
               profit={s.profit}
               fullYear={s.fullYear}
+            />
+          )}
+          {trendShown && (
+            <ClientTrendCard
+              clients={clients.data ?? []}
+              month={shown}
+              fullYear={wholeYear}
+              period={period}
+              monthly={s?.monthly ?? []}
             />
           )}
           {clientsShown && (

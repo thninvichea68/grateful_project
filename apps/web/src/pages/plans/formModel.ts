@@ -67,6 +67,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     material: direction === 'EXPORT' ? 'Garments & Apparel' : '',
     bookingNo: '',
     hblNo: '',
+    hblDate: '',
     vesselName: '',
     voyageNo: '',
     crd: '',
@@ -117,6 +118,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     material: s(d.material),
     bookingNo: s(d.bookingNo),
     hblNo: s(d.hblNo),
+    hblDate: s(d.hblDate),
     vesselName: s(d.vesselName),
     voyageNo: s(d.voyageNo),
     crd: s(d.crd),
@@ -146,7 +148,10 @@ export function fromDetail(d: ShipmentDetail): FormValues {
           customsSeal: s(c.customsSeal),
           truckNo: s(c.truckNo),
         }))
-      : [blankContainer()],
+      : // LCL containers are optional: none until the user adds one.
+        d.loadType === 'LCL'
+        ? []
+        : [blankContainer()],
     invoices: d.invoices.length
       ? d.invoices.map((i) => ({
           invoiceNo: i.invoiceNo,
@@ -197,7 +202,7 @@ export function cleanForSubmit(v: FormValues): FormValues {
   return {
     ...v,
     containers:
-      v.loadType === 'FCL' && v.transportMode !== 'AIR'
+      v.loadType !== 'NONE' && v.transportMode !== 'AIR'
         ? // Truck no. is only shown by truck: clear any left from when the shipment was by truck.
           (v.containers ?? []).map((c) => (v.transportMode === 'ROAD' ? c : { ...c, truckNo: '' }))
         : [],

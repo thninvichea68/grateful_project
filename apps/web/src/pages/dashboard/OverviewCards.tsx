@@ -636,6 +636,19 @@ export function ClientShareCard({
   );
 }
 
+/**
+ * Shipments per Client: one client's year month by month (import / export bars), with a
+ * dropdown of the year's clients; the first is shown until another is picked.
+ */
+export function ClientTrendCard(
+  props: Omit<Parameters<typeof ClientShareCard>[0], 'pick' | 'accounts'>,
+) {
+  const [clientId, setClientId] = useState('');
+  return (
+    <ClientShareCard {...props} accounts={[]} pick={{ value: clientId, onChange: setClientId }} />
+  );
+}
+
 /* ------------------------------ Countries (map card) ------------------------------ */
 
 export function CountryMapCard({ filters }: { filters: { from: string; to: string } }) {
@@ -862,7 +875,9 @@ function SingleAccount({
   return (
     <div className={acc.single}>
       <div className={acc.head}>
-        <span className={acc.badge}>{a.code}</span>
+        <span className={acc.badge} title={a.code}>
+          {icons.clients({})}
+        </span>
         <div className={acc.who}>
           <Link to={`/clients/${a.clientId}`} className={acc.name}>
             {a.name}

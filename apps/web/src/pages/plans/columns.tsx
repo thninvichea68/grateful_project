@@ -1,12 +1,5 @@
 import type { ReactNode } from 'react';
-import {
-  CLEARANCE_STATUS_LABEL,
-  freightMethodLabel,
-  type ClearanceStatus,
-  type LoadType,
-  type ShipmentListItem,
-  type TransportMode,
-} from '@gs/shared';
+import { CLEARANCE_STATUS_LABEL, type ClearanceStatus, type ShipmentListItem } from '@gs/shared';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
 
 export interface PlanColumn {
@@ -53,6 +46,12 @@ export function InvoiceNos({ nos, max = 3 }: { nos: string[]; max?: number }) {
 const ctnrList = (r: ShipmentListItem) =>
   r.containers.map((c) => `${c.containerNo}${c.size ? ` / ${c.size}` : ''}`).join(', ');
 
+/** The Freight column: SEA, AIR, TRUCK (by road) or RAIL. */
+const freightLabel = (v: string) => (v === 'ROAD' ? 'TRUCK' : v);
+/** The Terms column: CY/CY (full container) or LCL/LCL; none (air, loose road) = "-". */
+const termsLabel = (v: string) =>
+  (({ FCL: 'CY/CY', LCL: 'LCL/LCL' }) as Record<string, string>)[v] ?? '-';
+
 const declareNos = (r: ShipmentListItem) =>
   dash(r.declarations.map((d) => d.declareNo ?? 'Pending').join(', '));
 
@@ -80,7 +79,7 @@ export const BASE_COLUMNS: PlanColumn[] = [
   {
     key: 'clearanceDate',
     ...asDate,
-    label: 'Clearance Date',
+    label: 'Declare Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
   {
@@ -99,7 +98,7 @@ export const BASE_COLUMNS: PlanColumn[] = [
   // The port's short name (SHV, KTI, OLAIR…), in capitals; the full name on hover.
   {
     key: 'clearance',
-    label: 'Clearance Port',
+    label: 'Port',
     render: (r) =>
       r.clearancePortName ? (
         <span title={r.clearancePortName}>
@@ -110,6 +109,12 @@ export const BASE_COLUMNS: PlanColumn[] = [
       ),
   },
   { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },
+  {
+    key: 'bookingNo',
+    label: 'Booking / SO',
+    render: (r) => dash(r.bookingNo),
+    exportOnly: true,
+  },
   // The first container, then "… +N"; every container (with its size) on hover.
   {
     key: 'ctnr',
@@ -130,10 +135,11 @@ export const BASE_COLUMNS: PlanColumn[] = [
   },
   {
     key: 'freight',
-    format: (v) => freightMethodLabel(...(v.split('/') as [TransportMode, LoadType])),
-    label: 'Freight Method',
-    render: (r) => freightMethodLabel(r.transportMode, r.loadType),
+    format: freightLabel,
+    label: 'Freight',
+    render: (r) => freightLabel(r.transportMode),
   },
+  { key: 'terms', format: termsLabel, label: 'Terms', render: (r) => termsLabel(r.loadType) },
 ];
 
 /** The prototype's plansExpandedColumns ("Expand All"). */
@@ -143,12 +149,6 @@ export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
   { key: 'invoiceDate', ...asDate, label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },
-  {
-    key: 'bookingNo',
-    label: 'Booking / SO No.',
-    render: (r) => dash(r.bookingNo),
-    exportOnly: true,
-  },
   {
     key: 'linerSeal',
     label: 'Liner Seal',

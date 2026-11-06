@@ -86,6 +86,7 @@ export function PlansFilter({
                     ['COMPLETED', 'Completed'],
                     ['IN_PROGRESS', 'In Progress'],
                     ['PENDING', 'Pending'],
+                    ['EXCEPTION', 'Exception'],
                   ] as const
                 ).map(([v, l]) => (
                   <label className="filter-seg-item" key={v}>
