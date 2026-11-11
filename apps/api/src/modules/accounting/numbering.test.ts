@@ -51,9 +51,11 @@ async function shipment(
   clientId: string,
   declareNo: string,
   declareDate: string,
-  { approve = true }: { approve?: boolean } = {},
+  { approve = true, thcDate }: { approve?: boolean; thcDate?: string } = {},
 ) {
   const payload = {
+    // The shipping plan's Invoice / THC Date: the day the agency invoice / THC was paid.
+    ...(thcDate ? { thcHblDate: thcDate } : {}),
     clientId,
     direction: 'EXPORT',
     transportMode: 'SEA',
@@ -291,28 +293,26 @@ describe('numbers on approval', () => {
     expect((await jrNov2.row()).dnNo).toBe('JR2611002');
   });
 
-  it('a shipment belongs to the month of its INV date, not its clearance date', async () => {
-    // Fri 30 Oct → INV date Mon 2 Nov: November's ledger and a November debit note.
+  it('a shipment belongs to the month of its declare date, even with an INV dated next month', async () => {
+    // Fri 30 Oct → INV date Mon 2 Nov: still October's ledger and an October debit note.
     const s = await shipment(b.jr.id, 'E 34', '2026-10-30');
     expect(s.invDate).toBe('2026-11-02');
-    expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2611001']);
+    expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
     const inMonth = async (month: string) =>
       (await acc('get', '/ledger', { query: { month } })).body.data.map(
         (r: { declareNo: string }) => r.declareNo,
       );
-    expect(await inMonth('2026-10')).toEqual([]);
-    expect(await inMonth('2026-11')).toEqual(['E 34']);
-    // Billed in October after all: its issue date corrected to 30 Oct moves it, with an
-    // October debit note number.
+    expect(await inMonth('2026-10')).toEqual(['E 34']);
+    expect(await inMonth('2026-11')).toEqual([]);
+    // A corrected issue date doesn't move it: the declare date decides.
     const dis = await draft('disbursements', s.recordId);
     expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
     const ok = await acc('post', `/docs/disbursements/${dis.id}/correct`, {
-      body: { date: '2026-10-30', reason: 'Billed in October' },
+      body: { date: '2026-11-03', reason: 'Issued a day later' },
     });
     expect(ok.status).toBe(200);
     expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
     expect(await inMonth('2026-10')).toEqual(['E 34']);
-    expect(await inMonth('2026-11')).toEqual([]);
   });
 
   it('documents take the ledger number, date and rate; one of each type per shipment', async () => {
@@ -482,7 +482,7 @@ describe('a shipment approved late with an earlier INV date', () => {
           AND entity_id = ${e3.recordId} AND reason LIKE 'Renumbered%' ORDER BY id DESC LIMIT 1`,
     );
     expect(log).toEqual({
-      reason: 'Renumbered E 92 to keep INV-date order',
+      reason: 'Renumbered E 92 to keep ledger-date order',
       before: { invNo: 'GS26-004', disNo: 'DIS004', dnNo: 'JR2610003' },
       after: { invNo: 'GS26-005', disNo: 'DIS005', dnNo: 'JR2610004' },
     });
@@ -490,7 +490,7 @@ describe('a shipment approved late with an earlier INV date', () => {
 
   it('a DIS of no shipment counts by its own date, even when made later', async () => {
     const oct = await shipment(b.jr.id, 'E 97', '2026-10-27'); // → Wed 28 Oct
-    const nov = await shipment(b.jr.id, 'E 98', '2026-10-30'); // → Mon 2 Nov
+    const nov = await shipment(b.jr.id, 'E 98', '2026-11-02'); // → Tue 3 Nov
     const novDis = await draft('disbursements', nov.recordId);
     expect((await acc('post', `/docs/disbursements/${novDis.id}/issue`)).status).toBe(200);
     expect((await nov.row()).disNo).toBe('DIS002');
@@ -513,14 +513,15 @@ describe('a shipment approved late with an earlier INV date', () => {
     expect((await oct.row()).disNo).toBe('DIS001');
   });
 
-  it('a corrected issue date moves the shipment in its runs', async () => {
+  it('a corrected issue date puts the shipment in its document-date order', async () => {
     const a = await shipment(b.jr.id, 'E 70', '2026-10-27'); // → 28 Oct
     const c = await shipment(b.jyx.id, 'E 71', '2026-10-28'); // → 29 Oct
     const dis = await draft('disbursements', c.recordId);
     expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
     expect((await c.row()).disNo).toBe('DIS002');
 
-    // Its real date was 27 Oct: the ledger follows, and it goes before E 70.
+    // Its real issue date was 27 Oct, before E 70's 28 Oct: numbers follow the document
+    // date, so it takes DIS001 and E 70 moves to DIS002.
     const ok = await acc('post', `/docs/disbursements/${dis.id}/correct`, {
       body: { date: '2026-10-27', reason: 'Date issued in error' },
     });
@@ -528,6 +529,16 @@ describe('a shipment approved late with an earlier INV date', () => {
     expect(ok.body).toMatchObject({ number: 'DIS001', date: '2026-10-27' });
     expect(await c.row()).toMatchObject({ invDate: '2026-10-27', disNo: 'DIS001' });
     expect((await a.row()).disNo).toBe('DIS002');
+  });
+
+  it('a shipment declared earlier but issued later keeps its later number', async () => {
+    const a = await shipment(b.jr.id, 'E 73', '2026-10-27', { approve: false });
+    const c = await shipment(b.jyx.id, 'E 74', '2026-10-28'); // → 29 Oct, DIS001
+    // E 73 is approved later and issued on 30 Oct: it follows E 74.
+    await acc('post', '/ledger', {
+      body: { declarationId: a.declarationId, invDate: '2026-10-30' },
+    });
+    expect((await c.row()).disNo).toBe('DIS001');
   });
 
   it('a corrected date moves the shipment’s other documents with it', async () => {
@@ -695,7 +706,7 @@ describe('a shipment without a tax invoice', () => {
     expect(await ledgerRow(rec.id)).toMatchObject({
       invNo: 'GS26-001',
       disNo: 'DIS001',
-      dnNo: 'JR2611001', // declared 30 Oct, issued Mon 2 Nov
+      dnNo: 'JR2610001', // declared 30 Oct (issued Mon 2 Nov): October
       clearFee: '0.00',
     });
   });
@@ -745,5 +756,256 @@ describe('a shipment without a tax invoice', () => {
     const d = await shipment(b.jr.id, 'E 314', '2026-10-07');
     expect(await numbersOf(d)).toEqual(['GS26-003', 'DIS004', 'JR2610003']);
     expect((await thc.row()).dnNo).toBeNull();
+  });
+});
+
+describe('the agency invoice / THC paid in another month than the declaration', () => {
+  /** A record summary with a THC fee, issued and checked by accounting. */
+  async function checkSummary(recordId: string, thc = '210', mark = 'Receipt') {
+    const pre = (await acc('get', '/docs/record-summaries/prefill', { query: { recordId } })).body;
+    const line = (description: string, unitPrice: string, m = '') => ({
+      description,
+      qty: '1',
+      unit: 'SHIP',
+      unitPrice,
+      mark: m,
+    });
+    const rs = await acc('post', '/docs/record-summaries', {
+      body: {
+        ...pre,
+        lines: [
+          line('IMPORT PROCESSING FEE', '150', 'VAT 10%'),
+          line('THC FEE', thc, mark),
+          line('CUSTOMS PROCESSING FEE', '13.75', 'Receipt'),
+          line('HANDLING FEE', '35'),
+        ],
+      },
+    });
+    if (rs.status !== 201) throw new Error(JSON.stringify(rs.body));
+    await acc('post', `/docs/record-summaries/${rs.body.id}/issue`);
+    const res = await acc('patch', `/docs/record-summaries/${rs.body.id}/review`, {
+      body: { reviewStatus: 'CHECKED' },
+    });
+    if (res.status !== 200) throw new Error(JSON.stringify(res.body));
+    return rs.body.id as string;
+  }
+  const ledgerOf = async (month: string) =>
+    (await acc('get', '/ledger', { query: { month } })).body.data as {
+      id: string;
+      kind: string;
+      declareNo: string;
+      invDate: string;
+      invNo: string | null;
+      disNo: string | null;
+      dnNo: string | null;
+      thc: string;
+      disTotal: string;
+      dnTotal: string;
+      invRevenue: string;
+      netProfit: string;
+    }[];
+
+  it('is charged twice: the THC in the month paid, the services in the declare month', async () => {
+    const oct = await shipment(b.jr.id, 'E 400', '2026-10-20'); // an October shipment
+    const s = await history(b.jr.id, 'I 401', '2026-11-02', {});
+    await db.execute(sql`UPDATE shipments SET thc_hbl_date = '2026-10-30'
+      WHERE id = (SELECT shipment_id FROM customs_declarations WHERE declare_no = 'I 401')`);
+    await checkSummary(s.id);
+
+    const [o1, agency] = await ledgerOf('2026-10');
+    expect(o1!.declareNo).toBe('E 400');
+    expect(agency).toMatchObject({
+      kind: 'AGENCY',
+      declareNo: 'I 401',
+      invDate: '2026-10-30',
+      invNo: null,
+      disNo: 'DIS002',
+      dnNo: null,
+      thc: '210.00',
+      disTotal: '210.00',
+      netProfit: '0.00',
+    });
+    const [service] = await ledgerOf('2026-11');
+    expect(service).toMatchObject({
+      kind: 'SERVICE',
+      declareNo: 'I 401',
+      invNo: 'GS26-002',
+      disNo: 'DIS003',
+      dnNo: 'JR2611001',
+      thc: '0.00',
+      invRevenue: '150.00',
+      disTotal: '13.75',
+      dnTotal: '35.00',
+    });
+    expect(await numbersOf(oct)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+
+    // The agency DIS has the THC alone; the services' DIS leaves it out.
+    const agencyDis = (
+      await acc('get', '/docs/disbursements/prefill', { query: { recordId: agency!.id } })
+    ).body;
+    expect(agencyDis).toMatchObject({ disNo: 'DIS002', disDate: '2026-10-30' });
+    expect(agencyDis.lines.map((l: { description: string }) => l.description)).toEqual(['THC FEE']);
+    const serviceDis = (
+      await acc('get', '/docs/disbursements/prefill', { query: { recordId: service!.id } })
+    ).body;
+    expect(serviceDis.lines.map((l: { description: string }) => l.description)).toEqual([
+      'CUSTOMS PROCESSING FEE',
+    ]);
+  });
+
+  it('is billed with the services when paid in the declare month', async () => {
+    const s = await history(b.jr.id, 'I 402', '2026-11-02', {});
+    await db.execute(sql`UPDATE shipments SET thc_hbl_date = '2026-11-02'
+      WHERE id = (SELECT shipment_id FROM customs_declarations WHERE declare_no = 'I 402')`);
+    await checkSummary(s.id);
+    expect(await ledgerOf('2026-10')).toEqual([]);
+    const rows = await ledgerOf('2026-11');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: 'SERVICE', thc: '210.00', disTotal: '223.75' });
+  });
+
+  it('a client billed with the services keeps one charge in the declare month', async () => {
+    await db.execute(sql`UPDATE clients SET thc_billed_apart = false WHERE id = ${b.jr.id}`);
+    const s = await history(b.jr.id, 'I 404', '2026-11-02', {});
+    await db.execute(sql`UPDATE shipments SET thc_hbl_date = '2026-10-30'
+      WHERE id = (SELECT shipment_id FROM customs_declarations WHERE declare_no = 'I 404')`);
+    await checkSummary(s.id);
+    expect(await ledgerOf('2026-10')).toEqual([]);
+    expect(await ledgerOf('2026-11')).toMatchObject([
+      { kind: 'SERVICE', thc: '210.00', disTotal: '223.75', disNo: 'DIS001' },
+    ]);
+  });
+
+  it('a THC line without a Receipt mark goes on the agency DIS, not the debit note', async () => {
+    const s = await history(b.jr.id, 'I 405', '2026-11-02', {});
+    await db.execute(sql`UPDATE shipments SET thc_hbl_date = '2026-10-30'
+      WHERE id = (SELECT shipment_id FROM customs_declarations WHERE declare_no = 'I 405')`);
+    await checkSummary(s.id, '210', '');
+    expect(await ledgerOf('2026-10')).toMatchObject([
+      { kind: 'AGENCY', thc: '210.00', disTotal: '210.00' },
+    ]);
+    expect(await ledgerOf('2026-11')).toMatchObject([
+      { kind: 'SERVICE', thc: '0.00', disTotal: '13.75', dnTotal: '35.00' },
+    ]);
+  });
+
+  it('"+ Invoice/THC DIS" bills the THC first in the earlier month; the services follow', async () => {
+    const oct = await shipment(b.jr.id, 'E 410', '2026-10-20');
+    const s = await shipment(b.jr.id, 'I 411', '2026-11-02', { approve: false });
+    const cands = (
+      await acc('get', `/billing/${b.jr.id}/agency-candidates`, { query: { month: '2026-10' } })
+    ).body as { declareNo: string }[];
+    expect(cands.map((c) => c.declareNo)).toEqual(['I 411']);
+
+    // Only a date in a month before the declaration's.
+    const late = await acc('post', `/billing/${b.jr.id}/agency`, {
+      body: { declarationId: s.declarationId, date: '2026-11-02' },
+    });
+    expect(late.status).toBe(422);
+    const opened = await acc('post', `/billing/${b.jr.id}/agency`, {
+      body: { declarationId: s.declarationId, date: '2026-10-30' },
+    });
+    expect(opened.status).toBe(201);
+    const again = await acc('post', `/billing/${b.jr.id}/agency`, {
+      body: { declarationId: s.declarationId, date: '2026-10-30' },
+    });
+    expect(again.status).toBe(409);
+
+    // Its DIS, issued in October with the THC as paid.
+    const pre = (
+      await acc('get', '/docs/disbursements/prefill', {
+        query: { recordId: opened.body.recordId },
+      })
+    ).body;
+    expect(pre).toMatchObject({ disNo: 'DIS002', disDate: '2026-10-30' });
+    const dis = await acc('post', '/docs/disbursements', {
+      body: { ...pre, lines: [{ ...pre.lines[0], unitPrice: '210' }] },
+    });
+    expect(dis.status).toBe(201);
+    expect((await acc('post', `/docs/disbursements/${dis.body.id}/issue`)).status).toBe(200);
+    expect(await ledgerOf('2026-10')).toMatchObject([
+      { declareNo: 'E 410' },
+      { kind: 'AGENCY', declareNo: 'I 411', disNo: 'DIS002', thc: '210.00', disTotal: '210.00' },
+    ]);
+    expect(await numbersOf(oct)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+
+    // November: the services' ledger row and record summary. The issued agency DIS stays as it
+    // is, and the THC stays off the services.
+    const service = await acc('post', '/ledger', { body: { declarationId: s.declarationId } });
+    expect(service.status).toBe(201);
+    await checkSummary(service.body.id, '230');
+    expect(await ledgerOf('2026-10')).toMatchObject([
+      { declareNo: 'E 410' },
+      { kind: 'AGENCY', disNo: 'DIS002', thc: '210.00', disTotal: '210.00' },
+    ]);
+    expect(await ledgerOf('2026-11')).toMatchObject([
+      {
+        kind: 'SERVICE',
+        declareNo: 'I 411',
+        invNo: 'GS26-002',
+        disNo: 'DIS003',
+        dnNo: 'JR2611001',
+        thc: '0.00',
+        disTotal: '13.75',
+        dnTotal: '35.00',
+      },
+    ]);
+  });
+
+  it('"Separate Invoice/THC DIS" moves a DIS issued before the declare month to a row of its own', async () => {
+    const oct = await shipment(b.jr.id, 'E 420', '2026-10-20');
+    // Billed the old way: the THC's DIS issued on 30 Oct on the shipment's own row, which also
+    // has its INV and DN, though it was declared on 2 Nov.
+    const svc = await history(b.jr.id, 'I 421', '2026-11-02', {
+      invDate: '2026-10-30',
+      invNo: 'GS26-002',
+      disNo: 'DIS002',
+      dnNo: 'JR2610002',
+      invRevenue: '180',
+      dnTotal: '949',
+    });
+    const dis = await draft('disbursements', svc.id, { disDate: '2026-10-30' });
+    expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
+    const inv = await draft('tax-invoices', svc.id);
+    const disNo = (await doc('disbursements', dis.id)).number;
+
+    const m = (await acc('get', `/billing/${b.jr.id}`, { query: { month: '2026-11' } })).body;
+    expect(m.rows.find((r: { recordId: string }) => r.recordId === svc.id)?.separable ?? null).toBe(
+      true,
+    );
+    const res = await acc('post', `/ledger/${svc.id}/separate-agency`);
+    expect(res.status).toBe(201);
+
+    // October: the DIS as issued, on a row of its own.
+    expect(await ledgerOf('2026-10')).toMatchObject([
+      { declareNo: 'E 420' },
+      { kind: 'AGENCY', declareNo: 'I 421', invDate: '2026-10-30', disNo, invNo: null, dnNo: null },
+    ]);
+    expect(await doc('disbursements', dis.id)).toMatchObject({ number: disNo, status: 'ISSUED' });
+    // November: the tax invoice and debit note, dated after clearance.
+    const [nov] = await ledgerOf('2026-11');
+    expect(nov).toMatchObject({
+      kind: 'SERVICE',
+      declareNo: 'I 421',
+      invDate: '2026-11-03',
+      invNo: 'GS26-002',
+      disNo: null,
+      dnNo: 'JR2611001',
+    });
+    expect(await doc('tax-invoices', inv.id)).toMatchObject({ date: '2026-11-03' });
+    expect(await numbersOf(oct)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
+    // Done once.
+    expect((await acc('post', `/ledger/${svc.id}/separate-agency`)).status).toBe(409);
+  });
+
+  it('a THC paid after clearance goes in the later month', async () => {
+    const s = await history(b.jr.id, 'E 403', '2026-10-29', {});
+    await db.execute(sql`UPDATE shipments SET thc_hbl_date = '2026-11-02'
+      WHERE id = (SELECT shipment_id FROM customs_declarations WHERE declare_no = 'E 403')`);
+    await checkSummary(s.id);
+    expect(await ledgerOf('2026-10')).toMatchObject([{ kind: 'SERVICE', thc: '0.00' }]);
+    expect(await ledgerOf('2026-11')).toMatchObject([
+      { kind: 'AGENCY', invDate: '2026-11-02', disNo: 'DIS002', thc: '210.00' },
+    ]);
   });
 });

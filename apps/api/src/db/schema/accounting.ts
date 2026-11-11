@@ -34,9 +34,12 @@ import { clients, ports, forwarders } from './reference';
 import { customsDeclarations } from './shipments';
 
 /**
- * Monthly ledger / Chea payment row: one per customs declaration. All computed
- * columns (vat, commission, net_profit, inv_date) are written by the API using
- * @gs/shared `computeLedger` / `nextBusinessDay`, never by the browser.
+ * Monthly ledger / Chea payment row: one SERVICE row per customs declaration (its INV, DIS and
+ * DN, in the declare date's month), plus an AGENCY row when the agency invoice / THC was paid in
+ * another month: a DIS of the THC alone, billed in the month it was paid (inv_date = the
+ * shipping plan's Invoice / THC Date). All computed columns (vat, commission, net_profit,
+ * inv_date) are written by the API using @gs/shared `computeLedger` / `nextBusinessDay`, never
+ * by the browser.
  */
 export const accountingRecords = pgTable(
   'accounting_records',
@@ -44,8 +47,9 @@ export const accountingRecords = pgTable(
     id: id(),
     declarationId: uuid('declaration_id')
       .notNull()
-      .unique()
       .references(() => customsDeclarations.id, { onDelete: 'restrict' }),
+    /** SERVICE (INV / DIS / DN) or AGENCY (the agency invoice / THC's own DIS). */
+    kind: text('kind').$type<'SERVICE' | 'AGENCY'>().notNull().default('SERVICE'),
     clientId: uuid('client_id')
       .notNull()
       .references(() => clients.id, { onDelete: 'restrict' }),
@@ -73,6 +77,8 @@ export const accountingRecords = pgTable(
     ...timestamps,
   },
   (t) => [
+    uniqueIndex('accounting_records_declaration_kind_unique').on(t.declarationId, t.kind),
+    check('accounting_records_kind', sql`${t.kind} IN ('SERVICE', 'AGENCY')`),
     index('accounting_records_client_date_idx').on(t.clientId, t.invDate),
     index('accounting_records_inv_date_idx').on(t.invDate),
     uniqueIndex('accounting_records_inv_no_unique')

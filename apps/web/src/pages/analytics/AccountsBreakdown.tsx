@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { AccountRow } from '@gs/shared';
+import { icons } from '../../layout/icons';
 import { ChartState } from '../dashboard/parts';
 import s from './AccountsBreakdown.module.css';
 
@@ -76,7 +77,9 @@ export function AccountsBreakdown({
           {list.map((a) => (
             <div className={s.row} role="row" key={a.clientId}>
               <span className={s.client} role="cell">
-                <span className={s.badge}>{a.code}</span>
+                <span className={s.badge} title={a.code} aria-hidden>
+                  {icons.clients({ width: 18, height: 18 })}
+                </span>
                 <span className={s.who}>
                   <Link to={`/clients/${a.clientId}`} className={s.name}>
                     {a.name}

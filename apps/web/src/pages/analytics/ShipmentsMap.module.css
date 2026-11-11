@@ -247,14 +247,14 @@
 .popBar {
   height: 5px;
   margin-top: 10px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .popBar span {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 0;
   background: #22d3ee;
 }
 
@@ -335,14 +335,14 @@ span.flag {
 .bar {
   grid-column: 2 / -1;
   height: 4px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .bar span {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 0;
   background: #22d3ee;
 }
 .note {

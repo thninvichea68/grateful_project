@@ -190,7 +190,6 @@ export function ShipmentSummaryCard({
                   stackId="ss"
                   fill={SS_IMPORT}
                   maxBarSize={30}
-                  radius={[3, 3, 0, 0]}
                   // Every month's full-height slot: a faint track, dashed for months to come.
                   background={(raw: unknown) => {
                     const p = raw as {
@@ -207,7 +206,7 @@ export function ShipmentSummaryCard({
                         y={p.y}
                         width={p.width}
                         height={p.height}
-                        rx={5}
+                        rx={0}
                         fill={data[p.index]?.future ? 'none' : 'var(--bg-subtle)'}
                         fillOpacity={0.5}
                         stroke={data[p.index]?.future ? 'var(--border-strong)' : 'none'}
@@ -221,13 +220,7 @@ export function ShipmentSummaryCard({
                     <Cell key={d.month} fillOpacity={!sel || d.month === sel.month ? 1 : 0.55} />
                   ))}
                 </Bar>
-                <Bar
-                  dataKey="exports"
-                  stackId="ss"
-                  fill={SS_EXPORT}
-                  maxBarSize={30}
-                  radius={[3, 3, 0, 0]}
-                >
+                <Bar dataKey="exports" stackId="ss" fill={SS_EXPORT} maxBarSize={30}>
                   {data.map((d) => (
                     <Cell key={d.month} fillOpacity={!sel || d.month === sel.month ? 1 : 0.55} />
                   ))}
@@ -399,7 +392,6 @@ export function ProfitCard({
                   dataKey="v"
                   innerRadius={44}
                   outerRadius={64}
-                  cornerRadius={3}
                   paddingAngle={positive.length > 1 ? 2 : 0}
                   startAngle={90}
                   endAngle={-270}
@@ -611,7 +603,7 @@ export function ClientShareCard({
                       className="dot"
                       style={{ background: CLIENT_COLORS[i % CLIENT_COLORS.length] }}
                     />
-                    {a.name}
+                    <span title={a.name}>{a.name}</span>
                   </div>
                   <div className="rc-bar-track">
                     <div
@@ -806,9 +798,10 @@ export function AccountsCard({
                         <Link
                           to={`/clients/${a.clientId}`}
                           className={`accounts-name ${acc.nameLink}`}
+                          title={a.name}
                         >
                           <span className={acc.nameChip}>{icons.clients({})}</span>
-                          {a.name}
+                          <span className={acc.nameText}>{a.name}</span>
                         </Link>
                       </td>
                       <td className="accounts-val-bold" style={{ textAlign: 'center' }}>
@@ -934,7 +927,7 @@ function SingleAccount({
 /* ------------------------------ Port of discharge ------------------------------ */
 
 export function PortCard({ filters }: { filters: { from: string; to: string } }) {
-  const [mode, setMode] = useState<'percentage' | 'shipment'>('percentage');
+  const [mode, setMode] = useState<'percentage' | 'shipment'>('shipment');
   // Legend hover/focus spotlights one flow across every bar.
   const [focusFlow, setFocusFlow] = useState<'imp' | 'exp' | null>(null);
   const q = usePorts(filters);
@@ -943,11 +936,12 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
       .map((p) => ({ name: p.shortName, imp: p.imports, exp: p.exports, v: p.imports + p.exports }))
       .filter((p) => p.v > 0)
       .sort((a, b) => b.v - a.v);
-    const top = list.slice(0, 3);
-    const rest = list.slice(3);
+    // At most 5 bars: the top 4, then the rest together as OTHERS (all 5 when there are 5).
+    const top = list.length <= 5 ? list : list.slice(0, 4);
+    const rest = list.slice(top.length);
     if (!rest.length) return top;
     const add = (k: 'imp' | 'exp' | 'v') => rest.reduce((s, p) => s + p[k], 0);
-    return [...top, { name: 'OTHERS', imp: add('imp'), exp: add('exp'), v: add('v') }];
+    return [...top, { name: 'OTHERS', imp: add('imp'), exp: add('exp'), v: add('v'), parts: rest }];
   }, [q.data]);
   const sum = rows.reduce((s, r) => s + r.v, 0);
   const totals = rows.reduce((s, r) => ({ imp: s.imp + r.imp, exp: s.exp + r.exp }), {
@@ -1037,6 +1031,19 @@ export function PortCard({ filters }: { filters: { from: string; to: string } })
                       style={{ left: `${Math.min(w, 58)}%` }}
                     >
                       <b className="port-tip-title">{r.name}</b>
+                      {'parts' in r && r.parts && (
+                        <ul className="port-tip-parts">
+                          {r.parts.map((p) => (
+                            <li key={p.name}>
+                              {p.name}
+                              <small>
+                                {p.imp.toLocaleString()} imp · {p.exp.toLocaleString()} exp
+                              </small>
+                              <b>{p.v.toLocaleString()}</b>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       <span data-kind="imp">
                         <i /> Import <b>{r.imp.toLocaleString()}</b>
                         <small>{share(r.imp, r.v)}</small>

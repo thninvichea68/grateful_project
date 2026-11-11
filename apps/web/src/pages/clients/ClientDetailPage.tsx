@@ -209,6 +209,12 @@ export function ClientDetailPage() {
                   <dd>
                     {fmtMoney(c.commissionUsd)} <span className={s.unit}>per declaration</span>
                   </dd>
+                  <dt>THC / agency invoice</dt>
+                  <dd>
+                    {c.thcBilledApart
+                      ? 'Billed in the month paid (own DIS)'
+                      : 'Billed with services (declare month)'}
+                  </dd>
                 </dl>
               </section>
               <section className={`${s.group} ${s.groupWide}`}>

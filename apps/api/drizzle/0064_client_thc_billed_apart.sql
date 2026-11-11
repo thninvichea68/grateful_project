@@ -1,0 +1,1 @@
+ALTER TABLE "clients" ADD COLUMN "thc_billed_apart" boolean DEFAULT true NOT NULL;

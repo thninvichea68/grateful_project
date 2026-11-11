@@ -25,7 +25,7 @@ const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frida
 const weekday = (iso: string | null | undefined) =>
   iso ? (WEEKDAYS[new Date(`${iso.slice(0, 10)}T00:00:00Z`).getUTCDay()] ?? '-') : '-';
 const CHEA_LABEL: Record<string, string> = { PAID: 'Paid', UNPAID: 'Unpaid', NA: 'N/A' };
-const money = { kind: 'number', align: 'right', format: m } as const;
+const money = { kind: 'number', format: m } as const;
 const asDate = { kind: 'date', format: fmtDate } as const;
 
 /** The table's columns, keyed as the API's header filters. */
@@ -267,7 +267,7 @@ export function LedgerPage() {
             <thead>
               <tr>
                 {COLUMNS.map((c) => (
-                  <th key={c.key} style={c.align ? { textAlign: 'right' } : undefined}>
+                  <th key={c.key}>
                     <HeaderFilter
                       label={c.key === 'vat' ? vatHead : c.label}
                       kind={c.kind}
@@ -313,16 +313,12 @@ export function LedgerPage() {
                   <td>{fmtDate(r.declareDate)}</td>
                   <td>{r.clientCode}</td>
                   <td>
-                    {r.invNo ? (
-                      docNo(r, 'tax-invoices', r.invNo)
-                    ) : (
-                      <Pill tone="pending">Not invoiced</Pill>
-                    )}
+                    {r.invNo ? docNo(r, 'tax-invoices', r.invNo) : <Pill tone="pending">Non</Pill>}
                   </td>
                   <td>{docNo(r, 'disbursements', r.disNo)}</td>
                   <td>{docNo(r, 'debit-notes', r.dnNo)}</td>
                   <td>{fmtDate(r.invDate)}</td>
-                  <td style={{ textAlign: 'right' }}>{fmtNum(r.exchangeRate, 0)}</td>
+                  <td>{fmtNum(r.exchangeRate, 0)}</td>
                   <td>{weekday(r.invDate)}</td>
                   {[
                     r.clearFee,
@@ -334,13 +330,10 @@ export function LedgerPage() {
                     r.vat,
                     r.dnTotal,
                   ].map((v, i) => (
-                    <td key={i} style={{ textAlign: 'right' }}>
-                      {m(v)}
-                    </td>
+                    <td key={i}>{m(v)}</td>
                   ))}
                   <td
                     style={{
-                      textAlign: 'right',
                       fontWeight: 600,
                       color:
                         Number(r.netProfit) < 0
@@ -369,9 +362,7 @@ export function LedgerPage() {
                     t.dnTotal,
                     t.netProfit,
                   ].map((v, i) => (
-                    <td key={i} style={{ textAlign: 'right' }}>
-                      {m(v)}
-                    </td>
+                    <td key={i}>{m(v)}</td>
                   ))}
                   <td />
                 </tr>

@@ -34,7 +34,6 @@ function RowSlots() {
           y={barScale(barXAccessor(d)) ?? 0}
           width={innerWidth}
           height={bandWidth}
-          rx={4}
           fill="var(--bg-subtle)"
           fillOpacity={on === i ? 0.9 : 0.45}
           style={{ transition: 'fill-opacity 0.15s ease-in-out' }}
@@ -120,8 +119,8 @@ export function PortsCard({
             margin={MARGIN}
           >
             <RowSlots />
-            <Bar dataKey="imports" fill={IMPORT_FILL} lineCap={3} fadedOpacity={0.35} />
-            <Bar dataKey="exports" fill={EXPORT_FILL} lineCap={3} fadedOpacity={0.35} />
+            <Bar dataKey="imports" fill={IMPORT_FILL} lineCap="butt" fadedOpacity={0.35} />
+            <Bar dataKey="exports" fill={EXPORT_FILL} lineCap="butt" fadedOpacity={0.35} />
             <TotalLabels />
             <BarYAxis showAllLabels />
             <ChartTooltip

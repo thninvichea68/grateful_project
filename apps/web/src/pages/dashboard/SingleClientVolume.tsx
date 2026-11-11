@@ -159,7 +159,7 @@ export function SingleClientVolume({
               }}
             />
             <Tooltip
-              cursor={{ fill: 'var(--bg-subtle)', radius: 4 }}
+              cursor={{ fill: 'var(--bg-subtle)' }}
               content={({ active, payload }) => {
                 const p = active ? (payload?.[0]?.payload as Point | undefined) : undefined;
                 return p ? (
@@ -182,7 +182,7 @@ export function SingleClientVolume({
                 dataKey={k}
                 stackId="v"
                 fill={k === 'imports' ? IMPORT : EXPORT}
-                radius={k === 'exports' ? [3, 3, 0, 0] : undefined}
+
                 isAnimationActive={false}
               />
             ))}

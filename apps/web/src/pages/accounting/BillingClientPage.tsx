@@ -12,7 +12,12 @@ import {
   type OfficialReceipt,
 } from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
-import { useClientMonth, useIssueDrafts, useVoidReceipt } from '../../features/billing';
+import {
+  useClientMonth,
+  useIssueDrafts,
+  useSeparateAgency,
+  useVoidReceipt,
+} from '../../features/billing';
 import { ErrorBanner, ExpandToggle, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { fmtDate, fmtMoney, fmtNum } from '../../lib/format';
@@ -28,7 +33,7 @@ import {
   STATEMENT_TITLE,
   thisMonth,
 } from './billingUi';
-import { DraftsModal, ReceiptModal } from './BillingDialogs';
+import { AgencyDisModal, DraftsModal, ReceiptModal } from './BillingDialogs';
 import b from './Billing.module.css';
 import { PrintLink } from '../../components/PrintLink';
 
@@ -51,7 +56,7 @@ export function BillingClientPage() {
   if (data.error && !data.data)
     return (
       <section className="view active">
-        <BackLink to={`/accounting/billing?month=${month}`} label="Client Billing" />
+        <BackLink to={`/accounting/billing?month=${month}`} label="Invoice to Clients" />
         <div style={{ marginTop: 12 }}>
           <ErrorBanner error={data.error} />
         </div>
@@ -80,6 +85,27 @@ function Workspace({
   const canWrite = can('accounting:write');
   const issue = useIssueDrafts(m.client.id);
   const [drafting, setDrafting] = useState(false);
+  const [agency, setAgency] = useState(false);
+  const separate = useSeparateAgency();
+  const separateAgency = async (r: BillingShipmentRow) => {
+    const dis = r.docs.disbursements.find((d) => d.status === 'ISSUED');
+    if (
+      !window.confirm(
+        `Separate ${dis?.number ?? 'the DIS'} of ${r.declareNo}?\n\n` +
+          `${dis?.number ?? 'The DIS'} stays as issued (number, date, amount) on an Invoice/THC row of its own in ${monthName(month)}. ` +
+          `The tax invoice and debit note stay on the shipment and move to its declare month, with numbers in that month's order.`,
+      )
+    )
+      return;
+    try {
+      await separate.mutateAsync(r.recordId);
+      toast(
+        `${dis?.number ?? 'The DIS'} is on its own row. ${r.declareNo}'s tax invoice and debit note are in its declare month.`,
+      );
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not separate the DIS.');
+    }
+  };
   const [paying, setPaying] = useState<BillingStatement | null>(null);
   const [preview, setPreview] = useState<BillingShipmentRow | null>(null);
   // The statements stay folded under their heading until opened.
@@ -112,7 +138,7 @@ function Workspace({
         <div className={backRow}>
           <BackLink
             to={`/accounting/billing?month=${month}`}
-            label={`Client Billing · ${monthName(month)}`}
+            label={`Invoice to Clients · ${monthName(month)}`}
           />
           <div className={b.headTitle}>
             {m.client.legalName ?? m.client.name}
@@ -164,6 +190,14 @@ function Workspace({
               </Link>
               <button
                 type="button"
+                className="cargo-btn"
+                onClick={() => setAgency(true)}
+                title="Bill a shipment's agency invoice / THC in this month, before its declaration month"
+              >
+                + Invoice/THC DIS
+              </button>
+              <button
+                type="button"
                 className="new-shipment-btn"
                 disabled={s.drafts === 0 || issue.isPending}
                 onClick={() => void issueAll()}
@@ -195,6 +229,14 @@ function Workspace({
                   <td>{i + 1}</td>
                   <td>
                     <span className={b.declare}>{r.declareNo}</span>
+                    {r.kind === 'AGENCY' && (
+                      <span
+                        className={b.small}
+                        title="The agency invoice / THC, billed in the month it was paid. The services follow in the declare month."
+                      >
+                        Invoice/THC only
+                      </span>
+                    )}
                     <span className={b.small}>
                       <Link to={`/plans/${r.shipmentId}`}>{r.shipmentReference}</Link>
                     </span>
@@ -227,6 +269,18 @@ function Workspace({
                         className={b.rowDots}
                         title={`Preview, print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
                         onPreview={() => setPreview(r)}
+                        actions={
+                          canWrite && r.separable
+                            ? [
+                                {
+                                  label: 'Separate Invoice/THC DIS',
+                                  title:
+                                    'Move the DIS issued in the earlier month to a row of its own; the tax invoice and debit note follow the declare month',
+                                  onClick: () => void separateAgency(r),
+                                },
+                              ]
+                            : undefined
+                        }
                       >
                         {icons.dots({ width: 16, height: 16 })}
                       </PackPrintMenu>
@@ -312,6 +366,15 @@ function Workspace({
           month={month}
           missing={s.missing}
           onClose={() => setDrafting(false)}
+        />
+      )}
+      {agency && (
+        <AgencyDisModal
+          clientId={m.client.id}
+          clientCode={m.client.code}
+          month={month}
+          back={back}
+          onClose={() => setAgency(false)}
         />
       )}
       {preview && (

@@ -40,7 +40,7 @@ operationsRouter.get('/declarations', async (req, res) => {
            (SELECT count(*) FROM cdc_lines l WHERE l.declaration_id = d.id)::int AS "cdcLines",
            count(*) OVER () AS total_count
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id JOIN clients cl ON cl.id = s.client_id
-    LEFT JOIN ports p ON p.id = d.port_id LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    LEFT JOIN ports p ON p.id = d.port_id LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
     ${whereAll(c)} ORDER BY d.declare_date DESC, d.declare_no DESC ${paginate(q.page, q.pageSize)}`,
   );
   res.json(toPaginated(rows, q.page, q.pageSize));

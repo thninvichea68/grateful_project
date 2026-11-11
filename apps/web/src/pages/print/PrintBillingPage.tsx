@@ -183,7 +183,7 @@ export function PrintPackPage() {
       {drafts > 0 && (
         <div className={p.hint}>
           {drafts} draft{drafts === 1 ? ' is' : 's are'} in this pack marked DRAFT. Issue{' '}
-          {drafts === 1 ? 'it' : 'them'} in Client Billing to make the pack final.
+          {drafts === 1 ? 'it' : 'them'} in Invoice to Clients to make the pack final.
         </div>
       )}
       {sheets.length ? (

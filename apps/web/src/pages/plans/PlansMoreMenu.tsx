@@ -3,21 +3,26 @@ import { icons } from '../../layout/icons';
 import m from '../creditnoted/PackMenu.module.css';
 
 /**
- * A toolbar's ⋯: Export Excel (the list's filters), Import Excel (Shipping Plans, Cut Stock) and
- * Status rules (Shipping Plans).
+ * A toolbar's ⋯: Download Excel (the list's filters), Upload Excel and its blank template
+ * (Shipping Plans, Cut Stock) and Status rules (Shipping Plans).
  */
 export function PlansMoreMenu({
   exporting,
   onExport,
   onImport,
+  onTemplate,
   onStatusRules,
   exportHint = 'Shipments matching the current filters · .xlsx',
   importHint = 'Shipping plan workbook · .xlsx',
+  templateHint = 'The blank workbook Upload Excel accepts · .xlsx',
 }: {
   exporting: boolean;
   onExport: () => void;
   /** Omitted when the user can't import. */
   onImport?: (() => void) | undefined;
+  /** The blank upload template; omitted when the user can't import or there is none. */
+  onTemplate?: (() => void) | undefined;
+  templateHint?: string;
   /** Each client's "Completed when…" rule; omitted where it doesn't apply. */
   onStatusRules?: (() => void) | undefined;
   exportHint?: string;
@@ -41,7 +46,9 @@ export function PlansMoreMenu({
     };
   }, [open]);
 
-  const label = onStatusRules ? 'Import / Export Excel, Status rules' : 'Import or Export Excel';
+  const label = onStatusRules
+    ? 'Download / Upload Excel, Status rules'
+    : 'Download or Upload Excel';
   const pick = (fn: () => void) => () => {
     setOpen(false);
     fn();
@@ -65,7 +72,7 @@ export function PlansMoreMenu({
           <button type="button" role="menuitem" className={m.item} onClick={pick(onExport)}>
             {icons.download({ width: 16, height: 16 })}
             <span>
-              <b>Export Excel</b>
+              <b>Download Excel</b>
               <small>{exportHint}</small>
             </span>
           </button>
@@ -73,8 +80,17 @@ export function PlansMoreMenu({
             <button type="button" role="menuitem" className={m.item} onClick={pick(onImport)}>
               {icons.upload({ width: 16, height: 16 })}
               <span>
-                <b>Import Excel</b>
+                <b>Upload Excel</b>
                 <small>{importHint}</small>
+              </span>
+            </button>
+          )}
+          {onTemplate && (
+            <button type="button" role="menuitem" className={m.item} onClick={pick(onTemplate)}>
+              {icons.documents({ width: 16, height: 16 })}
+              <span>
+                <b>Download template</b>
+                <small>{templateHint}</small>
               </span>
             </button>
           )}

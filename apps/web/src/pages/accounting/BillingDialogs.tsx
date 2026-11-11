@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import {
   amountInWords,
   BILLING_PACK_TYPES,
@@ -10,13 +11,18 @@ import {
   type BillingStatement,
   type ReceiptInput,
 } from '@gs/shared';
-import { useCreateDrafts, useCreateReceipt } from '../../features/billing';
+import {
+  useAgencyCandidates,
+  useCreateDrafts,
+  useCreateReceipt,
+  useOpenAgencyLine,
+} from '../../features/billing';
 import { ErrorBanner, FieldError, Modal, ui } from '../../components/ui';
 import { NumberInput } from '../../components/NumberInput';
 import { useToast } from '../../components/Toast';
-import { fmtMoney } from '../../lib/format';
+import { fmtDate, fmtMoney } from '../../lib/format';
 import { formResolver } from '../../lib/zodForm';
-import { monthName, PACK_LABEL, periodCode, STATEMENT_TITLE } from './billingUi';
+import { monthDocDate, monthName, PACK_LABEL, periodCode, STATEMENT_TITLE } from './billingUi';
 import b from './Billing.module.css';
 
 /** Drafts for the month's shipments that are missing a document, in one go. */
@@ -277,6 +283,116 @@ export function ReceiptModal({
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/**
+ * "+ Invoice/THC DIS": the agency invoice / THC of a shipment declared in a later month, billed
+ * in this month on a DIS of its own. The tax invoice, the other disbursements and the debit
+ * note follow in the declare month. Opens the DIS editor for it.
+ */
+export function AgencyDisModal({
+  clientId,
+  clientCode,
+  month,
+  back,
+  onClose,
+}: {
+  clientId: string;
+  clientCode: string;
+  month: string;
+  /** Encoded return URL for the DIS editor. */
+  back: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const list = useAgencyCandidates(clientId, month, true);
+  const open = useOpenAgencyLine(clientId);
+  const [declarationId, setDeclarationId] = useState('');
+  const [date, setDate] = useState(monthDocDate(month));
+  const picked = list.data?.find((c) => c.declarationId === declarationId);
+  const pick = (id: string) => {
+    setDeclarationId(id);
+    // The shipping plan's Invoice / THC Date, when it falls in this month.
+    const thc = list.data?.find((c) => c.declarationId === id)?.thcDate;
+    if (thc?.startsWith(month)) setDate(thc);
+  };
+  const dateOk = date.startsWith(month);
+
+  const submit = async () => {
+    const r = await open.mutateAsync({ declarationId, date });
+    toast(
+      `${picked?.declareNo ?? 'The shipment'}'s Invoice/THC DIS is numbered. Enter the THC, then issue.`,
+    );
+    navigate(`/accounting/disbursements/new?recordId=${r.recordId}&back=${back}`);
+  };
+
+  return (
+    <Modal
+      title="Invoice/THC DIS"
+      sub={`${clientCode} · ${monthName(month)}: bill a shipment's agency invoice / THC in this month, before its declaration. Its tax invoice, other disbursements and debit note follow in the declare month.`}
+      onClose={onClose}
+      width={620}
+    >
+      <ErrorBanner error={list.error ?? open.error} />
+      <div
+        className="form-fields-grid"
+        style={{ gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)' }}
+      >
+        <div className="form-field-group">
+          <label htmlFor="ag-decl">Declaration</label>
+          <select
+            id="ag-decl"
+            className="form-field-box"
+            value={declarationId}
+            onChange={(e) => pick(e.target.value)}
+          >
+            <option value="">
+              {list.isLoading
+                ? 'Loading…'
+                : list.data?.length
+                  ? 'Choose a shipment declared after this month'
+                  : 'No shipment declared after this month'}
+            </option>
+            {list.data?.map((c) => (
+              <option key={c.declarationId} value={c.declarationId}>
+                {c.declareNo} · declared {fmtDate(c.declareDate)} · {c.hbl ?? c.shipmentReference}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-field-group">
+          <label htmlFor="ag-date">DIS date</label>
+          <input
+            id="ag-date"
+            type="date"
+            className="form-field-box"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            aria-invalid={!dateOk}
+          />
+          {!dateOk && <FieldError message={`Pick a date in ${monthName(month)}`} />}
+        </div>
+      </div>
+      <p className={ui.dialogSub} style={{ marginTop: 14 }}>
+        The DIS takes its number in {monthName(month)}&apos;s order. When the record summary is
+        checked later, the THC stays off the services&apos; DIS.
+      </p>
+      <div className={ui.actions}>
+        <button type="button" className="btn-cancel-shipment" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn-create-submit"
+          disabled={!declarationId || !dateOk || open.isPending}
+          onClick={() => void submit()}
+        >
+          {open.isPending ? 'Creating…' : 'Create DIS'}
+        </button>
+      </div>
     </Modal>
   );
 }

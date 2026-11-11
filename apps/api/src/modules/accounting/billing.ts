@@ -36,7 +36,7 @@ import { isoTs, likePattern, paginate, queryRows, toPaginated, whereAll } from '
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { parse } from '../../lib/validate';
 import { createDoc, getDoc, issueDoc, previewDoc } from './docs';
-import { LEDGER_DATE } from './ledgerDate';
+import { DECLARE_MONTH_FROM, LEDGER_DATE } from './ledgerDate';
 import { prefill, previousLines, summaryLines } from './prefill';
 
 /*
@@ -76,6 +76,8 @@ const realRef = (v: string | null | undefined) =>
 
 interface LedgerPart {
   recordId: string;
+  kind: 'SERVICE' | 'AGENCY';
+  separable: boolean;
   invDate: string;
   declareNo: string;
   shipmentId: string;
@@ -128,14 +130,20 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   const ledger = await queryRows<LedgerPart>(
     db,
     sql`
-    SELECT a.id AS "recordId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", d.declare_no AS "declareNo",
+    SELECT a.id AS "recordId", a.kind, to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", d.declare_no AS "declareNo",
            s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
            s.transport_mode AS "transportMode", s.load_type AS "loadType", s.hbl_no AS hbl,
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", a.inv_revenue::text AS "invRevenue",
            a.vat::text AS vat, a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
-           EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id AND cn.status <> 'VOID') AS "fromChea"
+           EXISTS (SELECT 1 FROM credit_notes cn WHERE cn.accounting_record_id = a.id AND cn.status <> 'VOID') AS "fromChea",
+           (a.kind = 'SERVICE' AND d.declare_date >= ${DECLARE_MONTH_FROM}::date
+             AND NOT EXISTS (SELECT 1 FROM accounting_records g WHERE g.declaration_id = a.declaration_id AND g.kind = 'AGENCY')
+             AND (SELECT count(*) FROM disbursements t WHERE t.accounting_record_id = a.id AND t.status = 'ISSUED') = 1
+             AND EXISTS (SELECT 1 FROM disbursements t WHERE t.accounting_record_id = a.id AND t.status = 'ISSUED'
+               AND t.dis_date >= ${DECLARE_MONTH_FROM}::date
+               AND date_trunc('month', t.dis_date) < date_trunc('month', d.declare_date))) AS separable
     FROM accounting_records a
     JOIN customs_declarations d ON d.id = a.declaration_id JOIN shipments s ON s.id = d.shipment_id
     WHERE a.client_id = ${clientId} AND ${inMonth(LEDGER_DATE, month)}
@@ -206,6 +214,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
       none[type] = numbered && !typed[type][0] && typed[type][1] === 0 && !docsByType[type].length;
     return {
       recordId: l.recordId,
+      kind: l.kind,
+      separable: l.separable,
       invDate: l.invDate,
       declareNo: l.declareNo,
       shipmentId: l.shipmentId,

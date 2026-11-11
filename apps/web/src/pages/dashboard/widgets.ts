@@ -58,13 +58,11 @@ export const WIDGETS: WidgetDef[] = [
 /** The widgets one person can pick from: Profit only with accounting access. */
 export const widgetsFor = (canProfit: boolean) => WIDGETS.filter((w) => canProfit || !w.accounting);
 
-/**
- * Shown before anyone customizes: all of them, except that Total Net Profit takes Shipments by
- * Client's place for accounting (the Overview as it always was). Shipments per Client is
- * opt-in: it shares that place, e.g. instead of Total Net Profit.
- */
-export const shownByDefault = (id: WidgetId, canProfit: boolean) =>
-  id === 'clientTrend' ? false : id === 'clients' ? !canProfit : true;
+/** Shown before anyone customizes; the rest are opt-in from Edit widgets. */
+const DEFAULTS: WidgetId[] = ['kpis', 'shipments', 'accounts', 'ports', 'live'];
+
+// canProfit kept in the signature: callers and toggle() pass it, defaults may depend on it again.
+export const shownByDefault = (id: WidgetId, _canProfit: boolean) => DEFAULTS.includes(id);
 
 type Choices = Partial<Record<WidgetId, boolean>>;
 const key = (userId: string) => `gs:overview-widgets:${userId}`;
@@ -110,4 +108,30 @@ export function useOverviewWidgets(userId: string, canProfit: boolean) {
     reset: () => save({}),
     customized: Object.keys(choices).length > 0,
   };
+}
+
+/**
+ * Overview grid: packs cards (each `base` columns wide) into rows of `cols` in order, and
+ * shares each row's leftover columns among that row's cards, last card first, so no row
+ * ends in an empty gap.
+ */
+export function rowSpans(base: number[], cols: number): number[] {
+  const out = base.map((b) => Math.min(b, cols));
+  let row: number[] = [];
+  let used = 0;
+  const close = () => {
+    for (let free = cols - used, k = row.length - 1; free > 0; free--) {
+      out[row[k]!]! += 1;
+      k = k > 0 ? k - 1 : row.length - 1;
+    }
+    row = [];
+    used = 0;
+  };
+  out.forEach((n, i) => {
+    if (used + n > cols) close();
+    row.push(i);
+    used += n;
+  });
+  if (row.length) close();
+  return out;
 }

@@ -4,6 +4,7 @@ import type {
   ClearanceStatusRow,
   ClientRevenueRow,
   CountryRow,
+  ForwarderMonthRow,
   ForwarderRow,
   KpiResponse,
   LiveConsignment,
@@ -53,6 +54,9 @@ export const useClearanceStatus = (f: AnalyticsFilters) =>
 export const useByCountry = (f: AnalyticsFilters, flow: 'import' | 'export') =>
   useAnalytics<CountryRow[]>('by-country', f, { flow });
 export const useForwarders = (f: AnalyticsFilters) => useAnalytics<ForwarderRow[]>('forwarders', f);
+/** The 5 busiest forwarders' shipments month by month (Analytics line chart). */
+export const useForwardersMonthly = (f: AnalyticsFilters) =>
+  useAnalytics<ForwarderMonthRow[]>('forwarders-monthly', f);
 export const usePorts = (f: AnalyticsFilters) => useAnalytics<PortRow[]>('ports', f);
 export const useAccounts = (f: AnalyticsFilters) => useAnalytics<AccountRow[]>('accounts', f);
 /** Per-client ledger breakdown (accounting roles only). */

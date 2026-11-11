@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import {
   computeLedger,
   DEFAULT_VAT_PERCENT,
@@ -81,7 +81,7 @@ export const listVatRates = (): Promise<VatRate[]> =>
   );
 
 const SELECT = sql`
-  SELECT a.id, a.declaration_id AS "declarationId", d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
+  SELECT a.id, a.declaration_id AS "declarationId", a.kind, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
          s.id AS "shipmentId", s.reference AS "shipmentReference", s.direction,
          c.id AS "clientId", c.code AS "clientCode", c.name AS "clientName", p.code AS "portCode", p.customs_port_no AS "portNo", p.short_name AS "portName",
          a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
@@ -232,7 +232,7 @@ export async function declarationOptions(
     SELECT d.id, d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", s.reference AS "shipmentReference",
            c.id AS "clientId", c.code AS "clientCode", s.direction
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
-    LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
     WHERE a.id IS NULL AND d.declare_no IS NOT NULL ${scoped ? sql`AND ${scoped}` : sql``} ${like ? sql`AND (d.declare_no ILIKE ${like} OR s.reference ILIKE ${like} OR c.code ILIKE ${like})` : sql``}
     ORDER BY d.declare_date DESC, d.declare_no LIMIT 30`,
   );
@@ -318,7 +318,12 @@ export async function insertLedger(tx: DbOrTx, input: LedgerInput, req: Request)
     const [exists] = await tx
       .select({ id: accountingRecords.id })
       .from(accountingRecords)
-      .where(eq(accountingRecords.declarationId, input.declarationId));
+      .where(
+        and(
+          eq(accountingRecords.declarationId, input.declarationId),
+          eq(accountingRecords.kind, 'SERVICE'),
+        ),
+      );
     if (exists) throw conflict(`Declaration ${d.d.declareNo} already has a ledger entry`);
     // Issue date: next working day after the declaration (clearance) date, past holidays.
     const invDate = input.invDate ?? (await issueDateFor(tx, d.d.declareDate));
@@ -499,7 +504,7 @@ export async function recordSummaryShipments(
            to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", c.id AS "clientId", c.code AS "clientCode",
            a.inv_no AS number, s.direction, s.hbl_no AS hbl
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL
-    JOIN clients c ON c.id = s.client_id LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    JOIN clients c ON c.id = s.client_id LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
     WHERE d.declare_no IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM record_summaries x WHERE x.status <> 'VOID'
         AND (x.accounting_record_id = a.id

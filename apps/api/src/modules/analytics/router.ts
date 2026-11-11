@@ -47,6 +47,9 @@ analyticsRouter.get('/by-country', async (req, res) => {
 analyticsRouter.get('/forwarders', async (req, res) =>
   res.json(await svc.forwarders(await filters(req))),
 );
+analyticsRouter.get('/forwarders-monthly', async (req, res) =>
+  res.json(await svc.forwardersMonthly(await filters(req))),
+);
 analyticsRouter.get('/ports', async (req, res) => res.json(await svc.ports(await filters(req))));
 analyticsRouter.get('/accounts', async (req, res) =>
   res.json(await svc.accounts(await filters(req))),

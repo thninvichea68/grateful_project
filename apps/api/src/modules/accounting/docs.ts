@@ -11,6 +11,7 @@ import {
   ledgerInputSchema,
   lineAmount,
   recordSummaryLedger,
+  isThcLine,
   toMoneyString,
   usdToKhr,
   vatMark,
@@ -67,6 +68,8 @@ import {
   type AssignedNumbers,
   type NumberKind,
 } from './numbers';
+import { LEDGER_DATE, serviceLedgerDate } from './ledgerDate';
+import { syncAgencyLine } from './agencyLine';
 
 type Row = Record<string, unknown>;
 type Input = z.output<(typeof BILLING_DOC_SCHEMAS)[BillingDocType]> & Row;
@@ -733,12 +736,22 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
   });
 }
 
+async function isAgencyRow(tx: Tx, recordId: string): Promise<boolean> {
+  const [r] = await tx
+    .select({ kind: accountingRecords.kind })
+    .from(accountingRecords)
+    .where(eq(accountingRecords.id, recordId));
+  return r?.kind === 'AGENCY';
+}
+
 /** An issued document's number and total into its Monthly Ledger row (on issue, and on later edits). */
 async function issuedToLedger(tx: Tx, cfg: Config, doc: Row, req: Request): Promise<void> {
   if (!cfg.ledger || !doc.accountingRecordId) return;
   const total = cfg.kind === 'tax' ? doc.subtotal : doc.total;
   // A submitted record summary decides the amounts; the document then only gives its number.
   const summary = await liveSummaryId(tx, doc.accountingRecordId as string);
+  // An agency row's DIS bills the THC as paid: its total is the row's THC cost too.
+  const agency = await isAgencyRow(tx, doc.accountingRecordId as string);
   await tx
     .update(accountingRecords)
     .set({
@@ -746,6 +759,7 @@ async function issuedToLedger(tx: Tx, cfg: Config, doc: Row, req: Request): Prom
         ? { [cfg.ledger.numberCol]: cfg.numberCol ? doc[cfg.numberCol] : null }
         : {}),
       ...(summary ? {} : { [cfg.ledger.totalCol]: total }),
+      ...(agency && cfg.ledger.totalCol === 'disTotal' ? { thc: total } : {}),
       updatedById: req.auth!.userId,
     } as never)
     .where(eq(accountingRecords.id, doc.accountingRecordId as string));
@@ -771,7 +785,7 @@ async function ledgerRowByDeclareNo(
     sql`
     SELECT d.id, s.client_id AS "clientId", a.id AS "recordId"
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL
-    LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
     WHERE upper(d.declare_no) = upper(${declareNo})
     ORDER BY d.declare_date DESC LIMIT 1`,
   );
@@ -822,7 +836,11 @@ async function summaryToLedger(
     })
     .from(recordSummaryLines)
     .where(eq(recordSummaryLines.recordSummaryId, summaryId));
-  const t = recordSummaryLedger(lines);
+  // The agency invoice / THC paid in another month than the declaration is billed on a DIS
+  // of its own in that month; the services' INV / DIS / DN leave it out.
+  const thcLines = lines.filter((l) => isThcLine(l.description));
+  const apart = await syncAgencyLine(tx, recordId, recordSummaryLedger(thcLines).thc, req);
+  const t = recordSummaryLedger(apart ? lines.filter((l) => !isThcLine(l.description)) : lines);
   await tx
     .update(accountingRecords)
     .set({
@@ -878,6 +896,7 @@ async function takeOutOfLedger(tx: Tx, cfg: Config, doc: Row): Promise<void> {
     .set({
       ...(numberCol ? { [numberCol]: null } : {}),
       ...(keepTotal ? {} : { [cfg.ledger.totalCol]: '0' }),
+      ...(r.kind === 'AGENCY' && cfg.ledger.totalCol === 'disTotal' ? { thc: '0' } : {}),
     } as never)
     .where(eq(accountingRecords.id, r.id));
   await recompute(tx, r.id);
@@ -989,7 +1008,7 @@ export async function applyClearanceDate(
                to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
                a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
         FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
-        JOIN clients c ON c.id = a.client_id WHERE a.declaration_id = ${declarationId}`,
+        JOIN clients c ON c.id = a.client_id WHERE a.declaration_id = ${declarationId} AND a.kind = 'SERVICE'`,
   );
   if (!rec) return;
   const [{ issued } = { issued: 0 }] = await queryRows<{ issued: number }>(
@@ -1000,8 +1019,8 @@ export async function applyClearanceDate(
   );
   if (issued) return;
   const date = await issueDateFor(tx, rec.declareDate);
-  const before = { invDate: rec.invDate, declareDate: oldDeclareDate };
-  const after = { invDate: date, declareDate: rec.declareDate };
+  const before = { ledgerDate: serviceLedgerDate(oldDeclareDate, rec.invDate) };
+  const after = { ledgerDate: serviceLedgerDate(rec.declareDate, date) };
   await lockNumbering(tx);
   // Numbers whose period changes come off the entry, then the new period's are taken.
   const moved = ISSUE_DATED.map((type) => KIND[type]).filter((kind) => {
@@ -1600,6 +1619,7 @@ export async function releaseInvoiceSet(
       declareNo: string;
       declareDate: string;
       invDate: string;
+      ledgerDate: string;
       code: string;
       invNo: string | null;
       disNo: string | null;
@@ -1608,6 +1628,7 @@ export async function releaseInvoiceSet(
       tx,
       sql`SELECT d.declare_no AS "declareNo", to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate",
                  to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate", c.code,
+                 to_char(${LEDGER_DATE}, 'YYYY-MM-DD') AS "ledgerDate",
                  a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo"
           FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id
           JOIN clients c ON c.id = a.client_id

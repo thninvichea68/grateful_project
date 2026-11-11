@@ -95,7 +95,7 @@
   text-align: center;
 }
 
-/* Client: code badge, name, share. */
+/* Client: building icon, name, share. */
 .client {
   display: flex;
   align-items: center;
@@ -104,15 +104,11 @@
 }
 .badge {
   flex-shrink: 0;
-  min-width: 38px;
+  width: 38px;
   height: 38px;
-  padding: 0 8px;
   display: grid;
   place-items: center;
   border-radius: 8px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
   color: var(--text-secondary);
   background: var(--bg-subtle);
 }
@@ -160,14 +156,12 @@ a.name:hover {
 .track {
   flex: 1;
   height: 6px;
-  border-radius: 8px;
   background: var(--bg-subtle);
   overflow: hidden;
 }
 .track > span {
   display: block;
   height: 100%;
-  border-radius: inherit;
   background: var(--accent-primary);
 }
 
@@ -181,7 +175,6 @@ a.name:hover {
   display: flex;
   gap: 2px;
   height: 6px;
-  border-radius: 8px;
   background: var(--bg-subtle);
   overflow: hidden;
 }

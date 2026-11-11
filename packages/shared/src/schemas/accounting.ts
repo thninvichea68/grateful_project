@@ -69,6 +69,8 @@ export const ledgerListQuerySchema = paginationQuerySchema.extend({
 export interface LedgerRow {
   id: string;
   declarationId: string;
+  /** SERVICE (INV / DIS / DN), or AGENCY: the agency invoice / THC billed in its paid month. */
+  kind: 'SERVICE' | 'AGENCY';
   declareNo: string;
   declareDate: string;
   shipmentId: string;

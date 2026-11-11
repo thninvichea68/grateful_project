@@ -1,49 +1,45 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useOverviewWidgets } from './widgets';
+import { rowSpans, useOverviewWidgets, WIDGETS } from './widgets';
 
 beforeEach(() => localStorage.clear());
 
 describe('Overview widgets', () => {
-  it('shows the Overview as it comes: profit for accounting, client share for the rest', () => {
-    const acc = renderHook(() => useOverviewWidgets('u1', true)).result.current;
-    expect([acc.shown('profit'), acc.shown('clients'), acc.shown('map')]).toEqual([
-      true,
-      false,
-      true,
-    ]);
-    const ops = renderHook(() => useOverviewWidgets('u2', false)).result.current;
-    expect([ops.shown('profit'), ops.shown('clients')]).toEqual([false, true]);
+  it('shows key figures, summary, breakdown, ports and live tracking as it comes', () => {
+    const shown = (canProfit: boolean) => {
+      const w = renderHook(() => useOverviewWidgets('u1', canProfit)).result.current;
+      return WIDGETS.filter((d) => w.shown(d.id)).map((d) => d.id);
+    };
+    const defaults = ['kpis', 'shipments', 'accounts', 'ports', 'live'];
+    expect(shown(true)).toEqual(defaults);
+    expect(shown(false)).toEqual(defaults);
   });
 
   it('remembers a removed or added widget per user, and resets', () => {
     const { result } = renderHook(() => useOverviewWidgets('u1', true));
+    act(() => result.current.toggle('ports'));
     act(() => result.current.toggle('map'));
-    act(() => result.current.toggle('clients'));
-    expect([result.current.shown('map'), result.current.shown('clients')]).toEqual([false, true]);
+    expect([result.current.shown('ports'), result.current.shown('map')]).toEqual([false, true]);
     expect(result.current.customized).toBe(true);
 
     const again = renderHook(() => useOverviewWidgets('u1', true)).result.current;
-    expect([again.shown('map'), again.shown('clients')]).toEqual([false, true]);
-    expect(renderHook(() => useOverviewWidgets('u3', true)).result.current.shown('map')).toBe(true);
+    expect([again.shown('ports'), again.shown('map')]).toEqual([false, true]);
+    expect(renderHook(() => useOverviewWidgets('u3', true)).result.current.shown('ports')).toBe(
+      true,
+    );
 
     act(() => result.current.reset());
-    expect(result.current.shown('map')).toBe(true);
+    expect([result.current.shown('ports'), result.current.shown('map')]).toEqual([true, false]);
     expect(result.current.customized).toBe(false);
   });
 
-  it('offers Shipments per Client off by default, to swap in for Total Net Profit', () => {
+  it('turns profit on for accounting, and back off without storing the default', () => {
     const { result } = renderHook(() => useOverviewWidgets('u1', true));
-    expect([result.current.shown('clientTrend'), result.current.shown('profit')]).toEqual([
-      false,
-      true,
-    ]);
     act(() => result.current.toggle('profit'));
-    act(() => result.current.toggle('clientTrend'));
-    expect([result.current.shown('clientTrend'), result.current.shown('profit')]).toEqual([
-      true,
-      false,
-    ]);
+    expect(result.current.shown('profit')).toBe(true);
+    act(() => result.current.toggle('profit'));
+    expect(result.current.shown('profit')).toBe(false);
+    expect(result.current.customized).toBe(false);
   });
 
   it('never shows profit without accounting access, even if stored', () => {
@@ -51,5 +47,16 @@ describe('Overview widgets', () => {
     expect(renderHook(() => useOverviewWidgets('u1', false)).result.current.shown('profit')).toBe(
       false,
     );
+  });
+});
+
+describe('rowSpans', () => {
+  it('widens the cards on a part-filled row so it ends flush', () => {
+    // Clients, map, breakdown (wide) | ports, forwarders
+    expect(rowSpans([1, 1, 2, 1, 1], 4)).toEqual([1, 1, 2, 2, 2]);
+    // Summary (wide), breakdown (wide) | ports alone takes the whole row
+    expect(rowSpans([2, 2, 1], 4)).toEqual([2, 2, 4]);
+    expect(rowSpans([1, 1, 1], 4)).toEqual([1, 1, 2]);
+    expect(rowSpans([1, 1, 1, 1, 1], 2)).toEqual([1, 1, 1, 1, 2]);
   });
 });

@@ -4,6 +4,7 @@ import type {
   ClearanceStatusRow,
   ClientRevenueRow,
   CountryRow,
+  ForwarderMonthRow,
   ForwarderRow,
   KpiResponse,
   LiveConsignment,
@@ -204,6 +205,30 @@ export async function forwarders(f: Filters): Promise<ForwarderRow[]> {
     FROM shipments s JOIN forwarders fw ON fw.id = s.forwarder_id
     ${shipWhere(f)}
     GROUP BY fw.id, fw.code, fw.name ORDER BY shipments DESC, fw.name`,
+  );
+}
+
+/** The `top` busiest forwarders (ranked as in forwarders()), month by month through the period. */
+export async function forwardersMonthly(
+  f: Filters & Period,
+  top = 5,
+): Promise<ForwarderMonthRow[]> {
+  return queryRows<ForwarderMonthRow>(
+    db,
+    sql`
+    WITH months AS (
+      SELECT generate_series(date_trunc('month', ${f.from}::date), date_trunc('month', ${f.to}::date), interval '1 month')::date AS m
+    ), agg AS (
+      SELECT s.forwarder_id AS id, date_trunc('month', ${periodDate()})::date AS m, count(*)::int AS n
+      FROM shipments s ${shipWhere(f)} AND s.forwarder_id IS NOT NULL GROUP BY 1, 2
+    ), ranked AS (
+      SELECT fw.id, fw.code, fw.name, sum(agg.n) AS total
+      FROM agg JOIN forwarders fw ON fw.id = agg.id
+      GROUP BY fw.id, fw.code, fw.name ORDER BY total DESC, fw.name LIMIT ${top}
+    )
+    SELECT to_char(months.m, 'YYYY-MM') AS month, r.id, r.code, coalesce(agg.n, 0)::int AS shipments
+    FROM ranked r CROSS JOIN months LEFT JOIN agg ON agg.id = r.id AND agg.m = months.m
+    ORDER BY r.total DESC, r.name, months.m`,
   );
 }
 

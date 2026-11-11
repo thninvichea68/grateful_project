@@ -11,6 +11,7 @@ import '../../components/bklit/bklit.css';
 import type { AnalyticsFilters } from '../../features/analytics';
 import { useClientRevenue } from '../../features/analytics';
 import { fmtDate, fmtMoney } from '../../lib/format';
+import { icons } from '../../layout/icons';
 import { ChartState, monthLabel } from '../dashboard/parts';
 import s from './ClientRevenueCards.module.css';
 
@@ -59,7 +60,6 @@ export function BarSlots() {
           y={0}
           width={bandWidth}
           height={innerHeight}
-          rx={3}
           fill="var(--bg-subtle)"
           fillOpacity={on === i ? 0.9 : 0.5}
           style={{ transition: 'fill-opacity 0.15s ease-in-out' }}
@@ -91,7 +91,7 @@ function Trend({ rows }: { rows: ClientRevenueRow['monthly'] }) {
       >
         <Grid horizontal />
         <BarSlots />
-        <Bar dataKey="netProfit" fill={TREND_FILL} lineCap={3} fadedOpacity={0.35} />
+        <Bar dataKey="netProfit" fill={TREND_FILL} lineCap="butt" fadedOpacity={0.35} />
         <BarXAxis showAllLabels />
         <ChartTooltip
           rows={(p) => [
@@ -110,7 +110,9 @@ function ClientCard({ r, link }: { r: ClientRevenueRow; link: string }) {
   return (
     <article className={s.card}>
       <header className={s.head}>
-        <span className={s.badge}>{r.code}</span>
+        <span className={s.badge} title={r.code} aria-hidden>
+          {icons.clients({ width: 18, height: 18 })}
+        </span>
         <div className={s.who}>
           <h4 className={s.name} title={r.name}>
             {r.name}

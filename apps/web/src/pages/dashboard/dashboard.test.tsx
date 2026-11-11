@@ -42,7 +42,7 @@ describe('dashboard helpers', () => {
 });
 
 describe('PortCard', () => {
-  it('groups ports beyond the top 3 into OTHERS and shows percentages', () => {
+  it('groups ports beyond the top 4 into OTHERS and shows shipment counts', () => {
     const p = (shortName: string, imports: number): PortRow => ({
       id: shortName,
       code: shortName,
@@ -58,12 +58,13 @@ describe('PortCard', () => {
       p('KTI', 10),
       p('PNH PORT', 15),
       p('UNION', 5),
+      p('TECHO', 3),
     ];
     render(<PortCard filters={{ from: '2026-01-01', to: '2026-12-31' }} />);
     const labels = [...document.querySelectorAll('.port-bar-label')].map((e) => e.textContent);
-    expect(labels).toEqual(['SIHANOUKVILLE', 'OLAIR', 'PNH PORT', 'OTHERS']);
+    expect(labels).toEqual(['SIHANOUKVILLE', 'OLAIR', 'PNH PORT', 'KTI', 'OTHERS']);
     const values = [...document.querySelectorAll('.port-bar-value')].map((e) => e.textContent);
-    expect(values).toEqual(['50%', '20%', '15%', '15%']);
+    expect(values).toEqual(['50', '20', '15', '10', '8']);
   });
   it('shows an empty state when there are no shipments', () => {
     portsData.data = [];

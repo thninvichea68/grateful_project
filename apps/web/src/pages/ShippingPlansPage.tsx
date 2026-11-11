@@ -17,7 +17,6 @@ import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS, type PlanColumn } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
-import { CardToggle } from './dashboard/parts';
 
 const PREFS = 'gs:plans-view';
 const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
@@ -37,7 +36,7 @@ function readPrefs(): { expandAll: boolean; frozen: string[] } {
   }
 }
 
-export function ShippingPlansPage() {
+export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT' }) {
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -62,8 +61,8 @@ export function ShippingPlansPage() {
 
   const filters = {
     clientId: params.getAll('clientId'),
-    // Always Import or Export (Import unless the link asks for Export).
-    direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
+    // Import Plans or Export Plans, from the route (the sidebar's Shipping Plans dropdown).
+    direction,
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
     // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
     month: rawMonth === 'all' ? '' : (rawMonth ?? (autoMonth ? currentMonth() : '')),
@@ -234,17 +233,6 @@ export function ShippingPlansPage() {
                 </option>
               ))}
             </select>
-            {/* Always Import or Export; the URL only carries Export. One click flips it,
-                like the Overview's Forwarder Statistics toggle. */}
-            <CardToggle
-              label="Import or Export"
-              value={filters.direction}
-              onChange={(d) => setParam('direction', d === 'EXPORT' ? 'EXPORT' : '')}
-              options={[
-                { value: 'IMPORT', label: 'Import' },
-                { value: 'EXPORT', label: 'Export' },
-              ]}
-            />
             <PlansFilter
               value={filterValue}
               onApply={apply}
@@ -269,6 +257,14 @@ export function ShippingPlansPage() {
               exporting={exporting}
               onExport={() => void doExport()}
               onImport={can('shipments:write') ? () => setImporting(true) : undefined}
+              onTemplate={
+                can('shipments:write')
+                  ? () =>
+                      void downloadFile('/shipments/import-template.xlsx').catch(() =>
+                        toast('The template could not be downloaded. Try again.'),
+                      )
+                  : undefined
+              }
               onStatusRules={() => setRulesOpen(true)}
             />
           </div>

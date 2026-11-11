@@ -70,7 +70,7 @@ export function ImportPlanDialog({ onClose }: { onClose: () => void }) {
   const ok = check && !check.errors.length && check.shipments.length > 0;
   return (
     <Modal
-      title="Import shipping plan from Excel"
+      title="Upload shipping plan Excel"
       sub="Fill in the template, then upload it here. It is checked first; nothing is saved until it has no problems."
       onClose={onClose}
       width={860}

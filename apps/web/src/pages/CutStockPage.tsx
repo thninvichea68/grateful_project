@@ -219,7 +219,7 @@ export function CutStockPage() {
                 emptyText={
                   q || category || condition || header.active
                     ? 'No items match these filters.'
-                    : 'No master list for this client yet. Use “Import Excel” to load it.'
+                    : 'No master list for this client yet. Use “Upload Excel” to load it.'
                 }
               />
               {list.data?.data.map((r) => (

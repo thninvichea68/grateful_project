@@ -60,7 +60,8 @@ describe('Sidebar', () => {
     renderAs('ADMIN');
     expect(links()).toEqual([
       'Overview',
-      'Shipping Plans',
+      'Import Plans',
+      'Export Plans',
       'Seal Plans',
       'CO Plans',
       'Breakdown',
@@ -71,7 +72,7 @@ describe('Sidebar', () => {
       'PDF Tools',
       'Follow Up',
       'Monthly',
-      'Client Billing',
+      'Invoice to Clients',
       'Chea Payments',
       'Expense to Clients',
       'Payroll',
@@ -102,7 +103,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Accounting' })).not.toBeInTheDocument();
     expect(links()).not.toContain('Monthly');
     expect(links()).not.toContain('Payroll');
-    expect(links()).toContain('Shipping Plans');
+    expect(links()).toContain('Import Plans');
   });
 
   it('shows Reports (payroll) to Accountants', () => {
@@ -126,7 +127,7 @@ describe('Sidebar', () => {
 
   it('gives a Customs Broker only Shipping Plans, Credit Note and Operations', () => {
     renderAs('CUSTOMS_BROKER');
-    expect(links()).toEqual(['Shipping Plans', 'Credit Note', 'Operations']);
+    expect(links()).toEqual(['Import Plans', 'Export Plans', 'Credit Note', 'Operations']);
   });
 
   it('hides staff management from Viewers', () => {
@@ -136,15 +137,20 @@ describe('Sidebar', () => {
   });
 
   it('marks the current route active', () => {
-    renderAs('MANAGER', '/plans');
-    expect(screen.getByRole('link', { name: 'Shipping Plans' })).toHaveClass('menu-item', 'active');
+    renderAs('MANAGER', '/plans/export');
+    expect(screen.getByRole('button', { name: 'Shipping Plans' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('link', { name: 'Export Plans' })).toHaveClass('active');
+    expect(screen.getByRole('link', { name: 'Import Plans' })).not.toHaveClass('active');
   });
 
   it('makes Accounting a dropdown, open while inside it', async () => {
     renderAs('ACCOUNTANT', '/accounting/tax-invoices');
     const toggle = screen.getByRole('button', { name: 'Accounting' });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('link', { name: 'Client Billing' })).toHaveClass('active');
+    expect(screen.getByRole('link', { name: 'Invoice to Clients' })).toHaveClass('active');
     toggle.click();
     expect(await screen.findByRole('button', { name: 'Accounting' })).toHaveAttribute(
       'aria-expanded',

@@ -22,7 +22,7 @@ export const BILLING_SECTION_PATHS = SECTIONS.map((s) => s.to);
 
 export function BillingSections({ className }: { className?: string }) {
   return (
-    <nav aria-label="Client Billing sections" className={`${b.sections} ${className ?? ''}`}>
+    <nav aria-label="Invoice to Clients sections" className={`${b.sections} ${className ?? ''}`}>
       {SECTIONS.map((s) => (
         <NavLink
           key={s.to}
@@ -50,6 +50,7 @@ export function PackPrintMenu({
   className,
   title,
   onPreview,
+  actions,
   children,
 }: {
   clientId: string;
@@ -58,6 +59,8 @@ export function PackPrintMenu({
   className?: string;
   title?: string;
   onPreview?: () => void;
+  /** More row actions, listed under the print and export buttons. */
+  actions?: { label: string; title?: string; onClick: () => void }[];
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -176,6 +179,20 @@ export function PackPrintMenu({
       >
         {exporting ? 'Exporting…' : 'Export Excel'}
       </button>
+      {actions?.map((a) => (
+        <button
+          key={a.label}
+          type="button"
+          className={`filter-btn ${b.packGo}`}
+          title={a.title}
+          onClick={() => {
+            setOpen(false);
+            a.onClick();
+          }}
+        >
+          {a.label}
+        </button>
+      ))}
     </div>
   );
   return (

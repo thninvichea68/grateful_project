@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import {
+  agencyLineInputSchema,
   BILLING_DOC_LABEL,
   BILLING_DOC_SCHEMAS,
   BILLING_DOC_TYPES,
@@ -32,6 +33,8 @@ import * as ledger from './ledger';
 import * as docs from './docs';
 import * as billing from './billing';
 import * as clearFee from './clearFeePayments';
+import { agencyCandidates, openAgencyLine, separateAgencyDis } from './agencyLine';
+import { db } from '../../db/client';
 import { clientPrefill, creditNotePrefill, prefill } from './prefill';
 import {
   allowedClients,
@@ -245,6 +248,16 @@ accountingRouter.post(
     res.json(await docs.releaseInvoiceSet(id, reason, req));
   },
 );
+/** "Separate Invoice/THC DIS": an issued THC DIS of an earlier month onto a row of its own. */
+accountingRouter.post(
+  '/ledger/:id/separate-agency',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { id } = parse(idParam, req.params);
+    const recordId = await db.transaction((tx) => separateAgencyDis(tx, id, req));
+    res.status(201).json({ recordId });
+  },
+);
 accountingRouter.delete('/ledger/:id', requirePermission('accounting:write'), async (req, res) => {
   await ledger.deleteLedger(parse(idParam, req.params).id, req);
   res.status(204).end();
@@ -406,6 +419,25 @@ accountingRouter.post(
     assertClientAllowed(req, clientId);
     const input = parse(billingDraftsInputSchema, req.body);
     res.status(201).json(await billing.createDrafts(clientId, input, req));
+  },
+);
+/** Declarations whose agency invoice / THC can be billed in this (earlier) month. */
+accountingRouter.get('/billing/:clientId/agency-candidates', async (req, res) => {
+  const { clientId } = parse(clientParam, req.params);
+  assertClientVisible(req, clientId, 'Client');
+  const { month } = parse(billingMonthQuerySchema, req.query);
+  res.json(await agencyCandidates(db, clientId, month));
+});
+/** "+ Invoice/THC DIS": the agency invoice / THC's own ledger row and DIS number. */
+accountingRouter.post(
+  '/billing/:clientId/agency',
+  requirePermission('accounting:write'),
+  async (req, res) => {
+    const { clientId } = parse(clientParam, req.params);
+    assertClientAllowed(req, clientId);
+    const input = parse(agencyLineInputSchema, req.body);
+    const recordId = await db.transaction((tx) => openAgencyLine(tx, clientId, input, req));
+    res.status(201).json({ recordId });
   },
 );
 accountingRouter.post(

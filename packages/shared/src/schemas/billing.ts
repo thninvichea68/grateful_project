@@ -42,6 +42,28 @@ export type BillingDraftsInput = z.input<typeof billingDraftsInputSchema>;
 
 export const billingIssueInputSchema = z.object({ month });
 
+/**
+ * "+ Invoice/THC DIS": the agency invoice / THC of a shipment declared in a later month,
+ * billed on a DIS of its own dated `date` (the month it was paid). The tax invoice, the other
+ * disbursements and the debit note follow in the declare month.
+ */
+export const agencyLineInputSchema = z.object({
+  declarationId: z.string().uuid(),
+  date: isoDate,
+});
+export type AgencyLineInput = z.input<typeof agencyLineInputSchema>;
+
+/** A declaration that can have its agency invoice / THC billed in an earlier month. */
+export interface AgencyCandidate {
+  declarationId: string;
+  declareNo: string;
+  declareDate: string;
+  shipmentReference: string;
+  hbl: string | null;
+  /** The shipping plan's Invoice / THC Date. */
+  thcDate: string | null;
+}
+
 export interface BillingDraftsResult {
   created: {
     type: BillingPackType;
@@ -114,6 +136,13 @@ export interface BillingDocSlot {
 
 export interface BillingShipmentRow {
   recordId: string;
+  /** SERVICE (INV / DIS / DN), or AGENCY: the agency invoice / THC's own DIS in its paid month. */
+  kind: 'SERVICE' | 'AGENCY';
+  /**
+   * Its DIS was issued in a month before the declaration (the agency invoice / THC billed
+   * first): "Separate Invoice/THC DIS" can move it to a row of its own.
+   */
+  separable: boolean;
   invDate: string;
   declareNo: string;
   shipmentId: string;

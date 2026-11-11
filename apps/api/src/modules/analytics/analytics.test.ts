@@ -198,6 +198,18 @@ describe('analytics endpoints (aggregated in SQL)', () => {
     });
   });
 
+  it('forwarders month by month: busiest first, every month of the period', async () => {
+    const rows = (await get('/analytics/forwarders-monthly', year)).body as {
+      month: string;
+      code: string;
+      shipments: number;
+    }[];
+    const first = rows.filter((r) => r.code === rows[0]!.code);
+    expect(first).toHaveLength(12);
+    expect(first.reduce((t, r) => t + r.shipments, 0)).toBe(5);
+    expect(first.map((r) => r.month)).toEqual([...first.map((r) => r.month)].sort());
+  });
+
   it('ports split imports and exports', async () => {
     const res = await get('/analytics/ports', year);
     expect(

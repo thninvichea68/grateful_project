@@ -43,6 +43,22 @@ export const NAV: NavGroup[] = [
         title: 'Shipping Plans',
         icon: 'plans',
         permission: 'shipments:read',
+        children: [
+          {
+            to: '/plans/import',
+            label: 'Import Plans',
+            title: 'Shipping Plans',
+            icon: 'download',
+            permission: 'shipments:read',
+          },
+          {
+            to: '/plans/export',
+            label: 'Export Plans',
+            title: 'Shipping Plans',
+            icon: 'upload',
+            permission: 'shipments:read',
+          },
+        ],
       },
       {
         to: '/seal-plans',
@@ -143,7 +159,7 @@ export const NAV: NavGroup[] = [
           {
             // Client Billing holds the tax invoice, disbursement, debit note and receipt registers.
             to: '/accounting/billing',
-            label: 'Client Billing',
+            label: 'Invoice to Clients',
             title: 'Accounting',
             icon: 'billing',
             permission: 'accounting:read',
@@ -304,6 +320,8 @@ const EXTRA_TITLES: [string, string][] = [
   ['/accounting/disbursements', 'Disbursement'],
   ['/accounting/debit-notes', 'Debit Note'],
   ['/plans/new', 'Create Shipment'],
+  ['/plans/import', 'Shipping Plans'],
+  ['/plans/export', 'Shipping Plans'],
   ['/plans/', 'Shipment Details'],
   ['/clients/', 'Client Details'],
   ['/quotations/', 'Quotation'],
@@ -366,7 +384,9 @@ export function crumbsFor(pathname: string): string[] {
   const trail = [...page.trail];
   const tab = longest(TABS.map(([to, label]) => ({ to, label })));
   if (tab) trail.push(tab.label);
-  const detail = longest(DETAILS.map(([to, label]) => ({ to, label })));
+  // A sub-item's own page (/plans/import) isn't a detail below its parent's "/plans/".
+  const detail =
+    pathname === page.to ? undefined : longest(DETAILS.map(([to, label]) => ({ to, label })));
   if (detail) trail.push(detail.label);
   return trail;
 }

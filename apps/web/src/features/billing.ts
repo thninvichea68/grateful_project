@@ -1,5 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  AgencyCandidate,
+  AgencyLineInput,
   BillingClientMonth,
   BillingDraftsInput,
   BillingDraftsResult,
@@ -60,6 +62,43 @@ export function useCreateDrafts(clientId: string) {
       api<BillingDraftsResult>(`/accounting/billing/${clientId}/drafts`, {
         method: 'POST',
         json: body,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Declarations whose agency invoice / THC can be billed in `month`, before their declare month. */
+export function useAgencyCandidates(clientId: string, month: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...KEY, 'billing-agency', clientId, month],
+    queryFn: () =>
+      api<AgencyCandidate[]>(`/accounting/billing/${clientId}/agency-candidates`, {
+        query: { month },
+      }),
+    enabled,
+  });
+}
+
+/** "+ Invoice/THC DIS": opens the shipment's agency row (with its DIS number) in an earlier month. */
+export function useOpenAgencyLine(clientId: string) {
+  const invalidate = useInvalidateBilling();
+  return useMutation({
+    mutationFn: (body: AgencyLineInput) =>
+      api<{ recordId: string }>(`/accounting/billing/${clientId}/agency`, {
+        method: 'POST',
+        json: body,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+/** "Separate Invoice/THC DIS": an issued THC DIS of an earlier month onto a row of its own. */
+export function useSeparateAgency() {
+  const invalidate = useInvalidateBilling();
+  return useMutation({
+    mutationFn: (recordId: string) =>
+      api<{ recordId: string }>(`/accounting/ledger/${recordId}/separate-agency`, {
+        method: 'POST',
       }),
     onSuccess: invalidate,
   });

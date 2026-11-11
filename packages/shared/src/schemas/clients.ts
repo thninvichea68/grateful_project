@@ -28,6 +28,8 @@ export const clientInputSchema = z.object({
   cdcNo: optText(60),
   cdcIssueDate: optDate,
   commissionUsd: decimal(2, { min: 0, allowEmpty: false }),
+  /** Agency invoice / THC paid before the clearance month: billed in its paid month apart. */
+  thcBilledApart: z.boolean().default(true),
   status: z.enum(CLIENT_STATUSES).default('ACTIVE'),
 });
 export type ClientInput = z.input<typeof clientInputSchema>;
@@ -63,6 +65,8 @@ export interface ClientDetail extends ClientListItem {
   contactPhone: string | null;
   cdcNo: string | null;
   cdcIssueDate: string | null;
+  /** See clientInputSchema.thcBilledApart. */
+  thcBilledApart: boolean;
   createdAt: string;
   importCount: number;
   exportCount: number;

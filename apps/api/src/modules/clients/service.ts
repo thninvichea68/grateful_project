@@ -113,6 +113,7 @@ export async function getClient(id: string, withProfit: boolean): Promise<Client
     contactPhone: row!.contactPhone,
     cdcNo: row!.cdcNo,
     cdcIssueDate: row!.cdcIssueDate,
+    thcBilledApart: row!.thcBilledApart,
     createdAt: row!.createdAt.toISOString(),
     importCount: e.imports,
     exportCount: e.exports,

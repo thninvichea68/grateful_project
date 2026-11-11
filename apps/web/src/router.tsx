@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router-dom';
 import type { Permission } from '@gs/shared';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { AppLayout } from './layout/AppLayout';
@@ -219,6 +219,16 @@ function HomeRedirect() {
   return <Navigate to={first?.to ?? '/overview'} replace />;
 }
 
+/** /plans → Import Plans, or Export Plans for ?direction=EXPORT, keeping the other filters. */
+function PlansRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const to = params.get('direction') === 'EXPORT' ? 'export' : 'import';
+  params.delete('direction');
+  const rest = params.toString();
+  return <Navigate to={`/plans/${to}${rest ? `?${rest}` : ''}`} replace />;
+}
+
 function DocsListRoute() {
   const { type = '' } = useParams();
   // Accounting's Credit Note tab checks the broker's submitted notes.
@@ -364,7 +374,17 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomeRedirect /> },
       { path: 'overview', element: guard('dashboard:read', <OverviewPage />) },
-      { path: 'plans', element: guard('shipments:read', <ShippingPlansPage />) },
+      // Shipping Plans: Import Plans and Export Plans, the sidebar dropdown. Old links
+      // (/plans?direction=EXPORT…) land on the matching one with their other filters.
+      { path: 'plans', element: <PlansRedirect /> },
+      {
+        path: 'plans/import',
+        element: guard('shipments:read', <ShippingPlansPage direction="IMPORT" key="IMPORT" />),
+      },
+      {
+        path: 'plans/export',
+        element: guard('shipments:read', <ShippingPlansPage direction="EXPORT" key="EXPORT" />),
+      },
       { path: 'plans/new', element: guard('shipments:write', <ShipmentFormPage />) },
       { path: 'plans/:id', element: guard('shipments:read', <ShipmentFormPage />) },
       { path: 'seal-plans', element: guard('sealplans:read', <SealPlansPage />) },

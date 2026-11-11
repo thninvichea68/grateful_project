@@ -95,6 +95,12 @@ export const clients = pgTable(
     cdcIssueDate: date('cdc_issue_date'),
     /** "CM" deducted in the monthly ledger. Prototype rule: JR = 0, others = 50. */
     commissionUsd: money('commission_usd').notNull().default('50.00'),
+    /**
+     * Billing policy: the agency invoice / THC is billed in the month it was paid, on a DIS of
+     * its own, when that is before the clearance month (true); or with the other services in
+     * the declare month (false).
+     */
+    thcBilledApart: boolean('thc_billed_apart').notNull().default(true),
     status: clientStatusEnum('status').notNull().default('ACTIVE'),
     /** What completes this client's shipments, per direction (null = DEFAULT_COMPLETION). */
     importCompleteOn: text('import_complete_on').array().$type<CompletionMilestone[]>(),

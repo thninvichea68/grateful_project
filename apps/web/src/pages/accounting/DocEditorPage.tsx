@@ -103,7 +103,7 @@ function useBack(type: BillingDocType) {
   return {
     to: safe ?? `/accounting/${type}`,
     label: safe?.startsWith('/accounting/billing')
-      ? 'Client Billing'
+      ? 'Invoice to Clients'
       : `${DOC_CONFIG[type].title}s`,
     /** Keep the way back when the URL changes (e.g. a new draft gets its id). */
     query: safe ? `?back=${encodeURIComponent(safe)}` : '',

@@ -5,6 +5,7 @@ import {
   containerUnit,
   billingUnit,
   recordSummaryLedgerGroup,
+  isThcLine,
   shipmentChargeUnit,
   type BillingDocType,
   type BillingLineInput,
@@ -17,6 +18,8 @@ import { queryRows } from '../../lib/listing';
 import { rateOn, vatRateOn } from './ledger';
 
 interface Ctx {
+  /** SERVICE, or AGENCY: the agency invoice / THC's own DIS. Null without a ledger row. */
+  kind: 'SERVICE' | 'AGENCY' | null;
   /** Null for a declaration not in the Monthly Ledger yet (record summaries only). */
   recordId: string | null;
   clientId: string;
@@ -91,7 +94,7 @@ export async function prefill(
   const [c] = await queryRows<Ctx>(
     db,
     sql`
-    SELECT a.id AS "recordId", c.id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
+    SELECT a.id AS "recordId", a.kind, c.id AS "clientId", to_char(a.inv_date, 'YYYY-MM-DD') AS "invDate",
            to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", a.exchange_rate::text AS "exchangeRate",
            coalesce(a.vat_rate, 10)::text AS "vatRate", a.inv_no AS "invNo", a.dis_no AS "disNo", a.dn_no AS "dnNo",
            CASE WHEN NOT EXISTS (SELECT 1 FROM tax_invoices t WHERE upper(t.invoice_no) = upper(a.inv_no)) THEN a.inv_no END AS "freeInvNo",
@@ -109,7 +112,7 @@ export async function prefill(
            coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
            coalesce((SELECT sum(l.ctns) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS ctns
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id
-    LEFT JOIN accounting_records a ON a.declaration_id = d.id JOIN clients c ON c.id = coalesce(a.client_id, s.client_id)
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND ${recordId ? sql`true` : sql`a.kind = 'SERVICE'`} JOIN clients c ON c.id = coalesce(a.client_id, s.client_id)
     LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id) LEFT JOIN consignees cn ON cn.id = s.consignee_id
     LEFT JOIN countries oc ON oc.iso2 = s.origin_country_iso2 LEFT JOIN countries dc ON dc.iso2 = s.destination_country_iso2
     WHERE ${
@@ -182,7 +185,9 @@ export async function prefill(
         exchangeRate: c.exchangeRate,
         reference: c.declareNo,
         lines: (await summaryLines('disbursements', recordId)) ?? [
-          line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal, shipUnit),
+          c.kind === 'AGENCY'
+            ? line('THC FEE (as per agency invoice)', c.disTotal, shipUnit)
+            : line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal, shipUnit),
         ],
       };
     case 'debit-notes':
@@ -240,26 +245,41 @@ export async function prefill(
 /**
  * A shipment's Disbursement or Debit Note lines from its checked record summary: the priced
  * receipt lines (DIS) or the other charges (DN), as on the summary. Null without one.
+ * With the agency invoice / THC billed apart (an AGENCY ledger row), the agency row's DIS has
+ * the THC / HBL lines alone and the services' DIS and DN leave them out.
  */
 export async function summaryLines(
   type: 'disbursements' | 'debit-notes',
   recordId: string | null,
 ): Promise<BillingLineInput[] | null> {
   if (!recordId) return null;
+  const [rec] = await queryRows<{ agency: boolean; apart: boolean }>(
+    db,
+    sql`SELECT a.kind = 'AGENCY' AS agency,
+               EXISTS (SELECT 1 FROM accounting_records g WHERE g.declaration_id = a.declaration_id
+                         AND g.kind = 'AGENCY') AS apart
+        FROM accounting_records a WHERE a.id = ${recordId}`,
+  );
+  if (!rec) return null;
+  if (rec.agency && type !== 'disbursements') return null;
   const rows = await queryRows<BillingLineInput & { description: string; mark: string }>(
     db,
     sql`SELECT l.description, l.qty::text AS qty, coalesce(l.unit, '') AS unit,
                l.unit_price::text AS "unitPrice", coalesce(l.mark, '') AS mark
         FROM record_summary_lines l JOIN record_summaries t ON t.id = l.record_summary_id
-        WHERE t.accounting_record_id = ${recordId} AND t.status = 'ISSUED'
-          AND t.review_status = 'CHECKED'
+        JOIN accounting_records a ON a.id = t.accounting_record_id AND a.kind = 'SERVICE'
+        WHERE a.declaration_id = (SELECT declaration_id FROM accounting_records WHERE id = ${recordId})
+          AND t.status = 'ISSUED' AND t.review_status = 'CHECKED'
         ORDER BY l.line_no`,
   );
   const want = type === 'disbursements' ? 'DIS' : 'DN';
+  const keep = (l: { description: string; mark: string }) =>
+    rec.agency
+      ? isThcLine(l.description)
+      : recordSummaryLedgerGroup(l.description, l.mark) === want &&
+        !(rec.apart && isThcLine(l.description));
   const lines = rows
-    .filter(
-      (l) => Number(l.unitPrice) > 0 && recordSummaryLedgerGroup(l.description, l.mark) === want,
-    )
+    .filter((l) => Number(l.unitPrice) > 0 && keep(l))
     .map((l) => ({
       ...l,
       qty: n(String(l.qty)),
@@ -308,7 +328,7 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
            coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
            (SELECT value FROM settings WHERE key = 'company') AS company
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
-    LEFT JOIN accounting_records a ON a.declaration_id = d.id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
     WHERE d.id = ${declarationId}`,
   );
   if (!c) throw notFound('Declaration');

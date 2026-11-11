@@ -62,7 +62,7 @@ export function ReceiptsPage() {
                 to="/accounting/billing"
                 style={{ color: 'var(--accent-primary)', fontWeight: 600 }}
               >
-                Client Billing
+                Invoice to Clients
               </Link>
               .
             </div>

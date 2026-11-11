@@ -387,7 +387,7 @@ function RecordSummaryEditor({
       {
         onSuccess: ({ drafts }) =>
           toast(
-            `${doc.declareNo ?? 'Record summary'} approved: INV, DIS and DN are in the Monthly Ledger${drafts ? `; ${drafts} draft${drafts === 1 ? '' : 's'} made in Client Billing` : ''}.`,
+            `${doc.declareNo ?? 'Record summary'} approved: INV, DIS and DN are in the Monthly Ledger${drafts ? `; ${drafts} draft${drafts === 1 ? '' : 's'} made in Invoice to Clients` : ''}.`,
           ),
       },
     );

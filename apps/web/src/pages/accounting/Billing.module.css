@@ -73,7 +73,6 @@
 .sectionsTop {
   margin-bottom: 12px;
 }
-
 /* ---------- Print month pack: parts menu ---------- */
 .packMenu {
   position: relative;
@@ -230,6 +229,7 @@
   font-weight: 600;
   white-space: nowrap;
   color: var(--text-secondary);
+  text-transform: uppercase;
 }
 .flag[data-tone='warning'] {
   color: var(--status-pending-fg);

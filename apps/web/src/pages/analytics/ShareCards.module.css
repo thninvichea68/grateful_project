@@ -35,7 +35,7 @@
   opacity: 0.35;
 }
 
-/* Thin bar of rounded segments, each growing in from the left. */
+/* Thin bar of flat segments, each growing in from the left. */
 .segBar {
   display: flex;
   gap: 3px;
@@ -43,7 +43,6 @@
 }
 .seg {
   min-width: 4px;
-  border-radius: 999px;
   transform-origin: left center;
   animation: grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: opacity 0.2s ease;
@@ -252,13 +251,11 @@
   grid-column: 1 / -1;
   height: 4px;
   overflow: hidden;
-  border-radius: 999px;
   background: var(--bg-subtle);
 }
 .fill {
   display: block;
   height: 100%;
-  border-radius: inherit;
   transform-origin: left center;
   animation: grow 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

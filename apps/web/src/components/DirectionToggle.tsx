@@ -9,21 +9,26 @@ const OPTIONS = [
 
 /**
  * The lists' shipment filter as one button, like the Overview's Forwarder Statistics toggle:
- * each click moves All → Import → Export → back. '' means both.
+ * each click moves All → Import → Export → back. '' means both. Pass `options` for another
+ * cycle (e.g. Import ↔ Export only).
  */
-export function DirectionToggle({
+export function DirectionToggle<T extends string = string>({
   value,
   onChange,
+  options = OPTIONS as { value: T; label: string }[],
+  label = 'Shipment',
 }: {
-  value: string | undefined;
-  onChange: (direction: string) => void;
+  value: T | undefined;
+  onChange: (direction: T) => void;
+  options?: { value: T; label: string }[];
+  label?: string;
 }) {
   return (
     <CardToggle
-      label="Shipment"
-      value={value ?? ''}
+      label={label}
+      value={value ?? ('' as T)}
       onChange={onChange}
-      options={OPTIONS}
+      options={options}
       triggerClass={s.trigger}
     />
   );

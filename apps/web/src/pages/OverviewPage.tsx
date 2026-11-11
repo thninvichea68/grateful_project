@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useAccounts, useOverviewSummary } from '../features/analytics';
@@ -18,7 +18,7 @@ import {
 import { KpiRowSkeleton } from './dashboard/KpiRow';
 import { currentMonth, monthRange, useOverviewMonth } from './dashboard/overviewMonth';
 import { MONTHS, MONTHS_LONG } from './dashboard/parts';
-import { useOverviewWidgets } from './dashboard/widgets';
+import { rowSpans, useOverviewWidgets } from './dashboard/widgets';
 import { CustomizeWidgets } from './dashboard/CustomizeWidgets';
 import cw from './dashboard/CustomizeWidgets.module.css';
 
@@ -69,20 +69,37 @@ export function OverviewPage() {
   const profitShown = on('profit') && !!s?.profit;
   const clientsShown = on('clients') || (on('profit') && !s?.profit);
   const trendShown = on('clientTrend');
-  const cards = [
-    on('shipments'),
-    profitShown,
-    trendShown,
-    clientsShown,
-    on('map'),
-    on('accounts'),
-    on('ports'),
-    on('forwarders'),
-  ].filter(Boolean).length;
+  // Shown cards in page order; Shipment Summary and Shipments breakdown are the wide ones.
+  const shownCards = [
+    { on: on('shipments'), wide: true },
+    { on: profitShown, wide: false },
+    { on: trendShown, wide: false },
+    { on: on('forwarders'), wide: false },
+    { on: on('map'), wide: false },
+    { on: on('accounts'), wide: true },
+    { on: on('ports'), wide: false },
+    { on: clientsShown, wide: false },
+  ].filter((c) => c.on);
+  const cards = shownCards.length;
   // Six cards with one in the second slot (profit, per client or by client) fill the grid's
   // named areas; any other set flows in order.
   const flow = cards !== 6 || [profitShown, trendShown, clientsShown].filter(Boolean).length > 1;
+  // Three cards share one row (wide cards wider) instead of leaving one alone on a second row.
+  const three = flow && cards === 3;
   const nothing = !on('kpis') && !cards && !on('live');
+  // Flowing cards: each one's column span (4 columns wide, 2 medium) so every row is full.
+  const spans = flow
+    ? Object.fromEntries([
+        ...rowSpans(
+          shownCards.map((c) => (c.wide ? 2 : 1)),
+          4,
+        ).map((n, i) => [`--s${i + 1}`, n]),
+        ...rowSpans(
+          shownCards.map(() => 1),
+          2,
+        ).map((n, i) => [`--m${i + 1}`, n]),
+      ])
+    : undefined;
 
   return (
     <section className="view active" id="view-overview">
@@ -90,7 +107,10 @@ export function OverviewPage() {
       {on('kpis') && (s ? <KpiRow k={s.kpis} fullYear={s.fullYear} /> : <KpiRowSkeleton />)}
 
       {cards > 0 && (
-        <div className={`ov-grid-3col${flow ? ' ov-flow' : ''}`}>
+        <div
+          className={`ov-grid-3col${flow ? ' ov-flow' : ''}${three ? ' ov-three' : ''}`}
+          style={spans as CSSProperties | undefined}
+        >
           {on('shipments') && (
             <ShipmentSummaryCard
               year={year}
@@ -116,6 +136,17 @@ export function OverviewPage() {
               monthly={s?.monthly ?? []}
             />
           )}
+          {on('forwarders') && <ForwarderCard filters={periodFilters} />}
+          {on('map') && <CountryMapCard filters={periodFilters} />}
+          {on('accounts') && (
+            <AccountsCard
+              filters={periodFilters}
+              period={period}
+              pick={pick}
+              clients={clients.data ?? []}
+            />
+          )}
+          {on('ports') && <PortCard filters={periodFilters} />}
           {clientsShown && (
             <ClientShareCard
               clients={clients.data ?? []}
@@ -127,17 +158,6 @@ export function OverviewPage() {
               pick={pick}
             />
           )}
-          {on('map') && <CountryMapCard filters={periodFilters} />}
-          {on('accounts') && (
-            <AccountsCard
-              filters={periodFilters}
-              period={period}
-              pick={pick}
-              clients={clients.data ?? []}
-            />
-          )}
-          {on('ports') && <PortCard filters={periodFilters} />}
-          {on('forwarders') && <ForwarderCard filters={periodFilters} />}
         </div>
       )}
 

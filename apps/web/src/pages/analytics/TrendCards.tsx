@@ -130,14 +130,14 @@ export function MonthlyVolumeCard({
             <Bar
               dataKey="imports"
               fill={IMPORT_FILL}
-              lineCap={3}
+              lineCap="butt"
               fadedOpacity={0.35}
               groupGap={4}
             />
             <Bar
               dataKey="exports"
               fill={EXPORT_FILL}
-              lineCap={3}
+              lineCap="butt"
               fadedOpacity={0.35}
               groupGap={4}
             />

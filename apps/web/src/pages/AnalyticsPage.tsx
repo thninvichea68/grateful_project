@@ -5,6 +5,7 @@ import {
   useByCountry,
   useClearanceStatus,
   useForwarders,
+  useForwardersMonthly,
   useMonthlyVolume,
   usePorts,
   useTransportShare,
@@ -18,12 +19,19 @@ import { ClientRevenueCards } from './analytics/ClientRevenueCards';
 import { ClearanceCard, FlowShareCard } from './analytics/ShareCards';
 import { MonthlyVolumeCard } from './analytics/TrendCards';
 import { PortsCard } from './analytics/PortsCard';
-import { ForwarderFunnelCard } from './analytics/ForwarderFunnelCard';
-import { ChartState, HBarList, dash, monthLabel } from './dashboard/parts';
+import { ForwarderTrendCard } from './analytics/ForwarderTrendCard';
+import { ForwarderRankCard } from './analytics/ForwarderRankCard';
+import { ChartState, dash, monthLabel } from './dashboard/parts';
 // Leaflet and its map tiles load only with the Analytics page.
 const ShipmentsMap = lazy(() =>
   import('./analytics/ShipmentsMap').then((m) => ({ default: m.ShipmentsMap })),
 );
+
+/** Shipments by Country: one click flips Import ↔ Export. */
+const COUNTRY_FLOWS = [
+  { value: 'import' as const, label: 'Import' },
+  { value: 'export' as const, label: 'Export' },
+];
 
 const MODES = {
   '': { label: 'All transport', mode: undefined, load: undefined },
@@ -103,6 +111,7 @@ export function AnalyticsPage() {
   const [countryFlow, setCountryFlow] = useState<'import' | 'export'>('import');
   const countries = useByCountry(filters, countryFlow);
   const fwd = useForwarders(filters);
+  const fwdMonthly = useForwardersMonthly(filters);
   const ports = usePorts(filters);
   const accounts = useAccounts(filters);
 
@@ -204,46 +213,16 @@ export function AnalyticsPage() {
       {can('accounting:read') && <ClientRevenueCards filters={filters} periodLabel={periodLabel} />}
 
       <div className="an-grid-2col-rev">
-        <div className="card">
-          <div className="an-section-title-row">
-            <div>
-              <h3>Forwarder Performance Ranking</h3>
-              <div className="an-section-sub">
-                Ranked by shipments; on-time = arrived on or before ETA.
-              </div>
-            </div>
-          </div>
-          <ChartState
-            loading={fwd.isLoading}
-            error={fwd.error}
-            empty={!fwd.data?.length}
-            height={150}
-          >
-            {/* Every forwarder, scrolling inside the card's chart height. */}
-            <div className="an-scroll-list">
-              <HBarList
-                rows={(fwd.data ?? []).map((f) => ({
-                  key: f.id,
-                  name: f.name,
-                  value: f.shipments,
-                  display: `${f.shipments} shipments · ${f.onTimePct === null ? 'no arrivals yet' : `${f.onTimePct}% on time`}${f.avgDelayDays ? ` · ${f.avgDelayDays}d avg delay` : ''}`,
-                  color:
-                    f.onTimePct === null
-                      ? 'var(--text-tertiary)'
-                      : f.onTimePct >= 85
-                        ? 'var(--accent-emerald)'
-                        : f.onTimePct >= 70
-                          ? 'var(--accent-amber)'
-                          : 'var(--accent-rose)',
-                }))}
-              />
-            </div>
-          </ChartState>
-        </div>
+        <ForwarderRankCard rows={fwd.data} loading={fwd.isLoading} error={fwd.error} />
         <PortsCard rows={ports.data} loading={ports.isLoading} error={ports.error} />
       </div>
 
-      <ForwarderFunnelCard rows={fwd.data} loading={fwd.isLoading} error={fwd.error} />
+      <ForwarderTrendCard
+        monthly={fwdMonthly.data}
+        rows={fwd.data}
+        loading={fwdMonthly.isLoading || fwd.isLoading}
+        error={fwdMonthly.error ?? fwd.error}
+      />
 
       <AccountsBreakdown rows={accounts.data} loading={accounts.isLoading} error={accounts.error} />
 
@@ -256,19 +235,12 @@ export function AnalyticsPage() {
               for its figures; nearby countries group into one bubble with their total.
             </div>
           </div>
-          <div className="an-seg-control" role="tablist">
-            {(['import', 'export'] as const).map((f) => (
-              <button
-                key={f}
-                role="tab"
-                aria-selected={countryFlow === f}
-                className={`an-seg-btn${countryFlow === f ? ' active' : ''}`}
-                onClick={() => setCountryFlow(f)}
-              >
-                {f === 'import' ? 'Import' : 'Export'}
-              </button>
-            ))}
-          </div>
+          <DirectionToggle
+            label="Country flow"
+            value={countryFlow}
+            onChange={setCountryFlow}
+            options={COUNTRY_FLOWS}
+          />
         </div>
         <ChartState
           loading={countries.isLoading}

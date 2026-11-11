@@ -101,7 +101,7 @@ export function ShipmentsMap({ rows, flow }: { rows: CountryRow[]; flow: 'import
   const groupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markersRef = useRef(new Map<string, PinMarker>());
   const landRef = useRef<L.GeoJSON | null>(null);
-  const [base, setBase] = useState<Base>('map');
+  const [base, setBase] = useState<Base>('satellite');
   const baseRef = useRef(base);
   baseRef.current = base;
   const [full, setFull] = useState(false);

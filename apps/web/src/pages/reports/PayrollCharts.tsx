@@ -116,7 +116,6 @@ function CategoryPie({ r }: { r: PayrollReport }) {
           data={data}
           innerRadius={62}
           padAngle={0.02}
-          cornerRadius={4}
           hoveredIndex={hovered}
           onHoverChange={setHovered}
         >
@@ -174,9 +173,9 @@ function DepartmentBars({ r }: { r: PayrollReport }) {
           orientation={['diagonal']}
         />
         <Grid horizontal />
-        <Bar dataKey="Female" fill="var(--chart-1)" lineCap="round" />
-        <Bar dataKey="Male" fill="var(--chart-2)" lineCap="round" />
-        <Bar dataKey="Total" fill="url(#payroll-bar-hatch)" lineCap="round" />
+        <Bar dataKey="Female" fill="var(--chart-1)" lineCap="butt" />
+        <Bar dataKey="Male" fill="var(--chart-2)" lineCap="butt" />
+        <Bar dataKey="Total" fill="url(#payroll-bar-hatch)" lineCap="butt" />
         <BarXAxis showAllLabels />
         <ChartTooltip />
       </BarChart>
@@ -226,7 +225,7 @@ function SalaryRings({ r }: { r: PayrollReport }) {
           onHoverChange={setHovered}
         >
           {data.map((d, i) => (
-            <Ring key={d.label} index={i} />
+            <Ring key={d.label} index={i} lineCap="butt" />
           ))}
           <RingCenter defaultLabel="Gross salary" formatOptions={usd} />
         </RingChart>

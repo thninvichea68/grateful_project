@@ -10,15 +10,19 @@ import s from './ShareCards.module.css';
 /*
  * Analytics → Import vs Export Share and Customs Clearance Status. A segmented ring and
  * segmented bars that draw in on load, numbers that count up, and hover focus that dims
- * the other parts — all in the primary cyan, darker shades for the second series.
+ * the other parts. Import vs Export uses Monthly Shipment Volume's cyan and blue, with flat
+ * (square-ended) segments.
  */
 
-export const IMPORT = 'var(--accent-primary)';
-export const EXPORT = 'color-mix(in srgb, var(--accent-primary) 55%, #083344)';
-/** Transport modes: primary cyan stepping lighter. */
-const MODE_TONES = [100, 72, 48, 30].map(
-  (p) => `color-mix(in srgb, var(--accent-primary) ${p}%, var(--bg-subtle))`,
-);
+export const IMPORT = 'var(--accent-cyan)';
+export const EXPORT = 'var(--accent-blue)';
+/** Transport modes: cyan and blue, then lighter cyan and lighter blue. */
+const MODE_TONES = [
+  'var(--accent-cyan)',
+  'var(--accent-blue)',
+  'color-mix(in srgb, var(--accent-cyan) 55%, var(--bg-subtle))',
+  'color-mix(in srgb, var(--accent-blue) 55%, var(--bg-subtle))',
+];
 const CLEARANCE_TONE = {
   CLEARED: 'var(--accent-primary)',
   IN_PROGRESS: 'var(--accent-blue)',
@@ -61,7 +65,7 @@ export function Count({
   return <>{format(useCountUp(value))}</>;
 }
 
-/** Ring of rounded segments with small gaps; the hovered one stays bright. */
+/** Ring of flat segments with small gaps; the hovered one stays bright. */
 function Ring({
   parts,
   active,
@@ -77,8 +81,7 @@ function Ring({
   const c = 2 * Math.PI * r;
   const total = parts.reduce((t, p) => t + p.value, 0);
   const shown = parts.filter((p) => p.value > 0).length;
-  // Round caps reach width/2 past each end, so the gap leaves room for both.
-  const gap = shown > 1 ? width + 4 : 0;
+  const gap = shown > 1 ? 4 : 0;
   let offset = 0;
   return (
     <svg className={s.ring} viewBox={`0 0 ${size} ${size}`} width={size} height={size} aria-hidden>
@@ -103,7 +106,7 @@ function Ring({
             fill="none"
             stroke={p.color}
             strokeWidth={active === i ? width + 4 : width}
-            strokeLinecap="round"
+            strokeLinecap="butt"
             strokeDasharray={`${len} ${c - len}`}
             strokeDashoffset={-(offset + gap / 2)}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
@@ -120,7 +123,7 @@ function Ring({
   );
 }
 
-/** One thin bar split into rounded segments, each growing in from the left. */
+/** One thin bar split into flat segments, each growing in from the left. */
 function SegBar({
   parts,
   active,

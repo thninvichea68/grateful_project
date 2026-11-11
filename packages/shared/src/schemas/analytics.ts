@@ -91,6 +91,14 @@ export interface ForwarderRow {
   clearedPct: number;
 }
 
+/** One of the busiest forwarders' shipments in one month (every month of the period, 0s included). */
+export interface ForwarderMonthRow {
+  month: string; // YYYY-MM
+  id: string;
+  code: string;
+  shipments: number;
+}
+
 export interface PortRow {
   id: string;
   code: string;

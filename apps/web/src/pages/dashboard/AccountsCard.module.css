@@ -34,9 +34,16 @@
   height: 13px;
 }
 .nameLink {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+/* Long client names end in "…" (full name on hover) so the table never scrolls sideways. */
+.nameText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .nameChip {
   width: 26px;
@@ -128,7 +135,7 @@
   display: flex;
   gap: 3px;
   height: 8px;
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
   background: var(--bg-subtle);
 }
@@ -208,7 +215,7 @@
 }
 .modeBar {
   height: 4px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--bg-subtle);
   overflow: hidden;
 }

@@ -196,7 +196,7 @@
   outline: none;
 }
 .num {
-  text-align: right !important;
+  text-align: left !important;
 }
 /* Declare no.: the app's Helvetica, with even-width digits so the numbers line up. */
 .mono {
