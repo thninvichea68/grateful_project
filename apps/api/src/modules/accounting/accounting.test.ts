@@ -4,7 +4,7 @@ import type { RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
 import { db, pool } from '../../db/client';
 import { exchangeRates } from '../../db/schema';
-import { createUser, resetDb, seedBasics, TEST_PASSWORD } from '../../test/helpers';
+import { createUser, resetDb, seedBasics, TEST_PASSWORD, typedLines } from '../../test/helpers';
 
 const app = createApp();
 let b: Awaited<ReturnType<typeof seedBasics>>;
@@ -689,7 +689,7 @@ describe('billing documents', () => {
       .post('/api/v1/accounting/docs/record-summaries')
       .set(h)
       // A stale "VAT 10%" Mark from the browser follows the summary's percent.
-      .send({ ...rs, lines: [{ ...rs.lines[0], mark: 'VAT 10%' }] });
+      .send(typedLines({ ...rs, lines: [{ ...rs.lines[0], mark: 'VAT 10%' }] }));
     expect(summary.status).toBe(201);
     expect(summary.body.lines[0]).toMatchObject({ mark: 'VAT 12%', subtotal: '207.20' });
     expect(summary.body.totals.total).toBe('207.20');
@@ -751,7 +751,6 @@ describe('billing documents', () => {
       .send({
         ...inv.pre,
         customerNameEn: 'JR APPAREL (FIXED) CO., LTD',
-        volumeCbm: '12.43',
         grossWeightKg: '3569.58',
         pol: 'CHINA',
       })
@@ -764,7 +763,6 @@ describe('billing documents', () => {
     });
     const dnHeader = await get('debit-notes', dn.id);
     expect(dnHeader).toMatchObject({ billTo: 'JR APPAREL (FIXED) CO., LTD', pol: 'CHINA' });
-    expect(Number(dnHeader.volumeCbm)).toBe(12.43);
     expect(Number(dnHeader.grossWeightKg)).toBe(3569.58);
 
     // The other way too: a fix on the debit note reaches the tax invoice and the DIS.
@@ -782,6 +780,60 @@ describe('billing documents', () => {
         hbl: 'HBL-777',
         pol: 'CHINA',
       });
+  });
+
+  it("a shipment's bills always show its shipping plan's CBM", async () => {
+    const h = await as('ACCOUNTANT');
+    const rec = await ledgerRow();
+    const make = async (type: string) => {
+      const pre = (
+        await request(app)
+          .get(`/api/v1/accounting/docs/${type}/prefill`)
+          .query({ recordId: rec.id })
+          .set(h)
+      ).body;
+      const res = await request(app).post(`/api/v1/accounting/docs/${type}`).set(h).send(pre);
+      expect(res.status).toBe(201);
+      return { id: res.body.id as string, pre };
+    };
+    const header = async (type: string, id: string) =>
+      (await request(app).get(`/api/v1/accounting/docs/${type}/${id}`).set(h)).body.header;
+    const inv = await make('tax-invoices');
+    const dis = await make('disbursements');
+    // Typed on the bill: the plan's CBM (the invoice lines' 45.5) stays.
+    await request(app)
+      .put(`/api/v1/accounting/docs/tax-invoices/${inv.id}`)
+      .set(h)
+      .send({ ...inv.pre, volumeCbm: '12.43' })
+      .expect(200);
+    expect(Number((await header('tax-invoices', inv.id)).volumeCbm)).toBe(45.5);
+
+    // A CBM typed on the shipping plan reaches its bills.
+    const { rows } = await pool.query(
+      `SELECT d.shipment_id AS id FROM accounting_records a JOIN customs_declarations d ON d.id = a.declaration_id WHERE a.id = $1`,
+      [rec.id],
+    );
+    const admin = await as('ADMIN');
+    const ship = (await request(app).get(`/api/v1/shipments/${rows[0].id}`).set(admin)).body;
+    expect(ship.cbm).toBeNull();
+    const { id: _id, reference: _r, clientCode: _c, clientName: _n, ...rest } = ship;
+    const put = await request(app)
+      .put(`/api/v1/shipments/${ship.id}`)
+      .set(admin)
+      .send({ ...rest, cbm: '61.5' });
+    expect(put.status, JSON.stringify(put.body)).toBe(200);
+    expect(Number((await header('tax-invoices', inv.id)).volumeCbm)).toBe(61.5);
+    expect(Number((await header('disbursements', dis.id)).volumeCbm)).toBe(61.5);
+    // New bills and the plan list take it too.
+    const dnPre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/debit-notes/prefill')
+        .query({ recordId: rec.id })
+        .set(h)
+    ).body;
+    expect(dnPre.volumeCbm).toBe('61.5');
+    const list = await request(app).get('/api/v1/shipments').set(admin);
+    expect(list.body.data.find((r: { id: string }) => r.id === ship.id).totals.cbm).toBe('61.500');
   });
 
   it('debit notes take the ledger number (one per shipment); credit notes and record summaries prefill from the ledger', async () => {
@@ -851,7 +903,7 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(h)
-      .send(rsPre);
+      .send(typedLines(rsPre));
     expect(rs.status).toBe(201);
     // The standard export breakdown; the processing fee is the ledger's service fee + 10% VAT.
     expect(rs.body.lines[0]).toMatchObject({
@@ -886,7 +938,7 @@ describe('billing documents', () => {
     await request(app)
       .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
       .set(h)
-      .send({ ...rsPre, invNo: 'TYPED-1', disNo: 'TYPED-2', dnNo: 'TYPED-3' })
+      .send(typedLines({ ...rsPre, invNo: 'TYPED-1', disNo: 'TYPED-2', dnNo: 'TYPED-3' }))
       .expect(200);
     const rsDoc = async () =>
       (await request(app).get(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`).set(h))
@@ -900,13 +952,13 @@ describe('billing documents', () => {
     await request(app)
       .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
       .set(h)
-      .send({ ...rsPre, transportMode: 'AIR', loadType: 'NONE', cbm: '12.5' })
+      .send(typedLines({ ...rsPre, transportMode: 'AIR', loadType: 'NONE', cbm: '12.5' }))
       .expect(200);
     expect((await rsDoc()).header).toMatchObject({ transportMode: 'AIR', cbm: 'NON' });
     await request(app)
       .put(`/api/v1/accounting/docs/record-summaries/${rs.body.id}`)
       .set(h)
-      .send(rsPre)
+      .send(typedLines(rsPre))
       .expect(200);
     await pool.query(`UPDATE accounting_records SET inv_no = 'GS26-999' WHERE id = $1`, [rec.id]);
     expect((await rsDoc()).header.invNo).toBe('GS26-999');
@@ -923,6 +975,62 @@ describe('billing documents', () => {
     expect(await count({ direction: 'IMPORT' })).toBe(0);
     expect(await count({ year: y - 1 })).toBe(0);
     expect(await count({ monthOfYear: (m % 12) + 1 })).toBe(0);
+  });
+
+  it("a record summary line's Type decides its bill, and every line needs one", async () => {
+    const h = await as('ACCOUNTANT');
+    const rec = await ledgerRow();
+    const pre = (
+      await request(app)
+        .get('/api/v1/accounting/docs/record-summaries/prefill')
+        .query({ recordId: rec.id })
+        .set(h)
+    ).body;
+    const line = (description: string, unitPrice: string, ledgerType: string, mark = '') => ({
+      description,
+      qty: '1',
+      unit: 'SHIP',
+      unitPrice,
+      mark,
+      ledgerType,
+    });
+    const missing = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send({ ...pre, lines: [line('EXPORT PROCESSING FEE', '100', 'INV'), line('X', '1', '')] });
+    expect(missing.status).toBe(400);
+    expect(JSON.stringify(missing.body)).toMatch(/Choose the type/);
+
+    const rs = await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send({
+        ...pre,
+        lines: [
+          line('EXPORT PROCESSING FEE', '100', 'INV', 'VAT 10%'),
+          // No Receipt mark, but typed DIS: it goes on the DIS.
+          line('TRUCKING FEE', '40', 'DIS'),
+          // Marked Receipt, but typed DN.
+          line('CUSTOMS PROCESSING FEE', '20', 'DN', 'Receipt'),
+        ],
+      })
+      .expect(201);
+    expect(rs.body.lines.map((l: { ledgerType: string }) => l.ledgerType)).toEqual([
+      'INV',
+      'DIS',
+      'DN',
+    ]);
+    await request(app)
+      .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
+      .set(h)
+      .expect(200);
+    await request(app)
+      .patch(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/review`)
+      .set(h)
+      .send({ reviewStatus: 'CHECKED' })
+      .expect(200);
+    const led = (await request(app).get(`/api/v1/accounting/ledger/${rec.id}`).set(h)).body;
+    expect(led).toMatchObject({ invRevenue: '100.00', disTotal: '40.00', dnTotal: '20.00' });
   });
 
   it('a record summary checked in Expense to Clients fills INV, THC, DIS and DN and decides them', async () => {
@@ -944,20 +1052,22 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(h)
-      .send({
-        ...pre,
-        lines: [
-          line('EXPORT PROCESSING FEE', '100', '1', 'VAT 10%'),
-          line('CUSTOMS PROCESSING FEE', '20', '1', 'Receipt'),
-          line('WAREHOUSE / STORAGE FEE', '10', '1', 'Receipt'),
-          line('HBL FEE', '30', '1', 'Receipt'),
-          line('LOLO AT PORT', '15', '1', 'Receipt'),
-          line('TRUCKING FEE', '100', '2'),
-          // A receipt, but billed on the debit note.
-          line('LOLO EMPTY CONTAINER', '5', '1', 'Receipt'),
-          line('SCAN FEE', '0', '1', 'Receipt'),
-        ],
-      })
+      .send(
+        typedLines({
+          ...pre,
+          lines: [
+            line('EXPORT PROCESSING FEE', '100', '1', 'VAT 10%'),
+            line('CUSTOMS PROCESSING FEE', '20', '1', 'Receipt'),
+            line('WAREHOUSE / STORAGE FEE', '10', '1', 'Receipt'),
+            line('HBL FEE', '30', '1', 'Receipt'),
+            line('LOLO AT PORT', '15', '1', 'Receipt'),
+            line('TRUCKING FEE', '100', '2'),
+            // A receipt, but billed on the debit note.
+            line('LOLO EMPTY CONTAINER', '5', '1', 'Receipt'),
+            line('SCAN FEE', '0', '1', 'Receipt'),
+          ],
+        }),
+      )
       .expect(201);
     await request(app)
       .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
@@ -1110,6 +1220,66 @@ describe('billing documents', () => {
     expect(await led()).toMatchObject({ invRevenue: '100.00', thc: '0.00', dnTotal: '0.00' });
   });
 
+  it('a record summary can start from a shipment not declared yet, found by its reference', async () => {
+    const h = await as('ACCOUNTANT');
+    const ship = await request(app)
+      .post('/api/v1/shipments')
+      .set(await as('ADMIN'))
+      .send({
+        clientId: b.jr.id,
+        direction: 'IMPORT',
+        transportMode: 'SEA',
+        loadType: 'FCL',
+        clearancePortId: b.port.id,
+        originCountryIso2: 'KH',
+        hblNo: 'TBKKOS2610001',
+        eta: '2026-11-10',
+        containers: [{ containerNo: 'MRKU8974303', size: '40HQ' }],
+        invoices: [
+          {
+            invoiceNo: 'INV-77',
+            lines: [{ pcs: 10, ctns: '8', cbm: '3.5', grossWeightKg: '420' }],
+          },
+        ],
+        declarations: [],
+      });
+    expect(ship.status, JSON.stringify(ship.body)).toBe(201);
+    const picker = (await request(app).get('/api/v1/accounting/eligible/record-summaries').set(h))
+      .body;
+    const hit = picker.find(
+      (e: { shipmentReference: string }) => e.shipmentReference === ship.body.reference,
+    );
+    expect(hit).toMatchObject({
+      shipmentId: ship.body.id,
+      declarationId: null,
+      declareNo: null,
+      hbl: 'TBKKOS2610001',
+    });
+    const pre = await request(app)
+      .get('/api/v1/accounting/docs/record-summaries/prefill')
+      .query({ shipmentId: ship.body.id })
+      .set(h);
+    expect(pre.status, JSON.stringify(pre.body)).toBe(200);
+    // What was typed on the shipping plan; the declare no. comes later.
+    expect(pre.body).toMatchObject({
+      accountingRecordId: null,
+      clientId: b.jr.id,
+      shipmentReference: ship.body.reference,
+      declareNo: null,
+      direction: 'IMPORT',
+      blNo: 'TBKKOS2610001',
+      containerNo: 'MRKU8974303',
+      grossWeightKg: '420',
+      cbm: '3.5',
+    });
+    expect(pre.body.summaryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await request(app)
+      .post('/api/v1/accounting/docs/record-summaries')
+      .set(h)
+      .send(typedLines(pre.body))
+      .expect(201);
+  });
+
   it('a record summary starts from the shipping plan and joins the Monthly Ledger row later', async () => {
     const h = await as('ACCOUNTANT');
     const declarationId = await declaration(b.jr.id, 'I 149461', '2026-08-21', 'IMPORT');
@@ -1137,7 +1307,7 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(h)
-      .send(pre)
+      .send(typedLines(pre))
       .expect(201);
     expect(rs.body.accountingRecordId).toBeNull();
     expect((await picker()).map((r: { declarationId: string }) => r.declarationId)).not.toContain(
@@ -1185,18 +1355,20 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(h)
-      .send({
-        ...pre,
-        lines: [
-          {
-            description: 'IMPORT PROCESSING FEE',
-            qty: '1',
-            unit: 'SHIP',
-            unitPrice: '100',
-            mark: 'VAT 10%',
-          },
-        ],
-      })
+      .send(
+        typedLines({
+          ...pre,
+          lines: [
+            {
+              description: 'IMPORT PROCESSING FEE',
+              qty: '1',
+              unit: 'SHIP',
+              unitPrice: '100',
+              mark: 'VAT 10%',
+            },
+          ],
+        }),
+      )
       .expect(201);
     await request(app)
       .post(`/api/v1/accounting/docs/record-summaries/${rs.body.id}/issue`)
@@ -1258,7 +1430,7 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post(docs)
       .set(op)
-      .send({ ...pre, lines: fee('100') })
+      .send(typedLines({ ...pre, lines: fee('100') }))
       .expect(201);
     const id = rs.body.id;
     await request(app).post(`${docs}/${id}/issue`).set(op).expect(200);
@@ -1275,7 +1447,7 @@ describe('billing documents', () => {
       return request(app)
         .post(`${docs}/${id}/resubmit`)
         .set(op)
-        .send({ ...d.header, clientId: d.clientId, lines: fee(unitPrice) });
+        .send(typedLines({ ...d.header, clientId: d.clientId, lines: fee(unitPrice) }));
     };
     const res = await resubmit('150');
     expect(res.status).toBe(200);
@@ -1297,6 +1469,8 @@ describe('billing documents', () => {
     // Operations: the picker, prefill, create, list, edit, submit; never the ledger or invoices.
     const picker = await request(app).get('/api/v1/accounting/eligible/record-summaries').set(op);
     expect(picker.status).toBe(200);
+    // Each shipment can be found by its shipping plan reference too.
+    expect(picker.body[0].shipmentReference).toMatch(/^SHP-26-\d{4}$/);
     const pre = (
       await request(app)
         .get('/api/v1/accounting/docs/record-summaries/prefill')
@@ -1306,7 +1480,7 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(op)
-      .send(pre);
+      .send(typedLines(pre));
     expect(rs.status).toBe(201);
     expect(
       (await request(app).get('/api/v1/accounting/docs/record-summaries').set(op)).body.meta.total,
@@ -1328,8 +1502,12 @@ describe('billing documents', () => {
       (await request(app).get('/api/v1/accounting/docs/record-summaries').set(viewer)).status,
     ).toBe(200);
     expect(
-      (await request(app).post('/api/v1/accounting/docs/record-summaries').set(viewer).send(pre))
-        .status,
+      (
+        await request(app)
+          .post('/api/v1/accounting/docs/record-summaries')
+          .set(viewer)
+          .send(typedLines(pre))
+      ).status,
     ).toBe(403);
     expect(
       (
@@ -1353,7 +1531,7 @@ describe('billing documents', () => {
     const rs = await request(app)
       .post('/api/v1/accounting/docs/record-summaries')
       .set(op)
-      .send(pre)
+      .send(typedLines(pre))
       .expect(201);
     const submit = () =>
       request(app)

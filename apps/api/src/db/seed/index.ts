@@ -11,7 +11,7 @@ import {
   ROLE_DEFAULT_PERMISSIONS,
   ROLE_LABEL,
   computeLedger,
-  nextBusinessDay,
+  invoiceIssueDate,
   toMoneyString,
   type Direction,
   type TransportMode,
@@ -630,6 +630,7 @@ async function main() {
         .insert(s.cargoInvoices)
         .values({
           shipmentId: shipmentRows[i]!.id,
+          clientId: shipmentRows[i]!.clientId,
           invoiceNo: inv.invoiceNo,
           invoiceDate: inv.invoiceDate,
           description: inv.description,
@@ -717,7 +718,7 @@ async function main() {
       }
 
       // Ledger row once the invoice date has passed.
-      const inv = nextBusinessDay(declareDate);
+      const inv = invoiceIssueDate(declareDate);
       if (Date.parse(inv.date) > Date.parse(TODAY)) continue;
       const ctns = p.containers;
       const clearFee =

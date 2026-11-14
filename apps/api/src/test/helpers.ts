@@ -1,6 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { sql } from 'drizzle-orm';
-import { ROLE_CODES, ROLE_DEFAULT_PERMISSIONS, ROLE_LABEL, type RoleCode } from '@gs/shared';
+import {
+  ROLE_CODES,
+  ROLE_DEFAULT_PERMISSIONS,
+  ROLE_LABEL,
+  recordSummaryLedgerGroup,
+  type RoleCode,
+} from '@gs/shared';
 import { db } from '../db/client';
 import { roles, users } from '../db/schema';
 
@@ -86,4 +92,22 @@ export async function seedBasics() {
     ])
     .returning();
   return { port: port!, fwd: fwd!, jr: jr!, jyx: jyx! };
+}
+
+/**
+ * A record summary body with each line's Type (Tax / DIS / DN) filled in by the old rule
+ * (processing fee = Tax, "Receipt" = DIS, the rest = DN), as a user picks them in the editor.
+ */
+export function typedLines<T>(body: T): T {
+  const b = body as {
+    lines?: { description: string; mark?: string | null; ledgerType?: string | null }[];
+  };
+  if (!b?.lines) return body;
+  return {
+    ...b,
+    lines: b.lines.map((l) => ({
+      ...l,
+      ledgerType: l.ledgerType || recordSummaryLedgerGroup(l.description, l.mark),
+    })),
+  } as T;
 }

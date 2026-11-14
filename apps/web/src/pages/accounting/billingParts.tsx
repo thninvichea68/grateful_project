@@ -60,7 +60,7 @@ export function PackPrintMenu({
   title?: string;
   onPreview?: () => void;
   /** More row actions, listed under the print and export buttons. */
-  actions?: { label: string; title?: string; onClick: () => void }[];
+  actions?: { label: string; title?: string; danger?: boolean; onClick: () => void }[];
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -185,6 +185,7 @@ export function PackPrintMenu({
           type="button"
           className={`filter-btn ${b.packGo}`}
           title={a.title}
+          data-danger={a.danger || undefined}
           onClick={() => {
             setOpen(false);
             a.onClick();

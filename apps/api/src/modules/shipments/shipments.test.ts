@@ -622,7 +622,25 @@ describe('shipments', () => {
       .set(h)
       .send(exportShipment({ declarations: [] }));
     expect(dup.status).toBe(409);
-    expect(dup.body.error.message).toBe('Invoice no. JRA26045 is already used on another shipment');
+    expect(dup.body.error.message).toBe(
+      'Invoice no. JRA26045 is already used on another shipment of this factory',
+    );
+  });
+
+  it('lets another factory use the same invoice number', async () => {
+    const h = await as('OPERATOR');
+    await request(app).post('/api/v1/shipments').set(h).send(exportShipment());
+    const other = await request(app)
+      .post('/api/v1/shipments')
+      .set(h)
+      .send(exportShipment({ clientId: basics.jyx.id, declarations: [] }));
+    expect(other.status).toBe(201);
+    // Moving it to JR clashes with JR's own JRA26045.
+    const moved = await request(app)
+      .put(`/api/v1/shipments/${other.body.id}`)
+      .set(h)
+      .send(exportShipment({ declarations: [] }));
+    expect(moved.status).toBe(409);
   });
 
   it("works the status out by the client's status rule and re-works it when the rule changes", async () => {
@@ -817,18 +835,26 @@ describe('shipments', () => {
   it('warns when an uploaded invoice number is already used', async () => {
     const h = await as('OPERATOR');
     await request(app).post('/api/v1/shipments').set(h).send(exportShipment());
-    const res = await request(app)
-      .post('/api/v1/shipments/parse-cargo-excel')
-      .set(h)
-      .attach(
-        'file',
-        fs.readFileSync(path.join(DATA, 'export-template.xlsx')),
-        'Export Template.xlsx',
-      );
+    const upload = (clientId: string) =>
+      request(app)
+        .post('/api/v1/shipments/parse-cargo-excel')
+        .query({ clientId })
+        .set(h)
+        .attach(
+          'file',
+          fs.readFileSync(path.join(DATA, 'export-template.xlsx')),
+          'Export Template.xlsx',
+        );
+    const res = await upload(basics.jr.id);
     const messages = res.body.warnings.map((w: { message: string }) => w.message);
     expect(messages).toEqual(
       expect.arrayContaining([expect.stringMatching(/JRA26045 is already on shipment SHP-26-/)]),
     );
+    // Another factory may use the number.
+    const other = (await upload(basics.jyx.id)).body.warnings.map(
+      (w: { message: string }) => w.message,
+    );
+    expect(other.join(' ')).not.toMatch(/already on shipment/);
     // The template mixes HTS codes within an invoice; one invoice = one HTS code.
     expect(messages).toEqual(
       expect.arrayContaining([expect.stringMatching(/JRA26045 has several HTS codes/)]),

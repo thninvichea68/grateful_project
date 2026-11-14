@@ -132,6 +132,8 @@ export interface BillingDocSlot {
   date: string;
   status: BillingDocStatus;
   total: string;
+  /** Edited after it was issued (shown as Revised). */
+  revised?: boolean;
 }
 
 export interface BillingShipmentRow {

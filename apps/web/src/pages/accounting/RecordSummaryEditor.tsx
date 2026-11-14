@@ -6,7 +6,9 @@ import { BackLink, backRow } from '../../components/BackLink';
 import {
   CONTAINER_SIZES,
   DEFAULT_CHARGE_UNITS,
+  RECORD_SUMMARY_GROUP_LABEL,
   RECORD_SUMMARY_ITEMS,
+  RECORD_SUMMARY_LEDGER_GROUPS,
   recordSummaryItems,
   vatMark,
   chargeLineAmount,
@@ -55,7 +57,14 @@ import s from '../creditnoted/CreditNotedEditor.module.css';
 import r from './RecordSummaryEditor.module.css';
 
 const TYPE = 'record-summaries' as const;
-const blankLine = (unit: string) => ({ description: '', qty: '1', unit, unitPrice: '', mark: '' });
+const blankLine = (unit: string) => ({
+  description: '',
+  qty: '1',
+  unit,
+  unitPrice: '',
+  mark: '',
+  ledgerType: '',
+});
 /** The Unit dropdown's "+ Add New" choice. */
 const NEW_ITEM = '__new__';
 /** A blank summary starts with the standard import / export breakdown; prices to fill. */
@@ -67,6 +76,8 @@ const itemsFor = (direction: unknown, shipUnit: string, vatPercent?: number) =>
       unit: chargeLineUnit(description, shipUnit),
       unitPrice: '',
       mark,
+      // Picked on every line: the bill (Tax / DIS / DN) it goes on.
+      ledgerType: '',
     }),
   );
 /** The unit the summary's charges are billed in, from its transport type and container size. */
@@ -104,8 +115,10 @@ export function RecordSummaryRoute({ base }: { base: string }) {
   const docId = id === 'new' ? undefined : id;
   const recordId = docId ? null : params.get('recordId');
   const declarationId = docId || recordId ? null : params.get('declarationId');
+  // Found by the shipping plan's reference: a shipment not declared yet.
+  const shipmentId = docId || recordId || declarationId ? null : params.get('shipmentId');
   const doc = useDoc(TYPE, docId);
-  const pre = usePrefill(TYPE, recordId, declarationId);
+  const pre = usePrefill(TYPE, recordId, declarationId, null, shipmentId);
   const lookups = useLookups();
   if (doc.isLoading || pre.isLoading || lookups.isLoading)
     return (
@@ -121,7 +134,7 @@ export function RecordSummaryRoute({ base }: { base: string }) {
     );
   return (
     <RecordSummaryEditor
-      key={`${id}-${recordId ?? declarationId ?? ''}`}
+      key={`${id}-${recordId ?? declarationId ?? shipmentId ?? ''}`}
       base={base}
       doc={doc.data}
       prefill={pre.data}
@@ -262,17 +275,26 @@ function RecordSummaryEditor({
    * A Declare No. on a shipping plan: reopen as that shipment's summary, filled in (from its
    * Monthly Ledger row when it has one; it joins the row later otherwise).
    */
-  const pickDeclareNo = (typed: string) => {
+  const pickDeclareNo = (typed: string, by: 'declareNo' | 'shipmentReference' = 'declareNo') => {
     if (doc) return;
     const hit = eligible.data?.find(
-      (e) => e.declareNo.toUpperCase() === typed.trim().toUpperCase(),
+      (e) => (e[by] ?? '').toUpperCase() === typed.trim().toUpperCase(),
     );
-    if (!hit || hit.declareNo === prefill?.declareNo) return;
+    if (!hit || hit.shipmentReference === prefill?.shipmentReference) return;
     navigate(
-      `${base}/new?${hit.recordId ? `recordId=${hit.recordId}` : `declarationId=${hit.declarationId}`}`,
+      `${base}/new?${
+        hit.recordId
+          ? `recordId=${hit.recordId}`
+          : hit.declarationId
+            ? `declarationId=${hit.declarationId}`
+            : `shipmentId=${hit.shipmentId}`
+      }`,
       { replace: true },
     );
   };
+
+  // Started from (or linked to) a shipment: its CBM comes from the shipping plan.
+  const fromPlan = !!(doc?.accountingRecordId || prefill?.declareNo);
 
   // Live preview: the print layout fed with what's in the form right now.
   const preview = {
@@ -327,8 +349,8 @@ function RecordSummaryEditor({
         !window.confirm(
           `Submit the record summary for ${saved.declareNo ?? (declareNo || 'this shipment')}?\n\n` +
             'It is issued and can no longer be edited. Accounting checks it in Expense to ' +
-            'Clients; once checked, its lines fill the Monthly Ledger: INV (the processing fee), ' +
-            'DIS (lines marked Receipt) and DN (the rest, LOLO empty container included).',
+            'Clients; once checked, its lines fill the Monthly Ledger by their Type: ' +
+            'Tax (INV), DIS and DN.',
         )
       )
         return;
@@ -690,6 +712,24 @@ function RecordSummaryEditor({
         >
           <fieldset disabled={!editable} className={s.fieldset}>
             <Panel title="1. Record summary header">
+              {!doc && (
+                // Find the shipment by its shipping plan reference: its details fill in.
+                <div className={r.grid2}>
+                  {item(
+                    'Shipment Ref',
+                    <input
+                      className="form-field-box"
+                      list="rs-refs"
+                      placeholder="e.g. SHP-26-0537"
+                      title="Type or pick the shipping plan reference to fill in this summary"
+                      defaultValue={String(prefill?.shipmentReference ?? '')}
+                      key={String(prefill?.shipmentReference ?? '')}
+                      onChange={(e) => pickDeclareNo(e.target.value, 'shipmentReference')}
+                      autoComplete="off"
+                    />,
+                  )}
+                </div>
+              )}
               <div className={r.grid2}>
                 {item(
                   'Shipment mode',
@@ -813,7 +853,9 @@ function RecordSummaryEditor({
                       onChange={(e) => {
                         // A ledger shipment picked from the list is taken as it is listed.
                         const listed = eligible.data?.some(
-                          (x) => x.declareNo.toUpperCase() === e.target.value.trim().toUpperCase(),
+                          (x) =>
+                            (x.declareNo ?? '').toUpperCase() ===
+                            e.target.value.trim().toUpperCase(),
                         );
                         if (!listed) maskDeclareNo(e);
                         void reg.onChange(e);
@@ -907,8 +949,15 @@ function RecordSummaryEditor({
                   <input
                     className="form-field-box"
                     placeholder="e.g. 61.5 or NON"
-                    readOnly={values.transportMode === 'AIR'}
-                    title={values.transportMode === 'AIR' ? 'Air shipments have no CBM' : undefined}
+                    // A shipment's summary shows its shipping plan's CBM (changed on the plan).
+                    readOnly={values.transportMode === 'AIR' || fromPlan}
+                    title={
+                      values.transportMode === 'AIR'
+                        ? 'Air shipments have no CBM'
+                        : fromPlan
+                          ? 'From the shipping plan: change the CBM there'
+                          : undefined
+                    }
                     {...register('cbm')}
                     aria-invalid={!!err('cbm')}
                   />,
@@ -917,18 +966,28 @@ function RecordSummaryEditor({
               </div>
               {fresh && editable && (
                 <p className={r.hint}>
-                  Type or pick the Declare No. of a shipment on the shipping plans: its details fill
-                  in, and its invoice, DIS and debit note numbers follow the Monthly Ledger once the
-                  accountant approves it.
+                  Type or pick the Shipment Ref or Declare No. of a shipment on the shipping plans:
+                  its details fill in, and its invoice, DIS and debit note numbers follow the
+                  Monthly Ledger once the accountant approves it.
                 </p>
               )}
-              <datalist id="rs-declares">
+              <datalist id="rs-refs">
                 {eligible.data?.map((e) => (
-                  <option key={e.declarationId} value={e.declareNo}>
-                    {e.clientCode} ·{' '}
-                    {e.number ?? (e.recordId ? 'awaiting approval' : 'not in the ledger yet')}
+                  <option key={e.declarationId ?? e.shipmentId} value={e.shipmentReference}>
+                    {e.clientCode} · {e.declareNo ?? 'not declared yet'}
+                    {e.hbl ? ` · ${e.hbl}` : ''}
                   </option>
                 ))}
+              </datalist>
+              <datalist id="rs-declares">
+                {eligible.data
+                  ?.filter((e): e is typeof e & { declareNo: string } => !!e.declareNo)
+                  .map((e) => (
+                    <option key={e.declarationId} value={e.declareNo}>
+                      {e.clientCode} ·{' '}
+                      {e.number ?? (e.recordId ? 'awaiting approval' : 'not in the ledger yet')}
+                    </option>
+                  ))}
               </datalist>
             </Panel>
 
@@ -1000,6 +1059,21 @@ function RecordSummaryEditor({
                     placeholder="Mark"
                     aria-label={`Line ${i + 1} mark`}
                   />
+                  <select
+                    className={`form-select-box ${r.type}`}
+                    {...register(`lines.${i}.ledgerType`)}
+                    aria-label={`Line ${i + 1} type`}
+                    aria-invalid={!!lineErr(i, 'ledgerType')}
+                    title={lineErr(i, 'ledgerType') ?? 'The bill this line goes on'}
+                    data-empty={!values.lines?.[i]?.ledgerType || undefined}
+                  >
+                    <option value="">Type…</option>
+                    {RECORD_SUMMARY_LEDGER_GROUPS.map((g) => (
+                      <option key={g} value={g}>
+                        {RECORD_SUMMARY_GROUP_LABEL[g]}
+                      </option>
+                    ))}
+                  </select>
                   {editable && (
                     // The last line can't go (a summary needs one), so the button clears it.
                     <button

@@ -73,7 +73,15 @@ const FEE_ITEMS: Record<ShipmentDoc, string[]> = {
 
 export type Values = Record<string, unknown> & {
   clientId: string;
-  lines: { description: string; qty: string; unit: string; unitPrice: string; mark: string }[];
+  lines: {
+    description: string;
+    qty: string;
+    unit: string;
+    unitPrice: string;
+    mark: string;
+    /** Record summaries only: INV (Tax) / DIS / DN, '' until picked. */
+    ledgerType?: string;
+  }[];
 };
 
 export function DocEditorPage() {
@@ -195,6 +203,10 @@ export function initialValues(
     unit: str(l.unit),
     unitPrice: num(l.unitPrice),
     mark: str(l.mark),
+    // Record summaries: Tax (INV) / DIS / DN; blank until picked on older lines.
+    ...(type === 'record-summaries'
+      ? { ledgerType: str((l as { ledgerType?: string | null }).ledgerType) }
+      : {}),
   }));
   return {
     ...header,
@@ -370,12 +382,17 @@ function Editor({
       i
     ]?.[f]?.message;
 
+  // A shipment's bill shows its shipping plan's CBM (changed on the plan, never here).
+  const planCbm = (name: string) =>
+    !!defaults.accountingRecordId && (name === 'volumeCbm' || name === 'cbm');
+
   /** One header field in its section's grid; long values wrap instead of being cut off. */
   const renderField = (f: FieldDef) => {
     // Never typed: the number (and, for a shipment, its date and rate) come from the ledger.
     const locked =
       (f.name === cfg.numberField && (isShipmentDoc(type) || issuedEdit)) ||
-      ((linked || issuedEdit) && (f.name === cfg.dateField || f.name === 'exchangeRate'));
+      ((linked || issuedEdit) && (f.name === cfg.dateField || f.name === 'exchangeRate')) ||
+      planCbm(f.name);
     const placeholder =
       f.name === cfg.numberField && isShipmentDoc(type) ? 'Given automatically' : f.placeholder;
     return (
@@ -400,6 +417,7 @@ function Editor({
             decimals={f.name === 'exchangeRate' ? 4 : 3}
             placeholder={placeholder}
             readOnly={locked}
+            title={planCbm(f.name) ? 'From the shipping plan: change the CBM there' : undefined}
             {...register(f.name)}
             aria-invalid={!!err(f.name)}
           />

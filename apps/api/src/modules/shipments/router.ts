@@ -189,14 +189,19 @@ shipmentsRouter.post(
   async (req, res) => {
     const file = requireFile(req.file);
     const result = await parseCargoWorkbook(file.buffer, file.originalname);
-    const exceptId =
-      typeof req.query.shipmentId === 'string' && /^[0-9a-f-]{36}$/i.test(req.query.shipmentId)
-        ? req.query.shipmentId
-        : undefined;
-    const used = await svc.existingInvoiceNumbers(
-      result.invoices.map((i) => i.invoiceNo),
-      exceptId,
-    );
+    const uuid = (v: unknown) =>
+      typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v) ? v : undefined;
+    const exceptId = uuid(req.query.shipmentId);
+    // Invoice numbers are unique per factory: without one chosen yet, there is nothing to check.
+    const clientId = uuid(req.query.clientId);
+    if (clientId) assertClientVisible(req, clientId, 'Client', 'shipments');
+    const used = clientId
+      ? await svc.existingInvoiceNumbers(
+          clientId,
+          result.invoices.map((i) => i.invoiceNo),
+          exceptId,
+        )
+      : new Map<string, string>();
     for (const [no, ref] of used)
       result.warnings.push({
         row: null,
@@ -253,6 +258,7 @@ shipmentsRouter.post(
     assertClientVisible(req, clientId, 'Client', 'shipments');
     const result = await parseImportCargoWorkbook(file.buffer, file.originalname, clientId);
     const used = await svc.existingInvoiceNumbers(
+      clientId,
       result.invoices.map((i) => i.invoiceNo),
       shipmentId,
     );

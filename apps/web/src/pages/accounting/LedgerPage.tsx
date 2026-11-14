@@ -304,7 +304,8 @@ export function LedgerPage() {
                   onKeyDown={(e) => e.key === 'Enter' && setOpen(r)}
                 >
                   <td>
-                    <CheaPill status={r.cheaStatus} />
+                    {/* No broker credit note (no clear fee): nothing to pay Chea, left blank. */}
+                    {r.cheaStatus !== 'NA' && <CheaPill status={r.cheaStatus} />}
                   </td>
                   <td>{r.portNo ?? '-'}</td>
                   <td>{r.portCode ?? '-'}</td>
@@ -330,7 +331,8 @@ export function LedgerPage() {
                     r.vat,
                     r.dnTotal,
                   ].map((v, i) => (
-                    <td key={i}>{m(v)}</td>
+                    // Clear Fee is blank, not 0.00, when there is no broker credit note.
+                    <td key={i}>{i === 0 && r.cheaStatus === 'NA' ? '' : m(v)}</td>
                   ))}
                   <td
                     style={{

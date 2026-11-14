@@ -341,12 +341,22 @@ export const followShipmentUnit = (
  * - DIS: every line marked "Receipt" (paid on the client's behalf and re-billed at cost),
  *   except LOLO Empty Container, which is billed on the debit note even with a receipt;
  * - DN: everything else (trucking, handling, document, permit, LOLO empty container…).
+ * A line's Type, picked on the summary, decides instead; older lines without one follow the rule.
  */
-export type RecordSummaryLedgerGroup = 'INV' | 'DIS' | 'DN';
+export const RECORD_SUMMARY_LEDGER_GROUPS = ['INV', 'DIS', 'DN'] as const;
+export type RecordSummaryLedgerGroup = (typeof RECORD_SUMMARY_LEDGER_GROUPS)[number];
+/** How a line's Type reads on screen. */
+export const RECORD_SUMMARY_GROUP_LABEL: Record<RecordSummaryLedgerGroup, string> = {
+  INV: 'Tax',
+  DIS: 'DIS',
+  DN: 'DN',
+};
 export function recordSummaryLedgerGroup(
   description: string,
   mark?: string | null,
+  ledgerType?: string | null,
 ): RecordSummaryLedgerGroup {
+  if (ledgerType === 'INV' || ledgerType === 'DIS' || ledgerType === 'DN') return ledgerType;
   if (isVatChargedLine(description)) return 'INV';
   if (/^\s*LOLO\s+EMPTY\s+CONTAINER\b/i.test(description)) return 'DN';
   if (/^\s*receipts?\s*$/i.test(mark ?? '')) return 'DIS';
@@ -361,12 +371,18 @@ export const isThcLine = (description: string): boolean => /^\s*(THC|HBL)\b/i.te
  * DIS / REIM (receipt lines), DN (the rest) and THC (the THC / HBL fee).
  */
 export function recordSummaryLedger(
-  lines: { description: string; mark?: string | null; qty: Decimalish; unitPrice: Decimalish }[],
+  lines: {
+    description: string;
+    mark?: string | null;
+    ledgerType?: string | null;
+    qty: Decimalish;
+    unitPrice: Decimalish;
+  }[],
 ): { invRevenue: number; thc: number; disTotal: number; dnTotal: number } {
   const sum = (keep: (l: (typeof lines)[number]) => boolean) =>
     sumMoney(lines.filter(keep).map((l) => lineAmount(l.qty, l.unitPrice)));
   const group = (g: RecordSummaryLedgerGroup) => (l: (typeof lines)[number]) =>
-    recordSummaryLedgerGroup(l.description, l.mark) === g;
+    recordSummaryLedgerGroup(l.description, l.mark, l.ledgerType) === g;
   return {
     invRevenue: sum(group('INV')),
     thc: sum((l) => isThcLine(l.description)),
@@ -387,8 +403,9 @@ export function computeChargeLinesTotal(
  * Issue date of a tax invoice, disbursement or debit note = the next working day after the
  * customs declaration (clearance) date: Saturdays, Sundays and the given Cambodian public
  * holidays (YYYY-MM-DD) are skipped, however many in a row (Friday → Monday; Friday before a
- * holiday Monday → Tuesday). Always the next working day, even in the next month or year.
- * Works on plain YYYY-MM-DD strings, so the result doesn't depend on the server's time zone.
+ * holiday Monday → Tuesday). Documents use {@link invoiceIssueDate}, which keeps a shipment
+ * in its clearance month. Works on plain YYYY-MM-DD strings, so the result doesn't depend on
+ * the server's time zone.
  */
 export function nextBusinessDay(
   isoDate: string,
@@ -406,4 +423,24 @@ export function nextBusinessDay(
   for (let guard = 0; off() && guard < 200; guard++) dt.setUTCDate(dt.getUTCDate() + 1);
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return { date: dt.toISOString().slice(0, 10), weekday: weekdays[dt.getUTCDay()]! };
+}
+
+/**
+ * Issue date of a shipment's tax invoice, DIS and debit note: the next working day after
+ * clearance, but never in a later month. When that day falls in the next month (cleared on
+ * the month's last day, or on Fri 30 Oct with the 31st a Saturday), the clearance date
+ * itself, even a Saturday: a shipment cleared in a month is invoiced in that month.
+ */
+export function invoiceIssueDate(
+  clearanceDate: string,
+  holidays: ReadonlySet<string> = new Set(),
+): { date: string; weekday: string } {
+  const next = nextBusinessDay(clearanceDate, holidays);
+  if (next.date.slice(0, 7) === clearanceDate.slice(0, 7)) return next;
+  const [y, m, d] = clearanceDate.split('-').map(Number);
+  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return {
+    date: clearanceDate,
+    weekday: weekdays[new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay()]!,
+  };
 }

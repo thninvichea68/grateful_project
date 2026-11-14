@@ -1160,10 +1160,15 @@ export async function importPlan(
   });
 
   // Declare / invoice numbers: not twice in the file, not already in the system.
-  const dup = (label: string, values: { no: string; ref: string }[], existing: Set<string>) => {
+  // A key may carry a scope (invoice numbers are unique per factory, declarations everywhere).
+  const dup = (
+    label: string,
+    values: { no: string; ref: string; scope?: string }[],
+    existing: Set<string>,
+  ) => {
     const seen = new Map<string, string>();
-    for (const { no, ref } of values) {
-      const k = no.toUpperCase();
+    for (const { no, ref, scope } of values) {
+      const k = no.toUpperCase() && `${scope ? `${scope}|` : ''}${no.toUpperCase()}`;
       if (!k) continue;
       if (seen.has(k))
         err('File', null, `${label} ${no} is used twice (${seen.get(k)} and ${ref}).`);
@@ -1177,7 +1182,11 @@ export async function importPlan(
     ),
   );
   const allInv = built.flatMap((b) =>
-    (b.input.invoices ?? []).map((i) => ({ no: i.invoiceNo, ref: b.ref })),
+    (b.input.invoices ?? []).map((i) => ({
+      no: i.invoiceNo,
+      ref: b.ref,
+      scope: b.input.clientId || b.clientCode,
+    })),
   );
   const existingDecl = new Set(
     (
@@ -1191,7 +1200,7 @@ export async function importPlan(
     (
       await queryRows<{ n: string }>(
         db,
-        sql`SELECT upper(i.invoice_no) AS n FROM cargo_invoices i JOIN shipments s ON s.id = i.shipment_id WHERE s.deleted_at IS NULL`,
+        sql`SELECT i.client_id || '|' || upper(i.invoice_no) AS n FROM cargo_invoices i JOIN shipments s ON s.id = i.shipment_id WHERE s.deleted_at IS NULL`,
       )
     ).map((r) => r.n),
   );

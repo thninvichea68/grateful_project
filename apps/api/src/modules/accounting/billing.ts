@@ -158,7 +158,8 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
   const part = (type: BillingPackType, table: string, no: string, date: string, ref: string) => sql`
     SELECT ${type} AS type, t.id, t.${sql.raw(no)} AS number, to_char(t.${sql.raw(date)}, 'YYYY-MM-DD') AS date,
            t.status::text AS status, t.total::text AS total, t.accounting_record_id AS "recordId",
-           t.hbl, t.container_no AS "containerNo", ${sql.raw(ref)} AS reference, t.created_at
+           t.hbl, t.container_no AS "containerNo", ${sql.raw(ref)} AS reference, t.created_at,
+           (t.revised_at IS NOT NULL) AS revised
     FROM ${sql.raw(table)} t
     WHERE t.client_id = ${clientId} AND t.status <> 'VOID'
       AND (${linked} OR (t.accounting_record_id IS NULL AND ${inMonth(sql.raw(`t.${date}`), month)}))`;
@@ -184,6 +185,7 @@ export async function clientMonth(clientId: string, month: string): Promise<Bill
     date: d.date,
     status: d.status,
     total: d.total,
+    revised: !!d.revised,
   });
   const byRecord = new Map<string, DocPart[]>();
   const others: DocPart[] = [];

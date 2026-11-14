@@ -202,15 +202,19 @@ export interface EligibleRecord {
 export interface RecordSummaryShipment {
   /** Null until the shipment is in the Monthly Ledger. */
   recordId: string | null;
-  declarationId: string;
-  declareNo: string;
-  declareDate: string;
+  /** Null for a shipment not declared yet. */
+  declarationId: string | null;
+  shipmentId: string;
+  declareNo: string | null;
+  declareDate: string | null;
   clientId: string;
   clientCode: string;
   /** The invoice no., null until approved. */
   number: string | null;
   direction: 'IMPORT' | 'EXPORT';
   hbl: string | null;
+  /** The shipping plan's reference, e.g. SHP-26-0537 (a summary can be found by it). */
+  shipmentReference: string;
 }
 
 export interface DeclarationOption {
@@ -265,6 +269,12 @@ export const billingLineInputSchema = z.object({
   unit: optText(20),
   unitPrice: decimal(4, { min: 0, allowEmpty: false }),
   mark: optText(100),
+  /** Record summaries: the line's Type — Tax (INV), DIS or DN. Required there. */
+  ledgerType: z
+    .enum(['INV', 'DIS', 'DN'])
+    .nullish()
+    .or(z.literal(''))
+    .transform((v) => (v ? v : null)),
 });
 export type BillingLineInput = z.input<typeof billingLineInputSchema>;
 
@@ -350,8 +360,22 @@ export const creditNoteInputSchema = z.object({
   declareNo: optText(30),
 });
 
+/** A record summary line must say which bill it goes on: Tax (INV), DIS or DN. */
+const recordSummaryLineSchema = billingLineInputSchema.extend({
+  // Blank in the form until picked; saving needs one.
+  ledgerType: z
+    .enum(['INV', 'DIS', 'DN', ''])
+    .nullish()
+    .transform((v, ctx) => {
+      if (v) return v;
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Choose the type: Tax, DIS or DN' });
+      return z.NEVER;
+    }),
+});
+
 export const recordSummaryInputSchema = z.object({
   ...docBase,
+  lines: z.array(recordSummaryLineSchema).min(1, 'Add at least one line'),
   direction: z.enum(DIRECTIONS),
   transportMode: z.enum(TRANSPORT_MODES),
   loadType: z.enum(LOAD_TYPES),
@@ -576,6 +600,8 @@ export interface BillingDoc {
     vat?: string;
     amount?: string;
     mark: string | null;
+    /** Record summaries: Tax (INV), DIS or DN; null on older lines not given one. */
+    ledgerType?: 'INV' | 'DIS' | 'DN' | null;
   }[];
   totals: {
     subtotal: string;

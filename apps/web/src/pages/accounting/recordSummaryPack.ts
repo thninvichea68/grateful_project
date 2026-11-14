@@ -44,8 +44,7 @@ export async function loadRecordSummaryPack(filters: PackFilters): Promise<Billi
     if (page >= res.meta.totalPages) break;
   }
   rows.sort(
-    (a, b) =>
-      a.date.localeCompare(b.date) || (a.declareNo ?? '').localeCompare(b.declareNo ?? ''),
+    (a, b) => a.date.localeCompare(b.date) || (a.declareNo ?? '').localeCompare(b.declareNo ?? ''),
   );
   const docs: BillingDoc[] = [];
   // A few at a time, so a large pack doesn't flood the API.

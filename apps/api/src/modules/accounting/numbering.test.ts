@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import type { RoleCode } from '@gs/shared';
+import { recordSummaryLedgerGroup, type RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
 import { db, pool } from '../../db/client';
 import { exchangeRates, publicHolidays } from '../../db/schema';
@@ -167,7 +167,7 @@ afterAll(async () => {
 });
 
 describe('issue date: the next working day after the declaration date', () => {
-  it('skips weekends and public holidays, also across the year end', async () => {
+  it('skips weekends and public holidays, but never into the next month', async () => {
     // Wed → Thu
     expect((await shipment(b.jr.id, 'E 1', '2026-10-07')).invDate).toBe('2026-10-08');
     // Fri, then Pchum Ben Sat–Mon → Tue
@@ -178,8 +178,8 @@ describe('issue date: the next working day after the declaration date', () => {
     expect((await shipment(b.jr.id, 'E 4', '2026-10-14')).invDate).toBe('2026-10-16');
     // Mon 28 Dec, Peace Day Tue 29 → Wed 30 Dec
     expect((await shipment(b.jr.id, 'E 5', '2026-12-28')).invDate).toBe('2026-12-30');
-    // Thu 31 Dec, New Year Fri 1 Jan, weekend → Mon 4 Jan 2027
-    expect((await shipment(b.jr.id, 'E 6', '2026-12-31')).invDate).toBe('2027-01-04');
+    // Cleared on the year's last day: it stays 31 Dec (the next working day is in January).
+    expect((await shipment(b.jr.id, 'E 6', '2026-12-31')).invDate).toBe('2026-12-31');
   });
 
   it('documents take the ledger row’s issue date', async () => {
@@ -294,9 +294,9 @@ describe('numbers on approval', () => {
   });
 
   it('a shipment belongs to the month of its declare date, even with an INV dated next month', async () => {
-    // Fri 30 Oct → INV date Mon 2 Nov: still October's ledger and an October debit note.
+    // Fri 30 Oct, the 31st a Saturday: the INV keeps 30 Oct rather than Mon 2 Nov.
     const s = await shipment(b.jr.id, 'E 34', '2026-10-30');
-    expect(s.invDate).toBe('2026-11-02');
+    expect(s.invDate).toBe('2026-10-30');
     expect(await numbersOf(s)).toEqual(['GS26-001', 'DIS001', 'JR2610001']);
     const inMonth = async (month: string) =>
       (await acc('get', '/ledger', { query: { month } })).body.data.map(
@@ -371,6 +371,56 @@ describe('numbers on approval', () => {
 });
 
 describe('deleting an issued invoice', () => {
+  it('can delete one document only: its number and amount leave, the others stay', async () => {
+    const a = await shipment(b.jr.id, 'E 80', '2026-10-05');
+    const c = await shipment(b.jr.id, 'E 81', '2026-10-06');
+    const inv = await draft('tax-invoices', a.recordId);
+    const dis = await draft('disbursements', a.recordId);
+    expect((await acc('post', `/docs/tax-invoices/${inv.id}/issue`)).status).toBe(200);
+    expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
+    expect(await numbersOf(c)).toEqual(['GS26-002', 'DIS002', 'JR2610002']);
+
+    // Revised: an issued document edited later is flagged in Bill to Clients.
+    const pre = (await doc('tax-invoices', inv.id)) as Record<string, unknown>;
+    expect(pre).toBeTruthy();
+    const month = async () =>
+      (await acc('get', `/billing/${b.jr.id}`, { query: { month: '2026-10' } })).body.rows.find(
+        (r: { declareNo: string }) => r.declareNo === 'E 80',
+      );
+    expect((await month()).docs['tax-invoices'][0].revised).toBe(false);
+    const full = (await acc('get', `/docs/tax-invoices/${inv.id}`)).body;
+    const saved = await acc('put', `/docs/tax-invoices/${inv.id}`, {
+      body: {
+        ...full.header,
+        clientId: full.clientId,
+        accountingRecordId: full.accountingRecordId,
+        lines: [{ ...LINES[0], unitPrice: '120' }],
+      },
+    });
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+    expect((await month()).docs['tax-invoices'][0].revised).toBe(true);
+
+    const del = await acc('post', `/ledger/${a.recordId}/delete-invoice`, {
+      body: { reason: 'Billed twice', type: 'disbursements' },
+    });
+    expect(del.status).toBe(200);
+    expect(del.body.released).toEqual([{ kind: 'DIS', number: 'DIS001', kept: false }]);
+    // Only the DIS went: the tax invoice and the other numbers stay; E 81 moved up.
+    expect(await a.row()).toMatchObject({
+      invNo: 'GS26-001',
+      disNo: null,
+      dnNo: 'JR2610001',
+      invRevenue: '120.00',
+      disTotal: '0.00',
+    });
+    expect((await acc('get', `/docs/tax-invoices/${inv.id}`)).status).toBe(200);
+    expect((await acc('get', `/docs/disbursements/${dis.id}`)).status).toBe(404);
+    expect(await numbersOf(c)).toEqual(['GS26-002', 'DIS001', 'JR2610002']);
+    // Checked again, it takes a DIS number once more.
+    await a.check();
+    expect((await a.row()).disNo).toMatch(/^DIS/);
+  });
+
   it('closes the gap it leaves: the later numbers move up, so no number is skipped', async () => {
     const a = await shipment(b.jr.id, 'E 70', '2026-10-05');
     const c = await shipment(b.jr.id, 'E 71', '2026-10-06');
@@ -680,6 +730,7 @@ describe('a shipment without a tax invoice', () => {
       unit: 'SHIP',
       unitPrice,
       mark,
+      ledgerType: recordSummaryLedgerGroup(description, mark),
     });
     const rs = await acc('post', '/docs/record-summaries', {
       body: {
@@ -769,6 +820,7 @@ describe('the agency invoice / THC paid in another month than the declaration', 
       unit: 'SHIP',
       unitPrice,
       mark: m,
+      ledgerType: recordSummaryLedgerGroup(description, m),
     });
     const rs = await acc('post', '/docs/record-summaries', {
       body: {
@@ -952,7 +1004,7 @@ describe('the agency invoice / THC paid in another month than the declaration', 
     ]);
   });
 
-  it('"Separate Invoice/THC DIS" moves a DIS issued before the declare month to a row of its own', async () => {
+  it('a DIS issued before the declare month goes to a row of its own in that month', async () => {
     const oct = await shipment(b.jr.id, 'E 420', '2026-10-20');
     // Billed the old way: the THC's DIS issued on 30 Oct on the shipment's own row, which also
     // has its INV and DN, though it was declared on 2 Nov.
@@ -965,16 +1017,12 @@ describe('the agency invoice / THC paid in another month than the declaration', 
       dnTotal: '949',
     });
     const dis = await draft('disbursements', svc.id, { disDate: '2026-10-30' });
+    // Issued on 30 Oct: it stays in October on its own row, no button needed.
     expect((await acc('post', `/docs/disbursements/${dis.id}/issue`)).status).toBe(200);
     const inv = await draft('tax-invoices', svc.id);
     const disNo = (await doc('disbursements', dis.id)).number;
-
     const m = (await acc('get', `/billing/${b.jr.id}`, { query: { month: '2026-11' } })).body;
-    expect(m.rows.find((r: { recordId: string }) => r.recordId === svc.id)?.separable ?? null).toBe(
-      true,
-    );
-    const res = await acc('post', `/ledger/${svc.id}/separate-agency`);
-    expect(res.status).toBe(201);
+    expect(m.rows.find((r: { recordId: string }) => r.recordId === svc.id)?.separable).toBe(false);
 
     // October: the DIS as issued, on a row of its own.
     expect(await ledgerOf('2026-10')).toMatchObject([

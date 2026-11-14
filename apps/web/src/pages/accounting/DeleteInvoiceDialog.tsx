@@ -3,6 +3,12 @@ import { ErrorBanner, Modal, ui } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { useDeleteInvoice } from '../../features/accounting';
 
+const ONE_LABEL = {
+  'tax-invoices': 'Tax invoice',
+  disbursements: 'Disbursement',
+  'debit-notes': 'Debit note',
+} as const;
+
 /**
  * Confirms deleting a shipment's invoice set (tax invoice, DIS, debit note). Its numbers are
  * released to the next approved shipment, it goes back to "not invoiced" and its Chea payment
@@ -12,11 +18,14 @@ export function DeleteInvoiceDialog({
   recordId,
   declareNo,
   numbers,
+  type,
   onClose,
   onDeleted,
 }: {
   recordId: string;
   declareNo: string;
+  /** Delete this one document (e.g. only the tax invoice); the whole set when left out. */
+  type?: 'tax-invoices' | 'disbursements' | 'debit-notes';
   /** The numbers on the shipment now, e.g. ['GS26-394', 'DIS437', 'JR2610001']. */
   numbers: string[];
   onClose: () => void;
@@ -27,15 +36,16 @@ export function DeleteInvoiceDialog({
   const [reason, setReason] = useState('');
   const canDelete = reason.trim().length >= 3 && !del.isPending;
 
+  const what = type ? ONE_LABEL[type] : 'Invoice';
   const run = async () => {
-    const res = await del.mutateAsync({ recordId, reason: reason.trim() });
+    const res = await del.mutateAsync({ recordId, reason: reason.trim(), type });
     const kept = res.released.filter((r) => r.kept).map((r) => r.number);
     const passed = res.reassigned.map(
       (r) => `${r.numbers.map((n) => n.number).join(' · ')} → ${r.declareNo}`,
     );
     toast(
       [
-        `Invoice deleted for ${declareNo}.`,
+        `${what} deleted for ${declareNo}.`,
         passed.length
           ? `Given to: ${passed.join('; ')}.`
           : kept.length
@@ -49,8 +59,12 @@ export function DeleteInvoiceDialog({
 
   return (
     <Modal
-      title={`Delete the invoice for ${declareNo}?`}
-      sub="This can't be undone. The documents are deleted and the shipment is not invoiced any more."
+      title={`Delete the ${what.toLowerCase()} for ${declareNo}?`}
+      sub={
+        type
+          ? `This can't be undone. Only the ${what.toLowerCase()} is deleted; the other documents stay.`
+          : "This can't be undone. The documents are deleted and the shipment is not invoiced any more."
+      }
       onClose={onClose}
       width={540}
     >
@@ -67,11 +81,15 @@ export function DeleteInvoiceDialog({
           style={{ margin: '0 0 12px', paddingLeft: 18, lineHeight: 1.6 }}
         >
           <li>
-            Deletes its tax invoice, disbursement and debit note
-            {numbers.length ? ` (${numbers.join(', ')})` : ''}.
+            {type
+              ? `Deletes its ${what.toLowerCase()}`
+              : 'Deletes its tax invoice, disbursement and debit note'}
+            {numbers.length ? ` (${numbers.join(', ')})` : ''}
+            {type ? ' and takes its amount out of the Monthly Ledger.' : '.'}
           </li>
           <li>
-            Releases the numbers: the next approved shipment takes them, so there are no gaps.
+            Releases the {type ? 'number' : 'numbers'}: the next approved shipment takes{' '}
+            {type ? 'it' : 'them'}, so there are no gaps.
           </li>
           <li>Its Chea payment goes back to Unchecked. Check it again to give it new numbers.</li>
         </ul>
@@ -88,10 +106,10 @@ export function DeleteInvoiceDialog({
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
           <button type="button" className="filter-btn" onClick={onClose}>
-            Keep invoice
+            Keep {what.toLowerCase()}
           </button>
           <button type="submit" className="btn-delete-shipment" disabled={!canDelete}>
-            {del.isPending ? 'Deleting…' : 'Delete invoice'}
+            {del.isPending ? 'Deleting…' : `Delete ${what.toLowerCase()}`}
           </button>
         </div>
       </form>

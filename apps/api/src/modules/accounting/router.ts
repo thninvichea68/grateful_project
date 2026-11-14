@@ -239,13 +239,15 @@ accountingRouter.post(
   requirePermission('accounting:write'),
   async (req, res) => {
     const { id } = parse(idParam, req.params);
-    const { reason } = parse(
+    const { reason, type } = parse(
       z.object({
         reason: z.string().trim().min(3, 'Give a reason for deleting the invoice').max(300),
+        // One document only (tax invoice, DIS or debit note); the whole set when left out.
+        type: z.enum(['tax-invoices', 'disbursements', 'debit-notes']).optional(),
       }),
       req.body,
     );
-    res.json(await docs.releaseInvoiceSet(id, reason, req));
+    res.json(await docs.releaseInvoiceSet(id, reason, req, type));
   },
 );
 /** "Separate Invoice/THC DIS": an issued THC DIS of an earlier month onto a row of its own. */
@@ -518,6 +520,16 @@ accountingRouter.get('/docs/:type/prefill', async (req, res) => {
         ? await creditNotePrefill(declarationId)
         : await prefill(type, null, declarationId);
     assertClientVisible(req, draft.clientId as string, 'Declaration');
+    return void res.json(draft);
+  }
+  // A record summary found by the shipping plan's reference, declared or not yet.
+  if (type === 'record-summaries' && typeof req.query.shipmentId === 'string') {
+    const { shipmentId } = parse(
+      z.object({ shipmentId: z.string().uuid('Choose a shipment') }),
+      req.query,
+    );
+    const draft = await prefill(type, null, null, shipmentId);
+    assertClientVisible(req, draft.clientId as string, 'Shipment');
     return void res.json(draft);
   }
   // A document of no shipment (e.g. a monthly service-fee debit note): from the client.

@@ -107,10 +107,19 @@ export function useSaveLedger() {
 export function useDeleteInvoice() {
   const invalidate = useInvalidateAccounting();
   return useMutation({
-    mutationFn: ({ recordId, reason }: { recordId: string; reason: string }) =>
+    mutationFn: ({
+      recordId,
+      reason,
+      type,
+    }: {
+      recordId: string;
+      reason: string;
+      /** One document only; the whole set (tax invoice, DIS, DN) when left out. */
+      type?: 'tax-invoices' | 'disbursements' | 'debit-notes';
+    }) =>
       api<ReleasedInvoiceSet>(`/accounting/ledger/${recordId}/delete-invoice`, {
         method: 'POST',
-        json: { reason },
+        json: { reason, type },
       }),
     onSuccess: invalidate,
   });
@@ -199,18 +208,22 @@ export function usePrefill(
   recordId: string | null,
   declarationId: string | null = null,
   client: { clientId: string; date: string } | null = null,
+  /** A record summary of a shipment found by its reference (declared or not). */
+  shipmentId: string | null = null,
 ) {
   return useQuery({
-    queryKey: [...KEY, 'prefill', type, recordId, declarationId, client],
+    queryKey: [...KEY, 'prefill', type, recordId, declarationId, client, shipmentId],
     queryFn: () =>
       api<Record<string, unknown>>(`/accounting/docs/${type}/prefill`, {
         query: declarationId
           ? { declarationId }
           : recordId
             ? { recordId }
-            : { clientId: client!.clientId, date: client!.date },
+            : shipmentId
+              ? { shipmentId }
+              : { clientId: client!.clientId, date: client!.date },
       }),
-    enabled: !!recordId || !!declarationId || !!client,
+    enabled: !!recordId || !!declarationId || !!client || !!shipmentId,
     staleTime: Infinity,
   });
 }

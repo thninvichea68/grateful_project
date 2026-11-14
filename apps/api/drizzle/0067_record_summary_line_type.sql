@@ -1,0 +1,2 @@
+ALTER TABLE "record_summary_lines" ADD COLUMN "ledger_type" text;--> statement-breakpoint
+ALTER TABLE "record_summary_lines" ADD CONSTRAINT "record_summary_lines_ledger_type" CHECK (ledger_type IN ('INV', 'DIS', 'DN'));

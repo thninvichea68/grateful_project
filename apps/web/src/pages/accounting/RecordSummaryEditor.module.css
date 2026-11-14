@@ -162,6 +162,20 @@
   min-width: 70px;
   max-width: 130px;
 }
+/* The line's Type (Tax / DIS / DN): required, so a blank one reads as a prompt. */
+.type {
+  flex: 0 0 84px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 22px 0 8px;
+  font-size: 12px;
+}
+.type[data-empty] {
+  color: var(--text-muted);
+}
+.type[aria-invalid='true'] {
+  border-color: var(--danger, #dc2626);
+}
 .del {
   display: flex;
   flex-shrink: 0;

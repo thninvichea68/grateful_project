@@ -293,6 +293,38 @@ export async function openAgencyLine(
 }
 
 /**
+ * A shipment's DIS was just issued in a month before its declare month (its THC was paid
+ * then): it stays in that month on an agency row of its own, and the shipment's tax invoice,
+ * DIS and debit note follow the declare month with new numbers, dated the working day after
+ * clearance. Nothing happens for a client billed with the services, or when the shipment
+ * already has its agency row. Returns whether it was separated.
+ */
+export async function separateIfIssuedEarly(
+  tx: Tx,
+  serviceId: string,
+  disDate: string,
+  req: Request,
+): Promise<boolean> {
+  const [r] = await tx
+    .select({ kind: accountingRecords.kind })
+    .from(accountingRecords)
+    .where(eq(accountingRecords.id, serviceId));
+  if (r?.kind !== 'SERVICE') return false;
+  const s = await shipmentOf(tx, serviceId);
+  if (!s || s.agencyId || !s.thcBilledApart) return false;
+  if (disDate < DECLARE_MONTH_FROM || disDate.slice(0, 7) >= s.declareDate.slice(0, 7))
+    return false;
+  const [{ n } = { n: 0 }] = await queryRows<{ n: number }>(
+    tx,
+    sql`SELECT count(*)::int AS n FROM disbursements
+        WHERE accounting_record_id = ${serviceId} AND status = 'ISSUED'`,
+  );
+  if (n !== 1) return false;
+  await separateAgencyDis(tx, serviceId, req);
+  return true;
+}
+
+/**
  * "Separate Invoice/THC DIS": a shipment whose DIS was issued for the agency invoice / THC in
  * an earlier month than its declaration (before "+ Invoice/THC DIS" existed). The issued DIS
  * moves, number, date and amount unchanged, to an AGENCY row of its own in that month; the

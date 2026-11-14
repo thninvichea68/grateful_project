@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
 import {
   BILLING_PACK_TYPES,
@@ -34,6 +34,7 @@ import {
   thisMonth,
 } from './billingUi';
 import { AgencyDisModal, DraftsModal, ReceiptModal } from './BillingDialogs';
+import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import b from './Billing.module.css';
 import { PrintLink } from '../../components/PrintLink';
 
@@ -108,6 +109,12 @@ function Workspace({
   };
   const [paying, setPaying] = useState<BillingStatement | null>(null);
   const [preview, setPreview] = useState<BillingShipmentRow | null>(null);
+  // ⋯ → Delete: one document of a shipment (its number goes to the next approved shipment).
+  const [deleting, setDeleting] = useState<{
+    row: BillingShipmentRow;
+    doc: BillingDocSlot;
+  } | null>(null);
+  const navigate = useNavigate();
   // The statements stay folded under their heading until opened.
   const [statementsOpen, setStatementsOpen] = useState(false);
   const s = m.summary;
@@ -261,7 +268,7 @@ function Workspace({
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.invDate)}</td>
                   <td className={b.actionCol}>
                     {/* The row's tax invoice, disbursement and debit note in one go. */}
-                    {BILLING_PACK_TYPES.some((t) => r.docs[t].some((d) => d.status !== 'VOID')) && (
+                    {(liveDocs(r).length > 0 || BILLING_PACK_TYPES.some((t) => r.manual[t])) && (
                       <PackPrintMenu
                         clientId={m.client.id}
                         month={month}
@@ -270,14 +277,59 @@ function Workspace({
                         title={`Preview, print or export ${r.declareNo}'s tax invoice, disbursement and debit note (drafts marked DRAFT)`}
                         onPreview={() => setPreview(r)}
                         actions={
-                          canWrite && r.separable
+                          canWrite
                             ? [
-                                {
-                                  label: 'Separate Invoice/THC DIS',
-                                  title:
-                                    'Move the DIS issued in the earlier month to a row of its own; the tax invoice and debit note follow the declare month',
-                                  onClick: () => void separateAgency(r),
-                                },
+                                // Revise / Delete each of the row's documents on its own.
+                                ...liveDocs(r).flatMap((d) => {
+                                  const name = `${PACK_LABEL[d.type]} ${d.number ?? 'draft'}`;
+                                  return [
+                                    {
+                                      label: `Revise ${name}`,
+                                      title: `Open ${name} to change its amounts or details; an issued one stays issued and shows Revised`,
+                                      onClick: () =>
+                                        navigate(`/accounting/${d.type}/${d.id}?back=${back}`),
+                                    },
+                                    {
+                                      label: `Delete ${name}`,
+                                      title: `Delete only ${name}; the row's other documents stay`,
+                                      danger: true,
+                                      onClick: () => setDeleting({ row: r, doc: d }),
+                                    },
+                                  ];
+                                }),
+                                // A number typed in the Monthly Ledger (no document here).
+                                ...BILLING_PACK_TYPES.filter(
+                                  (t) => !liveDocs(r).some((d) => d.type === t) && r.manual[t],
+                                ).map((t) => {
+                                  const name = `${PACK_LABEL[t]} ${r.manual[t]!.number}`;
+                                  return {
+                                    label: `Delete ${name}`,
+                                    title: `Take ${name} and its amount out of the Monthly Ledger`,
+                                    danger: true,
+                                    onClick: () =>
+                                      setDeleting({
+                                        row: r,
+                                        doc: {
+                                          id: '',
+                                          type: t,
+                                          number: r.manual[t]!.number,
+                                          date: '',
+                                          status: 'ISSUED',
+                                          total: r.manual[t]!.total,
+                                        },
+                                      }),
+                                  };
+                                }),
+                                ...(r.separable
+                                  ? [
+                                      {
+                                        label: 'Separate Invoice/THC DIS',
+                                        title:
+                                          'Move the DIS issued in the earlier month to a row of its own; the tax invoice and debit note follow the declare month',
+                                        onClick: () => void separateAgency(r),
+                                      },
+                                    ]
+                                  : []),
                               ]
                             : undefined
                         }
@@ -388,6 +440,15 @@ function Workspace({
           />
         </Suspense>
       )}
+      {deleting && (
+        <DeleteInvoiceDialog
+          recordId={deleting.row.recordId}
+          declareNo={deleting.row.declareNo}
+          type={deleting.doc.type}
+          numbers={deleting.doc.number ? [deleting.doc.number] : []}
+          onClose={() => setDeleting(null)}
+        />
+      )}
       {paying && (
         <ReceiptModal
           clientId={m.client.id}
@@ -400,6 +461,10 @@ function Workspace({
     </section>
   );
 }
+
+/** A row's documents that are not cancelled, in pack order (tax invoice, DIS, DN). */
+const liveDocs = (r: BillingShipmentRow): BillingDocSlot[] =>
+  BILLING_PACK_TYPES.flatMap((t) => r.docs[t].filter((d) => d.status !== 'VOID'));
 
 /** "MAEU4417941, MAEU7075009, MRKU8475691" → "MAEU4417941 +2" (the full list on hover). */
 function shortContainers(list: string | null): string {
@@ -418,7 +483,7 @@ const FREIGHT_LABEL: Record<string, string> = {
 /** A document: number · amount; a draft is yellow. Opens the editor. */
 function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
   const draft = d.status === 'DRAFT';
-  const label = `${PACK_LABEL[d.type]} ${d.number ?? ''}, ${fmtMoney(d.total)}, ${draft ? 'draft (not issued yet)' : 'issued'}`;
+  const label = `${PACK_LABEL[d.type]} ${d.number ?? ''}, ${fmtMoney(d.total)}, ${draft ? 'draft (not issued yet)' : d.revised ? 'issued, revised' : 'issued'}`;
   return (
     <Link
       to={`/accounting/${d.type}/${d.id}?back=${back}`}
@@ -428,6 +493,7 @@ function DocChip({ d, back }: { d: BillingDocSlot; back: string }) {
       aria-label={label}
     >
       <b>{d.number ?? 'Draft'}</b>
+      {d.revised && <em data-tag="revised">Revised</em>}
       <span>{fmtMoney(d.total)}</span>
     </Link>
   );

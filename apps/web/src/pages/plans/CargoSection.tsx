@@ -279,6 +279,7 @@ export function CargoSection({
             { clientId, shipmentId },
           )
         : await uploadFile<CargoExcelParseResult>('/shipments/parse-cargo-excel', file, {
+            clientId,
             shipmentId,
           });
       const errs = 'errors' in res ? res.errors : [];

@@ -456,6 +456,34 @@
       "when": 1794026037865,
       "tag": "0064_client_thc_billed_apart",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1794627366180,
+      "tag": "0065_invoice_no_per_factory",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1794627820053,
+      "tag": "0066_shipment_cbm",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1794631849574,
+      "tag": "0067_record_summary_line_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1794632353093,
+      "tag": "0068_bill_revised_at",
+      "breakpoints": true
     }
   ]
 }

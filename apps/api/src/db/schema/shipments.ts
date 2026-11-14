@@ -66,6 +66,11 @@ export const shipments = pgTable(
     // Cargo summary
     quantity: qty('quantity'),
     quantityUnit: text('quantity_unit'), // ROLLS, PKGS, CTNS…
+    /**
+     * The shipment's CBM as typed on the plan. Blank = the invoice lines' CBM total. The bills to
+     * the client (tax invoice, DIS, DN, credit note, record summary) always print this CBM.
+     */
+    cbm: qty('cbm'),
     material: text('material'),
     /** Incoterms 2020 rule (EXW, FOB, CIF…). */
     incoterm: text('incoterm'),
@@ -202,6 +207,14 @@ export const cargoInvoices = pgTable(
     shipmentId: uuid('shipment_id')
       .notNull()
       .references(() => shipments.id, { onDelete: 'cascade' }),
+    /**
+     * The shipment's client (factory), copied so an invoice number is unique per factory:
+     * two factories may use the same number, one factory can't use it twice. A trigger keeps
+     * it equal to shipments.client_id.
+     */
+    clientId: uuid('client_id')
+      .notNull()
+      .references(() => clients.id, { onDelete: 'restrict' }),
     invoiceNo: text('invoice_no').notNull(),
     invoiceDate: date('invoice_date'),
     description: text('description'),
@@ -212,7 +225,10 @@ export const cargoInvoices = pgTable(
     ...timestamps,
   },
   (t) => [
-    uniqueIndex('cargo_invoices_invoice_no_unique').on(sql`upper(${t.invoiceNo})`),
+    uniqueIndex('cargo_invoices_client_invoice_no_unique').on(
+      t.clientId,
+      sql`upper(${t.invoiceNo})`,
+    ),
     index('cargo_invoices_shipment_idx').on(t.shipmentId),
   ],
 );

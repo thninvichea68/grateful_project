@@ -121,7 +121,12 @@ settingsRouter.put('/company', manage, async (req, res) => {
   // At most one account is printed on invoices; it is also stored in the legacy single-bank fields.
   const banks = parsed.banks?.map((b, i, all) => ({
     ...b,
-    onInvoice: i === Math.max(0, all.findIndex((x) => x.onInvoice)),
+    onInvoice:
+      i ===
+      Math.max(
+        0,
+        all.findIndex((x) => x.onInvoice),
+      ),
   }));
   const chosen = banks?.find((b) => b.onInvoice);
   const v = banks

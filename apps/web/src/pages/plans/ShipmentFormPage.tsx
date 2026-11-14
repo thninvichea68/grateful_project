@@ -669,6 +669,28 @@ function CargoQuantityFromInvoices() {
   return null;
 }
 
+/**
+ * The shipment's CBM: typed here, or left blank for its invoice lines' CBM total (shown as the
+ * hint). Every bill to the client prints this same CBM.
+ */
+function CbmField() {
+  const { control } = useFormContext<FormValues>();
+  const [invoices, mode] = useWatch({ control, name: ['invoices', 'transportMode'] });
+  const lines = (invoices ?? []).reduce(
+    (n, inv) => n + (inv.lines ?? []).reduce((m, l) => m + toNum(l.cbm), 0),
+    0,
+  );
+  return (
+    <Field
+      name="cbm"
+      label={mode === 'AIR' ? 'CBM (bills show NON by air)' : 'CBM'}
+      // Blank = the invoice lines' total.
+      placeholder={lines ? `${+lines.toFixed(3)} (from invoices)` : '0.000'}
+      decimals={3}
+    />
+  );
+}
+
 function Milestones({ direction }: { direction: FormValues['direction'] }) {
   const { control } = useFormContext<FormValues>();
   const [invoices, hblNo, eta, arriveFty, bookingNo, etd, atd, declarations, mode] = useWatch({
@@ -1501,6 +1523,7 @@ function buildSteps(
           'destinationCountryIso2',
           'quantity',
           'quantityUnit',
+          'cbm',
           'material',
           'receivedDocumentDate',
         ],
@@ -1524,7 +1547,7 @@ function buildSteps(
               />
               <CargoTypeSelect label="Export Type" options={materials} span={1} />
             </Card>
-            <Card title="Quantity & Unit" icon="box" cols={2}>
+            <Card title="Quantity, Unit & CBM" icon="box" cols={2}>
               <Field
                 name="quantity"
                 // Filled in from the invoices' CTNS total (Cargo, Pricing & FOB), as on an import.
@@ -1534,6 +1557,7 @@ function buildSteps(
                 readOnly
               />
               <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+              <CbmField />
             </Card>
           </div>
         ),
@@ -1646,6 +1670,7 @@ function buildSteps(
         'consigneeId',
         'quantity',
         'quantityUnit',
+        'cbm',
         'forwarderId',
         'broker',
         'originCountryIso2',
@@ -1673,7 +1698,7 @@ function buildSteps(
             />
             <CargoTypeSelect label="Import Type" options={materials} span={1} />
           </Card>
-          <Card title="Quantity & Unit" icon="box" cols={2}>
+          <Card title="Quantity, Unit & CBM" icon="box" cols={2}>
             <Field
               name="quantity"
               // Filled in from the invoices' Pkgs total (Item, Costing & Forwarding).
@@ -1683,6 +1708,7 @@ function buildSteps(
               readOnly
             />
             <Select name="quantityUnit" label="Unit" options={units} placeholder="Select unit" />
+            <CbmField />
           </Card>
         </div>
       ),

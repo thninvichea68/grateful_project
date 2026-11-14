@@ -121,6 +121,9 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.packGo[data-danger] {
+  color: var(--danger, #dc2626);
+}
 
 /* ---------- Overview ---------- */
 .bar {
@@ -440,6 +443,10 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
+}
+/* Edited after it was issued. */
+.chip em[data-tag='revised'] {
+  color: var(--status-pending-fg);
 }
 .chip[data-status='DRAFT'] :is(b, em) {
   color: var(--status-pending-fg);

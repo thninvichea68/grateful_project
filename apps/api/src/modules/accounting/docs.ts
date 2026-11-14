@@ -48,6 +48,7 @@ import {
   taxInvoices,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
+import { planCbm } from '../../lib/shipmentCbm';
 import { businessRule, conflict, notFound } from '../../lib/errors';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { clientCondition } from '../../lib/clientScope';
@@ -69,7 +70,7 @@ import {
   type NumberKind,
 } from './numbers';
 import { LEDGER_DATE, serviceLedgerDate } from './ledgerDate';
-import { syncAgencyLine } from './agencyLine';
+import { separateIfIssuedEarly, syncAgencyLine } from './agencyLine';
 
 type Row = Record<string, unknown>;
 type Input = z.output<(typeof BILLING_DOC_SCHEMAS)[BillingDocType]> & Row;
@@ -373,6 +374,21 @@ function headerValues(type: BillingDocType, input: Input) {
   return values;
 }
 
+/** A bill of a shipment always shows its shipping plan's CBM; one without a shipment keeps its own. */
+async function withPlanCbm(tx: Tx, type: BillingDocType, input: Input, values: Row): Promise<void> {
+  const cbm = await planCbm(
+    tx,
+    input.accountingRecordId as string | null | undefined,
+    type === 'record-summaries'
+      ? { clientId: input.clientId as string, declareNo: input.declareNo as string | null }
+      : undefined,
+  );
+  if (cbm === null) return;
+  if (type === 'record-summaries') values.cbm = values.transportMode === 'AIR' ? 'NON' : cbm;
+  else if (type === 'credit-notes') values.cbm = cbm;
+  else values.volumeCbm = cbm;
+}
+
 async function writeLines(
   tx: Tx,
   type: BillingDocType,
@@ -392,6 +408,7 @@ async function writeLines(
       unitPrice: l.unitPrice,
       // The processing fee's "VAT 10%" Mark follows the document's percent.
       mark: cfg.vatOnFee && vatRate ? vatMark(l, vatRate) : l.mark,
+      ...(type === 'record-summaries' ? { ledgerType: l.ledgerType ?? null } : {}),
       ...lineTotals[i],
     })) as never,
   );
@@ -405,6 +422,7 @@ export async function createDoc(type: BillingDocType, typed: Input, req: Request
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
+      await withPlanCbm(tx, type, input, values);
       if (isIssueDated(type)) {
         // Never typed: a shipment's document takes its Monthly Ledger number and date.
         values[cfg.numberCol!] = undefined;
@@ -514,6 +532,7 @@ export async function updateDoc(
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
+      await withPlanCbm(tx, type, input, values);
       const linked = isIssueDated(type) && !!input.accountingRecordId;
       if (isIssueDated(type)) values[cfg.numberCol!] = undefined; // never typed
       if (type === 'record-summaries')
@@ -558,7 +577,8 @@ export async function updateDoc(
       );
       await tx
         .update(cfg.table)
-        .set({ ...values, ...t.header } as never)
+        // Edited after it was issued: Bill to Clients marks it Revised.
+        .set({ ...values, ...t.header, ...(issued ? { revisedAt: new Date() } : {}) } as never)
         .where(eq(col(cfg.table, 'id'), id));
       await tx.delete(cfg.lines).where(eq(col(cfg.lines, cfg.fk), id));
       await writeLines(tx, type, id, input, t.lines, values.vatRate as string);
@@ -722,6 +742,15 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
       .where(eq(col(cfg.table, 'id'), id));
     // A credit note reaches the Monthly Ledger when accounting checks it, not on submission.
     if (type !== 'credit-notes') await issuedToLedger(tx, cfg, doc, req);
+    // A DIS issued in a month before the declare month (the THC paid then) stays in that
+    // month on its own row; the services follow the declare month.
+    if (type === 'disbursements' && doc.accountingRecordId)
+      await separateIfIssuedEarly(
+        tx,
+        doc.accountingRecordId as string,
+        String(doc.disDate),
+        req,
+      );
     await audit(
       tx,
       {
@@ -831,6 +860,7 @@ async function summaryToLedger(
     .select({
       description: recordSummaryLines.description,
       mark: recordSummaryLines.mark,
+      ledgerType: recordSummaryLines.ledgerType,
       qty: recordSummaryLines.qty,
       unitPrice: recordSummaryLines.unitPrice,
     })
@@ -1360,6 +1390,9 @@ export async function getDoc(type: BillingDocType, id: string): Promise<BillingD
       unitPrice: l.unitPrice as string,
       subtotal: l.subtotal as string,
       mark: (l.mark as string | null) ?? null,
+      ...(type === 'record-summaries'
+        ? { ledgerType: (l.ledgerType as 'INV' | 'DIS' | 'DN' | null) ?? null }
+        : {}),
       ...(cfg.kind === 'tax' ? { vat: l.vat as string, amount: l.amount as string } : {}),
     })),
     totals: {
@@ -1435,6 +1468,7 @@ export function previewDoc(
           }
         : {}),
       mark: l.mark || null,
+      ledgerType: (l.ledgerType as 'INV' | 'DIS' | 'DN' | null | undefined) ?? null,
     })),
     totals: {
       subtotal: h.subtotal ?? h.total ?? '0',
@@ -1612,7 +1646,11 @@ export async function releaseInvoiceSet(
   recordId: string,
   reason: string,
   req: Request,
+  /** Only this document (its number and ledger amount); the whole set when left out. */
+  only?: IssueDatedType,
 ): Promise<ReleasedSet> {
+  const types = only ? [only] : ISSUE_DATED;
+  const kinds = new Set(types.map((t) => KIND[t]));
   return db.transaction(async (tx) => {
     await lockNumbering(tx);
     const [rec] = await queryRows<{
@@ -1637,13 +1675,14 @@ export async function releaseInvoiceSet(
     if (!rec) throw notFound('Ledger entry');
     const numbers = new Map<NumberKind, Set<string>>();
     const add = (kind: NumberKind, n: string | null | undefined) => {
-      if (n) numbers.set(kind, (numbers.get(kind) ?? new Set()).add(n.toUpperCase()));
+      if (n && kinds.has(kind))
+        numbers.set(kind, (numbers.get(kind) ?? new Set()).add(n.toUpperCase()));
     };
     add('INV', rec.invNo);
     add('DIS', rec.disNo);
     add('DN', rec.dnNo);
     const deleted: Row[] = [];
-    for (const type of ISSUE_DATED) {
+    for (const type of types) {
       const cfg = CONFIG[type];
       const docs = (await tx
         .delete(cfg.table)
@@ -1659,23 +1698,23 @@ export async function releaseInvoiceSet(
         deleted.push({ type, id: d.id, number: d[cfg.numberCol!], status: d.status });
       }
     }
+    const label = only ? BILLING_LABEL[only] : 'Invoice';
     if (!numbers.size && !deleted.length)
-      throw conflict(`${rec.declareNo} has no invoice numbers or documents to delete`);
+      throw conflict(`${rec.declareNo} has no ${label.toLowerCase()} number or document to delete`);
+    // The deleted documents' numbers and amounts leave the ledger row.
+    const cleared = {
+      ...(kinds.has('INV') ? { invNo: null, invRevenue: '0' } : {}),
+      ...(kinds.has('DIS') ? { disNo: null, disTotal: '0' } : {}),
+      ...(kinds.has('DN') ? { dnNo: null, dnTotal: '0' } : {}),
+    };
     await tx
       .update(accountingRecords)
-      .set({
-        invNo: null,
-        disNo: null,
-        dnNo: null,
-        invRevenue: '0',
-        disTotal: '0',
-        dnTotal: '0',
-        updatedById: req.auth?.userId ?? null,
-      })
+      .set({ ...cleared, updatedById: req.auth?.userId ?? null })
       .where(eq(accountingRecords.id, recordId));
     await recompute(tx, recordId);
     // Not invoiced again: it waits for accounting to approve its record summary (or check its
-    // Chea payment) once more.
+    // Chea payment) once more. Deleting one document does this too, or the numbering would
+    // give the shipment a new number for it straight away; it keeps its other numbers.
     await tx
       .update(recordSummaries)
       .set({
@@ -1729,10 +1768,8 @@ export async function releaseInvoiceSet(
         entityId: recordId,
         before: { invNo: rec.invNo, disNo: rec.disNo, dnNo: rec.dnNo, documents: deleted },
         after: {
-          invNo: null,
-          disNo: null,
-          dnNo: null,
-          invoiceDeleted: true,
+          ...Object.fromEntries(Object.entries(cleared).filter(([k]) => k.endsWith('No'))),
+          invoiceDeleted: only ?? true,
           released,
           reassignedTo: reassigned.flatMap((r) =>
             r.numbers
@@ -1740,7 +1777,7 @@ export async function releaseInvoiceSet(
               .map((n) => ({ number: n.number, declareNo: r.declareNo })),
           ),
         },
-        reason: `Invoice deleted for ${rec.declareNo}: ${reason}`,
+        reason: `${label} deleted for ${rec.declareNo}: ${reason}`,
       },
       req,
     );

@@ -277,6 +277,8 @@ export const shipmentInputSchema = z
     etdPort: optText(120),
     quantity: decimal(3, { min: 0 }),
     quantityUnit: optText(20),
+    /** Blank = the invoice lines' CBM total. */
+    cbm: decimal(3, { min: 0 }),
     material: optText(60),
     bookingNo: optText(60),
     hblNo: optText(60),
@@ -481,6 +483,8 @@ export interface ShipmentDetail {
   etdPort: string | null;
   quantity: string | null;
   quantityUnit: string | null;
+  /** As typed on the plan; null = the invoice lines' CBM total. */
+  cbm: string | null;
   material: string | null;
   incoterm: Incoterm | null;
   bookingNo: string | null;

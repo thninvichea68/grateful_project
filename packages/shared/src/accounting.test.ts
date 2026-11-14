@@ -3,6 +3,7 @@ import {
   computeLedger,
   computeTaxDocument,
   computeTaxLine,
+  invoiceIssueDate,
   nextBusinessDay,
   computeLinesTotal,
   chargeLineAmount,
@@ -184,6 +185,21 @@ describe('nextBusinessDay', () => {
     expect(nextBusinessDay('2026-12-31', hol).date).toBe('2027-01-04'));
   it('year end: Mon 28 Dec 2026 → Wed 30 Dec (Peace Day 29 Dec)', () =>
     expect(nextBusinessDay('2026-12-28', hol).date).toBe('2026-12-30'));
+});
+
+describe('invoiceIssueDate', () => {
+  it('the next working day inside the month (Fri 23 Oct → Mon 26 Oct)', () =>
+    expect(invoiceIssueDate('2026-10-23').date).toBe('2026-10-26'));
+  it('skips holidays inside the month (Fri 9 Oct → Tue 13 Oct, Pchum Ben)', () =>
+    expect(invoiceIssueDate('2026-10-09', new Set(['2026-10-12'])).date).toBe('2026-10-13'));
+  it('cleared on the last day (Sat 31 Oct) keeps that day, a Saturday', () =>
+    expect(invoiceIssueDate('2026-10-31')).toEqual({ date: '2026-10-31', weekday: 'Saturday' }));
+  it('Fri 30 Oct with the 31st a Saturday keeps 30 Oct, not Mon 2 Nov', () =>
+    expect(invoiceIssueDate('2026-10-30').date).toBe('2026-10-30'));
+  it('Thu 30 Apr with 1 May off keeps 30 Apr', () =>
+    expect(invoiceIssueDate('2026-04-30', new Set(['2026-05-01'])).date).toBe('2026-04-30'));
+  it('year end: Thu 31 Dec keeps 31 Dec', () =>
+    expect(invoiceIssueDate('2026-12-31').date).toBe('2026-12-31'));
 });
 
 describe('cut stock', () => {

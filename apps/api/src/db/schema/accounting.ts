@@ -170,6 +170,8 @@ export const taxInvoices = pgTable('tax_invoices', {
   hbl: text('hbl'),
   pkgs: text('pkgs'),
   pkgsUnit: text('pkgs_unit'),
+  /** Last edited after it was issued ("Revised" in Bill to Clients). */
+  revisedAt: timestamp('revised_at', { withTimezone: true }),
   subtotal: money('subtotal').notNull().default('0'),
   vat: money('vat').notNull().default('0'),
   total: money('total').notNull().default('0'),
@@ -218,6 +220,8 @@ export const disbursements = pgTable(
     hbl: text('hbl'),
     pkgs: text('pkgs'),
     pkgsUnit: text('pkgs_unit'),
+    /** Last edited after it was issued ("Revised" in Bill to Clients). */
+    revisedAt: timestamp('revised_at', { withTimezone: true }),
     total: money('total').notNull().default('0'),
     totalKhr: khr('total_khr').notNull().default('0'),
   },
@@ -258,6 +262,8 @@ export const debitNotes = pgTable('debit_notes', {
   hbl: text('hbl'),
   pkgs: text('pkgs'),
   pkgsUnit: text('pkgs_unit'),
+  /** Last edited after it was issued ("Revised" in Bill to Clients). */
+  revisedAt: timestamp('revised_at', { withTimezone: true }),
   total: money('total').notNull().default('0'),
 });
 
@@ -347,6 +353,8 @@ export const recordSummaryLines = pgTable(
     recordSummaryId: uuid('record_summary_id')
       .notNull()
       .references(() => recordSummaries.id, { onDelete: 'cascade' }),
+    /** The bill the line goes on: INV (Tax), DIS or DN. Null on older lines (the rule decides). */
+    ledgerType: text('ledger_type'),
   },
   (t) => [
     index('record_summary_lines_doc_idx').on(t.recordSummaryId),

@@ -1,0 +1,1 @@
+ALTER TABLE "shipments" ADD COLUMN "cbm" numeric(14, 3);

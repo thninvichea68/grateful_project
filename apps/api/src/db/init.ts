@@ -164,23 +164,19 @@ async function main() {
     .insert(s.users)
     .values({ email, fullName, passwordHash: await bcrypt.hash(password, 12), roleId: role!.id })
     .returning({ id: s.users.id });
-  await db
-    .insert(s.staffProfiles)
-    .values({
-      userId: u!.id,
-      jobTitle: 'Administrator',
-      department: 'Management',
-      joinedOn: new Date().toISOString().slice(0, 10),
-    });
-  await db
-    .insert(s.auditLog)
-    .values({
-      userId: u!.id,
-      action: 'CREATE',
-      entity: 'user',
-      entityId: u!.id,
-      after: { email, fullName, role: 'ADMIN', via: 'db:init' },
-    });
+  await db.insert(s.staffProfiles).values({
+    userId: u!.id,
+    jobTitle: 'Administrator',
+    department: 'Management',
+    joinedOn: new Date().toISOString().slice(0, 10),
+  });
+  await db.insert(s.auditLog).values({
+    userId: u!.id,
+    action: 'CREATE',
+    entity: 'user',
+    entityId: u!.id,
+    after: { email, fullName, role: 'ADMIN', via: 'db:init' },
+  });
   console.log(`\n✔ Admin ${email} created. Sign in and add your team under Staff Management.`);
 }
 

@@ -25,6 +25,7 @@ import {
   shipments,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
+import { shipmentCbm } from '../../lib/shipmentCbm';
 import { issueDateFor } from '../../lib/issueDate';
 import { badRequest, businessRule, conflict, notFound } from '../../lib/errors';
 import {
@@ -258,7 +259,7 @@ export async function creditNoteDeclarations(
            (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
            (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
            coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS "grossWeightKg",
-           coalesce((SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS cbm,
+           ${shipmentCbm()}::text AS cbm,
            (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id)
@@ -491,7 +492,8 @@ export async function eligibleRecords(
 
 /**
  * Declarations on the shipping plans a record summary can start from, newest first: any with
- * a declare no., in the Monthly Ledger or not yet, and no live record summary.
+ * a declare no., in the Monthly Ledger or not yet, and no live record summary; and shipments
+ * not declared yet, found by their reference.
  */
 export async function recordSummaryShipments(
   clientIds?: string[],
@@ -500,16 +502,20 @@ export async function recordSummaryShipments(
   return queryRows<RecordSummaryShipment>(
     db,
     sql`
-    SELECT a.id AS "recordId", d.id AS "declarationId", d.declare_no AS "declareNo",
+    SELECT a.id AS "recordId", d.id AS "declarationId", s.id AS "shipmentId", d.declare_no AS "declareNo",
            to_char(d.declare_date, 'YYYY-MM-DD') AS "declareDate", c.id AS "clientId", c.code AS "clientCode",
-           a.inv_no AS number, s.direction, s.hbl_no AS hbl
-    FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL
-    JOIN clients c ON c.id = s.client_id LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
-    WHERE d.declare_no IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM record_summaries x WHERE x.status <> 'VOID'
+           a.inv_no AS number, s.direction, s.hbl_no AS hbl, s.reference AS "shipmentReference"
+    FROM shipments s JOIN clients c ON c.id = s.client_id
+    LEFT JOIN customs_declarations d ON d.shipment_id = s.id AND d.declare_no IS NOT NULL
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
+    WHERE s.deleted_at IS NULL
+      -- A shipment not declared yet is listed once, by its reference.
+      AND (d.id IS NOT NULL OR NOT EXISTS (SELECT 1 FROM customs_declarations y
+                                           WHERE y.shipment_id = s.id AND y.declare_no IS NOT NULL))
+      AND (d.id IS NULL OR NOT EXISTS (SELECT 1 FROM record_summaries x WHERE x.status <> 'VOID'
         AND (x.accounting_record_id = a.id
-          OR (x.client_id = s.client_id AND upper(x.declare_no) = upper(d.declare_no))))
+          OR (x.client_id = s.client_id AND upper(x.declare_no) = upper(d.declare_no)))))
       ${scoped ? sql`AND ${scoped}` : sql``}
-    ORDER BY d.declare_date DESC, d.declare_no LIMIT 500`,
+    ORDER BY coalesce(d.declare_date, s.created_at::date) DESC, d.declare_no, s.reference LIMIT 500`,
   );
 }

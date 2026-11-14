@@ -52,6 +52,7 @@ import {
   toPaginated,
   whereAll,
 } from '../../lib/listing';
+import { shipmentCbm, syncBillCbm } from '../../lib/shipmentCbm';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { applyClearanceDate } from '../accounting/docs';
 import { recomputeShipmentStatuses } from '../../db/shipmentStatus';
@@ -117,7 +118,7 @@ const listSelect = (extra: SQL = sql``) => sql`
          to_char(s.thc_hbl_date, 'YYYY-MM-DD') AS "thcHblDate", s.thc_hbl_amount::text AS "thcHblAmount", s.remark,
          coalesce(inv.invoice_nos, '{}') AS "invoiceNos", to_char(inv.invoice_date, 'YYYY-MM-DD') AS "invoiceDate",
          coalesce(ct.items, '[]'::json) AS containers, coalesce(dc.items, '[]'::json) AS declarations,
-         json_build_object('pcs', tot.pcs::text, 'ctns', tot.ctns::text, 'cbm', tot.cbm::text, 'netWeightKg', tot.nw::text,
+         json_build_object('pcs', tot.pcs::text, 'ctns', tot.ctns::text, 'cbm', coalesce(s.cbm, tot.cbm)::text, 'netWeightKg', tot.nw::text,
                            'grossWeightKg', tot.gw::text, 'fob', tot.fob::text) AS totals,
          fl.first_line AS "firstLine"
          ${extra}
@@ -232,7 +233,10 @@ const PLAN_COLUMNS: FilterColumns = {
   coStatus: text('s.co_status'),
   netWeight: total('net_weight_kg'),
   grossWeight: total('gross_weight_kg'),
-  cbm: total('cbm'),
+  cbm: (() => {
+    const order = shipmentCbm();
+    return { value: sql`${order}::text`, order };
+  })(),
   qtyPcs: total('pcs'),
   ctns: total('ctns'),
   totalFob: total('fob_amount'),
@@ -413,6 +417,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     etdPort: r.etdPort,
     quantity: r.quantity,
     quantityUnit: r.quantityUnit,
+    cbm: r.cbm,
     material: r.material,
     incoterm: r.incoterm as Incoterm | null,
     bookingNo: r.bookingNo,
@@ -640,19 +645,16 @@ async function writeChildren(
       .insert(containers)
       .values(input.containers.map((c, i) => ({ ...c, shipmentId, sortOrder: i })));
   }
-  const stock = await checkCutStock(
-    tx,
-    (
-      await tx.select({ c: shipments.clientId }).from(shipments).where(eq(shipments.id, shipmentId))
-    )[0]!.c,
-    input,
-    actor,
-  );
+  const clientId = (
+    await tx.select({ c: shipments.clientId }).from(shipments).where(eq(shipments.id, shipmentId))
+  )[0]!.c;
+  const stock = await checkCutStock(tx, clientId, input, actor);
   for (const [i, inv] of input.invoices.entries()) {
     const [row] = await tx
       .insert(cargoInvoices)
       .values({
         shipmentId,
+        clientId,
         invoiceNo: inv.invoiceNo,
         invoiceDate: inv.invoiceDate,
         description: inv.description,
@@ -703,10 +705,16 @@ function mapUniqueViolation(err: unknown): never {
     (err as { code?: string; constraint?: string; detail?: string });
   if (cause?.code === '23505') {
     const value = /\)=\((.*)\)/.exec(cause.detail ?? '')?.[1];
-    if (cause.constraint === 'cargo_invoices_invoice_no_unique')
+    if (cause.constraint === 'cargo_invoices_client_invoice_no_unique') {
+      // detail is "(client_id, upper(invoice_no))=(<uuid>, <NO>)": show the number only.
+      const no = value?.split(', ').slice(1).join(', ');
       throw conflict(
-        `Invoice no. ${value ?? ''} is already used on another shipment`.replace('  ', ' '),
+        `Invoice no. ${no ?? ''} is already used on another shipment of this factory`.replace(
+          '  ',
+          ' ',
+        ),
       );
+    }
     if (cause.constraint === 'customs_declarations_declare_no_unique')
       throw conflict(`Declaration ${value ?? ''} is already recorded on another shipment`);
   }
@@ -907,6 +915,8 @@ export async function updateShipment(
         if (old && old.declareDate !== d.declareDate)
           await applyClearanceDate(tx, old.id, old.declareDate, req);
       }
+      // The bills to the client print the plan's CBM.
+      await syncBillCbm(tx, id, req);
       await audit(
         tx,
         { action: 'UPDATE', entity: 'shipment', entityId: id, before, after: input },
@@ -954,8 +964,12 @@ export async function deleteShipment(id: string, req: Request): Promise<void> {
   });
 }
 
-/** Which of these invoice numbers already exist on (non-deleted) shipments. */
+/**
+ * Which of these invoice numbers the factory already uses on (non-deleted) shipments.
+ * Another factory may use the same number.
+ */
 export async function existingInvoiceNumbers(
+  clientId: string,
   nos: string[],
   exceptShipmentId?: string,
 ): Promise<Map<string, string>> {
@@ -967,7 +981,7 @@ export async function existingInvoiceNumbers(
     WHERE upper(ci.invoice_no) IN (${sql.join(
       nos.map((n) => sql`${n.toUpperCase()}`),
       sql`, `,
-    )}) AND s.deleted_at IS NULL
+    )}) AND ci.client_id = ${clientId} AND s.deleted_at IS NULL
       ${exceptShipmentId ? sql`AND s.id <> ${exceptShipmentId}` : sql``}`,
   );
   return new Map(rows.map((r) => [r.invoice_no.toUpperCase(), r.reference]));

@@ -78,8 +78,11 @@ describe('Record Summary', () => {
 
   it('labels the number BL NO or HAWB NO as chosen; an untyped one by its freight', () => {
     const label = (header: object) =>
-      recordSummaryHeader({ ...doc, header: { ...doc.header, ...header } } as BillingDoc, '', '')
-        .find(([, v]) => v === '274995778')?.[0];
+      recordSummaryHeader(
+        { ...doc, header: { ...doc.header, ...header } } as BillingDoc,
+        '',
+        '',
+      ).find(([, v]) => v === '274995778')?.[0];
     expect(label({})).toBe('BL NO:');
     expect(label({ refType: 'HAWB_NO' })).toBe('HAWB NO:');
     expect(label({ transportMode: 'AIR' })).toBe('HAWB NO:');
