@@ -190,6 +190,55 @@
   margin-top: calc(4px + 1.55em);
 }
 
+/* ---------- November 2026 layout (documents dated from LAYOUT_2_FROM) ---------- */
+/* Even margins all round. */
+.sheet2 {
+  padding: 12mm 12mm 10mm !important;
+}
+/* The header: one grid, left label | left value | right label | right value, so each line
+   on the right sits on the same row as its partner on the left. */
+.hdr {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  column-gap: 8px;
+  row-gap: 3px;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 9pt;
+  line-height: 1.5;
+}
+.hdrCustomer {
+  grid-column: 1 / 3;
+  align-self: start;
+  min-width: 0;
+  line-height: 1.55;
+  margin-bottom: 2px;
+}
+/* A label: "SHIPPER :". */
+.hk {
+  white-space: nowrap;
+}
+.hk::after {
+  content: ' :';
+}
+/* The right side's labels, with room between the two sides. */
+.hkRight {
+  grid-column: 3;
+  padding-left: 28px;
+}
+.hv {
+  min-width: 0;
+  word-break: break-word;
+}
+.hv b {
+  font-weight: 700;
+}
+/* A whole line on the left (the VATTIN), in place of a label and value. */
+.hLine {
+  grid-column: 1 / 3;
+  min-width: 0;
+}
+
 /* ---------- Lines and totals (same fixed columns) ---------- */
 .lines,
 .totals {

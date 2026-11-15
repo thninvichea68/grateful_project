@@ -177,7 +177,7 @@ export default function RowPreviewModal({
 
 function Sheet({ d, children }: { d: BillingDoc; children: ReactNode }) {
   return (
-    <div className={`${sheetClass(d.type)} ${v.sheet}`}>
+    <div className={`${sheetClass(d.type, d.date)} ${v.sheet}`}>
       {d.status === 'DRAFT' && <div className={s.stamp}>DRAFT</div>}
       {children}
     </div>

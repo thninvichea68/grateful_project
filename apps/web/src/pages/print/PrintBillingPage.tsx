@@ -110,7 +110,7 @@ export function PrintPackPage() {
         {d.docs.length ? (
           <div className={p.pack}>
             {d.docs.map((doc) => (
-              <div className={sheetClass(doc.type)} key={doc.id}>
+              <div className={sheetClass(doc.type, doc.date)} key={doc.id}>
                 {doc.status === 'DRAFT' && <div className={s.stamp}>DRAFT</div>}
                 {doc.type === 'debit-notes' ? (
                   <DebitNote d={doc} c={c} />
@@ -131,7 +131,7 @@ export function PrintPackPage() {
   if (on('docs'))
     for (const doc of d.docs)
       sheets.push(
-        <div className={sheetClass(doc.type)} key={doc.id}>
+        <div className={sheetClass(doc.type, doc.date)} key={doc.id}>
           {doc.status === 'DRAFT' && <div className={s.stamp}>DRAFT</div>}
           {doc.type === 'debit-notes' ? (
             <DebitNote d={doc} c={c} />

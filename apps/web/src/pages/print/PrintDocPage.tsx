@@ -52,7 +52,7 @@ export function PrintDocPage() {
           Print / Save as PDF
         </button>
       </div>
-      <div className={sheetClass(d.type)}>
+      <div className={sheetClass(d.type, d.date)}>
         {d.status !== 'ISSUED' && (
           <div className={s.stamp}>{d.status === 'VOID' ? 'CANCELLED' : d.status}</div>
         )}

@@ -7,7 +7,7 @@ import {
   type BillingDoc,
   type BillingDocType,
 } from '@gs/shared';
-import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { CompanyInfo } from '../../features/accounting';
 import './printFonts';
 import s from './print.module.css';
@@ -97,14 +97,114 @@ const volume = (d: BillingDoc) => {
     return containerUnit(h(d, 'containerSize'));
   return cbm(h(d, 'volumeCbm'));
 };
+/** A label and its value. */
+type Pair = [ReactNode, ReactNode];
+
+/** The shipment's details on the right: weight, volume, container / flight, ports. */
+const shipRight = (d: BillingDoc): Pair[] => {
+  const air = h(d, 'transportMode') === 'AIR';
+  return [
+    ['GROSS WEIGHT', kgs(h(d, 'grossWeightKg'))],
+    ['VOLUME', volume(d)],
+    [
+      air ? 'FLIGHT NO' : 'CTNR NO',
+      air ? (h(d, 'containerNo') || h(d, 'flightNo')).toUpperCase() : container(d),
+    ],
+    ['POL', h(d, 'pol').toUpperCase()],
+    ['POD', h(d, 'pod').toUpperCase()],
+  ];
+};
+const shipLeft = (d: BillingDoc): Pair[] => [
+  ['SHIPPER', h(d, 'shipper')],
+  ['CONSIGNEE', h(d, 'consignee')],
+  ['HBL', h(d, 'hbl')],
+  ['QUANTITY', pkgs(d)],
+];
+
+/**
+ * The header of the November 2026 layout, one grid of four columns (left label, left value,
+ * right label, right value), so a line on the right always sits on the same row as its partner
+ * on the left (GROSS WEIGHT beside VATTIN, VOLUME beside SHIPPER…) and every value on a side
+ * starts at the same point. `customer` fills the top left beside the number and date; `pairs`
+ * are the rows under it: the left side is a label : value pair or a whole line (VATTIN).
+ */
+function HeaderGrid({
+  customer,
+  top,
+  pairs,
+}: {
+  customer: ReactNode;
+  top: Pair[];
+  pairs: { left?: Pair | ReactNode; right?: Pair }[];
+}) {
+  const first = top.length + 2;
+  return (
+    <div className={p.hdr} style={{ gridTemplateRows: `repeat(${top.length}, auto) 1fr` }}>
+      <div className={p.hdrCustomer} style={{ gridRow: `1 / ${first}` }}>
+        {customer}
+      </div>
+      {top.map(([k, v], i) => (
+        <Fragment key={`t${i}`}>
+          <div className={`${p.hk} ${p.hkRight}`} style={{ gridRow: i + 1 }}>
+            {k}
+          </div>
+          <div className={p.hv} style={{ gridRow: i + 1, gridColumn: 4 }}>
+            {v}
+          </div>
+        </Fragment>
+      ))}
+      {pairs.map(({ left, right }, i) => {
+        const row = first + i;
+        return (
+          <Fragment key={`p${i}`}>
+            {Array.isArray(left) ? (
+              <>
+                <div className={p.hk} style={{ gridRow: row, gridColumn: 1 }}>
+                  {left[0]}
+                </div>
+                <div className={p.hv} style={{ gridRow: row, gridColumn: 2 }}>
+                  {left[1]}
+                </div>
+              </>
+            ) : left ? (
+              <div className={p.hLine} style={{ gridRow: row }}>
+                {left}
+              </div>
+            ) : null}
+            {right && (
+              <>
+                <div className={`${p.hk} ${p.hkRight}`} style={{ gridRow: row }}>
+                  {right[0]}
+                </div>
+                <div className={p.hv} style={{ gridRow: row, gridColumn: 4 }}>
+                  {right[1]}
+                </div>
+              </>
+            )}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 1 → "1", 3.3 → "3.3" (the debit note's Q'TY column). */
 const plain = (v: string | number) =>
   Number(v).toLocaleString('en-US', { maximumFractionDigits: 3 });
 
+/**
+ * Documents dated from November 2026 print in the newer layout: even margins, and the details
+ * on both sides as label : value columns, left-aligned. Older ones keep the engine's layout.
+ */
+export const LAYOUT_2_FROM = '2026-11-01';
+export const isLayout2 = (date: string | null | undefined) => !!date && date >= LAYOUT_2_FROM;
+
 /** The sheet's class: these three use the engine's own paper (padding and fonts). */
-export function sheetClass(type: BillingDocType): string {
-  if (type === 'tax-invoices' || type === 'disbursements') return `${s.sheet} ${p.sheetInvoice}`;
-  if (type === 'debit-notes') return `${s.sheet} ${p.sheetDn}`;
+export function sheetClass(type: BillingDocType, date?: string | null): string {
+  const two = isLayout2(date) ? ` ${p.sheet2}` : '';
+  if (type === 'tax-invoices' || type === 'disbursements')
+    return `${s.sheet} ${p.sheetInvoice}${two}`;
+  if (type === 'debit-notes') return `${s.sheet} ${p.sheetDn}${two}`;
   // Credit notes and record summaries: narrow side margins.
   return `${s.sheet} ${p.sheetNarrow}`;
 }
@@ -166,48 +266,97 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
         <div className={p.titleEn}>{tax ? 'TAX INVOICE' : 'DISBURSEMENT'}</div>
       </div>
 
-      <div className={p.meta}>
-        <div>
-          <FitLine>
-            <span className={p.lblMuol}>ឈ្មោះអតិថិជន</span>
-            <span className={p.custLbl}> / Customer:</span>
-            <span className={p.custKm}>{h(d, 'customerNameKm')}</span>
-          </FitLine>
-          <div className={p.custEn}>{h(d, 'customerNameEn')}</div>
+      {isLayout2(d.date) ? (
+        <HeaderGrid
+          customer={
+            <>
+              <FitLine>
+                <span className={p.lblMuol}>ឈ្មោះអតិថិជន</span>
+                <span className={p.custLbl}> / Customer:</span>
+                <span className={p.custKm}>{h(d, 'customerNameKm')}</span>
+              </FitLine>
+              <div className={p.custEn}>{h(d, 'customerNameEn')}</div>
+              <div>
+                <span className={p.metaLbl}>អាស័យដ្ឋាន / Address:</span>{' '}
+                <span className={p.metaVal}>{keepCity(h(d, 'customerAddress'))}</span>
+              </div>
+            </>
+          }
+          top={[
+            [
+              tax ? 'លេខវិក្កយបត្រ / Invoice No' : 'លេខវិក្កយបត្រ / DIS-No',
+              <b key="n">{d.number}</b>,
+            ],
+            [tax ? 'កាលបរិច្ឆេទ / Invoice Date' : 'កាលបរិច្ឆេទ / DIS-Date', longDate(d.date)],
+          ]}
+          // GROSS WEIGHT on the VATTIN line, then each shipment line beside its partner;
+          // the exchange rate on the line under QUANTITY.
+          pairs={(() => {
+            const left = shipLeft(d);
+            const right = shipRight(d);
+            return [
+              {
+                left: (
+                  <>
+                    <span className={p.metaLbl}>លេខ អតប (VATTIN) :</span>{' '}
+                    <span className={p.metaVal}>{h(d, 'customerVattin')}</span>
+                  </>
+                ),
+                right: right[0],
+              },
+              ...left.map((l, i) => ({ left: l, right: right[i + 1] })),
+              { right: ['Exchange Rate', `1 USD = ${riel(h(d, 'exchangeRate'))} KHR`] as Pair },
+            ];
+          })()}
+        />
+      ) : (
+        <div className={p.meta}>
           <div>
-            <span className={p.metaLbl}>អាស័យដ្ឋាន / Address:</span>{' '}
-            <span className={p.metaVal}>{keepCity(h(d, 'customerAddress'))}</span>
+            <FitLine>
+              <span className={p.lblMuol}>ឈ្មោះអតិថិជន</span>
+              <span className={p.custLbl}> / Customer:</span>
+              <span className={p.custKm}>{h(d, 'customerNameKm')}</span>
+            </FitLine>
+            <div className={p.custEn}>{h(d, 'customerNameEn')}</div>
+            <div>
+              <span className={p.metaLbl}>អាស័យដ្ឋាន / Address:</span>{' '}
+              <span className={p.metaVal}>{keepCity(h(d, 'customerAddress'))}</span>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <span className={p.metaLbl}>លេខ អតប (VATTIN) :</span>{' '}
+              <span className={p.metaVal}>{h(d, 'customerVattin')}</span>
+            </div>
+            <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
+            <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
+            <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
+            <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
           </div>
-          <div style={{ marginTop: 4 }}>
-            <span className={p.metaLbl}>លេខ អតប (VATTIN) :</span>{' '}
-            <span className={p.metaVal}>{h(d, 'customerVattin')}</span>
+          <div className={p.metaRight}>
+            <div>
+              <span className={p.metaLbl}>
+                {tax ? 'លេខវិក្កយបត្រ / Invoice No:' : 'លេខវិក្កយបត្រ / DIS-No:'}
+              </span>{' '}
+              <span className={p.metaVal}>{d.number}</span>
+            </div>
+            <div>
+              <span className={p.metaLbl}>
+                {tax
+                  ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date:'
+                  : 'កាលបរិច្ឆេទវិក្កយបត្រ / DIS-Date:'}
+              </span>{' '}
+              <span className={p.metaVal}>{longDate(d.date)}</span>
+            </div>
+            <div className={`${p.ship} ${p.shipGap}`}>
+              GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}
+            </div>
+            <div className={p.ship}>VOLUME: {volume(d)}</div>
+            <div className={p.ship}>{ctnrLine(d)}</div>
+            <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
+            <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
+            <div className={p.ship}>Exchange Rate: 1USD = {riel(h(d, 'exchangeRate'))} KHR</div>
           </div>
-          <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
-          <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
-          <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-          <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
         </div>
-        <div className={p.metaRight}>
-          <div>
-            <span className={p.metaLbl}>
-              {tax ? 'លេខវិក្កយបត្រ / Invoice No:' : 'លេខវិក្កយបត្រ / DIS-No:'}
-            </span>{' '}
-            <span className={p.metaVal}>{d.number}</span>
-          </div>
-          <div>
-            <span className={p.metaLbl}>
-              {tax ? 'កាលបរិច្ឆេទវិក្កយបត្រ / Invoice Date:' : 'កាលបរិច្ឆេទវិក្កយបត្រ / DIS-Date:'}
-            </span>{' '}
-            <span className={p.metaVal}>{longDate(d.date)}</span>
-          </div>
-          <div className={`${p.ship} ${p.shipGap}`}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
-          <div className={p.ship}>VOLUME: {volume(d)}</div>
-          <div className={p.ship}>{ctnrLine(d)}</div>
-          <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
-          <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
-          <div className={p.ship}>Exchange Rate: 1USD = {riel(h(d, 'exchangeRate'))} KHR</div>
-        </div>
-      </div>
+      )}
 
       <table className={p.lines}>
         <ColGroup />
@@ -390,47 +539,80 @@ export function DebitNote({ d }: { d: BillingDoc; c?: CompanyInfo }) {
   return (
     <>
       <div className={p.dnHeadline}>DEBIT NOTE</div>
-      {/* Laid out like the tax invoice's details, in English only. */}
-      <div className={`${p.meta} ${p.dnMeta}`}>
-        <div>
-          <div>
-            <span className={p.custLbl}>Customer: </span>
-            <span className={p.custEn}>{h(d, 'billTo')}</span>
-          </div>
-          <div>
-            <span className={p.metaLbl}>Address:</span>{' '}
-            <span className={p.metaVal}>{h(d, 'address')}</span>
-          </div>
-          {shipment ? (
-            <>
-              <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
-              <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
-              <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
-              <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
-            </>
-          ) : (
-            <div className={p.ship}>CHARGE: {h(d, 'reference')}</div>
-          )}
+      {isLayout2(d.date) ? (
+        <div className={p.dnMeta}>
+          <HeaderGrid
+            customer={
+              <>
+                <div>
+                  <span className={p.custLbl}>Customer: </span>
+                  <span className={p.custEn}>{h(d, 'billTo')}</span>
+                </div>
+                <div>
+                  <span className={p.metaLbl}>Address:</span>{' '}
+                  <span className={p.metaVal}>{h(d, 'address')}</span>
+                </div>
+              </>
+            }
+            top={[
+              ['DN No', <b key="n">{d.number}</b>],
+              ['DN Date', longDate(d.date)],
+            ]}
+            // No VATTIN line: GROSS WEIGHT beside SHIPPER, then each line beside its partner.
+            pairs={
+              shipment
+                ? (() => {
+                    const left = shipLeft(d);
+                    const right = shipRight(d);
+                    return right.map((r, i) => ({ left: left[i], right: r }));
+                  })()
+                : [{ left: ['CHARGE', h(d, 'reference')] as Pair }]
+            }
+          />
         </div>
-        <div className={p.metaRight}>
+      ) : (
+        <div className={`${p.meta} ${p.dnMeta}`}>
           <div>
-            <span className={p.metaLbl}>DN No:</span> <span className={p.metaVal}>{d.number}</span>
+            <div>
+              <span className={p.custLbl}>Customer: </span>
+              <span className={p.custEn}>{h(d, 'billTo')}</span>
+            </div>
+            <div>
+              <span className={p.metaLbl}>Address:</span>{' '}
+              <span className={p.metaVal}>{h(d, 'address')}</span>
+            </div>
+            {shipment ? (
+              <>
+                <div className={p.ship}>SHIPPER: {h(d, 'shipper')}</div>
+                <div className={p.ship}>CONSIGNEE: {h(d, 'consignee')}</div>
+                <div className={p.ship}>HBL: {h(d, 'hbl')}</div>
+                <div className={p.ship}>QUANTITY: {pkgs(d)}</div>
+              </>
+            ) : (
+              <div className={p.ship}>CHARGE: {h(d, 'reference')}</div>
+            )}
           </div>
-          <div>
-            <span className={p.metaLbl}>DN Date:</span>{' '}
-            <span className={p.metaVal}>{longDate(d.date)}</span>
+          <div className={p.metaRight}>
+            <div>
+              <span className={p.metaLbl}>DN No:</span>{' '}
+              <span className={p.metaVal}>{d.number}</span>
+            </div>
+            <div>
+              <span className={p.metaLbl}>DN Date:</span>{' '}
+              <span className={p.metaVal}>{longDate(d.date)}</span>
+            </div>
+            {shipment && (
+              <>
+                <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
+                <div className={p.ship}>VOLUME: {volume(d)}</div>
+                <div className={p.ship}>{ctnrLine(d)}</div>
+                <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
+                <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
+              </>
+            )}
           </div>
-          {shipment && (
-            <>
-              <div className={p.ship}>GROSS WEIGHT: {kgs(h(d, 'grossWeightKg'))}</div>
-              <div className={p.ship}>VOLUME: {volume(d)}</div>
-              <div className={p.ship}>{ctnrLine(d)}</div>
-              <div className={p.ship}>POL: {h(d, 'pol').toUpperCase()}</div>
-              <div className={p.ship}>POD: {h(d, 'pod').toUpperCase()}</div>
-            </>
-          )}
         </div>
-      </div>
+      )}
 
       <table className={p.dnTable}>
         <thead>
