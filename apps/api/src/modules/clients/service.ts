@@ -178,6 +178,13 @@ export async function updateClient(
     if (patch.commissionUsd === null) delete patch.commissionUsd;
     const [after] = await tx.update(clients).set(patch).where(eq(clients.id, id)).returning();
     if (after!.legalName !== before.legalName) await ensureOwnConsignee(tx, id, after!.legalName);
+    // The tax invoices and DIS print the client's VATTIN: a new one reaches every one that is
+    // not cancelled, drafts and issued alike.
+    if (after!.vattin !== before.vattin)
+      for (const table of [sql`tax_invoices`, sql`disbursements`])
+        await tx.execute(
+          sql`UPDATE ${table} SET customer_vattin = ${after!.vattin} WHERE client_id = ${id} AND status <> 'VOID'`,
+        );
     await audit(tx, { action: 'UPDATE', entity: 'client', entityId: id, before, after }, req);
   });
 }

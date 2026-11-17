@@ -374,6 +374,16 @@ function headerValues(type: BillingDocType, input: Input) {
   return values;
 }
 
+/**
+ * The documents that print the customer's VATTIN: always the client's, never typed (a change
+ * on the client reaches them through updateClient).
+ */
+const VATTIN_TYPES: BillingDocType[] = ['tax-invoices', 'disbursements'];
+
+function withClientVattin(type: BillingDocType, values: Row, client: { vattin: string | null }) {
+  if (VATTIN_TYPES.includes(type)) values.customerVattin = client.vattin;
+}
+
 /** A bill of a shipment always shows its shipping plan's CBM; one without a shipment keeps its own. */
 async function withPlanCbm(tx: Tx, type: BillingDocType, input: Input, values: Row): Promise<void> {
   const cbm = await planCbm(
@@ -422,6 +432,7 @@ export async function createDoc(type: BillingDocType, typed: Input, req: Request
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
+      withClientVattin(type, values, client);
       await withPlanCbm(tx, type, input, values);
       if (isIssueDated(type)) {
         // Never typed: a shipment's document takes its Monthly Ledger number and date.
@@ -532,6 +543,7 @@ export async function updateDoc(
       const client = await loadClient(tx, input.clientId);
       await assertRecord(tx, input.accountingRecordId ?? null, input.clientId);
       const values = headerValues(type, input);
+      withClientVattin(type, values, client);
       await withPlanCbm(tx, type, input, values);
       const linked = isIssueDated(type) && !!input.accountingRecordId;
       if (isIssueDated(type)) values[cfg.numberCol!] = undefined; // never typed
@@ -745,12 +757,7 @@ export async function issueDoc(type: BillingDocType, id: string, req: Request): 
     // A DIS issued in a month before the declare month (the THC paid then) stays in that
     // month on its own row; the services follow the declare month.
     if (type === 'disbursements' && doc.accountingRecordId)
-      await separateIfIssuedEarly(
-        tx,
-        doc.accountingRecordId as string,
-        String(doc.disDate),
-        req,
-      );
+      await separateIfIssuedEarly(tx, doc.accountingRecordId as string, String(doc.disDate), req);
     await audit(
       tx,
       {

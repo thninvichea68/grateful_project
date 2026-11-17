@@ -392,7 +392,8 @@ function Editor({
     const locked =
       (f.name === cfg.numberField && (isShipmentDoc(type) || issuedEdit)) ||
       ((linked || issuedEdit) && (f.name === cfg.dateField || f.name === 'exchangeRate')) ||
-      planCbm(f.name);
+      planCbm(f.name) ||
+      f.name === 'customerVattin';
     const placeholder =
       f.name === cfg.numberField && isShipmentDoc(type) ? 'Given automatically' : f.placeholder;
     return (
@@ -439,9 +440,11 @@ function Editor({
             readOnly={locked}
             title={
               locked
-                ? issuedEdit
-                  ? 'Issued: use "Correct number / date" to change it'
-                  : 'From the Monthly Ledger'
+                ? f.name === 'customerVattin'
+                  ? "The client's VATTIN: change it on the client"
+                  : issuedEdit
+                    ? 'Issued: use "Correct number / date" to change it'
+                    : 'From the Monthly Ledger'
                 : undefined
             }
             {...register(f.name)}

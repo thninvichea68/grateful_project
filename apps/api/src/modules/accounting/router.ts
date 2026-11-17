@@ -33,6 +33,7 @@ import * as ledger from './ledger';
 import * as docs from './docs';
 import * as billing from './billing';
 import * as clearFee from './clearFeePayments';
+import { addMonthlyLedgerSheet } from './ledgerWorkbook';
 import { agencyCandidates, openAgencyLine, separateAgencyDis } from './agencyLine';
 import { db } from '../../db/client';
 import { clientPrefill, creditNotePrefill, prefill } from './prefill';
@@ -153,6 +154,20 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
     clientIds: scopeClients(req),
     pageSize: 100_000,
   });
+  const fileName = attachmentName(
+    `${q.month ? 'monthly' : q.year ? 'yearly' : 'full'}-ledger-${period}.xlsx`,
+  );
+  const xlsxType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  // A month: laid out as the accounts' LIST I & E workbook sheet.
+  if (q.month) {
+    const wb = new ExcelJS.Workbook();
+    addMonthlyLedgerSheet(wb, q.month, data, totals);
+    res.setHeader('Content-Type', xlsxType);
+    res.setHeader('Content-Disposition', fileName);
+    await wb.xlsx.write(res);
+    res.end();
+    return;
+  }
   // "VAT 10%" when every row has the same percent; just "VAT" across a rate change.
   const vatRates = new Set(data.map((r) => Number(r.vatRate)));
   const vatHeader = vatRates.size === 1 ? vatLabel([...vatRates][0]) : 'VAT';
@@ -203,14 +218,8 @@ accountingRouter.get('/ledger/export.xlsx', async (req, res) => {
   ]);
   t.font = { bold: true };
   for (let i = 8; i <= 16; i++) ws.getColumn(i).numFmt = '#,##0.00';
-  res.setHeader(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  );
-  res.setHeader(
-    'Content-Disposition',
-    attachmentName(`${q.month ? 'monthly' : q.year ? 'yearly' : 'full'}-ledger-${period}.xlsx`),
-  );
+  res.setHeader('Content-Type', xlsxType);
+  res.setHeader('Content-Disposition', fileName);
   await wb.xlsx.write(res);
   res.end();
 });

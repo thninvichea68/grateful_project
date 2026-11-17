@@ -422,6 +422,35 @@ describe('client billing: a client month', () => {
     expect(refs(statements.INVOICE.lines)).toEqual(['CXDU0264562', 'HEH2601282']);
     expect(refs(statements.DEBIT_NOTE.lines)).toEqual(['CXDU0264562', 'HEH2601282']);
   });
+
+  it("the tax invoice and DIS always carry the client's VATTIN", async () => {
+    const setVattin = async (vattin: string) =>
+      expect(
+        (
+          await request(app)
+            .patch(`/api/v1/clients/${b.jr.id}`)
+            .set(await as('ADMIN'))
+            .send({ vattin })
+        ).status,
+      ).toBe(200);
+    const vattinOf = async (type: string, id: string) =>
+      (await acc('get', `/docs/${type}/${id}`)).body.header.customerVattin;
+    await setVattin('L001-902401027');
+    const recordId = await shipment(b.jr.id, 'E 53016', '2026-09-02');
+    // A typed VATTIN is not kept: the client's is.
+    const pre = (await acc('get', '/docs/tax-invoices/prefill', { query: { recordId } })).body;
+    const inv = (
+      await acc('post', '/docs/tax-invoices', {
+        body: { ...pre, customerVattin: 'L001-902501613', lines: EXPORT_LINES['tax-invoices'] },
+      })
+    ).body;
+    expect(await vattinOf('tax-invoices', inv.id)).toBe('L001-902401027');
+    const dis = await issued('disbursements', recordId);
+    // A new VATTIN on the client reaches its documents, issued ones too.
+    await setVattin('L001-999999999');
+    expect(await vattinOf('tax-invoices', inv.id)).toBe('L001-999999999');
+    expect(await vattinOf('disbursements', dis.id)).toBe('L001-999999999');
+  });
 });
 
 describe('official receipts', () => {

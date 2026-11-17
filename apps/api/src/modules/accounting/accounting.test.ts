@@ -1,4 +1,5 @@
 import request from 'supertest';
+import ExcelJS from 'exceljs';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
@@ -170,9 +171,34 @@ describe('monthly ledger', () => {
     const xlsx = await request(app)
       .get('/api/v1/accounting/ledger/export.xlsx')
       .query({ month: '2026-08' })
-      .set(h);
+      .set(h)
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
     expect(xlsx.status).toBe(200);
     expect(xlsx.headers['content-disposition']).toContain('monthly-ledger-2026-08');
+    // A month is laid out as the accounts' LIST I & E sheet: sheet "08", header on row 2.
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(xlsx.body as ArrayBuffer);
+    const ws = book.getWorksheet('08')!;
+    expect(ws.getCell('E1').value).toBe('REVENUE & EXPENSE — AUGUST 2026');
+    expect(['A2', 'E2', 'H2', 'N2', 'S2', 'T2', 'V2'].map((a) => ws.getCell(a).value)).toEqual([
+      'CHEA\nPAYMENT',
+      'DECLARE/ INV F.W NO',
+      'INV',
+      'CLEAR\nFEE',
+      'REIM',
+      'VAT 10%',
+      'NET \nPROFIT',
+    ]);
+    expect(ws.getCell('A3').value).toBe('NOT YET');
+    expect(ws.getCell('E3').value).toBe('I 122050');
+    expect(ws.getCell('V3').value).toMatchObject({ result: 202.8 });
+    expect(ws.getCell('E4').value).toBe('TOTAL:');
+    expect(ws.getCell('V4').value).toMatchObject({ formula: 'SUBTOTAL(9,V3:V3)', result: 202.8 });
 
     // Whole year: both months together; another year has nothing.
     const y2026 = await request(app)
