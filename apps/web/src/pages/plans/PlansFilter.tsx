@@ -76,38 +76,6 @@ export function PlansFilter({
           </button>
         </div>
         <div className="filter-menu-body">
-<<<<<<< Updated upstream
-          <div className="filter-section">
-            <div className="filter-col">
-              <div className="filter-col-title">
-                <span>Status</span>
-              </div>
-              <div className="filter-seg-group">
-                {(
-                  [
-                    ['', 'All Shipment'],
-                    ['COMPLETED', 'Completed'],
-                    ['IN_PROGRESS', 'In Progress'],
-                    ['PENDING', 'Pending'],
-                    ['EXCEPTION', 'Exception'],
-                  ] as const
-                ).map(([v, l]) => (
-                  <label className="filter-seg-item" key={v}>
-                    <input
-                      type="radio"
-                      name="plansStatus"
-                      checked={draft.status === v}
-                      onChange={() => setDraft({ ...draft, status: v })}
-                    />
-                    <span className="seg-dot" />
-                    <span>{l}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-=======
->>>>>>> Stashed changes
           <div className="filter-section filter-expand-row">
             <label className="filter-check-item">
               <input

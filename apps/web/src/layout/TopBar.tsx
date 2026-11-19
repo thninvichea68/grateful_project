@@ -25,7 +25,7 @@ export function TopBar({ crumbs, onToggleMenu }: Props) {
   const overdue = counts.data?.overdueFollowUps ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
   const searchBox = useRef<HTMLDivElement>(null);
-  const shipmentSearch = pathname === '/plans';
+  const shipmentSearch = pathname === '/plans/import' || pathname === '/plans/export';
   const shipmentQuery = params.get('q') ?? '';
   const setShipmentQuery = (query: string) => {
     const next = new URLSearchParams(params);

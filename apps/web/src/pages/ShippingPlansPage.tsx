@@ -5,11 +5,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { useLookups, useShipmentColumnValues, useShipments } from '../features/hooks';
 import { ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
-<<<<<<< Updated upstream
-import { SearchBox } from '../components/SearchBox';
-import { MonthInput, currentMonth } from '../components/MonthInput';
-=======
->>>>>>> Stashed changes
+import { MonthInput } from '../components/MonthInput';
 import { HeaderFilter } from '../components/HeaderFilter';
 import { useHeaderFilters } from '../components/useHeaderFilters';
 import { useToast } from '../components/Toast';
@@ -20,11 +16,8 @@ import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS, type PlanColumn } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
-<<<<<<< Updated upstream
-=======
 import { CardToggle } from './dashboard/parts';
 import s from './ShippingPlansPage.module.css';
->>>>>>> Stashed changes
 
 const PREFS = 'gs:plans-view';
 const currentMonth = () =>
@@ -39,6 +32,7 @@ const STATUS_FILTERS: { value: '' | ShipmentStatus; label: string }[] = [
   { value: 'IN_PROGRESS', label: 'In progress' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'COMPLETED', label: 'Completed' },
+  { value: 'EXCEPTION', label: 'Exception' },
 ];
 
 function readPrefs(): { expandAll: boolean; frozen: string[] } {
@@ -63,7 +57,6 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   const [exporting, setExporting] = useState(false);
   const header = useHeaderFilters(params, setParams);
   const defaultMonth = currentMonth();
-
   // A plain visit (sidebar, or only direction/sort in the link) opens on this month.
   // Links that bring a search, client or status keep every month so their counts match.
   // "All months" is kept in the URL as month=all so Clear doesn't snap back.
@@ -79,19 +72,11 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
 
   const filters = {
     clientId: params.getAll('clientId'),
-<<<<<<< Updated upstream
     // Import Plans or Export Plans, from the route (the sidebar's Shipping Plans dropdown).
     direction,
-    status: (params.get('status') ?? '') as PlansFilterValue['status'],
+    status: (params.get('status') ?? '') as '' | ShipmentStatus,
     // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
     month: rawMonth === 'all' ? '' : (rawMonth ?? (autoMonth ? currentMonth() : '')),
-=======
-    // Always Import or Export (Import unless the link asks for Export).
-    direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
-    status: (params.get('status') ?? '') as '' | ShipmentStatus,
-    // Default to the current month; an explicitly empty month means all months.
-    month: params.get('month') ?? defaultMonth,
->>>>>>> Stashed changes
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
     // Newest customs clearance (declaration) date first, unless another order is picked.
@@ -121,8 +106,7 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
 
   const setParam = (k: string, v: string) => {
     const next = new URLSearchParams(params);
-    if (k === 'month' && !v) next.set(k, '');
-    else if (v) next.set(k, v);
+    if (v) next.set(k, v);
     else next.delete(k);
     if (k !== 'page') next.delete('page');
     setParams(next, { replace: k === 'q' });
@@ -235,47 +219,15 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
         <div className={s.controls}>
           <div className={s.filterToolbar}>
             <div className={s.monthControl}>
-              <input
-                type="month"
-                className={`${ui.input} ${s.monthFilter}`}
+              <MonthInput
                 value={filters.month}
-                onChange={(e) => setParam('month', e.target.value)}
+                onChange={(month) => setParam('month', month || 'all')}
+                placeholder="All months"
                 aria-label="Declaration month"
-                title="Filter by declaration month"
+                title="Declaration month"
+                className={s.monthFilter}
               />
-              <button
-                type="button"
-                className="filter-mini-link"
-                onClick={() => setParam('month', filters.month ? '' : defaultMonth)}
-              >
-                {filters.month ? 'All months' : 'This month'}
-              </button>
             </div>
-<<<<<<< Updated upstream
-          </div>
-          <div className={ui.toolbar}>
-            <SearchBox
-              grow
-              placeholder="Invoice, HBL, container, declare no…"
-              defaultValue={filters.q}
-              aria-label="Search shipments"
-              key={filters.q}
-              onKeyDown={(e) =>
-                e.key === 'Enter' && setParam('q', (e.target as HTMLInputElement).value.trim())
-              }
-              onBlur={(e) =>
-                e.target.value.trim() !== filters.q && setParam('q', e.target.value.trim())
-              }
-            />
-            <MonthInput
-              value={filters.month}
-              onChange={(v) => setParam('month', v || 'all')}
-              placeholder="All months"
-              aria-label="Declaration month"
-              title="Declaration month"
-            />
-=======
->>>>>>> Stashed changes
             <select
               className={`${ui.input} ${s.clientFilter}`}
               value={filters.clientId.length === 1 ? filters.clientId[0] : ''}
@@ -289,21 +241,28 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
                 </option>
               ))}
             </select>
-<<<<<<< Updated upstream
-=======
             {/* Always Import or Export; the URL only carries Export. One click flips it,
                 like the Overview's Forwarder Statistics toggle. */}
             <CardToggle
               label="Import or Export"
               triggerClass={s.directionToggle}
               value={filters.direction}
-              onChange={(d) => setParam('direction', d === 'EXPORT' ? 'EXPORT' : '')}
+              onChange={(nextDirection) => {
+                const next = new URLSearchParams(params);
+                next.delete('direction');
+                next.delete('page');
+                const search = next.toString();
+                navigate(
+                  `/plans/${nextDirection === 'EXPORT' ? 'export' : 'import'}${
+                    search ? `?${search}` : ''
+                  }`,
+                );
+              }}
               options={[
                 { value: 'IMPORT', label: 'Import' },
                 { value: 'EXPORT', label: 'Export' },
               ]}
             />
->>>>>>> Stashed changes
             <PlansFilter
               value={filterValue}
               onApply={applyView}
