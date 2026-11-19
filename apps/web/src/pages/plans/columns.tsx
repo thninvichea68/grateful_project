@@ -55,8 +55,10 @@ const termsLabel = (v: string) =>
 const declareNos = (r: ShipmentListItem) =>
   dash(r.declarations.map((d) => d.declareNo ?? 'Pending').join(', '));
 
-/** Same columns, labels and order as the prototype's plansBaseColumns. */
+/** Keep identity and tracking fields visible without expanding the shipment row. */
 export const BASE_COLUMNS: PlanColumn[] = [
+  { key: 'reference', label: 'Reference', render: (r) => r.reference, bold: true },
+  { key: 'client', label: 'Client', render: (r) => r.clientCode },
   {
     key: 'invoice',
     label: 'Invoice No.',
@@ -72,7 +74,14 @@ export const BASE_COLUMNS: PlanColumn[] = [
     bold: true,
     exportOnly: true,
   },
-  { key: 'qty', ...asNum(), label: 'Quantity', render: qty },
+  { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },
+  {
+    key: 'ctnr',
+    label: 'Ctnr No',
+    render: (r) => (
+      <ListMore items={r.containers.map((c) => c.containerNo)} max={1} title={ctnrList(r)} />
+    ),
+  },
   { key: 'eta', ...asDate, label: 'ETA Port', render: (r) => fmtDate(r.eta), importOnly: true },
   { key: 'declareNo', label: 'Declare No.', render: declareNos, exportOnly: true },
   // Customs clearance (declaration) date: the order the plan is listed in by default.
@@ -108,6 +117,7 @@ export const BASE_COLUMNS: PlanColumn[] = [
         '-'
       ),
   },
+<<<<<<< Updated upstream
   { key: 'hbl', label: 'HBL No', render: (r) => dash(r.hblNo) },
   {
     key: 'bookingNo',
@@ -123,6 +133,13 @@ export const BASE_COLUMNS: PlanColumn[] = [
       <ListMore items={r.containers.map((c) => c.containerNo)} max={1} title={ctnrList(r)} />
     ),
   },
+=======
+];
+
+/** Additional shipment details shown by "Expand All". */
+export const EXPANDED_COLUMNS: PlanColumn[] = [
+  { key: 'qty', ...asNum(), label: 'Quantity', render: qty },
+>>>>>>> Stashed changes
   {
     key: 'ctnrSize',
     label: 'Size',
@@ -139,6 +156,7 @@ export const BASE_COLUMNS: PlanColumn[] = [
     label: 'Freight',
     render: (r) => freightLabel(r.transportMode),
   },
+<<<<<<< Updated upstream
   { key: 'terms', format: termsLabel, label: 'Terms', render: (r) => termsLabel(r.loadType) },
 ];
 
@@ -146,6 +164,8 @@ export const BASE_COLUMNS: PlanColumn[] = [
 export const EXPANDED_COLUMNS: PlanColumn[] = [
   { key: 'reference', label: 'Reference', render: (r) => r.reference },
   { key: 'client', label: 'Client', render: (r) => r.clientCode },
+=======
+>>>>>>> Stashed changes
   { key: 'consignee', label: 'Consignee', render: (r) => dash(r.consigneeName) },
   { key: 'invoiceDate', ...asDate, label: 'Invoice Date', render: (r) => fmtDate(r.invoiceDate) },
   { key: 'country', label: 'Country', render: (r) => dash(r.countryName) },

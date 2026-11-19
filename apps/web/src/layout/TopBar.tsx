@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { SearchBox } from '../components/SearchBox';
 import { icons } from './icons';
 import { AskAi } from './AskAi';
 import { GlobalSearch } from './GlobalSearch';
@@ -18,11 +19,21 @@ interface Props {
 export function TopBar({ crumbs, onToggleMenu }: Props) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [params, setParams] = useSearchParams();
   const { can } = useAuth();
   const counts = useNavCounts();
   const overdue = counts.data?.overdueFollowUps ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
   const searchBox = useRef<HTMLDivElement>(null);
+  const shipmentSearch = pathname === '/plans';
+  const shipmentQuery = params.get('q') ?? '';
+  const setShipmentQuery = (query: string) => {
+    const next = new URLSearchParams(params);
+    if (query) next.set('q', query);
+    else next.delete('q');
+    next.delete('page');
+    setParams(next, { replace: true });
+  };
 
   // Ctrl+K (⌘K on a Mac) opens the search from any page, or puts the cursor back in it.
   useEffect(() => {
@@ -61,7 +72,11 @@ export function TopBar({ crumbs, onToggleMenu }: Props) {
   useEffect(() => setSearchOpen(false), [pathname]);
 
   return (
-    <header className={`topbar${searchOpen ? ' search-open' : ''}`}>
+    <header
+      className={`topbar${searchOpen ? ' search-open' : ''}${
+        shipmentSearch ? ' has-shipment-search' : ''
+      }`}
+    >
       <div className="topbar-left">
         <button
           type="button"
@@ -90,6 +105,22 @@ export function TopBar({ crumbs, onToggleMenu }: Props) {
       </div>
 
       <div className="topbar-right">
+        {shipmentSearch && (
+          <div className="topbar-plans-search">
+            <SearchBox
+              grow
+              placeholder="Search invoice, HBL, container, declaration…"
+              defaultValue={shipmentQuery}
+              aria-label="Search shipments"
+              key={shipmentQuery}
+              onKeyDown={(e) => e.key === 'Enter' && setShipmentQuery(e.currentTarget.value.trim())}
+              onBlur={(e) =>
+                e.currentTarget.value.trim() !== shipmentQuery &&
+                setShipmentQuery(e.currentTarget.value.trim())
+              }
+            />
+          </div>
+        )}
         {/* Search opens with Ctrl+K; phones and tablets (no Ctrl key) get this icon instead. */}
         <button
           type="button"

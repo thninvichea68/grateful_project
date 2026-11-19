@@ -5,8 +5,11 @@ import { useAuth } from '../auth/AuthProvider';
 import { useLookups, useShipmentColumnValues, useShipments } from '../features/hooks';
 import { ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
+<<<<<<< Updated upstream
 import { SearchBox } from '../components/SearchBox';
 import { MonthInput, currentMonth } from '../components/MonthInput';
+=======
+>>>>>>> Stashed changes
 import { HeaderFilter } from '../components/HeaderFilter';
 import { useHeaderFilters } from '../components/useHeaderFilters';
 import { useToast } from '../components/Toast';
@@ -17,12 +20,26 @@ import { fmtDate } from '../lib/format';
 import { BASE_COLUMNS, EXPANDED_COLUMNS, type PlanColumn } from './plans/columns';
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
+<<<<<<< Updated upstream
+=======
+import { CardToggle } from './dashboard/parts';
+import s from './ShippingPlansPage.module.css';
+>>>>>>> Stashed changes
 
 const PREFS = 'gs:plans-view';
+const currentMonth = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date()).slice(0, 7);
 const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
   [...BASE_COLUMNS, ...(expand ? EXPANDED_COLUMNS : [])].filter((c) =>
     direction === 'EXPORT' ? !c.importOnly : !c.exportOnly,
   );
+
+const STATUS_FILTERS: { value: '' | ShipmentStatus; label: string }[] = [
+  { value: '', label: 'All shipments' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'COMPLETED', label: 'Completed' },
+];
 
 function readPrefs(): { expandAll: boolean; frozen: string[] } {
   try {
@@ -45,6 +62,7 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   const [prefs, setPrefs] = useState(readPrefs);
   const [exporting, setExporting] = useState(false);
   const header = useHeaderFilters(params, setParams);
+  const defaultMonth = currentMonth();
 
   // A plain visit (sidebar, or only direction/sort in the link) opens on this month.
   // Links that bring a search, client or status keep every month so their counts match.
@@ -61,11 +79,19 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
 
   const filters = {
     clientId: params.getAll('clientId'),
+<<<<<<< Updated upstream
     // Import Plans or Export Plans, from the route (the sidebar's Shipping Plans dropdown).
     direction,
     status: (params.get('status') ?? '') as PlansFilterValue['status'],
     // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
     month: rawMonth === 'all' ? '' : (rawMonth ?? (autoMonth ? currentMonth() : '')),
+=======
+    // Always Import or Export (Import unless the link asks for Export).
+    direction: (params.get('direction') === 'EXPORT' ? 'EXPORT' : 'IMPORT') as 'IMPORT' | 'EXPORT',
+    status: (params.get('status') ?? '') as '' | ShipmentStatus,
+    // Default to the current month; an explicitly empty month means all months.
+    month: params.get('month') ?? defaultMonth,
+>>>>>>> Stashed changes
     q: params.get('q') ?? '',
     page: Number(params.get('page') ?? 1),
     // Newest customs clearance (declaration) date first, unless another order is picked.
@@ -93,19 +119,10 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   // Export rows end on ETD / ATD (leaving Cambodia) instead of Arrive FTY.
   const isExport = filters.direction === 'EXPORT';
 
-  const apply = (v: PlansFilterValue) => {
-    const next = new URLSearchParams(params);
-    next.delete('page');
-    if (v.status) next.set('status', v.status);
-    else next.delete('status');
-    setParams(next);
-    const p = { expandAll: v.expandAll, frozen: v.frozen };
-    setPrefs(p);
-    localStorage.setItem(PREFS, JSON.stringify(p));
-  };
   const setParam = (k: string, v: string) => {
     const next = new URLSearchParams(params);
-    if (v) next.set(k, v);
+    if (k === 'month' && !v) next.set(k, '');
+    else if (v) next.set(k, v);
     else next.delete(k);
     if (k !== 'page') next.delete('page');
     setParams(next, { replace: k === 'q' });
@@ -186,18 +203,55 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   );
 
   const filterValue: PlansFilterValue = {
-    status: filters.status,
     ...prefs,
   };
+  const hasActiveFilters = Boolean(
+    filters.q ||
+    (params.has('month') && filters.month !== defaultMonth) ||
+    filters.clientId.length ||
+    filters.direction === 'EXPORT' ||
+    filters.status ||
+    header.active ||
+    params.has('sort'),
+  );
+  const clearFilters = () => {
+    const next = new URLSearchParams(params);
+    ['q', 'month', 'clientId', 'direction', 'status', 'page', 'f', 'sort'].forEach((key) =>
+      next.delete(key),
+    );
+    setParams(next, { replace: true });
+  };
+  const applyView = (value: PlansFilterValue) => {
+    setPrefs(value);
+    localStorage.setItem(PREFS, JSON.stringify(value));
+  };
+
   return (
     <section className="view active caps-values" id="view-plans">
-      <div className="card">
-        <div className="card-header-row">
-          <div>
-            <h3>Live Consignments Tracking</h3>
-            <div className="create-header-desc" style={{ marginTop: 4 }}>
-              Real-time status of cargo clearance and delivery checkpoints.
+      <div className={`card ${s.pageCard}`}>
+        <header className={s.pageHeader}>
+          <h1>Shipping plans</h1>
+        </header>
+        <div className={s.controls}>
+          <div className={s.filterToolbar}>
+            <div className={s.monthControl}>
+              <input
+                type="month"
+                className={`${ui.input} ${s.monthFilter}`}
+                value={filters.month}
+                onChange={(e) => setParam('month', e.target.value)}
+                aria-label="Declaration month"
+                title="Filter by declaration month"
+              />
+              <button
+                type="button"
+                className="filter-mini-link"
+                onClick={() => setParam('month', filters.month ? '' : defaultMonth)}
+              >
+                {filters.month ? 'All months' : 'This month'}
+              </button>
             </div>
+<<<<<<< Updated upstream
           </div>
           <div className={ui.toolbar}>
             <SearchBox
@@ -220,8 +274,10 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
               aria-label="Declaration month"
               title="Declaration month"
             />
+=======
+>>>>>>> Stashed changes
             <select
-              className={ui.input}
+              className={`${ui.input} ${s.clientFilter}`}
               value={filters.clientId.length === 1 ? filters.clientId[0] : ''}
               onChange={(e) => setParam('clientId', e.target.value)}
               aria-label="Client"
@@ -233,24 +289,29 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
                 </option>
               ))}
             </select>
+<<<<<<< Updated upstream
+=======
+            {/* Always Import or Export; the URL only carries Export. One click flips it,
+                like the Overview's Forwarder Statistics toggle. */}
+            <CardToggle
+              label="Import or Export"
+              triggerClass={s.directionToggle}
+              value={filters.direction}
+              onChange={(d) => setParam('direction', d === 'EXPORT' ? 'EXPORT' : '')}
+              options={[
+                { value: 'IMPORT', label: 'Import' },
+                { value: 'EXPORT', label: 'Export' },
+              ]}
+            />
+>>>>>>> Stashed changes
             <PlansFilter
               value={filterValue}
-              onApply={apply}
+              onApply={applyView}
               columnsFor={(expand) => columnsFor(expand, filters.direction)}
             />
-            {header.active && (
-              <button
-                type="button"
-                className={ui.ghostBtn}
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  next.delete('f');
-                  next.delete('sort');
-                  next.delete('page');
-                  setParams(next, { replace: true });
-                }}
-              >
-                Clear filters
+            {hasActiveFilters && (
+              <button type="button" className={ui.ghostBtn} onClick={clearFilters}>
+                Clear all
               </button>
             )}
             <PlansMoreMenu
@@ -268,9 +329,33 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
               onStatusRules={() => setRulesOpen(true)}
             />
           </div>
+          <div className={s.statusBar}>
+            <div className={s.statusFilters} role="group" aria-label="Filter shipments by status">
+              {STATUS_FILTERS.map((status) => (
+                <button
+                  key={status.value || 'all'}
+                  type="button"
+                  className={`${s.statusFilter} ${
+                    filters.status === status.value ? s.statusFilterActive : ''
+                  }`}
+                  aria-pressed={filters.status === status.value}
+                  onClick={() => setParam('status', status.value)}
+                >
+                  {status.label}
+                </button>
+              ))}
+            </div>
+            <p className={s.resultCount} aria-live="polite">
+              {list.data
+                ? `${list.data.meta.total.toLocaleString()} ${
+                    filters.status ? SHIPMENT_STATUS_LABEL[filters.status] + ' ' : ''
+                  }shipment${list.data.meta.total === 1 ? '' : 's'}`
+                : 'Loading shipments…'}
+            </p>
+          </div>
         </div>
         {filters.q && (
-          <div className="create-header-desc" style={{ marginBottom: 10 }}>
+          <div className={s.searchSummary}>
             Showing results for “{filters.q}”.{' '}
             <button type="button" className="filter-mini-link" onClick={() => setParam('q', '')}>
               Clear search
@@ -278,7 +363,7 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
           </div>
         )}
         <div className={`plans-table-scroll${prefs.expandAll ? ' expanded' : ''}`}>
-          <table className="data-table-clean">
+          <table className={`data-table-clean ${s.table}`}>
             <thead>
               <tr ref={headRef}>
                 {cols.map((c) => (

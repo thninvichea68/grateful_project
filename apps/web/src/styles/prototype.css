@@ -540,6 +540,19 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
 .topbar-right > * {
   flex-shrink: 0;
 }
+.topbar.has-shipment-search .topbar-right > .topbar-plans-search {
+  display: flex;
+  flex: 1 1 400px;
+  min-width: 180px;
+  max-width: 520px;
+  margin-right: auto;
+}
+.topbar.has-shipment-search .topbar-plans-search .search-box {
+  width: 100%;
+  max-width: none;
+  height: 34px;
+  padding: 0 12px;
+}
 .ask-ai-btn,
 .topbar-right .new-shipment-btn {
   white-space: nowrap;
@@ -589,6 +602,15 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   .topbar .search-toggle {
     display: flex;
   }
+  .topbar.has-shipment-search .topbar-right > .topbar-plans-search {
+    flex-basis: 220px;
+    min-width: 120px;
+    max-width: none;
+    margin: 0 8px;
+  }
+  .topbar.has-shipment-search .search-toggle {
+    display: none;
+  }
   .topbar.search-open .topbar-search {
     position: absolute;
     inset: 0;
@@ -612,6 +634,12 @@ body.sidebar-collapsed .submenu.acc-submenu .submenu-item svg {
   .topbar-left {
     flex: 1 1 auto;
     gap: 8px;
+  }
+  .topbar.has-shipment-search .topbar-right > .topbar-plans-search {
+    display: none;
+  }
+  .topbar.has-shipment-search .search-toggle {
+    display: flex;
   }
   .topbar-right {
     flex: 0 0 auto;

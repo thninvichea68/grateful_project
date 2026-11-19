@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ShipmentStatus } from '@gs/shared';
 import type { PlanColumn } from './columns';
 
 export interface PlansFilterValue {
-  status: '' | ShipmentStatus;
   expandAll: boolean;
   frozen: string[];
 }
 
-/** The prototype's "Filter Shipments" dropdown (client, month and Import/Export sit in the toolbar). */
+/** Options for showing more shipment columns and pinning them while scrolling. */
 export function PlansFilter({
   value,
   onApply,
@@ -35,14 +33,17 @@ export function PlansFilter({
     };
   }, [open]);
 
-  const count = (value.status ? 1 : 0) + (value.expandAll ? 1 : 0) + (value.frozen.length ? 1 : 0);
-  const hint = value.status ? value.status.replace('_', ' ').toLowerCase() : 'All shipments';
+  const count = (value.expandAll ? 1 : 0) + (value.frozen.length ? 1 : 0);
+  const hint = value.frozen.length
+    ? `${value.frozen.length} column${value.frozen.length === 1 ? '' : 's'} pinned`
+    : 'Shipment columns';
 
   return (
     <div className={`card-dropdown filter-dropdown${open ? ' open' : ''}`} ref={ref}>
       <button
         className={`filter-btn${count ? ' active' : ''}`}
         type="button"
+        aria-label="Customize shipment columns"
         aria-haspopup="true"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -51,29 +52,31 @@ export function PlansFilter({
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2.2"
+          strokeWidth="2"
           aria-hidden="true"
         >
-          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18M15 3v18" />
         </svg>
-        Filter
+        Columns
         <span className="filter-count" style={count ? { display: 'inline-flex' } : undefined}>
           {count}
         </span>
       </button>
-      <div className="filter-dropdown-menu" role="dialog" aria-label="Filter shipments">
+      <div className="filter-dropdown-menu" role="dialog" aria-label="Customize shipment columns">
         <div className="filter-menu-header">
-          <div className="filter-menu-title">Filter Shipments</div>
+          <div className="filter-menu-title">Customize shipment list</div>
           <button
             type="button"
             className="filter-menu-close"
-            aria-label="Close filters"
+            aria-label="Close column options"
             onClick={() => setOpen(false)}
           >
             ×
           </button>
         </div>
         <div className="filter-menu-body">
+<<<<<<< Updated upstream
           <div className="filter-section">
             <div className="filter-col">
               <div className="filter-col-title">
@@ -103,6 +106,8 @@ export function PlansFilter({
               </div>
             </div>
           </div>
+=======
+>>>>>>> Stashed changes
           <div className="filter-section filter-expand-row">
             <label className="filter-check-item">
               <input
@@ -159,7 +164,6 @@ export function PlansFilter({
               className="filter-reset-btn"
               onClick={() =>
                 setDraft({
-                  status: '',
                   expandAll: false,
                   frozen: [],
                 })
@@ -175,7 +179,7 @@ export function PlansFilter({
                 setOpen(false);
               }}
             >
-              Apply Filters
+              Apply view
             </button>
           </div>
         </div>
