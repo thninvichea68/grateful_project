@@ -52,10 +52,20 @@ export function DraftsModal({
   const submit = async () => {
     const r = await create.mutateAsync({ month, types, lines });
     const sources = [...new Set(r.created.map((c) => c.copiedFrom).filter(Boolean))];
+    const quotations = [
+      ...new Set(
+        r.created.flatMap((c) =>
+          c.quotation ? [`${c.quotation.quoteNo} v${c.quotation.version}`] : [],
+        ),
+      ),
+    ];
     toast(
       `${r.created.length} draft${r.created.length === 1 ? '' : 's'} created` +
         (sources.length ? ` (lines from ${sources.join(', ')})` : '') +
-        '. Check them, then issue.',
+        (quotations.length
+          ? ` Accepted quotation rates used: ${quotations.join(', ')}. Prices remain editable.`
+          : '') +
+        ' Check them, then issue.',
     );
     onClose();
   };

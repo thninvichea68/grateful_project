@@ -13,6 +13,7 @@ import st from './SettingsPage.module.css';
 import r from './settings/ExchangeRates.module.css';
 import { icons } from '../layout/icons';
 import { PublicHolidays } from './settings/PublicHolidays';
+import { MilestoneRules } from './settings/MilestoneRules';
 import { InvoiceManagement } from './settings/InvoiceManagement';
 import { useToast } from '../components/Toast';
 import { ApiError, api } from '../lib/api';
@@ -25,6 +26,7 @@ const TABS = [
   ['rates', 'Rates'],
   ['invoice', 'Tax management'],
   ['holidays', 'Public holidays'],
+  ['milestones', 'Shipment milestones'],
   ['ports', 'Ports'],
   ['forwarders', 'Forwarders'],
   ['consignees', 'Consignees'],
@@ -103,6 +105,7 @@ function Workspace({ tab }: { tab: Exclude<Tab, 'profile'> }) {
           {tab === 'rates' && <RatesTab manage={manage} />}
           {tab === 'invoice' && <InvoiceManagement manage={manage} />}
           {tab === 'holidays' && <PublicHolidays manage={manage} />}
+          {tab === 'milestones' && <MilestoneRules manage={manage} />}
           {tab === 'ports' && <Ports manage={manage} />}
           {tab === 'forwarders' && <Forwarders manage={manage} />}
           {tab === 'consignees' && <SimpleList kind="consignees" manage={manage} />}

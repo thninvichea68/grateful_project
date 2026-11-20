@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
 import { db, pool } from '../../db/client';
-import { exchangeRates } from '../../db/schema';
+import { exchangeRates, quotationTemplates } from '../../db/schema';
 import { createUser, resetDb, seedBasics, TEST_PASSWORD } from '../../test/helpers';
 
 /*
@@ -150,6 +150,91 @@ afterAll(async () => {
 });
 
 describe('client billing: a client month', () => {
+  it('uses the accepted client quotation on Bill to Clients drafts and still permits price edits', async () => {
+    await db.insert(quotationTemplates).values({
+      key: 'export_shv',
+      label: 'Export SHV',
+      docTitle: 'Export quotation',
+      columns: [
+        { key: 'desc', label: 'Description', type: 'wide' },
+        { key: 'ccy', label: 'Currency', type: 'text' },
+        { key: 'c20', label: "20'GP", type: 'num' },
+        { key: 'c40', label: "40'H", type: 'num' },
+        { key: 'remark', label: 'Remark', type: 'remark' },
+      ],
+      defaultRows: [],
+      notes: null,
+      sortOrder: 0,
+    });
+    const h = await as('ACCOUNTANT');
+    const quotation = await request(app)
+      .post('/api/v1/quotations')
+      .set(h)
+      .send({
+        templateKey: 'export_shv',
+        clientId: b.jr.id,
+        toName: 'JR Apparel',
+        quoteDate: '2026-08-01',
+        paymentTermDays: 30,
+        latePenaltyPctPerDay: '0.4',
+        lines: [
+          {
+            desc: 'EXPORT PROCESSING FEE',
+            ccy: 'USD',
+            c20: '215',
+            c40: '245',
+            remark: '',
+          },
+        ],
+      });
+    expect(quotation.status).toBe(201);
+    await request(app)
+      .post(`/api/v1/quotations/${quotation.body.id}/status`)
+      .set(h)
+      .send({ status: 'SENT' })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/quotations/${quotation.body.id}/status`)
+      .set(h)
+      .send({ status: 'ACCEPTED' })
+      .expect(200);
+
+    const august = await shipment(b.jr.id, 'E 250001', '2026-08-12');
+    const prefill = await acc('get', '/docs/tax-invoices/prefill', {
+      query: { recordId: august },
+    });
+    expect(prefill.body.quotationCharges).toEqual([
+      { description: 'EXPORT PROCESSING FEE', unitPrice: '245' },
+    ]);
+    expect(prefill.body.lines[0]).toMatchObject({
+      description: 'EXPORT PROCESSING FEE',
+      unitPrice: '245',
+    });
+    await issued('tax-invoices', august);
+    await shipment(b.jr.id, 'E 266001', '2026-09-09');
+    const created = await acc('post', `/billing/${b.jr.id}/drafts`, {
+      body: { month: '2026-09', types: ['tax-invoices'], lines: 'previous' },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.created[0]).toMatchObject({
+      quotation: { quoteNo: quotation.body.quoteNo, version: 1 },
+    });
+    const draftId = created.body.created[0].id as string;
+    const draft = await acc('get', `/docs/tax-invoices/${draftId}`);
+    expect(Number(draft.body.lines[0].unitPrice)).toBe(245);
+    expect(draft.body.totals.total).toBe('269.50');
+
+    const edited = await acc('put', `/docs/tax-invoices/${draftId}`, {
+      body: {
+        ...draft.body.header,
+        clientId: b.jr.id,
+        lines: [{ ...draft.body.lines[0], unitPrice: '250' }],
+      },
+    });
+    expect(edited.status).toBe(200);
+    expect(Number(edited.body.lines[0].unitPrice)).toBe(250);
+  });
+
   it('reads numbers typed in the ledger as documents made outside the system', async () => {
     // 2 Sep (Wed) → invoice date 3 Sep, the first of the year.
     await shipment(b.jr.id, 'E 264562', '2026-09-02', {

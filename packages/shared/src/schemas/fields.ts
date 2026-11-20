@@ -16,6 +16,14 @@ export const optDate = z
   .or(z.literal(''))
   .transform((v) => (v ? v : null));
 
+export const optDateTime = z
+  .string()
+  .trim()
+  .max(40)
+  .nullish()
+  .or(z.literal(''))
+  .transform((v) => (v ? v : null));
+
 export const optUuid = z
   .string()
   .uuid()

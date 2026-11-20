@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   jsonb,
   numeric,
+  timestamp,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { id, timestamps, softDelete, quotationStatusEnum } from './_common';
@@ -77,7 +78,45 @@ export const quotationLines = pgTable(
     lineNo: integer('line_no').notNull(),
     cells: jsonb('cells').$type<Record<string, string>>().notNull(),
     amounts: jsonb('amounts').$type<Record<string, number>>().notNull().default({}),
+    /** Our cost per column (what we pay); seen and set only with quotations:cost. */
+    costs: jsonb('costs').$type<Record<string, string>>().notNull().default({}),
     ...timestamps,
   },
   (t) => [index('quotation_lines_quotation_idx').on(t.quotationId)],
 );
+
+/**
+ * A quotation's extra charges, listed under its rates ("Red signal · 45 USD / Shipment"): once
+ * the free-text notes, now one row each so bills and record summaries can pick them by name.
+ */
+export const quotationCharges = pgTable(
+  'quotation_charges',
+  {
+    id: id(),
+    quotationId: uuid('quotation_id')
+      .notNull()
+      .references(() => quotations.id, { onDelete: 'cascade' }),
+    lineNo: integer('line_no').notNull(),
+    description: text('description').notNull(),
+    /** USD; null when the charge has no fixed price ("as per receipt"). */
+    amount: numeric('amount', { precision: 12, scale: 2 }),
+    unit: text('unit'),
+    remark: text('remark'),
+    /** Our cost (quotations:cost only). */
+    cost: numeric('cost', { precision: 12, scale: 2 }),
+    ...timestamps,
+  },
+  (t) => [index('quotation_charges_quotation_idx').on(t.quotationId)],
+);
+
+/**
+ * The text quotations had before they were made English only (and their notes before they became
+ * extra charges), kept once so nothing typed is lost: kind = quotation | line | template.
+ */
+export const quotationTextBackup = pgTable('quotation_text_backup', {
+  id: id(),
+  kind: text('kind').notNull(),
+  ref: text('ref').notNull(),
+  data: jsonb('data').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

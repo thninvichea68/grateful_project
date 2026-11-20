@@ -14,11 +14,28 @@ export const metaRouter = Router();
 metaRouter.get('/nav-counts', requireAuth, async (req, res) => {
   // Only follow-ups of the clients this user may see (same rule as the Follow-Up list).
   const scoped = clientCondition(sql`coalesce(f.client_id, s.client_id)`, scopeClients(req));
+  // Overdue = what My Work shows: shipping plans whose current milestone (the first open one)
+  // is past its planned date, plus manual follow-ups past due. Later steps of the same plan
+  // aren't counted again.
+  const live = sql`f.deleted_at IS NULL
+      AND (f.milestone_rule_id IS NULL OR
+        (mr.active AND NOT (mr.skip_when_cleared_by_other AND s.cleared_by <> 'GS')))
+      ${scoped ? sql`AND ${scoped}` : sql``}`;
   const result = await db.execute<{ open: string; overdue: string }>(sql`
-    SELECT count(*) FILTER (WHERE f.status <> 'DONE') AS open,
-           count(*) FILTER (WHERE f.status <> 'DONE' AND f.due_at < now()) AS overdue
-    FROM follow_ups f LEFT JOIN shipments s ON s.id = f.shipment_id
-    WHERE f.deleted_at IS NULL ${scoped ? sql`AND ${scoped}` : sql``}
+    WITH live AS (
+      SELECT f.id, f.shipment_id, f.milestone_rule_id, f.status, f.due_at, f.planned_at, mr.sequence
+      FROM follow_ups f LEFT JOIN shipments s ON s.id = f.shipment_id
+      LEFT JOIN milestone_rules mr ON mr.id = f.milestone_rule_id
+      WHERE ${live}
+    ),
+    cur AS (
+      SELECT DISTINCT ON (shipment_id) planned_at FROM live
+      WHERE milestone_rule_id IS NOT NULL AND status <> 'DONE' ORDER BY shipment_id, sequence
+    )
+    SELECT (SELECT count(*) FROM live WHERE status <> 'DONE') AS open,
+           (SELECT count(*) FROM cur WHERE planned_at < now())
+           + (SELECT count(*) FROM live WHERE milestone_rule_id IS NULL AND status <> 'DONE' AND due_at < now())
+             AS overdue
   `);
   const row = result.rows[0];
   const inbox = await db.execute<{ n: string }>(sql`

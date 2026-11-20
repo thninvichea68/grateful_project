@@ -120,7 +120,7 @@
 .month[data-selected] {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
   font-weight: 600;
 }
 .month:disabled {
@@ -161,7 +161,7 @@
 .fullYear[data-selected] {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
 }
 .fullYear[data-selected] small {
   color: inherit;

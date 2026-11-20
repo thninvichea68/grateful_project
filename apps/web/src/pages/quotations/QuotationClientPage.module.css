@@ -1,0 +1,144 @@
+/* One client's quotations: header, the port tabs, then the chosen port's quotation. */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.title {
+  flex: 1;
+  min-width: 0;
+}
+.title h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 650;
+}
+.title p {
+  margin: 2px 0 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.title b {
+  margin-right: 4px;
+  color: var(--text-secondary);
+}
+.note {
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Port tabs: quoted ones with their status dot; not quoted ones dashed with "+". */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+.tabOn {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--accent-on-primary);
+}
+.tabOn:hover {
+  color: var(--accent-on-primary);
+}
+.tabEmpty:not(.tabOn) {
+  border-style: dashed;
+  color: var(--text-tertiary);
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+.dot[data-tone='completed'] {
+  background: var(--status-completed-fg);
+}
+.dot[data-tone='progress'] {
+  background: var(--status-progress-fg);
+}
+.dot[data-tone='pending'] {
+  background: var(--status-pending-fg);
+}
+.dot[data-tone='exception'] {
+  background: var(--status-exception-fg);
+}
+.tabOn .dot {
+  background: var(--accent-on-primary);
+}
+
+.panel {
+  min-width: 0;
+}
+.hint {
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* The port dropdown: label, select, the chosen port's status. */
+.picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.picker label {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.select {
+  width: auto !important;
+  min-width: 0;
+  max-width: min(100%, 300px);
+  min-height: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+.newTag {
+  padding: 2px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}

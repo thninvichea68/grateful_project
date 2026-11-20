@@ -8,7 +8,7 @@ import {
   type FollowUpRow,
 } from '@gs/shared';
 import { db } from '../../db/client';
-import { followUps } from '../../db/schema';
+import { followUps, milestoneRules } from '../../db/schema';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
@@ -23,6 +23,7 @@ import {
   scopeClients,
 } from '../../lib/clientScope';
 import { shipmentClientId } from '../shipments/service';
+import { myWork } from './myWork';
 
 const FU_CLIENT = sql`coalesce(f.client_id, s.client_id)`;
 
@@ -36,19 +37,35 @@ function toInstant(v: string): Date {
     ? v
     : `${v.length === 10 ? `${v}T17:00` : v}+07:00`;
   const d = new Date(withZone);
-  if (Number.isNaN(d.getTime())) throw badRequest('Due date is not a valid date');
+  if (Number.isNaN(d.getTime())) throw badRequest('Date and time is not valid');
   return d;
 }
 
+const PLANNED_AT = 'CASE WHEN f.milestone_rule_id IS NULL THEN f.due_at ELSE f.planned_at END';
+const PLANNED_DUE = sql.raw(PLANNED_AT);
 const SELECT = sql`
   SELECT f.id, f.reference, f.subject, f.notes, f.client_id AS "clientId", c.name AS "clientName", f.shipment_id AS "shipmentId",
-         s.reference AS "shipmentReference", f.assignee_id AS "assigneeId", u.full_name AS "assigneeName", ${isoTs('f.due_at')} AS "dueAt",
-         f.priority, f.status, (f.status <> 'DONE' AND f.due_at < now()) AS overdue, ${isoTs('f.completed_at')} AS "completedAt"
-  FROM follow_ups f LEFT JOIN clients c ON c.id = f.client_id LEFT JOIN shipments s ON s.id = f.shipment_id LEFT JOIN users u ON u.id = f.assignee_id`;
+         s.reference AS "shipmentReference", f.assignee_id AS "assigneeId", u.full_name AS "assigneeName",
+         f.priority, f.status, (f.status <> 'DONE' AND ${PLANNED_DUE} IS NOT NULL AND ${PLANNED_DUE} < now()) AS overdue,
+         (f.status = 'DONE' AND f.actual_at IS NOT NULL AND ${PLANNED_DUE} IS NOT NULL AND f.actual_at > ${PLANNED_DUE}) AS "completedLate",
+         ${isoTs('CASE WHEN f.milestone_rule_id IS NULL THEN f.due_at ELSE f.planned_at END')} AS "dueAt",
+         ${isoTs('f.actual_at')} AS "actualAt", f.milestone_rule_id AS "milestoneRuleId", mr.owner_role AS "ownerRole",
+         mr.completion_field AS "completionField",
+         ${isoTs('f.completed_at')} AS "completedAt"
+  FROM follow_ups f LEFT JOIN clients c ON c.id = f.client_id LEFT JOIN shipments s ON s.id = f.shipment_id
+  LEFT JOIN users u ON u.id = f.assignee_id LEFT JOIN milestone_rules mr ON mr.id = f.milestone_rule_id`;
+
+// My Work: live jobs from the shipping plans with their current stage, alerts and clients.
+followUpsRouter.get('/my-work', requirePermission('followups:read'), async (req, res) => {
+  res.json(await myWork(scopeClients(req, undefined, 'shipments')));
+});
 
 followUpsRouter.get('/', requirePermission('followups:read'), async (req, res) => {
   const q = parse(followUpListQuerySchema, req.query);
   const c = [sql`f.deleted_at IS NULL`];
+  c.push(
+    sql`(f.milestone_rule_id IS NULL OR (mr.active AND NOT (mr.skip_when_cleared_by_other AND s.cleared_by <> 'GS')))`,
+  );
   if (q.status === 'ACTIVE') c.push(sql`f.status <> 'DONE'`);
   else if (q.status) c.push(sql`f.status = ${q.status}`);
   if (q.priority) c.push(sql`f.priority = ${q.priority}`);
@@ -56,7 +73,8 @@ followUpsRouter.get('/', requirePermission('followups:read'), async (req, res) =
   if (q.clientId) c.push(sql`f.client_id = ${q.clientId}`);
   const scoped = clientCondition(FU_CLIENT, scopeClients(req));
   if (scoped) c.push(scoped);
-  if (q.overdue) c.push(sql`f.status <> 'DONE' AND f.due_at < now()`);
+  if (q.overdue)
+    c.push(sql`f.status <> 'DONE' AND ${PLANNED_DUE} IS NOT NULL AND ${PLANNED_DUE} < now()`);
   if (q.q) {
     const like = likePattern(q.q);
     c.push(
@@ -67,12 +85,13 @@ followUpsRouter.get('/', requirePermission('followups:read'), async (req, res) =
     db,
     sql`
     ${SELECT} ${whereAll(c)}
-    ORDER BY (f.status = 'DONE'), (f.status <> 'DONE' AND f.due_at < now()) DESC, f.due_at, f.reference
+    ORDER BY (f.status = 'DONE'), (f.status <> 'DONE' AND ${PLANNED_DUE} < now()) DESC, ${PLANNED_DUE} NULLS LAST, f.reference
     ${paginate(q.page, q.pageSize)}`,
   );
   const [count] = await queryRows<{ n: string }>(
     db,
-    sql`SELECT count(*) AS n FROM follow_ups f LEFT JOIN clients c ON c.id = f.client_id LEFT JOIN shipments s ON s.id = f.shipment_id ${whereAll(c)}`,
+    sql`SELECT count(*) AS n FROM follow_ups f LEFT JOIN clients c ON c.id = f.client_id LEFT JOIN shipments s ON s.id = f.shipment_id
+        LEFT JOIN milestone_rules mr ON mr.id = f.milestone_rule_id ${whereAll(c)}`,
   );
   res.json(
     toPaginated(
@@ -114,6 +133,10 @@ async function getOne(id: string) {
 
 followUpsRouter.post('/', requirePermission('followups:write'), async (req, res) => {
   const v = parse(followUpInputSchema, req.body);
+  if (!v.dueAt) throw badRequest('Enter a due date');
+  const dueAt = v.dueAt;
+  if (v.status === 'DONE' && !v.actualAt)
+    throw badRequest('Enter an actual date to complete a follow-up');
   await assertLinksAllowed(req, v);
   const id = await db.transaction(async (tx) => {
     const reference = formatNumber.followUp(await nextNumber(tx, 'FOLLOW_UP'));
@@ -122,8 +145,11 @@ followUpsRouter.post('/', requirePermission('followups:write'), async (req, res)
       .values({
         ...v,
         reference,
-        dueAt: toInstant(v.dueAt),
-        completedAt: v.status === 'DONE' ? new Date() : null,
+        dueAt: toInstant(dueAt),
+        actualAt: v.actualAt ? toInstant(v.actualAt) : null,
+        status: v.actualAt ? 'DONE' : v.status,
+        completedAt: v.actualAt ? toInstant(v.actualAt) : null,
+        completedById: v.actualAt ? req.auth!.userId : null,
         createdById: req.auth!.userId,
       })
       .returning();
@@ -145,12 +171,32 @@ followUpsRouter.patch('/:id', requirePermission('followups:write'), async (req, 
       .where(and(eq(followUps.id, id), isNull(followUps.deletedAt)))
       .for('update');
     if (!before) throw notFound('Follow-up');
+    if (v.actualAt !== undefined && before.milestoneRuleId) {
+      const [rule] = await tx
+        .select({ completionField: milestoneRules.completionField })
+        .from(milestoneRules)
+        .where(eq(milestoneRules.id, before.milestoneRuleId));
+      if (rule?.completionField)
+        throw badRequest('Record this actual date on the linked shipment plan');
+    }
+    if (v.status === 'DONE' && !before.actualAt && !v.actualAt)
+      throw badRequest('Enter an actual date to complete a follow-up');
+    if (v.status && v.status !== 'DONE' && before.actualAt && v.actualAt === undefined)
+      throw badRequest('Clear the actual date before reopening a follow-up');
     const patch: Partial<typeof followUps.$inferInsert> = Object.fromEntries(
-      Object.entries({ ...v, dueAt: undefined }).filter(([, x]) => x !== undefined),
+      Object.entries({ ...v, dueAt: undefined, actualAt: undefined, status: undefined }).filter(
+        ([, x]) => x !== undefined,
+      ),
     );
     if (v.dueAt) patch.dueAt = toInstant(v.dueAt);
-    if (v.status && v.status !== before.status)
-      patch.completedAt = v.status === 'DONE' ? new Date() : null;
+    if (v.actualAt !== undefined) {
+      patch.actualAt = v.actualAt ? toInstant(v.actualAt) : null;
+      patch.status = v.actualAt ? 'DONE' : v.status === 'DONE' ? 'OPEN' : (v.status ?? 'OPEN');
+      patch.completedAt = v.actualAt ? toInstant(v.actualAt) : null;
+      patch.completedById = v.actualAt ? req.auth!.userId : null;
+    } else if (v.status) {
+      patch.status = v.status;
+    }
     const [after] = await tx.update(followUps).set(patch).where(eq(followUps.id, id)).returning();
     await audit(tx, { action: 'UPDATE', entity: 'follow_up', entityId: id, before, after }, req);
   });
@@ -160,6 +206,12 @@ followUpsRouter.patch('/:id', requirePermission('followups:write'), async (req, 
 followUpsRouter.delete('/:id', requirePermission('followups:write'), async (req, res) => {
   const { id } = parse(idParam, req.params);
   assertClientVisible(req, await followUpClientId(id), 'Follow-up');
+  const [before] = await db
+    .select({ milestoneRuleId: followUps.milestoneRuleId })
+    .from(followUps)
+    .where(and(eq(followUps.id, id), isNull(followUps.deletedAt)));
+  if (!before) throw notFound('Follow-up');
+  if (before.milestoneRuleId) throw badRequest('Shipment milestones cannot be deleted here');
   const [row] = await db
     .update(followUps)
     .set({ deletedAt: new Date() })

@@ -891,6 +891,7 @@ function InvoiceCard({
             title={e?.htsCode?.message}
           />
         </label>
+        <InvoiceGw gi={gi} control={control} register={register} />
         <span className={c.tags}>
           {/* The CTNS and PCS stay in sight while the invoice is folded; a zero is left out. */}
           {lineSum.ctns > 0 && <span className={c.tag}>{fmtNum(lineSum.ctns)} CTNS</span>}
@@ -1022,6 +1023,38 @@ const materialOf = (it: CutStockRow) => CUT_STOCK_CATEGORY_LABEL[it.category].to
 type LineErrs = Record<string, { message?: string } | undefined> | undefined;
 
 /**
+ * The invoice's G.W (kg) in its head bar. Typed, it is the invoice's gross weight, so an invoice
+ * can be kept with only its no., date and G.W; blank, the lines' G.W total shows as the hint.
+ */
+function InvoiceGw({
+  gi,
+  control,
+  register,
+  error,
+}: {
+  gi: number;
+  control: Control<FormValues>;
+  register: ReturnType<typeof useFormContext<FormValues>>['register'];
+  error?: string | undefined;
+}) {
+  const lines = useWatch({ control, name: `invoices.${gi}.lines` });
+  const sum = (lines ?? []).reduce((n, l) => n + toNum(l.grossWeightKg), 0);
+  return (
+    <label className={c.impHeadField}>
+      <span>G.W (kg)</span>
+      <NumberInput
+        decimals={3}
+        className={`${c.impHeadInput} ${c.gwInput}`}
+        placeholder={sum > 0 ? `${fmtNum(sum, 3)} (lines)` : '0.000'}
+        {...register(`invoices.${gi}.grossWeightKg`)}
+        aria-invalid={!!error}
+        title={error ?? "Gross weight of this invoice. Leave blank to use the lines' total."}
+      />
+    </label>
+  );
+}
+
+/**
  * An import invoice: a bar with its invoice no. and date (a click opens or closes its items),
  * then one read-only row per item (No. · Item · Pkgs · Quantity · NW · GW · Unit Price ·
  * Amount · ⋮). An item is read, changed or added in its View Details dialog; a click on the row
@@ -1129,6 +1162,7 @@ function ImportInvoiceCard({
             })}
           />
         </label>
+        <InvoiceGw gi={gi} control={control} register={register} />
         <span className={c.tags}>
           {/* The Pkgs and Quantity stay in sight while the invoice is folded; a zero is left out. */}
           {sumOf('ctns') > 0 && (

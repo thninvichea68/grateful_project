@@ -6,7 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { RoleCode } from '@gs/shared';
 import { createApp } from '../../app';
 import { db, pool } from '../../db/client';
-import { accountingRecords, cutStockItems } from '../../db/schema';
+import { accountingRecords, cutStockItems, milestoneRules } from '../../db/schema';
 import { createUser, resetDb, seedBasics, TEST_PASSWORD } from '../../test/helpers';
 
 const app = createApp();
@@ -77,6 +77,75 @@ afterAll(async () => {
 });
 
 describe('shipments', () => {
+  it('creates milestones, replans open dates, and completes from actual dates', async () => {
+    await db.insert(milestoneRules).values([
+      {
+        mode: 'SEA_EXPORT',
+        code: 'PLANNED_TASK',
+        name: 'Final documents',
+        sequence: 1,
+        anchorCode: 'ETD',
+        offsetValue: -3,
+        offsetUnit: 'DAYS',
+        ownerRole: 'Operator',
+      },
+      {
+        mode: 'SEA_EXPORT',
+        code: 'DEPARTURE_ACTUAL',
+        name: 'Departure',
+        sequence: 2,
+        anchorCode: 'ETD',
+        offsetValue: 0,
+        offsetUnit: 'DAYS',
+        ownerRole: 'Operator',
+        completionField: 'ATD',
+      },
+    ]);
+    const h = await as('OPERATOR');
+    const created = await request(app)
+      .post('/api/v1/shipments')
+      .set(h)
+      .send(exportShipment({ declarations: [] }));
+    expect(created.status).toBe(201);
+
+    const initial = await request(app).get('/api/v1/follow-ups').set(h);
+    const planned = initial.body.data.find(
+      (row: { subject: string }) => row.subject === 'Final documents',
+    );
+    const departure = initial.body.data.find(
+      (row: { subject: string }) => row.subject === 'Departure',
+    );
+    expect(planned.dueAt).toBe('2026-07-29T10:00:00.000Z');
+    expect(departure.status).toBe('OPEN');
+
+    const update = await request(app)
+      .put(`/api/v1/shipments/${created.body.id}`)
+      .set(h)
+      .send(exportShipment({ etd: '2026-08-05', atd: '2026-08-05', declarations: [] }));
+    expect(update.status).toBe(200);
+    const replanned = await request(app).get('/api/v1/follow-ups').set(h);
+    const updatedTask = replanned.body.data.find(
+      (row: { subject: string }) => row.subject === 'Final documents',
+    );
+    const completedTask = replanned.body.data.find(
+      (row: { subject: string }) => row.subject === 'Departure',
+    );
+    expect(updatedTask.dueAt).toBe('2026-08-02T10:00:00.000Z');
+    expect(completedTask).toMatchObject({
+      status: 'DONE',
+      actualAt: '2026-08-05T10:00:00.000Z',
+    });
+
+    const completed = await request(app)
+      .patch(`/api/v1/follow-ups/${updatedTask.id}`)
+      .set(h)
+      .send({ actualAt: '2026-08-03T17:00' });
+    expect(completed.body).toMatchObject({
+      status: 'DONE',
+      actualAt: '2026-08-03T10:00:00.000Z',
+    });
+  });
+
   it('creates a shipment with nested data, normalised values and a reference number', async () => {
     const res = await request(app)
       .post('/api/v1/shipments')

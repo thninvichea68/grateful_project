@@ -25,7 +25,7 @@ import {
   shipments,
 } from '../../db/schema';
 import { audit } from '../../lib/audit';
-import { shipmentCbm } from '../../lib/shipmentCbm';
+import { shipmentCbm, shipmentGw } from '../../lib/shipmentCbm';
 import { issueDateFor } from '../../lib/issueDate';
 import { badRequest, businessRule, conflict, notFound } from '../../lib/errors';
 import {
@@ -258,7 +258,7 @@ export async function creditNoteDeclarations(
            (SELECT container_no FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerNo",
            (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
            (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
-           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS "grossWeightKg",
+           ${shipmentGw()}::text AS "grossWeightKg",
            ${shipmentCbm()}::text AS cbm,
            (SELECT cn.cn_no FROM credit_notes cn WHERE upper(cn.declare_no) = upper(d.declare_no) AND cn.status <> 'VOID' LIMIT 1) AS "creditNoteNo"
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id

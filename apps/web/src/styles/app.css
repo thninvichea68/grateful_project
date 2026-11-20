@@ -38,6 +38,14 @@
 ):focus {
   border-color: var(--accent-primary);
 }
+:where(
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']),
+    select,
+    textarea
+  )[aria-invalid='true']:not(:focus) {
+  border-color: var(--status-exception-fg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-exception-fg) 14%, transparent);
+}
 
 /*
  * One standard dropdown everywhere (the .form-select-box look): white box, thin border and a
@@ -127,7 +135,7 @@ select[class]:disabled {
   }
   select option:checked {
     background: var(--accent-primary);
-    color: #041b2d;
+    color: var(--accent-on-primary);
     font-weight: 600;
   }
   /* Tick on the right of the chosen option (the browser puts it on the left). */
@@ -177,7 +185,7 @@ select[class]:disabled {
   padding: 10px 16px;
   border-radius: var(--radius-md);
   background: var(--accent-primary);
-  color: #001018;
+  color: var(--accent-on-primary);
   font-weight: 600;
 }
 .skip-link:focus {
@@ -246,4 +254,18 @@ input::-webkit-datetime-edit-ampm-field:focus {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Inter: straight-line figures that line up in columns (tnum), a slashless clear 1 / l / I. */
+body {
+  font-feature-settings:
+    'cv11' 1,
+    'ss01' 0;
+  font-optical-sizing: auto;
+}
+table,
+input,
+select,
+textarea {
+  font-variant-numeric: tabular-nums;
 }

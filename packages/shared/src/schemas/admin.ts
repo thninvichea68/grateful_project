@@ -4,6 +4,7 @@ import {
   FOLLOW_UP_PRIORITIES,
   FOLLOW_UP_STATUSES,
   LOOKUP_TYPES,
+  MILESTONE_OFFSET_UNITS,
   PORT_KINDS,
   QUOTATION_STATUSES,
   STAFF_STATUSES,
@@ -11,6 +12,8 @@ import {
   type FollowUpPriority,
   type FollowUpStatus,
   type LookupType,
+  type MilestoneMode,
+  type MilestoneOffsetUnit,
   type PortKind,
   type QuotationStatus,
   type StaffStatus,
@@ -24,7 +27,7 @@ import {
 } from '../permissions';
 import { clientScopesSchema } from './auth';
 import { paginationQuerySchema } from './common';
-import { boolParam, decimal, optText, optUuid } from './fields';
+import { boolParam, decimal, optDateTime, optText, optUuid } from './fields';
 
 /* ------------------------------ Passwords ------------------------------ */
 
@@ -109,8 +112,15 @@ export const followUpInputSchema = z.object({
   clientId: optUuid,
   shipmentId: optUuid,
   assigneeId: optUuid,
+  actualAt: optDateTime,
   /** Local Phnom Penh date-time "YYYY-MM-DDTHH:mm" (from a datetime-local input) or ISO. */
-  dueAt: z.string().min(10, 'Enter a due date'),
+  dueAt: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? v : undefined)),
   priority: z.enum(FOLLOW_UP_PRIORITIES).default('MEDIUM'),
   status: z.enum(FOLLOW_UP_STATUSES).default('OPEN'),
 });
@@ -135,12 +145,43 @@ export interface FollowUpRow {
   shipmentReference: string | null;
   assigneeId: string | null;
   assigneeName: string | null;
-  dueAt: string;
+  dueAt: string | null;
+  actualAt: string | null;
+  milestoneRuleId: string | null;
+  ownerRole: string | null;
+  completionField: string | null;
   priority: FollowUpPriority;
   status: FollowUpStatus;
   overdue: boolean;
+  completedLate: boolean;
   completedAt: string | null;
 }
+
+export interface MilestoneRule {
+  id: string;
+  mode: MilestoneMode;
+  code: string;
+  name: string;
+  sequence: number;
+  anchorCode: string;
+  offsetValue: number;
+  offsetUnit: MilestoneOffsetUnit;
+  ownerRole: string;
+  completionField: string | null;
+  remindBefore: number;
+  escalateAfter: number;
+  skipWhenClearedByOther: boolean;
+  active: boolean;
+}
+
+export const milestoneRuleUpdateSchema = z.object({
+  offsetValue: z.number().int().min(-365).max(365),
+  offsetUnit: z.enum(MILESTONE_OFFSET_UNITS),
+  ownerRole: z.string().trim().min(2).max(80),
+  remindBefore: z.number().int().min(0).max(720),
+  escalateAfter: z.number().int().min(0).max(720),
+  active: z.boolean(),
+});
 
 /* ------------------------------ Documents ------------------------------ */
 
@@ -245,9 +286,25 @@ export const quotationInputSchema = z.object({
     .nullish()
     .transform((v) => v ?? null),
   latePenaltyPctPerDay: decimal(3, { min: 0 }),
+  /** Free-text conditions; the priced items are `charges`. */
   notes: optText(4000),
   /** One object per row: column key → displayed text ("As per receipt", "60", "5/10/15"). */
   lines: z.array(z.record(z.string().max(300))).min(1, 'Add at least one row'),
+  /** Our cost per rate row, as `lines` (column key → cost); saved only with quotations:cost. */
+  costs: z.array(z.record(z.string().max(300))).optional(),
+  /** Extra charges under the rates (Red signal 45 / Shipment…), picked on bills and summaries. */
+  charges: z
+    .array(
+      z.object({
+        description: z.string().trim().min(1, 'Name each extra charge').max(200),
+        amount: decimal(2, { min: 0 }),
+        unit: optText(40),
+        remark: optText(500),
+        /** Our cost (quotations:cost only). */
+        cost: decimal(2, { min: 0 }).optional(),
+      }),
+    )
+    .default([]),
 });
 export type QuotationInput = z.input<typeof quotationInputSchema>;
 
@@ -279,10 +336,15 @@ export interface QuotationRow {
   toName: string;
   quoteDate: string;
   lineCount: number;
+  /** Extra charges listed under the rates. */
+  chargeCount: number;
   isLatest: boolean;
 }
 
-export interface QuotationDetail extends Omit<QuotationRow, 'lineCount' | 'isLatest'> {
+export interface QuotationDetail extends Omit<
+  QuotationRow,
+  'lineCount' | 'chargeCount' | 'isLatest'
+> {
   attn: string | null;
   paymentTermDays: number | null;
   latePenaltyPctPerDay: string | null;
@@ -290,6 +352,16 @@ export interface QuotationDetail extends Omit<QuotationRow, 'lineCount' | 'isLat
   docTitle: string;
   columns: QuotationTemplate['columns'];
   lines: Record<string, string>[];
+  /** Our cost per rate row (as `lines`); only for people with quotations:cost. */
+  costs?: Record<string, string>[];
+  charges: {
+    description: string;
+    amount: string | null;
+    unit: string | null;
+    remark: string | null;
+    /** Only for people with quotations:cost. */
+    cost?: string | null;
+  }[];
   versions: { id: string; version: number; status: QuotationStatus; quoteDate: string }[];
 }
 
@@ -573,4 +645,60 @@ export interface SettingsBundle {
     sortOrder: number;
     isActive: boolean;
   }[];
+}
+
+/* ---------- My Work (operator follow-up, from the shipping plans) ---------- */
+
+/** One live job: a shipping plan and the first milestone still open on it. */
+export interface MyWorkJob {
+  shipmentId: string;
+  reference: string;
+  direction: 'IMPORT' | 'EXPORT';
+  clientId: string;
+  clientCode: string;
+  clientName: string;
+  /** "412 ROLLS", from the plan's quantity; null when not entered. */
+  quantity: string | null;
+  /** "1×40HQ", or "LCL 6.2 CBM", or "AIR". */
+  equipment: string | null;
+  /** The current stage: the first open milestone (by sequence). */
+  followUpId: string;
+  stage: string;
+  stageOwner: string | null;
+  /** The stage's planned date (ISO); null while its anchor date is missing. */
+  dueAt: string | null;
+  overdue: boolean;
+  dueToday: boolean;
+  /** The plan's key date: ATA / ETA for imports, ATD / ETD for exports. */
+  keyDateLabel: 'ETA' | 'ATA' | 'ETD' | 'ATD';
+  keyDate: string | null;
+  stepsDone: number;
+  stepsTotal: number;
+}
+
+export interface MyWorkAlert {
+  kind: 'ETA_PASSED' | 'ETD_PASSED' | 'NOT_INVOICED';
+  severity: 'high' | 'medium';
+  title: string;
+  detail: string;
+  /** A single shipment to open, or null when the alert groups several. */
+  shipmentId: string | null;
+}
+
+export interface MyWorkClient {
+  id: string;
+  code: string;
+  name: string;
+  activeJobs: number;
+  overdue: number;
+}
+
+export interface MyWork {
+  jobs: MyWorkJob[];
+  /** Imports with ETA in the next 3 days and no ATA yet. */
+  arriving: { shipments: number; containers: number; lcl: number; air: number };
+  /** Completed shipping plans with nothing billed to the client yet (every month). */
+  notInvoiced: { import: number; export: number };
+  alerts: MyWorkAlert[];
+  clients: MyWorkClient[];
 }

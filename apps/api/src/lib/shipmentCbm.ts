@@ -13,6 +13,17 @@ export const shipmentCbm = (alias = 's'): SQL => {
   return sql`coalesce(${s}.cbm, (SELECT sum(l.cbm) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = ${s}.id), 0)`;
 };
 
+/**
+ * A shipment's gross weight (kg): each invoice's G.W as typed, else that invoice's lines' total.
+ * An invoice kept with only its no., date and G.W counts through its typed G.W.
+ */
+export const shipmentGw = (alias = 's'): SQL => {
+  const s = sql.raw(alias);
+  return sql`coalesce((SELECT sum(coalesce(ci.gross_weight_kg,
+      (SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l WHERE l.invoice_id = ci.id), 0))
+    FROM cargo_invoices ci WHERE ci.shipment_id = ${s}.id), 0)`;
+};
+
 /** 12.430 → "12.43", as the bills store and print it. */
 const plain = (v: string) => String(Number(v));
 

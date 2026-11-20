@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ShipmentPlanSummary,
   ClientDetail,
   ClientInput,
   ClientListItem,
@@ -217,6 +218,15 @@ export function useShipments(query: Query) {
   return useQuery({
     queryKey: [...queryKeys.shipments, 'list', query],
     queryFn: () => api<Paginated<ShipmentListItem>>('/shipments', { query }),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Shipping Plans headline: the month's shipments by status and the unbilled follow-up. */
+export function useShipmentSummary(query: Query) {
+  return useQuery({
+    queryKey: [...queryKeys.shipments, 'summary', query],
+    queryFn: () => api<ShipmentPlanSummary>('/shipments/summary', { query }),
     placeholderData: keepPreviousData,
   });
 }

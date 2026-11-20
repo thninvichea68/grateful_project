@@ -116,6 +116,13 @@ export type FollowUpPriority = (typeof FOLLOW_UP_PRIORITIES)[number];
 export const FOLLOW_UP_STATUSES = ['OPEN', 'AWAITING_REPLY', 'IN_REVIEW', 'DONE'] as const;
 export type FollowUpStatus = (typeof FOLLOW_UP_STATUSES)[number];
 
+export const MILESTONE_MODES = ['SEA_IMPORT', 'SEA_EXPORT', 'AIR_IMPORT', 'AIR_EXPORT'] as const;
+export type MilestoneMode = (typeof MILESTONE_MODES)[number];
+export const MILESTONE_OFFSET_UNITS = ['DAYS', 'HOURS'] as const;
+export type MilestoneOffsetUnit = (typeof MILESTONE_OFFSET_UNITS)[number];
+export const CLEARED_BY_OPTIONS = ['GS', 'FORWARDER', 'OTHER_BROKER'] as const;
+export type ClearedBy = (typeof CLEARED_BY_OPTIONS)[number];
+
 export const STAFF_STATUSES = ['ACTIVE', 'ON_LEAVE', 'INACTIVE'] as const;
 export type StaffStatus = (typeof STAFF_STATUSES)[number];
 

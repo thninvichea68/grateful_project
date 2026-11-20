@@ -11,6 +11,7 @@ import {
 import type { CompanyInfo } from '../../features/accounting';
 import { saveBlob } from '../../lib/files';
 import { logoDataUrl } from './recordSummaryExport';
+import { taxInvoiceServiceDescription } from './taxInvoiceService';
 
 /*
  * Excel for a tax invoice, disbursement or debit note, laid out like its printed sheet
@@ -572,7 +573,7 @@ function taxOrDisbursement(
     ];
     const values: Value[] = [
       l.lineNo,
-      l.description,
+      tax ? taxInvoiceServiceDescription(l.description) : l.description,
       num(l.qty),
       billingUnit(l.description, l.unit),
       num(l.unitPrice),

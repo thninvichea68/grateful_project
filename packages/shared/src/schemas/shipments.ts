@@ -3,6 +3,7 @@ import {
   CLEARANCE_STATUSES,
   COMPLETION_MILESTONES,
   CONTAINER_SIZES,
+  CLEARED_BY_OPTIONS,
   DEFAULT_COMPLETION,
   DIRECTIONS,
   INCOTERMS,
@@ -13,6 +14,7 @@ import {
   type ClientStatus,
   type CompletionMilestone,
   type ContainerSize,
+  type ClearedBy,
   type Incoterm,
   type Direction,
   type LoadType,
@@ -20,7 +22,15 @@ import {
   type TransportMode,
 } from '../enums';
 import { paginationQuerySchema } from './common';
-import { decimal, headerFiltersParam, multi, optDate, optText, optUuid } from './fields';
+import {
+  decimal,
+  headerFiltersParam,
+  multi,
+  optDate,
+  optDateTime,
+  optText,
+  optUuid,
+} from './fields';
 
 /** ISO 6346 shape: 4 letters + 7 digits. Spaces/dashes are stripped. */
 export const containerNo = z
@@ -75,9 +85,18 @@ export const cargoInvoiceInputSchema = z
     description: optText(300),
     /** Imports: packages on the invoice (QTY PKGS). */
     packages: decimal(3, { min: 0 }),
-    lines: z.array(cargoLineInputSchema).min(1, 'Add at least one line'),
+    /** The invoice's G.W (kg) as typed; blank = its lines' total. */
+    grossWeightKg: decimal(3, { min: 0 }),
+    /** An invoice may be kept with no lines when its G.W is entered (no., date and G.W only). */
+    lines: z.array(cargoLineInputSchema),
   })
   .superRefine((inv, ctx) => {
+    if (!inv.lines.length && !(Number(inv.grossWeightKg ?? 0) > 0))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['lines'],
+        message: 'Add at least one line, or enter the invoice G.W',
+      });
     const codes = invoiceHtsCodes(inv.lines);
     if (codes.length > 1)
       ctx.addIssue({
@@ -136,6 +155,7 @@ function blankInvoiceRow(i: unknown): boolean {
     !text(x.invoiceNo) &&
     !text(x.description) &&
     !text(x.packages) &&
+    !text(x.grossWeightKg) &&
     (!Array.isArray(x.lines) || x.lines.every(blankLine))
   );
 }
@@ -261,6 +281,7 @@ export const shipmentInputSchema = z
     direction: z.enum(DIRECTIONS),
     transportMode: z.enum(TRANSPORT_MODES),
     loadType: z.enum(LOAD_TYPES),
+    clearedBy: z.enum(CLEARED_BY_OPTIONS).default('GS'),
     incoterm: z
       .enum(INCOTERMS)
       .or(z.literal(''))
@@ -293,9 +314,16 @@ export const shipmentInputSchema = z
     arriveFty: optDate,
     receivedDocumentDate: optDate,
     doDate: optDate,
+    permitDate: optDate,
+    authorizeDate: optDate,
     flightNo: optText(40),
     checkInDate: optDate,
     cutOffDate: optDate,
+    airCutoffAt: optDateTime,
+    cyCutoffAt: optDateTime,
+    siCutoffAt: optDateTime,
+    vgmCutoffAt: optDateTime,
+    stuffingDate: optDate,
     thcHblNo: optText(60),
     thcHblDate: optDate,
     thcHblAmount: decimal(2, { min: 0 }),
@@ -308,6 +336,19 @@ export const shipmentInputSchema = z
     declarations: declarationRows,
   })
   .superRefine((s, ctx) => {
+    const timestampFields = ['airCutoffAt', 'cyCutoffAt', 'siCutoffAt', 'vgmCutoffAt'] as const;
+    for (const field of timestampFields) {
+      const value = s[field];
+      if (value) {
+        const zoned = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}+07:00`;
+        if (Number.isNaN(Date.parse(zoned)))
+          ctx.addIssue({
+            code: 'custom',
+            path: [field],
+            message: 'Enter a valid date and time',
+          });
+      }
+    }
     if (s.transportMode === 'AIR' && s.loadType !== 'NONE')
       ctx.addIssue({
         code: 'custom',
@@ -329,6 +370,31 @@ export const shipmentInputSchema = z
         path: ['arriveFty'],
         message: 'Arrive FTY cannot be before ETA',
       });
+    if (s.direction === 'EXPORT' && s.transportMode === 'SEA' && s.etd) {
+      for (const field of ['cyCutoffAt', 'siCutoffAt', 'vgmCutoffAt'] as const) {
+        if (s[field] && s[field]!.slice(0, 10) >= s.etd)
+          ctx.addIssue({
+            code: 'custom',
+            path: [field],
+            message: 'Sea cut-offs must be before ETD',
+          });
+      }
+    }
+    if (s.direction === 'EXPORT' && s.transportMode === 'AIR') {
+      const cutoffDay = (s.airCutoffAt ?? s.cutOffDate)?.slice(0, 10);
+      if (s.checkInDate && cutoffDay && s.checkInDate > cutoffDay)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['checkInDate'],
+          message: 'Check-in date cannot be after the cut-off',
+        });
+      if (cutoffDay && s.etd && cutoffDay > s.etd)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['airCutoffAt'],
+          message: 'Cut-off cannot be after the flight date',
+        });
+    }
     const dup = <T>(items: T[], key: (t: T) => string, path: string, label: string) => {
       const seen = new Set<string>();
       items.forEach((it, i) => {
@@ -392,14 +458,31 @@ export const shipmentListQuerySchema = paginationQuerySchema.extend({
     .string()
     .regex(/^\d{4}-\d{2}$/, 'Use YYYY-MM')
     .optional(),
+  /** UNBILLED: completed shipments with nothing billed to the client yet (ledger or INV / DIS / DN). */
+  billing: z.enum(['UNBILLED']).optional(),
   /** Header filters, Excel style: the values each list column keeps. */
   filters: headerFiltersParam.optional(),
 });
 export type ShipmentListQuery = z.input<typeof shipmentListQuerySchema>;
 
+/** The Shipping Plans page's headline figures (direction + client + month filters). */
+export interface ShipmentPlanSummary {
+  total: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  exception: number;
+  /** Completed in the month, with nothing billed to the client yet. */
+  unbilled: number;
+  /** The same, across every month: the whole follow-up backlog. */
+  unbilledAll: number;
+}
+
 /** One row of the Shipping Plans table (all "Expand All" columns included). */
 export interface ShipmentListItem {
   id: string;
+  /** Billed to the client: a ledger row with amounts, or an issued INV / DIS / DN. */
+  billed: boolean;
   reference: string;
   clientId: string;
   clientCode: string;
@@ -420,9 +503,13 @@ export interface ShipmentListItem {
   crd: string | null;
   arriveFty: string | null;
   forwarderName: string | null;
+  /** The forwarder's code (MAERSK, FWF…): what the list shows. */
+  forwarderCode: string | null;
   clearancePortName: string | null;
-  /** The port's short name (Settings → Ports, e.g. SHV, KTI): what the list shows. */
+  /** The port's short name (Settings → Ports, e.g. SHV, KTI); shown on hover with the full name. */
   clearancePortShortName: string | null;
+  /** The customs port code (PNH04, SHV11…): what the list shows. */
+  clearancePortCode: string | null;
   etdPort: string | null;
   hblNo: string | null;
   bookingNo: string | null;
@@ -471,6 +558,7 @@ export interface ShipmentDetail {
   direction: Direction;
   transportMode: TransportMode;
   loadType: LoadType;
+  clearedBy: ClearedBy;
   status: ShipmentStatus;
   clearanceStatus: ClearanceStatus;
   shipperName: string | null;
@@ -501,9 +589,16 @@ export interface ShipmentDetail {
   arriveFty: string | null;
   receivedDocumentDate: string | null;
   doDate: string | null;
+  permitDate: string | null;
+  authorizeDate: string | null;
   flightNo: string | null;
   checkInDate: string | null;
   cutOffDate: string | null;
+  airCutoffAt: string | null;
+  cyCutoffAt: string | null;
+  siCutoffAt: string | null;
+  vgmCutoffAt: string | null;
+  stuffingDate: string | null;
   thcHblNo: string | null;
   thcHblDate: string | null;
   thcHblAmount: string | null;
@@ -525,6 +620,8 @@ export interface ShipmentDetail {
     invoiceDate: string | null;
     description: string | null;
     packages: string | null;
+    /** As typed on the invoice; null = its lines' G.W total. */
+    grossWeightKg: string | null;
     lines: {
       id: string;
       poNo: string | null;

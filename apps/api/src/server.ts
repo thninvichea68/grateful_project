@@ -5,6 +5,7 @@ import { pool } from './db/client';
 import { startExchangeRateSync } from './modules/settings/rateSync';
 import { startMarketSync } from './modules/settings/marketSync';
 import { startChatRetention } from './modules/chat/retention';
+import { backfillExistingShipmentMilestones } from './modules/shipments/milestones';
 
 const app = createApp();
 const server = app.listen(env.PORT, () => {
@@ -13,6 +14,9 @@ const server = app.listen(env.PORT, () => {
 const stopRateSync = startExchangeRateSync();
 const stopMarketSync = startMarketSync();
 const stopChatRetention = startChatRetention();
+void backfillExistingShipmentMilestones()
+  .then((shipments) => logger.info({ shipments }, 'Shipment milestone backfill complete'))
+  .catch((err) => logger.error({ err }, 'Shipment milestone backfill failed'));
 
 function shutdown(signal: string) {
   logger.info({ signal }, 'Shutting down');

@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "follow_ups_shipment_milestone_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "follow_ups_shipment_milestone_unique" ON "follow_ups" USING btree ("shipment_id","milestone_rule_id") WHERE "follow_ups"."milestone_rule_id" IS NOT NULL AND "follow_ups"."shipment_id" IS NOT NULL AND "follow_ups"."deleted_at" IS NULL;

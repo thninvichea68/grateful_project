@@ -9,7 +9,7 @@
   border: 1px solid transparent;
   border-radius: 50%;
   background: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
   transition: background 0.15s ease;
 }
 .back svg {

@@ -16,8 +16,9 @@ import { db } from '../../db/client';
 import { badRequest, notFound } from '../../lib/errors';
 import { issueDateFor } from '../../lib/issueDate';
 import { queryRows } from '../../lib/listing';
-import { shipmentCbm } from '../../lib/shipmentCbm';
+import { shipmentCbm, shipmentGw } from '../../lib/shipmentCbm';
 import { rateOn, vatRateOn } from './ledger';
+import { quotationServiceChoices } from './quotationServiceChoices';
 
 interface Ctx {
   /** SERVICE, or AGENCY: the agency invoice / THC's own DIS. Null without a ledger row. */
@@ -54,6 +55,7 @@ interface Ctx {
   forwarderId: string | null;
   portId: string | null;
   portName: string | null;
+  portKind: string | null;
   originName: string | null;
   destinationName: string | null;
   clientName: string;
@@ -73,8 +75,232 @@ interface Ctx {
   ctns: string;
 }
 
+type QuoteRef = { quoteNo: string; version: number };
+type QuoteCharge = {
+  description: string;
+  unitPrice: string | null;
+  /** Per what (Set, Shipment…), for the quotation's extra charges. */
+  unit?: string | null;
+  /** 'rate' = a row of the rates table; 'extra' = an extra charge under it. */
+  kind?: 'rate' | 'extra';
+};
+export type QuoteContext = Pick<
+  Ctx,
+  | 'clientId'
+  | 'direction'
+  | 'transportMode'
+  | 'loadType'
+  | 'portName'
+  | 'portKind'
+  | 'containerSize'
+  | 'gw'
+>;
+type DraftLine = Record<string, unknown> & { description: string };
+type QuotationColumn = { key: string; label: string; type: string };
+
 const n = (v: string | null | undefined) =>
   v === null || v === undefined ? '' : String(Number(v));
+
+function quoteTemplateKey(c: QuoteContext): string {
+  if (c.transportMode === 'AIR') return c.direction === 'IMPORT' ? 'import_air' : 'export_air';
+  if (c.direction === 'IMPORT') {
+    if (c.portKind === 'DRY' && c.loadType === 'LCL') return 'dryport_lcl';
+    return c.portName?.toUpperCase().includes('PNH') ? 'import_pnh' : 'import_sih';
+  }
+  if (c.portName?.toUpperCase().includes('BAVET')) return 'export_bavet';
+  if (c.portName?.toUpperCase().includes('PNH')) return 'export_pnh';
+  return 'export_shv';
+}
+
+function rateColumnKey(templateKey: string, c: QuoteContext): string | null {
+  const weight = Number(c.gw);
+  if (templateKey === 'dryport_lcl') {
+    if (!weight || weight > 5000) return null;
+    return weight <= 1500 ? 't15' : weight <= 2500 ? 't25' : 't5';
+  }
+  if (templateKey.endsWith('_air')) {
+    if (!weight || weight > 5000) return null;
+    return weight <= 500
+      ? 'w500'
+      : weight <= 1000
+        ? 'w1000'
+        : weight <= 2000
+          ? 'w2000'
+          : weight <= 3000
+            ? 'w3000'
+            : 'w5000';
+  }
+  if (c.loadType === 'LCL') return 'lcl';
+  if (c.containerSize?.startsWith('20')) return 'c20';
+  if (/^(40|45)/.test(c.containerSize ?? '')) return 'c40';
+  return null;
+}
+
+function normalizedDescription(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+async function applyQuotationRates(
+  c: QuoteContext,
+  lines: DraftLine[],
+): Promise<{
+  lines: DraftLine[];
+  quotation: QuoteRef | null;
+  quotationCharges: QuoteCharge[];
+  /** The accepted quotation found for this service, whether or not a line matched it. */
+  source?: QuoteRef | null;
+}> {
+  const templateKey = quoteTemplateKey(c);
+  const rateKey = rateColumnKey(templateKey, c);
+
+  const [template] = await queryRows<{
+    columns: QuotationColumn[];
+    defaultRows: string[][];
+  }>(
+    db,
+    sql`SELECT columns, default_rows AS "defaultRows"
+        FROM quotation_templates WHERE key = ${templateKey}`,
+  );
+  if (!template) return { lines, quotation: null, quotationCharges: [] };
+
+  const [quote] = await queryRows<{
+    id: string;
+    quoteNo: string;
+    version: number;
+  }>(
+    db,
+    sql`
+    SELECT q.id, q.quote_no AS "quoteNo", q.version
+    FROM quotations q
+    WHERE q.client_id = ${c.clientId} AND q.template_key = ${templateKey}
+      AND q.status = 'ACCEPTED' AND q.deleted_at IS NULL
+    ORDER BY q.quote_date DESC, q.version DESC, q.created_at DESC
+    LIMIT 1`,
+  );
+
+  const descriptionKey =
+    template.columns.find((column) => column.key === 'desc')?.key ??
+    template.columns.find((column) => /description/i.test(column.label))?.key ??
+    template.columns[0]?.key;
+  const currencyKey = template.columns.find(
+    (column) => column.key === 'ccy' || /currency/i.test(column.label),
+  )?.key;
+  if (!descriptionKey) return { lines, quotation: null, quotationCharges: [] };
+
+  const quoteLines = quote
+    ? await queryRows<{ cells: Record<string, string> }>(
+        db,
+        sql`SELECT cells FROM quotation_lines WHERE quotation_id = ${quote.id} ORDER BY line_no`,
+      )
+    : [];
+  const quotedCharges = quoteLines
+    .map(({ cells }) => {
+      const price =
+        rateKey && template.columns.some((column) => column.key === rateKey)
+          ? String(cells[rateKey] ?? '')
+              .trim()
+              .replace(/,/g, '')
+          : '';
+      const currency = currencyKey
+        ? String(cells[currencyKey] ?? '')
+            .trim()
+            .toUpperCase()
+        : 'USD';
+      return {
+        description: String(cells[descriptionKey] ?? ''),
+        unitPrice:
+          (!currencyKey || currency === 'USD') && /^\d+(?:\.\d+)?$/.test(price) ? price : null,
+      };
+    })
+    .filter((charge) => charge.description);
+  const descriptionIndex = template.columns.findIndex((column) => column.key === descriptionKey);
+  const quotationCharges: QuoteCharge[] = quotationServiceChoices(
+    template.defaultRows.map((row) => row[descriptionIndex] ?? ''),
+    quotedCharges,
+  ).map((c) => ({ ...c, kind: 'rate' as const }));
+  // The quotation's extra charges (Red signal, Document fee…), with their price and per what.
+  if (quote) {
+    const extras = await queryRows<{
+      description: string;
+      amount: string | null;
+      unit: string | null;
+    }>(
+      db,
+      sql`SELECT description, amount::text AS amount, unit FROM quotation_charges
+          WHERE quotation_id = ${quote.id} ORDER BY line_no`,
+    );
+    for (const x of extras)
+      if (
+        !quotationCharges.some(
+          (c) => normalizedDescription(c.description) === normalizedDescription(x.description),
+        )
+      )
+        quotationCharges.push({
+          description: x.description,
+          unitPrice: x.amount === null ? null : String(Number(x.amount)),
+          unit: x.unit,
+          kind: 'extra',
+        });
+  }
+  let matched = false;
+  const pricedLines = lines.map((line) => {
+    const description = normalizedDescription(line.description);
+    const charge = quotationCharges.find((row) => {
+      const quotedDescription = normalizedDescription(row.description);
+      return (
+        description.length >= 5 &&
+        quotedDescription.length >= 5 &&
+        (description.includes(quotedDescription) || quotedDescription.includes(description))
+      );
+    });
+    if (!charge) return line;
+    if (charge.unitPrice === null) return { ...line, description: charge.description };
+    matched = true;
+    return { ...line, description: charge.description, unitPrice: charge.unitPrice };
+  });
+  return {
+    lines: pricedLines,
+    quotation: matched && quote ? { quoteNo: quote.quoteNo, version: quote.version } : null,
+    quotationCharges,
+    source: quote ? { quoteNo: quote.quoteNo, version: quote.version } : null,
+  };
+}
+
+/**
+ * A client's quoted charges for one shipment's service (by port, direction and load): the rates
+ * table priced for its container size / weight, then the extra charges. For pick lists on
+ * record summaries and bills, so a charge and its price are chosen, not typed.
+ */
+export async function quotationChoicesFor(c: QuoteContext) {
+  const { source, quotationCharges } = await applyQuotationRates(c, []);
+  return { quotation: source ?? null, templateKey: quoteTemplateKey(c), charges: quotationCharges };
+}
+
+/** Reapply accepted quote prices after Bill to Clients copies a previous document's lines. */
+export async function applyQuotationRatesToRecord(
+  recordId: string,
+  lines: DraftLine[],
+): Promise<{ lines: DraftLine[]; quotation: QuoteRef | null }> {
+  const [c] = await queryRows<QuoteContext>(
+    db,
+    sql`
+    SELECT a.client_id AS "clientId", s.direction, s.transport_mode AS "transportMode",
+           s.load_type AS "loadType", p.short_name AS "portName", p.kind AS "portKind",
+           (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
+           ${shipmentGw()}::text AS gw
+    FROM accounting_records a
+    JOIN customs_declarations d ON d.id = a.declaration_id
+    JOIN shipments s ON s.id = d.shipment_id
+    LEFT JOIN ports p ON p.id = coalesce(d.port_id, s.clearance_port_id)
+    WHERE a.id = ${recordId}`,
+  );
+  if (!c) throw notFound('Ledger entry');
+  const priced = await applyQuotationRates(c, lines);
+  return { lines: priced.lines, quotation: priced.quotation };
+}
 
 /**
  * A ready-to-edit draft for a document type, built from a ledger row and its shipment. A record
@@ -109,13 +335,13 @@ export async function prefill(
            a.clear_fee::text AS "clearFee", a.thc::text AS thc,
            a.other_pay::text AS "otherPay", a.inv_revenue::text AS "invRevenue", a.dis_total::text AS "disTotal", a.dn_total::text AS "dnTotal",
            d.declare_no AS "declareNo", s.reference AS "shipmentReference", s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.flight_no AS "flightNo", s.forwarder_id AS "forwarderId",
-           coalesce(d.port_id, s.clearance_port_id) AS "portId", p.short_name AS "portName", oc.name AS "originName", dc.name AS "destinationName",
+           coalesce(d.port_id, s.clearance_port_id) AS "portId", p.short_name AS "portName", p.kind AS "portKind", oc.name AS "originName", dc.name AS "destinationName",
            c.name AS "clientName", c.legal_name AS "legalName", c.legal_name_km AS "legalNameKm", c.address, c.vattin,
            s.shipper_name AS shipper, cn.name AS consignee, s.hbl_no AS hbl, s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
            (SELECT string_agg(container_no, ', ' ORDER BY sort_order) FROM containers WHERE shipment_id = s.id) AS containers,
            (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
            ${shipmentCbm()}::text AS cbm,
-           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
+           ${shipmentGw()}::text AS gw,
            coalesce((SELECT sum(l.ctns) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS ctns
     FROM shipments s LEFT JOIN customs_declarations d ON d.shipment_id = s.id ${
       shipmentId
@@ -177,10 +403,19 @@ export async function prefill(
     : 'កំរៃសេវាបំពេញបែបបទនាំចេញ / EXPORT PROCESSING FEE';
   // Billed per container (40H), or per shipment (SHIP) by air / LCL.
   const shipUnit = billingUnit(null, shipmentChargeUnit(c));
+  const applyRates = async (draft: Record<string, unknown>) => {
+    const priced = await applyQuotationRates(c, draft.lines as DraftLine[]);
+    return {
+      ...draft,
+      lines: priced.lines,
+      quotationCharges: priced.quotationCharges,
+      ...(priced.quotation ? { quotation: priced.quotation } : {}),
+    };
+  };
 
   switch (type) {
     case 'tax-invoices':
-      return {
+      return applyRates({
         ...base,
         ...customer,
         ...ship,
@@ -189,9 +424,9 @@ export async function prefill(
         exchangeRate: c.exchangeRate,
         vatRate: c.vatRate,
         lines: [line(fee, c.invRevenue, shipUnit)],
-      };
+      });
     case 'disbursements':
-      return {
+      return applyRates({
         ...base,
         ...customer,
         ...ship,
@@ -204,9 +439,9 @@ export async function prefill(
             ? line('THC FEE (as per agency invoice)', c.disTotal, shipUnit)
             : line('CUSTOMS PROCESSING FEE (as per receipt)', c.disTotal, shipUnit),
         ],
-      };
+      });
     case 'debit-notes':
-      return {
+      return applyRates({
         ...base,
         ...ship,
         dnNo: c.freeDnNo,
@@ -217,7 +452,7 @@ export async function prefill(
         lines: (await summaryLines('debit-notes', recordId)) ?? [
           line('CLEARANCE, TRUCKING & HANDLING CHARGES', c.dnTotal, shipUnit),
         ],
-      };
+      });
     case 'record-summaries': {
       // Not in the ledger yet: the issue date it will get (next working day after clearance);
       // not declared yet either: today, changed on the summary as needed.
@@ -251,19 +486,51 @@ export async function prefill(
         containerSize: c.containerSize,
         grossWeightKg: n(c.gw),
         cbm: c.transportMode === 'AIR' ? 'NON' : n(c.cbm),
-        // The standard import / export breakdown; the processing fee starts at the ledger's
-        // service fee (VAT at the summary date's percent goes on top), the rest are priced
-        // per shipment.
-        lines: recordSummaryItems(c.direction, vatRate).map(([description, mark], i) => ({
-          description,
-          qty: '1',
-          unit: chargeLineUnit(description, shipmentChargeUnit(c)),
-          unitPrice: (i === 0 && n(c.invRevenue)) || '0',
-          mark,
-        })),
+        // Only what the client's accepted quotation prices for this shipment (its port,
+        // container size or weight), already priced; the rest (receipt items, extras) are
+        // added on the summary when they apply. No quotation: the processing fee alone.
+        lines: await quotedSummaryLines(c, vatRate),
       };
     }
   }
+}
+
+/** A new record summary's lines: the quotation's priced rates, with the standard Marks. */
+async function quotedSummaryLines(c: Ctx, vatRate: string | null) {
+  const standard = recordSummaryItems(c.direction, vatRate ?? undefined);
+  const markFor = (description: string) => {
+    const k = normalizedDescription(description);
+    return (
+      standard.find(([d]) => {
+        const s = normalizedDescription(d);
+        return s === k || (s.length >= 5 && k.length >= 5 && (s.includes(k) || k.includes(s)));
+      })?.[1] ?? ''
+    );
+  };
+  const unit = shipmentChargeUnit(c);
+  const { quotationCharges } = await applyQuotationRates(c, []);
+  const priced = quotationCharges.filter(
+    (q) => q.kind !== 'extra' && q.unitPrice !== null && Number(q.unitPrice) > 0,
+  );
+  if (priced.length)
+    return priced.map((q) => ({
+      description: q.description.toUpperCase(),
+      qty: '1',
+      unit: chargeLineUnit(q.description, unit),
+      unitPrice: String(Number(q.unitPrice)),
+      mark: markFor(q.description),
+    }));
+  // No quotation for this service yet: the processing fee at the ledger's service fee.
+  const [description, mark] = standard[0]!;
+  return [
+    {
+      description,
+      qty: '1',
+      unit: chargeLineUnit(description, unit),
+      unitPrice: n(c.invRevenue) || '0',
+      mark,
+    },
+  ];
 }
 
 /**
@@ -352,7 +619,7 @@ export async function creditNotePrefill(declarationId: string): Promise<Record<s
            (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
            (SELECT count(*)::int FROM containers WHERE shipment_id = s.id) AS "containerCount",
            ${shipmentCbm()}::text AS cbm,
-           coalesce((SELECT sum(l.gross_weight_kg) FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id), 0)::text AS gw,
+           ${shipmentGw()}::text AS gw,
            (SELECT value FROM settings WHERE key = 'company') AS company
     FROM customs_declarations d JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL JOIN clients c ON c.id = s.client_id
     LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'

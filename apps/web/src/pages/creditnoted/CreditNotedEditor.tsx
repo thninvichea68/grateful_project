@@ -18,6 +18,7 @@ import { useAuth } from '../../auth/AuthProvider';
 import {
   useCompany,
   useCreditNoteMessages,
+  useCreditNoteQuotationServices,
   useDoc,
   useDocAction,
   useDocVatPercent,
@@ -55,6 +56,14 @@ const A4_WIDTH = 794; // 210mm at 96dpi
 /** The "+ Add New Item" choice in a line's description dropdown. */
 const NEW_ITEM = '__new__';
 
+function quoteServiceKey(description: string): string {
+  const key = description.trim().toUpperCase().replace(/\s+/g, ' ');
+  if (/^(?:IMPORT|EXPORT)-CLEARANCE$/.test(key)) return 'CLEARANCE';
+  if (/^TRUCK(?:ING| FEE)?$/.test(key)) return 'TRUCKING';
+  if (/^CUSTOMS? PROCESSING FEE$/.test(key)) return 'CUSTOM PROCESSING FEE';
+  return key;
+}
+
 /**
  * The unit the note's charges are billed in, read from the Container box ("MRKU8974303
  * (1X40'HQ)" → 40'HQ). No size there (air, LCL) → SHIP.
@@ -71,9 +80,10 @@ export function CreditNotedRoute({ base }: { base: string }) {
   const { id = 'new' } = useParams();
   const [params] = useSearchParams();
   const docId = id === 'new' ? undefined : id;
-  const recordId = docId ? null : params.get('recordId');
+  const requestedRecordId = docId ? null : params.get('recordId');
   const declarationId = docId ? null : params.get('declarationId');
   const doc = useDoc(TYPE, docId);
+  const recordId = docId ? (doc.data?.accountingRecordId ?? null) : requestedRecordId;
   const pre = usePrefill(TYPE, recordId, declarationId);
   const lookups = useLookups();
   if (doc.isLoading || pre.isLoading || lookups.isLoading)
@@ -94,6 +104,8 @@ export function CreditNotedRoute({ base }: { base: string }) {
       base={base}
       doc={doc.data}
       prefill={pre.data}
+      declarationId={declarationId}
+      recordId={recordId}
     />
   );
 }
@@ -107,10 +119,14 @@ function CreditNotedEditor({
   base,
   doc,
   prefill,
+  declarationId,
+  recordId,
 }: {
   base: string;
   doc?: BillingDoc | undefined;
   prefill?: Record<string, unknown> | undefined;
+  declarationId: string | null;
+  recordId: string | null;
 }) {
   const { can } = useAuth();
   const navigate = useNavigate();
@@ -151,6 +167,16 @@ function CreditNotedEditor({
     name: 'lines',
   });
   const values = useWatch({ control }) as Values;
+  const quoteServices = useCreditNoteQuotationServices({
+    declarationId,
+    recordId,
+    portId: String(values.portId ?? '') || null,
+    containerNo: String(values.containerNo ?? ''),
+    grossWeightKg: String(values.grossWeightKg ?? ''),
+    cbm: String(values.cbm ?? ''),
+  });
+  const previousQuoteRates = useRef(new Map<string, string | null>());
+  const previousQuoteContext = useRef('');
 
   // Units follow the container size in the Container box (SHIP without one; SET for the
   // per-set charges) on every line not given a unit of its own (DAY, CBM…).
@@ -169,6 +195,51 @@ function CreditNotedEditor({
       setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
   };
 
+  useEffect(() => {
+    const data = quoteServices.data;
+    if (!data || !editable) return;
+    const context = [values.portId, values.containerNo, values.grossWeightKg, values.cbm].join('|');
+    if (context === previousQuoteContext.current) return;
+
+    const nextRates = new Map(
+      data.services.map((service) => [quoteServiceKey(service.description), service.unitPrice]),
+    );
+    const initial = !previousQuoteContext.current;
+    getValues('lines').forEach((line, i) => {
+      const key = quoteServiceKey(line.description);
+      const service = data.services.find((item) => quoteServiceKey(item.description) === key);
+      const oldPrice = previousQuoteRates.current.get(key);
+      const currentPrice = String(line.unitPrice ?? '').trim();
+      const unchanged = initial
+        ? !doc && !currentPrice
+        : !currentPrice || currentPrice === (oldPrice ?? '');
+      if (!service) {
+        if (!initial && unchanged) setValue(`lines.${i}.unitPrice`, '', { shouldDirty: true });
+        return;
+      }
+      if (initial && !doc && !currentPrice) {
+        setValue(`lines.${i}.description`, service.description, { shouldDirty: true });
+      }
+      if (unchanged) {
+        setValue(`lines.${i}.unitPrice`, service.unitPrice ?? '', { shouldDirty: true });
+        if (service.unit === 'CBM') setValue(`lines.${i}.unit`, 'CBM', { shouldDirty: true });
+        if (service.qty) setValue(`lines.${i}.qty`, service.qty, { shouldDirty: true });
+      }
+    });
+    previousQuoteRates.current = nextRates;
+    previousQuoteContext.current = context;
+  }, [
+    doc,
+    editable,
+    getValues,
+    quoteServices.data,
+    setValue,
+    values.cbm,
+    values.containerNo,
+    values.grossWeightKg,
+    values.portId,
+  ]);
+
   // The company details may load after the form opened: fill Bill to / Address if still empty.
   useEffect(() => {
     if (!editable || !company.data) return;
@@ -178,9 +249,7 @@ function CreditNotedEditor({
       setValue('address', company.data.addressEn);
   }, [company.data, editable, getValues, setValue]);
 
-  // Line descriptions come from Settings → Dropdown lists → Charge descriptions.
   const qc = useQueryClient();
-  const charges = (lookups.data?.values.CHARGE ?? []).map((c) => c.label);
   // Units: the standard ones, then any added to Settings → Dropdown lists → Charge units.
   const units = [
     ...new Set([
@@ -190,30 +259,22 @@ function CreditNotedEditor({
     ]),
   ];
   /** "+ Add New" in a line's Description or Unit dropdown: ask, use it, and add it to the list. */
-  const chooseNew = async (
-    i: number,
-    field: 'description' | 'unit',
-    el: HTMLSelectElement,
-    current: string,
-  ) => {
+  const chooseNew = async (i: number, el: HTMLSelectElement, current: string) => {
     if (el.value !== NEW_ITEM) return false;
     el.value = current; // keep showing the old choice while asking
-    const typed = window.prompt(field === 'unit' ? 'New unit' : 'New item description')?.trim();
+    const typed = window.prompt('New unit')?.trim();
     if (!typed) return true;
     const label = typed.toUpperCase();
-    setValue(`lines.${i}.${field}`, label, { shouldDirty: true, shouldValidate: true });
-    if (field === 'description') reunit(i);
+    setValue(`lines.${i}.unit`, label, { shouldDirty: true, shouldValidate: true });
     // Also add it to the list so it's there next time (already there = no change).
     try {
-      await api(field === 'unit' ? '/lookups/charge-units' : '/lookups/charges', {
+      await api('/lookups/charge-units', {
         method: 'POST',
         json: { label },
       });
       await qc.invalidateQueries({ queryKey: queryKeys.lookups });
     } catch {
-      toast(
-        `${field === 'unit' ? 'Unit' : 'Item'} used on this line, but it could not be added to the list.`,
-      );
+      toast('Unit used on this line, but it could not be added to the list.');
     }
     return true;
   };
@@ -584,7 +645,7 @@ function CreditNotedEditor({
         ) : (
           <ReviewBanner doc={doc} />
         )}
-        <ErrorBanner error={action.error ?? setReview.error} />
+        <ErrorBanner error={quoteServices.error ?? action.error ?? setReview.error} />
         {supportDocs && doc && (
           <SupportDocumentsModal
             title={`Credit Note No. ${cnSeq(doc.number)}`}
@@ -682,6 +743,28 @@ function CreditNotedEditor({
             <section className={s.card}>
               <h3>2. Credit note line items</h3>
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
+              <p className={s.note}>
+                All services for this clearance port are listed. A client rate loads when available;
+                edit Price for a case-by-case change.
+              </p>
+              {quoteServices.isSuccess && quoteServices.data.services.length === 0 && (
+                <p className={s.note} role="alert">
+                  No service list is available for this clearance port and shipment direction.
+                </p>
+              )}
+              {quoteServices.isSuccess &&
+                quoteServices.data.services.length > 0 &&
+                quoteServices.data.services.every((service) => service.unitPrice === null) && (
+                  <p className={s.note} role="status">
+                    Services are available to select, but no quoted rates match this client and
+                    shipment details. Enter a price for this case.
+                  </p>
+                )}
+              {!declarationId && !recordId && (
+                <p className={s.note} role="alert">
+                  Choose a declaration to load client- and port-specific quotation rates.
+                </p>
+              )}
               <div className={s.lineHead}>
                 <span>#</span>
                 <span>Description</span>
@@ -698,29 +781,55 @@ function CreditNotedEditor({
                     <span className={s.no}>{i + 1}</span>
                     {(() => {
                       const current = String(l?.description ?? '');
+                      const services = quoteServices.data?.services ?? [];
+                      const selected = services.find((item) => item.description === current);
                       const reg = register(`lines.${i}.description`);
                       return (
                         <select
                           className="form-select-box"
                           {...reg}
                           onChange={async (e) => {
-                            if (!(await chooseNew(i, 'description', e.target, current))) {
-                              await reg.onChange(e);
+                            const description = e.currentTarget.value;
+                            await reg.onChange(e);
+                            const service = services.find(
+                              (item) => item.description === description,
+                            );
+                            if (service?.unit === 'CBM') {
+                              setValue(`lines.${i}.unit`, 'CBM', { shouldDirty: true });
+                            } else {
                               reunit(i);
                             }
+                            setValue(`lines.${i}.unitPrice`, service?.unitPrice ?? '', {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                            if (service?.qty)
+                              setValue(`lines.${i}.qty`, service.qty, { shouldDirty: true });
                           }}
                           aria-label={`Line ${i + 1} description`}
                           aria-invalid={!!lineErr(i, 'description')}
-                          title={lineErr(i, 'description') ?? current}
+                          title={
+                            lineErr(i, 'description') ??
+                            selected?.note ??
+                            'Select a service to load its quoted base rate'
+                          }
                         >
-                          <option value="">Choose…</option>
-                          <option value={NEW_ITEM}>+ Add New Item</option>
-                          {current && !charges.includes(current) && (
-                            <option value={current}>{current}</option>
+                          <option value="">
+                            {quoteServices.isLoading ? 'Loading quotation rates…' : 'Choose…'}
+                          </option>
+                          {current && !selected && (
+                            <option value={current} disabled>
+                              {current} (not in current quotation)
+                            </option>
                           )}
-                          {charges.map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          {services.map((service, index) => (
+                            <option
+                              key={`${service.description}-${index}`}
+                              value={service.description}
+                            >
+                              {service.unitPrice === null
+                                ? `${service.description} — enter case price`
+                                : `${service.description} — $${service.unitPrice}`}
                             </option>
                           ))}
                         </select>
@@ -739,8 +848,7 @@ function CreditNotedEditor({
                           className="form-select-box"
                           {...reg}
                           onChange={async (e) => {
-                            if (!(await chooseNew(i, 'unit', e.target, current)))
-                              await reg.onChange(e);
+                            if (!(await chooseNew(i, e.target, current))) await reg.onChange(e);
                           }}
                           aria-label={`Line ${i + 1} unit`}
                         >

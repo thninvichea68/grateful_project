@@ -6,10 +6,12 @@ import {
   type QueryKey,
 } from '@tanstack/react-query';
 import type {
+  MyWork,
   DeclarationRegisterRow,
   DocumentRow,
   FollowUpRow,
   MarketPrices,
+  MilestoneRule,
   Paginated,
   PublicHoliday,
   QuotationDetail,
@@ -52,6 +54,20 @@ export const usePublicHolidays = (year: number) =>
   useQuery({
     queryKey: ['settings', 'holidays', year],
     queryFn: () => api<PublicHoliday[]>('/settings/public-holidays', { query: { year } }),
+  });
+
+export const useMilestoneRules = () =>
+  useQuery({
+    queryKey: ['settings', 'milestone-rules'],
+    queryFn: () => api<MilestoneRule[]>('/settings/milestone-rules'),
+  });
+
+/** My Work: live shipping-plan jobs with their current stage, alerts and clients. */
+export const useMyWork = () =>
+  useQuery({
+    queryKey: ['follow-ups', 'my-work'],
+    queryFn: () => api<MyWork>('/follow-ups/my-work'),
+    refetchInterval: 5 * 60_000,
   });
 
 export const useFollowUps = (q: Query) =>

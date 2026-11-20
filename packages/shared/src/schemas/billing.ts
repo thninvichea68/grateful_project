@@ -70,6 +70,7 @@ export interface BillingDraftsResult {
     id: string;
     number: string | null;
     copiedFrom: string | null;
+    quotation?: { quoteNo: string; version: number } | null;
   }[];
 }
 export interface BillingIssueResult {

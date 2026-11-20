@@ -458,9 +458,19 @@ describe('follow-ups', () => {
       openFollowUps: 2,
       overdueFollowUps: 1,
     });
-    const done = (await api('patch', `/follow-ups/${late.id}`).set(h).send({ status: 'DONE' }))
-      .body;
-    expect(done).toMatchObject({ status: 'DONE', overdue: false, completedAt: expect.any(String) });
+    const invalidDone = await api('patch', `/follow-ups/${late.id}`)
+      .set(h)
+      .send({ status: 'DONE' });
+    expect(invalidDone.status).toBe(400);
+    const done = (
+      await api('patch', `/follow-ups/${late.id}`).set(h).send({ actualAt: '2026-01-05T17:00' })
+    ).body;
+    expect(done).toMatchObject({
+      status: 'DONE',
+      overdue: false,
+      actualAt: '2026-01-05T10:00:00.000Z',
+      completedAt: '2026-01-05T10:00:00.000Z',
+    });
     expect(
       (await api('get', '/follow-ups').query({ status: 'ACTIVE' }).set(h)).body.meta.total,
     ).toBe(1);

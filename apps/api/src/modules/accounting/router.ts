@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from 'express';
+import { sql } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import {
@@ -29,6 +30,8 @@ import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { badRequest, notFound } from '../../lib/errors';
 import { attachmentName } from '../../lib/http';
+import { queryRows } from '../../lib/listing';
+import { shipmentCbm, shipmentGw } from '../../lib/shipmentCbm';
 import * as ledger from './ledger';
 import * as docs from './docs';
 import * as billing from './billing';
@@ -36,7 +39,8 @@ import * as clearFee from './clearFeePayments';
 import { addMonthlyLedgerSheet } from './ledgerWorkbook';
 import { agencyCandidates, openAgencyLine, separateAgencyDis } from './agencyLine';
 import { db } from '../../db/client';
-import { clientPrefill, creditNotePrefill, prefill } from './prefill';
+import { clientPrefill, creditNotePrefill, prefill, quotationChoicesFor } from './prefill';
+import { creditNotePortGroup, creditNoteQuotationServices } from './creditNoteQuotation';
 import {
   allowedClients,
   assertClientAllowed,
@@ -65,6 +69,7 @@ const isCreditNotes = (path: string) =>
 const isRecordSummaries = (path: string) =>
   path.startsWith('/docs/record-summaries') ||
   path === '/eligible/record-summaries' ||
+  path === '/record-summaries/quotation-rates' ||
   path.startsWith('/record-summaries/inbox');
 accountingRouter.use((req, res, next) =>
   requirePermission(
@@ -314,6 +319,123 @@ accountingRouter.delete(
 accountingRouter.get('/credit-notes/declarations', async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(60).optional() }), req.query);
   res.json(await ledger.creditNoteDeclarations(q, scopeClients(req)));
+});
+
+/**
+ * A record summary's pick list: the client's accepted quotation for this service (port,
+ * direction, load), its rates priced for the container size / weight, then its extra charges.
+ */
+accountingRouter.get('/record-summaries/quotation-rates', async (req, res) => {
+  const q = parse(
+    z.object({
+      clientId: z.string().uuid(),
+      portId: z.string().uuid().optional(),
+      direction: z.enum(['IMPORT', 'EXPORT']),
+      transportMode: z.string().max(10).optional(),
+      loadType: z.string().max(10).optional(),
+      containerSize: z.string().max(10).optional(),
+      grossWeightKg: z.coerce.number().finite().min(0).max(10_000_000).optional(),
+    }),
+    req.query,
+  );
+  assertClientVisible(req, q.clientId, 'Client');
+  const [port] = q.portId
+    ? await queryRows<{ name: string | null; kind: string | null }>(
+        db,
+        sql`SELECT short_name AS name, kind::text AS kind FROM ports WHERE id = ${q.portId}`,
+      )
+    : [];
+  res.json(
+    await quotationChoicesFor({
+      clientId: q.clientId,
+      direction: q.direction,
+      transportMode: q.transportMode ?? 'SEA',
+      loadType: q.loadType ?? 'FCL',
+      portName: port?.name ?? null,
+      portKind: port?.kind ?? null,
+      containerSize: q.containerSize ?? null,
+      gw: String(q.grossWeightKg ?? 0),
+    } as Parameters<typeof quotationChoicesFor>[0]),
+  );
+});
+
+accountingRouter.get('/credit-notes/quotation-services', async (req, res) => {
+  const query = parse(
+    z
+      .object({
+        declarationId: z.string().uuid().optional(),
+        recordId: z.string().uuid().optional(),
+        portId: z.string().uuid().optional(),
+        containerNo: z.string().trim().max(200).optional(),
+        grossWeightKg: z.coerce.number().finite().min(0).max(10_000_000).optional(),
+        cbm: z.coerce.number().finite().min(0).max(1_000_000).optional(),
+      })
+      .refine((value) => Boolean(value.declarationId) !== Boolean(value.recordId), {
+        message: 'Choose a declaration or ledger entry',
+      }),
+    req.query,
+  );
+  const selectedPort = query.portId
+    ? sql`${query.portId}::uuid`
+    : sql`coalesce(d.port_id, s.clearance_port_id)`;
+  const target = query.declarationId
+    ? sql`d.id = ${query.declarationId}`
+    : sql`a.id = ${query.recordId}`;
+  const [context] = await queryRows<{
+    clientId: string;
+    clientCode: string;
+    direction: 'IMPORT' | 'EXPORT';
+    loadType: string;
+    portId: string | null;
+    portCode: string | null;
+    portName: string | null;
+    portShortName: string | null;
+    portKind: string | null;
+    containerSize: string | null;
+    grossWeightKg: string;
+    cbm: string;
+  }>(
+    db,
+    sql`
+    SELECT s.client_id AS "clientId", c.code AS "clientCode", s.direction, s.load_type AS "loadType",
+           ${selectedPort}::text AS "portId", p.code AS "portCode", p.name AS "portName",
+           p.short_name AS "portShortName", p.kind::text AS "portKind",
+           (SELECT size::text FROM containers WHERE shipment_id = s.id ORDER BY sort_order LIMIT 1) AS "containerSize",
+           ${shipmentGw()}::text AS "grossWeightKg",
+           ${shipmentCbm()}::text AS cbm
+    FROM customs_declarations d
+    JOIN shipments s ON s.id = d.shipment_id AND s.deleted_at IS NULL
+    JOIN clients c ON c.id = s.client_id
+    LEFT JOIN accounting_records a ON a.declaration_id = d.id AND a.kind = 'SERVICE'
+    LEFT JOIN ports p ON p.id = ${selectedPort}
+    WHERE ${target}
+    LIMIT 1`,
+  );
+  if (!context) throw notFound(query.declarationId ? 'Declaration' : 'Ledger entry');
+  assertClientVisible(req, context.clientId, 'Declaration');
+  const group = creditNotePortGroup({
+    code: context.portCode ?? '',
+    name: context.portName ?? '',
+    shortName: context.portShortName ?? '',
+    kind: context.portKind ?? '',
+  });
+  const containerSize =
+    /(?:\b|X)(20|40|45)\s*['"]?\s*(GP|HQ|HC)?/i
+      .exec(query.containerNo ?? '')
+      ?.slice(1)
+      .join('') || context.containerSize;
+  const services = group
+    ? creditNoteQuotationServices({
+        clientCode: context.clientCode,
+        direction: context.direction,
+        portGroup: group,
+        loadType: context.loadType,
+        containerSize,
+        grossWeightKg: String(query.grossWeightKg ?? context.grossWeightKg),
+        cbm: String(query.cbm ?? context.cbm),
+      })
+    : [];
+  res.json({ clientCode: context.clientCode, portGroup: group, services });
 });
 
 /** Accounting's check of submitted credit notes: an accounting page, not the broker's. */

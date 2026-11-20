@@ -154,7 +154,7 @@
 .primary {
   border: 1px solid var(--accent-primary);
   background: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
 }
 .primary:hover:not(:disabled) {
   background: var(--accent-lime-bright);
@@ -237,7 +237,7 @@
 }
 .themes button[aria-pressed='true'] {
   background: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
 }
 
 @media (max-width: 760px) {

@@ -295,6 +295,7 @@ export const NAV: NavGroup[] = [
             ['rates', 'Rates', 'rates'],
             ['invoice', 'Tax management', 'tax'],
             ['holidays', 'Public holidays', 'holidays'],
+            ['milestones', 'Shipment milestones', 'followup'],
             ['ports', 'Ports', 'ports'],
             ['forwarders', 'Forwarders', 'forwarders'],
             ['consignees', 'Consignees', 'consignees'],
@@ -324,6 +325,7 @@ const EXTRA_TITLES: [string, string][] = [
   ['/plans/export', 'Shipping Plans'],
   ['/plans/', 'Shipment Details'],
   ['/clients/', 'Client Details'],
+  ['/quotations/client/', 'Client Quotations'],
   ['/quotations/', 'Quotation'],
 ];
 
@@ -341,6 +343,7 @@ const DETAILS: [string, string][] = [
   ['/plans/new', 'Create Shipment'],
   ['/plans/', 'Shipment Details'],
   ['/clients/', 'Client Details'],
+  ['/quotations/client/', 'Client Quotations'],
   ['/quotations/', 'Quotation'],
   ['/accounting/billing/', 'Client'],
   ['/accounting/tax-invoices/', 'Tax Invoice'],

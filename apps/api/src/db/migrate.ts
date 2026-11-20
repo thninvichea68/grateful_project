@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { ROLE_CODES, ROLE_DEFAULT_PERMISSIONS, ROLE_LABEL } from '@gs/shared';
 import { db, pool } from './client';
 import { roles } from './schema';
+import { quotationsToEnglish } from './quotationEnglish';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Works from src/db (tsx) and from dist (bundled): look for the drizzle folder upwards.
@@ -47,6 +48,14 @@ async function main() {
   );
   // eslint-disable-next-line no-console
   if (flagged.rowCount) console.log(`✔ ${flagged.rowCount} shipment(s) set to Exception`);
+  // Quotations in English only, their notes as extra charges (the old text is kept in
+  // quotation_text_backup). Only touches what still needs it.
+  const q = await quotationsToEnglish(db);
+  if (q.templates || q.quotes || q.lines)
+    // eslint-disable-next-line no-console
+    console.log(
+      `✔ Quotations in English: ${q.templates} service(s), ${q.lines} rate row(s), ${q.quotes} quotation(s), ${q.charges} extra charge(s)`,
+    );
   await pool.end();
 }
 

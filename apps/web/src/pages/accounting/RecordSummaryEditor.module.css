@@ -216,3 +216,40 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Prices from the client's quotation: a strip over the breakdown lines. */
+.quoteBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface));
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+.quoteFill {
+  padding: 5px 10px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Under the lines: pick a charge to add (quotation or receipt item), or a custom row. */
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.addPick {
+  width: auto !important;
+  max-width: min(100%, 360px);
+}

@@ -27,6 +27,7 @@ import {
   useDocAction,
   useDocVatPercent,
   usePrefill,
+  useQuotationRates,
   useRecordSummaryShipments,
   useSetRecordSummaryReview,
 } from '../../features/accounting';
@@ -171,7 +172,8 @@ function RecordSummaryEditor({
   const eligible = useRecordSummaryShipments();
   const defaults = useMemo(() => {
     const v = initialValues(TYPE, doc, prefill);
-    if (!doc && !prefill) v.lines = itemsFor(v.direction, shipUnitOf(v));
+    // No shipment picked yet: one empty row (a shipment brings its quoted charges).
+    if (!doc && !prefill) v.lines = [blankLine(shipUnitOf(v))];
     if (!v.refType) v.refType = v.transportMode === 'AIR' ? 'HAWB_NO' : 'BILL_NO';
     // An unpriced line shows an empty box (placeholder 0.00), not a 0 to delete first.
     v.lines = v.lines.map((l) => (Number(l.unitPrice) ? l : { ...l, unitPrice: '' }));
@@ -219,10 +221,61 @@ function RecordSummaryEditor({
   const client = lookups.data?.clients.find((c) => c.id === values.clientId);
   const declareNo = String(values.declareNo ?? '') || doc?.declareNo || '';
 
-  // Descriptions: suggestions from Settings → Dropdown lists, still free text. Units: a
-  // dropdown of the standard ones and Settings → Dropdown lists → Charge units, as on Credit Note.
+  // The client's accepted quotation for this service (port, direction, load): its rates for
+  // this container size, then its extra charges. Picking one fills its price.
+  const rates = useQuotationRates({
+    clientId: (values.clientId as string | undefined) || undefined,
+    portId: (values.portId as string | undefined) || undefined,
+    direction: values.direction as string | undefined,
+    transportMode: (values.transportMode as string | undefined) || undefined,
+    loadType: (values.loadType as string | undefined) || undefined,
+    containerSize: (values.containerSize as string | undefined) || undefined,
+  });
+  const quoted = (rates.data?.charges ?? []).filter((c) => c.unitPrice !== null);
+  const key = (d: string) =>
+    d
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .trim();
+  const quoteFor = (description: string) => {
+    const k = key(description);
+    if (k.length < 3) return undefined;
+    return (
+      quoted.find((c) => key(c.description) === k) ??
+      quoted.find((c) => {
+        const q = key(c.description);
+        return q.length >= 5 && k.length >= 5 && (q.includes(k) || k.includes(q));
+      })
+    );
+  };
+  /** A charge already on the summary (so the Add charge list leaves it out). */
+  const onSummary = (description: string) =>
+    (values.lines ?? []).some((l) => key(l.description ?? '') === key(description));
+  /** Fill the price of every line with none yet from the quotation. */
+  const fillFromQuotation = () => {
+    let n = 0;
+    getValues('lines').forEach((l, i) => {
+      if (Number(l.unitPrice) > 0) return;
+      const c = quoteFor(l.description);
+      if (!c?.unitPrice) return;
+      setValue(`lines.${i}.unitPrice`, String(Number(c.unitPrice)), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      n++;
+    });
+    toast(
+      n
+        ? `${n} price${n === 1 ? '' : 's'} filled from the quotation.`
+        : 'No unpriced line matches the quotation.',
+    );
+  };
+
+  // Descriptions: the quotation's charges first, then Settings → Dropdown lists, still free
+  // text. Units: the standard ones and Settings → Dropdown lists → Charge units.
   const charges = [
     ...new Set([
+      ...(rates.data?.charges ?? []).map((c) => c.description),
       ...defaults.lines.map((l) => l.description).filter(Boolean),
       ...RECORD_SUMMARY_ITEMS.IMPORT.map(([d]) => d),
       ...RECORD_SUMMARY_ITEMS.EXPORT.map(([d]) => d),
@@ -733,16 +786,7 @@ function RecordSummaryEditor({
               <div className={r.grid2}>
                 {item(
                   'Shipment mode',
-                  <select
-                    className="form-select-box"
-                    {...register('direction', {
-                      // Still unpriced: switch to that direction's standard breakdown.
-                      onChange: (e: { target: { value: string } }) => {
-                        if (!(values.lines ?? []).some((l) => Number(l.unitPrice) > 0))
-                          lines.replace(itemsFor(e.target.value, shipUnit, vatPercent));
-                      },
-                    })}
-                  >
+                  <select className="form-select-box" {...register('direction')}>
                     <option value="IMPORT">IMPORT</option>
                     <option value="EXPORT">EXPORT</option>
                   </select>,
@@ -993,6 +1037,28 @@ function RecordSummaryEditor({
 
             <Panel title="2. Breakdown line items">
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
+              {rates.data?.quotation ? (
+                <div className={r.quoteBar}>
+                  <span>
+                    Prices from quotation <b>{rates.data.quotation.quoteNo}</b>
+                    {rates.data.quotation.version > 1
+                      ? ` v${rates.data.quotation.version}`
+                      : ''} · {quoted.length} priced charges. Pick a charge to fill its price.
+                  </span>
+                  {editable && (
+                    <button type="button" className={r.quoteFill} onClick={fillFromQuotation}>
+                      Fill prices from quotation
+                    </button>
+                  )}
+                </div>
+              ) : (
+                values.clientId &&
+                !rates.isLoading && (
+                  <div className={r.quoteBar}>
+                    No accepted quotation for this client and port yet: prices are typed.
+                  </div>
+                )
+              )}
               {lines.fields.map((f, i) => (
                 <div className={r.rowItem} key={f.id} onKeyDown={moveInLines}>
                   <span className={r.no}>{i + 1}</span>
@@ -1007,6 +1073,13 @@ function RecordSummaryEditor({
                         );
                         if (unit !== getValues(`lines.${i}.unit`))
                           setValue(`lines.${i}.unit`, unit, { shouldDirty: true });
+                        // A quoted charge picked: its price, unless one is typed already.
+                        const c = quoteFor(e.target.value);
+                        if (c?.unitPrice && !(Number(getValues(`lines.${i}.unitPrice`)) > 0))
+                          setValue(`lines.${i}.unitPrice`, String(Number(c.unitPrice)), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
                       },
                     })}
                     aria-label={`Line ${i + 1} description`}
@@ -1093,18 +1166,79 @@ function RecordSummaryEditor({
                 </div>
               ))}
               <datalist id="rs-charges">
-                {charges.map((c) => (
-                  <option key={c} value={c} />
-                ))}
+                {charges.map((c) => {
+                  const q = quoteFor(c);
+                  return (
+                    <option
+                      key={c}
+                      value={c}
+                      label={
+                        q?.unitPrice
+                          ? `USD ${Number(q.unitPrice)}${q.unit ? ` / ${q.unit}` : ''}`
+                          : undefined
+                      }
+                    />
+                  );
+                })}
               </datalist>
               {editable && (
-                <button
-                  type="button"
-                  className={r.addItem}
-                  onClick={() => lines.append(blankLine(shipUnit))}
-                >
-                  + Add Custom Row
-                </button>
+                <div className={r.addRow}>
+                  {/* Add one charge when it applies: the quotation's (priced) or a receipt item. */}
+                  <select
+                    className={`form-select-box ${r.addPick}`}
+                    value=""
+                    aria-label="Add a charge"
+                    onChange={(e) => {
+                      const description = e.target.value;
+                      if (!description) return;
+                      const q = (rates.data?.charges ?? []).find(
+                        (c) => c.description === description,
+                      );
+                      const std = itemsFor(values.direction, shipUnit, vatPercent).find(
+                        (l) => l.description === description,
+                      );
+                      lines.append({
+                        ...blankLine(shipUnit),
+                        description: description.toUpperCase(),
+                        unit: chargeLineUnit(description, shipUnit),
+                        unitPrice: q?.unitPrice ? String(Number(q.unitPrice)) : '',
+                        mark: std?.mark ?? '',
+                      });
+                    }}
+                  >
+                    <option value="">+ Add charge…</option>
+                    {(rates.data?.charges.length ?? 0) > 0 && (
+                      <optgroup label={`From quotation ${rates.data?.quotation?.quoteNo ?? ''}`}>
+                        {rates
+                          .data!.charges.filter((c) => !onSummary(c.description))
+                          .map((c) => (
+                            <option key={`q-${c.description}`} value={c.description}>
+                              {c.description}
+                              {c.unitPrice !== null
+                                ? ` — USD ${Number(c.unitPrice)}${c.unit ? ` / ${c.unit}` : ''}`
+                                : ' — as per receipt'}
+                            </option>
+                          ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="Receipt & other items">
+                      {itemsFor(values.direction, shipUnit, vatPercent)
+                        .filter((l) => !onSummary(l.description))
+                        .map((l) => (
+                          <option key={`s-${l.description}`} value={l.description}>
+                            {l.description}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                  <button
+                    type="button"
+                    className={r.addItem}
+                    onClick={() => lines.append(blankLine(shipUnit))}
+                  >
+                    + Add Custom Row
+                  </button>
+                </div>
               )}
               <div className={s.totalRow}>
                 <span>Total</span>

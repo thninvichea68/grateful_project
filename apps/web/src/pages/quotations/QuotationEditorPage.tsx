@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
-import { quotationInputSchema, type QuotationDetail, type QuotationTemplate } from '@gs/shared';
+import {
+  parseChargeLines,
+  quotationInputSchema,
+  type QuotationDetail,
+  type QuotationTemplate,
+} from '@gs/shared';
 import { useAuth } from '../../auth/AuthProvider';
 import { useApiMutation, useQuotation, useQuotationTemplates } from '../../features/admin';
 import { useLookups } from '../../features/hooks';
@@ -10,13 +15,59 @@ import { NumberInput } from '../../components/NumberInput';
 import { Pill } from '../../components/StatusPill';
 import { useToast } from '../../components/Toast';
 import { ApiError, api } from '../../lib/api';
-import { QUOTE_STATUS } from '../QuotationsPage';
+import { QUOTE_STATUS, serviceName } from '../QuotationsPage';
 import { PrintLink } from '../../components/PrintLink';
 import { icons } from '../../layout/icons';
 import s from '../creditnoted/CreditNotedEditor.module.css';
 import q from './QuotationEditor.module.css';
 
 type Row = Record<string, string>;
+/** An extra charge as edited: amount as typed (blank = no fixed price). */
+type Extra = { description: string; amount: string; unit: string; remark: string; cost: string };
+const blankExtra = (): Extra => ({ description: '', amount: '', unit: '', remark: '', cost: '' });
+/** A service's standard notes as its starting extra charges. */
+const extrasFrom = (t: QuotationTemplate | undefined): Extra[] =>
+  parseChargeLines(t?.notes).map((c) => ({
+    description: c.description,
+    amount: c.amount ?? '',
+    unit: c.unit ?? '',
+    remark: c.remark ?? '',
+    cost: '',
+  }));
+/** "1,234.5" → 1234.5; null when not a plain number ("As per receipt"). */
+const num = (v: string | undefined) => {
+  const x = String(v ?? '')
+    .replace(/,/g, '')
+    .trim();
+  return /^\d+(\.\d+)?$/.test(x) ? Number(x) : null;
+};
+/** Sell − cost, as "+45.00" (green) or "−5.00" (red); nothing unless both are numbers. */
+function Margin({ sell, cost }: { sell: string | undefined; cost: string | undefined }) {
+  const a = num(sell);
+  const b = num(cost);
+  if (a === null || b === null) return null;
+  const m = a - b;
+  return (
+    <span className={m < 0 ? q.marginLow : q.margin} title="Margin: client price − cost">
+      {m >= 0 ? '+' : '−'}
+      {Math.abs(m).toFixed(2)}
+    </span>
+  );
+}
+/** Per what: the usual ones (still free text). */
+const PER = [
+  'Set',
+  'Shipment',
+  'CTNR',
+  'Declaration',
+  'Truck',
+  'Truck/night',
+  'Time',
+  'Ton',
+  'KG',
+  'CBM',
+  'Day',
+];
 const rowsFrom = (t: QuotationTemplate): Row[] =>
   t.defaultRows.map((r) => Object.fromEntries(t.columns.map((c, i) => [c.key, r[i] ?? ''])));
 
@@ -45,23 +96,46 @@ export function QuotationEditorPage() {
   );
 }
 
-function Editor({
+/**
+ * A quotation to a client: its rates and extra charges (what the client sees), and for the
+ * Sales Manager (quotations:cost) what each one costs us, with the margin. On its own page, or
+ * embedded in the client's quotations page (`embedded`), one port at a time.
+ */
+export function Editor({
   quote,
   templates,
+  embedded = false,
+  presetClientId,
+  presetTemplate,
+  onSaved,
+  onDeleted,
 }: {
   quote?: QuotationDetail | undefined;
   templates: QuotationTemplate[];
+  /** Inside the client's page: no back link or title (the page has them). */
+  embedded?: boolean;
+  presetClientId?: string;
+  presetTemplate?: string;
+  /** Created, revised or saved: the quotation now shown (embedded pages follow it). */
+  onSaved?: (q: QuotationDetail) => void;
+  onDeleted?: () => void;
 }) {
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const lookups = useLookups();
-  const first = templates[0];
+  const [params] = useSearchParams();
+  const canCost = can('quotations:cost');
+  const presetClient = presetClientId ?? params.get('clientId');
+  // "Not quoted yet → + Import · PNH Port" on a client's page opens on that service.
+  const first =
+    templates.find((t) => t.key === (presetTemplate ?? params.get('template'))) ?? templates[0];
   const [templateKey, setTemplateKey] = useState(quote?.templateKey ?? first?.key ?? '');
   const template = templates.find((t) => t.key === templateKey);
   const [head, setHead] = useState({
-    clientId: quote?.clientId ?? '',
-    toName: quote?.toName ?? '',
+    // "+ Add port" on a client's card opens a new quotation for that client.
+    clientId: quote?.clientId ?? presetClient ?? '',
+    toName: quote?.toName ?? lookups.data?.clients.find((c) => c.id === presetClient)?.name ?? '',
     attn: quote?.attn ?? '',
     quoteDate:
       quote?.quoteDate ??
@@ -70,9 +144,27 @@ function Editor({
     latePenaltyPctPerDay: quote?.latePenaltyPctPerDay
       ? String(Number(quote.latePenaltyPctPerDay))
       : '',
-    notes: quote?.notes ?? first?.notes ?? '',
+    // Free-text conditions only; the priced items are the extra charges.
+    notes: quote?.notes ?? '',
   });
+  const [extras, setExtras] = useState<Extra[]>(() =>
+    quote
+      ? quote.charges.map((c) => ({
+          description: c.description,
+          amount: c.amount === null ? '' : String(Number(c.amount)),
+          unit: c.unit ?? '',
+          remark: c.remark ?? '',
+          cost: c.cost == null ? '' : String(Number(c.cost)),
+        }))
+      : extrasFrom(first),
+  );
+  const setExtra = (i: number, k: keyof Extra, v: string) =>
+    setExtras(extras.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
   const [rows, setRows] = useState<Row[]>(() => quote?.lines ?? (first ? rowsFrom(first) : []));
+  // Our cost per rate cell, row for row with `rows` (Sales Manager only).
+  const [costs, setCosts] = useState<Row[]>(() => quote?.costs ?? rows.map(() => ({})));
+  const setCost = (i: number, key: string, value: string) =>
+    setCosts(rows.map((_, j) => (j === i ? { ...costs[j], [key]: value } : (costs[j] ?? {}))));
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
   const editable = can('quotations:write') && (!quote || quote.status === 'DRAFT');
   const latest = !quote || quote.versions[0]?.id === quote.id;
@@ -83,6 +175,16 @@ function Editor({
     clientId: head.clientId || null,
     paymentTermDays: head.paymentTermDays || null,
     lines: rows,
+    ...(canCost ? { costs: rows.map((_, i) => costs[i] ?? {}) } : {}),
+    charges: extras
+      .filter((x) => x.description.trim())
+      .map((x) => ({
+        description: x.description,
+        amount: x.amount || null,
+        unit: x.unit || null,
+        remark: x.remark || null,
+        ...(canCost ? { cost: x.cost || null } : {}),
+      })),
   });
   const save = useApiMutation(
     () =>
@@ -107,6 +209,19 @@ function Editor({
     () => api(`/quotations/${quote!.id}`, { method: 'DELETE' }),
     [['quotations']],
   );
+  // Costs on a sent or accepted quotation: saved on their own (no new version for the client).
+  const saveCosts = useApiMutation(
+    () =>
+      api<QuotationDetail>(`/quotations/${quote!.id}/costs`, {
+        method: 'PUT',
+        json: {
+          costs: rows.map((_, i) => costs[i] ?? {}),
+          chargeCosts: extras.filter((x) => x.description.trim()).map((x) => x.cost || null),
+        },
+      }),
+    [['quotations']],
+  );
+  const costOnly = canCost && !!quote && quote.status !== 'DRAFT' && quote.status !== 'SUPERSEDED';
 
   const onSave = async () => {
     const check = quotationInputSchema.safeParse(body());
@@ -114,7 +229,8 @@ function Editor({
     if (!check.success) return;
     const saved = await save.mutateAsync(undefined);
     toast(quote ? 'Quotation saved.' : `Quotation ${saved.quoteNo} created.`);
-    if (!quote) navigate(`/quotations/${saved.id}`, { replace: true });
+    if (onSaved) onSaved(saved);
+    else if (!quote) navigate(`/quotations/${saved.id}`, { replace: true });
   };
   const changeTemplate = (key: string) => {
     const t = templates.find((x) => x.key === key);
@@ -128,23 +244,29 @@ function Editor({
       return;
     setTemplateKey(key);
     setRows(rowsFrom(t));
-    setHead((h) => ({ ...h, notes: t.notes ?? '' }));
+    setCosts(rowsFrom(t).map(() => ({})));
+    setExtras(extrasFrom(t));
   };
   const pickClient = (id: string) => {
     const c = lookups.data?.clients.find((x) => x.id === id);
     setHead((h) => ({ ...h, clientId: id, toName: c && !h.toName ? c.name : h.toName }));
   };
   const cols = useMemo(() => template?.columns ?? [], [template]);
-  const err = save.error ?? status.error ?? revise.error ?? del.error;
+  /** Back to the client's quotations page, or the list for a prospect. */
+  const backTo = head.clientId ? `/quotations/client/${head.clientId}` : '/quotations';
+  const err = save.error ?? status.error ?? revise.error ?? del.error ?? saveCosts.error;
   const setCell = (i: number, key: string, value: string) =>
     setRows(rows.map((x, j) => (j === i ? { ...x, [key]: value } : x)));
 
+  const Wrap = embedded ? 'div' : 'section';
   return (
-    <section className="view active">
+    <Wrap className={embedded ? undefined : 'view active'}>
       <div className="shipment-create-container">
         <div className="create-top-bar">
           <div className={backRow}>
-            <BackLink to="/quotations" label="Quotations" />
+            {!embedded && (
+              <BackLink to={backTo} label={head.clientId ? 'Client quotations' : 'Quotations'} />
+            )}
             <div>
               <div className="create-header-title">
                 {quote
@@ -174,17 +296,21 @@ function Editor({
             </div>
           </div>
           <div className={q.headActions}>
-            {can('quotations:write') && quote?.status === 'DRAFT' && (
+            {can('quotations:write') && quote && (
               <button
                 type="button"
                 className={s.headDelete}
                 disabled={del.isPending}
                 onClick={() =>
-                  window.confirm('Delete this draft?') &&
-                  void del.mutateAsync(undefined).then(() => navigate('/quotations'))
+                  window.confirm(
+                    `Delete ${quote.quoteNo}${quote.version > 1 ? ` v${quote.version}` : ''}? Bills already made keep their prices.`,
+                  ) &&
+                  void del
+                    .mutateAsync(undefined)
+                    .then(() => (onDeleted ? onDeleted() : navigate(backTo)))
                 }
-                aria-label="Delete draft"
-                title="Delete draft"
+                aria-label="Delete quotation"
+                title="Delete quotation"
               >
                 {icons.trash({})}
               </button>
@@ -205,7 +331,8 @@ function Editor({
                   onClick={() =>
                     void revise.mutateAsync(undefined).then((v) => {
                       toast(`Version ${v.version} created.`);
-                      navigate(`/quotations/${v.id}`);
+                      if (onSaved) onSaved(v);
+                      else navigate(`/quotations/${v.id}`);
                     })
                   }
                 >
@@ -221,6 +348,19 @@ function Editor({
                 }
               >
                 Mark accepted
+              </button>
+            )}
+            {costOnly && (
+              <button
+                type="button"
+                className="btn-cancel-shipment"
+                disabled={saveCosts.isPending}
+                title="Costs are internal: saved without a new version for the client"
+                onClick={() =>
+                  void saveCosts.mutateAsync(undefined).then(() => toast('Costs saved.'))
+                }
+              >
+                Save costs
               </button>
             )}
             {editable && (
@@ -246,17 +386,24 @@ function Editor({
         </div>
         <ErrorBanner error={err instanceof ApiError ? err : null} />
         {fieldErrors.length > 0 && <div className={ui.alert}>{fieldErrors.join(' · ')}</div>}
-        <fieldset disabled={!editable} className={q.fieldset}>
+        {/* A sent / accepted quotation is read-only, except its costs for the Sales Manager. */}
+        <fieldset disabled={!editable && !costOnly} className={q.fieldset}>
           <div className={q.card}>
-            <div className={q.section}>
-              <div className={q.sectionHead}>
-                <div>
-                  <h4>Quotation details</h4>
-                  <p>The service, who it is for, and its payment terms.</p>
+            <div className={`${q.section} ${embedded ? q.sectionCompact : ''}`}>
+              {/* On a client's page the port and client are already chosen: one short row. */}
+              {!embedded && (
+                <div className={q.sectionHead}>
+                  <div>
+                    <h4>Quotation details</h4>
+                    <p>The service, who it is for, and its payment terms.</p>
+                  </div>
                 </div>
-              </div>
-              <div className={q.fields}>
-                <div className={`${q.field} ${q.span2}`}>
+              )}
+              <fieldset
+                disabled={!editable}
+                className={`${q.fieldset} ${q.fields} ${embedded ? q.fieldsCompact : ''}`}
+              >
+                <div className={`${q.field} ${q.span2}`} hidden={embedded}>
                   <label htmlFor="qt-template">Service</label>
                   <select
                     id="qt-template"
@@ -268,12 +415,12 @@ function Editor({
                   >
                     {templates.map((t) => (
                       <option key={t.key} value={t.key}>
-                        {t.label}
+                        {serviceName(t.label)}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className={`${q.field} ${q.span2}`}>
+                <div className={`${q.field} ${q.span2}`} hidden={embedded}>
                   <label htmlFor="qt-client">Client (optional)</label>
                   <select
                     id="qt-client"
@@ -343,14 +490,17 @@ function Editor({
                     <span>% / day</span>
                   </div>
                 </div>
-              </div>
+              </fieldset>
             </div>
 
             <div className={q.section}>
               <div className={q.sectionHead}>
                 <div>
                   <h4>{template?.docTitle ?? 'Rates'}</h4>
-                  <p>Type numbers or text such as “As per receipt”.</p>
+                  <p>
+                    Type numbers or text such as “As per receipt”.
+                    {canCost && ' Under each price: our cost, and the margin.'}
+                  </p>
                 </div>
                 <span className={q.count}>
                   {rows.length} {rows.length === 1 ? 'row' : 'rows'}
@@ -387,6 +537,7 @@ function Editor({
                                 className="form-field-box"
                                 rows={1}
                                 value={r[c.key] ?? ''}
+                                disabled={!editable}
                                 onChange={(e) => setCell(i, c.key, e.target.value)}
                                 aria-label={`${c.label} row ${i + 1}`}
                               />
@@ -394,10 +545,23 @@ function Editor({
                               <input
                                 className="form-field-box"
                                 value={r[c.key] ?? ''}
+                                disabled={!editable}
                                 onChange={(e) => setCell(i, c.key, e.target.value)}
                                 aria-label={`${c.label} row ${i + 1}`}
                                 title={r[c.key] || undefined}
                               />
+                            )}
+                            {canCost && c.type === 'num' && (
+                              <div className={q.costLine}>
+                                <input
+                                  className={`form-field-box ${q.costInput}`}
+                                  value={costs[i]?.[c.key] ?? ''}
+                                  placeholder="cost"
+                                  onChange={(e) => setCost(i, c.key, e.target.value)}
+                                  aria-label={`${c.label} row ${i + 1} cost`}
+                                />
+                                <Margin sell={r[c.key]} cost={costs[i]?.[c.key]} />
+                              </div>
                             )}
                           </td>
                         ))}
@@ -406,7 +570,10 @@ function Editor({
                             <button
                               type="button"
                               className={q.remove}
-                              onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                              onClick={() => {
+                                setRows(rows.filter((_, j) => j !== i));
+                                setCosts(costs.filter((_, j) => j !== i));
+                              }}
                               aria-label={`Remove row ${i + 1}`}
                               title="Remove row"
                             >
@@ -423,12 +590,13 @@ function Editor({
                 <button
                   type="button"
                   className={q.addRow}
-                  onClick={() =>
+                  onClick={() => (
                     setRows([
                       ...rows,
                       Object.fromEntries(cols.map((c) => [c.key, c.key === 'ccy' ? 'USD' : ''])),
-                    ])
-                  }
+                    ]),
+                    setCosts([...rows.map((_, j) => costs[j] ?? {}), {}])
+                  )}
                 >
                   + Add row
                 </button>
@@ -438,23 +606,151 @@ function Editor({
             <div className={q.section}>
               <div className={q.sectionHead}>
                 <div>
-                  <h4>
-                    <label htmlFor="qt-notes">Notes &amp; conditions</label>
-                  </h4>
-                  <p>Printed under the rates, one condition per line.</p>
+                  <h4>Extra charges</h4>
+                  <p>
+                    Charged only when they apply (Red signal, Document fee…). Bills and record
+                    summaries pick them by name with their price.
+                  </p>
                 </div>
+                <span className={q.count}>
+                  {extras.length} {extras.length === 1 ? 'charge' : 'charges'}
+                </span>
               </div>
-              <textarea
-                id="qt-notes"
-                className={`form-field-box ${q.notes}`}
-                rows={6}
-                value={head.notes}
-                onChange={(e) => setHead({ ...head, notes: e.target.value })}
-              />
+              <div className={q.tableWrap}>
+                <table className={q.table}>
+                  <colgroup>
+                    <col className={q.no} />
+                    <col style={{ width: '32%' }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 140 }} />
+                    {canCost && <col style={{ width: 150 }} />}
+                    <col />
+                    <col className={q.actions} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className={q.no}>#</th>
+                      <th>Charge</th>
+                      <th className={q.num}>Amount (USD)</th>
+                      <th>Per</th>
+                      {canCost && <th className={q.num}>Our cost · margin</th>}
+                      <th>Condition / remark</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {extras.map((x, i) => (
+                      <tr key={i}>
+                        <td className={q.no}>{i + 1}</td>
+                        <td>
+                          <input
+                            className="form-field-box"
+                            value={x.description}
+                            placeholder="e.g. Red signal"
+                            disabled={!editable}
+                            onChange={(e) => setExtra(i, 'description', e.target.value)}
+                            aria-label={`Extra charge ${i + 1}`}
+                          />
+                        </td>
+                        <td className={q.num}>
+                          <NumberInput
+                            decimals={2}
+                            className="form-field-box"
+                            value={x.amount}
+                            placeholder="—"
+                            disabled={!editable}
+                            onChange={(e) => setExtra(i, 'amount', e.target.value)}
+                            aria-label={`Extra charge ${i + 1} amount`}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="form-field-box"
+                            list="qt-per"
+                            value={x.unit}
+                            placeholder="Set"
+                            disabled={!editable}
+                            onChange={(e) => setExtra(i, 'unit', e.target.value)}
+                            aria-label={`Extra charge ${i + 1} per`}
+                          />
+                        </td>
+                        {canCost && (
+                          <td className={q.num}>
+                            <div className={q.costLine}>
+                              <NumberInput
+                                decimals={2}
+                                className={`form-field-box ${q.costInput}`}
+                                value={x.cost}
+                                placeholder="cost"
+                                onChange={(e) => setExtra(i, 'cost', e.target.value)}
+                                aria-label={`Extra charge ${i + 1} cost`}
+                              />
+                              <Margin sell={x.amount} cost={x.cost} />
+                            </div>
+                          </td>
+                        )}
+                        <td>
+                          <textarea
+                            className="form-field-box"
+                            rows={1}
+                            value={x.remark}
+                            placeholder="(if any), as per receipt…"
+                            disabled={!editable}
+                            onChange={(e) => setExtra(i, 'remark', e.target.value)}
+                            aria-label={`Extra charge ${i + 1} remark`}
+                          />
+                        </td>
+                        <td>
+                          {editable && (
+                            <button
+                              type="button"
+                              className={q.remove}
+                              onClick={() => setExtras(extras.filter((_, j) => j !== i))}
+                              aria-label={`Remove extra charge ${i + 1}`}
+                              title="Remove charge"
+                            >
+                              {icons.trash({})}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <datalist id="qt-per">
+                  {PER.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+              </div>
+              {editable && (
+                <button
+                  type="button"
+                  className={q.addRow}
+                  onClick={() => setExtras([...extras, blankExtra()])}
+                >
+                  + Add charge
+                </button>
+              )}
+              {(head.notes || editable) && (
+                <details className={q.otherNotes} open={!!head.notes}>
+                  <summary>Other conditions (not charged)</summary>
+                  <textarea
+                    id="qt-notes"
+                    className={`form-field-box ${q.notes}`}
+                    rows={3}
+                    value={head.notes}
+                    placeholder="e.g. Max weight 21T / 40'"
+                    disabled={!editable}
+                    onChange={(e) => setHead({ ...head, notes: e.target.value })}
+                    aria-label="Other conditions"
+                  />
+                </details>
+              )}
             </div>
           </div>
         </fieldset>
       </div>
-    </section>
+    </Wrap>
   );
 }

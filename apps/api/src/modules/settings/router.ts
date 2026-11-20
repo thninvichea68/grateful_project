@@ -13,11 +13,14 @@ import {
   forwarderUpdateSchema,
   fuelPriceInputSchema,
   lookupValueInputSchema,
+  MILESTONE_MODES,
+  milestoneRuleUpdateSchema,
   portInputSchema,
   publicHolidayInputSchema,
   vatRateInputSchema,
   type PublicHoliday,
   type SettingsBundle,
+  type MilestoneMode,
 } from '@gs/shared';
 import { db } from '../../db/client';
 import {
@@ -26,6 +29,7 @@ import {
   forwarders,
   fuelPrices,
   lookupValues,
+  milestoneRules,
   ports,
   publicHolidays,
   settings,
@@ -43,11 +47,49 @@ import { queryRows } from '../../lib/listing';
 import { parseRateWorkbook } from './rateImport';
 import { listVatRates } from '../accounting/ledger';
 import type { PgTable } from 'drizzle-orm/pg-core';
+import { replanMilestonesForMode } from '../shipments/milestones';
 
 const idParam = z.object({ id: z.string().uuid() });
 export const settingsRouter = Router();
 settingsRouter.use(requireAuth);
 const manage = requirePermission('settings:manage');
+
+settingsRouter.get('/milestone-rules', requirePermission('settings:read'), async (_req, res) => {
+  res.json(
+    await db
+      .select()
+      .from(milestoneRules)
+      .orderBy(asc(milestoneRules.mode), asc(milestoneRules.sequence)),
+  );
+});
+
+settingsRouter.patch('/milestone-rules/:id', manage, async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const values = parse(milestoneRuleUpdateSchema, req.body);
+  const updated = await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(milestoneRules)
+      .where(eq(milestoneRules.id, id))
+      .for('update');
+    if (!before) throw notFound('Milestone rule');
+    if (!(MILESTONE_MODES as readonly string[]).includes(before.mode))
+      throw badRequest('Milestone rule has an unsupported mode');
+    const [after] = await tx
+      .update(milestoneRules)
+      .set({ ...values, updatedAt: new Date() })
+      .where(eq(milestoneRules.id, id))
+      .returning();
+    await replanMilestonesForMode(tx, before.mode as MilestoneMode, req.auth!.userId);
+    await audit(
+      tx,
+      { action: 'UPDATE', entity: 'milestone_rule', entityId: id, before, after },
+      req,
+    );
+    return after;
+  });
+  res.json(updated);
+});
 
 settingsRouter.get('/', requirePermission('settings:read'), async (_req, res) => {
   const [company] = await db.select().from(settings).where(eq(settings.key, 'company'));

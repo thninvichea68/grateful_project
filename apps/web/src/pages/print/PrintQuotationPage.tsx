@@ -90,6 +90,31 @@ export function PrintQuotationPage() {
             ))}
           </tbody>
         </table>
+        {d.charges.length > 0 && (
+          <div className={s.note}>
+            <b>Above rate is subjected to below items:</b>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
+              {d.charges.map((c, i) => (
+                <li key={i}>
+                  {c.description}
+                  {c.amount !== null &&
+                    `: USD ${Number(c.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                  {c.unit && ` / ${c.unit}`}
+                  {/* The condition, without the name it repeats ("…: or 13.73 $ (if any)"). */}
+                  {c.remark && (
+                    <span style={{ color: '#555' }}>
+                      {' '}
+                      —{' '}
+                      {c.remark.startsWith(c.description)
+                        ? c.remark.slice(c.description.length).replace(/^[\s:,*-]+/, '')
+                        : c.remark}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {d.notes && (
           <div className={s.note} style={{ whiteSpace: 'pre-wrap' }}>
             <b>Notes:</b>

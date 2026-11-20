@@ -22,3 +22,4 @@ export * from './chat';
 export * from './schemas/reports';
 export * from './schemas/mih';
 export * from './schemas/co';
+export * from './quotationText';

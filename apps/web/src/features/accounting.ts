@@ -30,6 +30,20 @@ import { queryKeys } from '../lib/queryKeys';
 const KEY = ['accounting'] as const;
 type Query = Record<string, string | number | undefined>;
 
+export interface CreditNoteQuotationService {
+  description: string;
+  unitPrice: string | null;
+  unit: string | null;
+  qty: string | null;
+  note: string | null;
+}
+
+interface CreditNoteQuotationServicesResult {
+  clientCode: string;
+  portGroup: string | null;
+  services: CreditNoteQuotationService[];
+}
+
 /** Ledger changes move net profit on the dashboards, so refresh those too. */
 function useInvalidateAccounting() {
   const qc = useQueryClient();
@@ -225,6 +239,34 @@ export function usePrefill(
       }),
     enabled: !!recordId || !!declarationId || !!client || !!shipmentId,
     staleTime: Infinity,
+  });
+}
+
+export function useCreditNoteQuotationServices(input: {
+  declarationId: string | null;
+  recordId: string | null;
+  portId: string | null;
+  containerNo: string;
+  grossWeightKg: string;
+  cbm: string;
+}) {
+  const query = {
+    ...(input.declarationId
+      ? { declarationId: input.declarationId }
+      : { recordId: input.recordId ?? undefined }),
+    portId: input.portId ?? undefined,
+    containerNo: input.containerNo,
+    grossWeightKg: input.grossWeightKg,
+    cbm: input.cbm,
+  };
+  return useQuery({
+    queryKey: [...KEY, 'credit-note-quotation-services', input],
+    queryFn: () =>
+      api<CreditNoteQuotationServicesResult>('/accounting/credit-notes/quotation-services', {
+        query,
+      }),
+    enabled: (!!input.declarationId || !!input.recordId) && !!input.portId,
+    staleTime: 30_000,
   });
 }
 
@@ -465,4 +507,32 @@ export function useDocVatPercent(
   const rates = useVatRates();
   if (saved?.vatRate != null && saved.date === date) return Number(saved.vatRate);
   return vatPercentOn(rates.data, date);
+}
+
+/** A record summary's pick list: the client's quoted rates and extra charges for its service. */
+export interface QuotationRateChoices {
+  quotation: { quoteNo: string; version: number } | null;
+  templateKey: string;
+  charges: {
+    description: string;
+    unitPrice: string | null;
+    unit?: string | null;
+    kind?: 'rate' | 'extra';
+  }[];
+}
+export function useQuotationRates(input: {
+  clientId?: string | undefined;
+  portId?: string | undefined;
+  direction?: string | undefined;
+  transportMode?: string | undefined;
+  loadType?: string | undefined;
+  containerSize?: string | undefined;
+}) {
+  return useQuery({
+    queryKey: [...KEY, 'quotation-rates', input],
+    queryFn: () =>
+      api<QuotationRateChoices>('/accounting/record-summaries/quotation-rates', { query: input }),
+    enabled: !!input.clientId && (input.direction === 'IMPORT' || input.direction === 'EXPORT'),
+    staleTime: 60_000,
+  });
 }

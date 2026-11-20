@@ -466,9 +466,37 @@
 }
 
 /* ---------- Milestones ---------- */
+.progress {
+  margin-top: 12px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.progressHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.progressHeader span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.trackScroll {
+  overflow-x: auto;
+  padding: 8px 2px 3px;
+  scrollbar-width: thin;
+}
 .track {
   display: flex;
-  margin: 8px 0 0;
+  min-width: 840px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -513,10 +541,10 @@
   stroke-width: 3;
 }
 .mileLabel {
-  font-size: 11.5px;
+  max-width: 110px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
+  line-height: 1.35;
   color: var(--text-tertiary);
 }
 .mile[data-state='done'] .mileDot {

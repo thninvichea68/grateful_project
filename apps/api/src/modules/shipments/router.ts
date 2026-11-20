@@ -50,6 +50,17 @@ shipmentsRouter.get('/values', requirePermission('shipments:read'), async (req, 
   );
 });
 
+// The page's headline: the month's shipments by status, and completed ones not yet billed.
+shipmentsRouter.get('/summary', requirePermission('shipments:read'), async (req, res) => {
+  const q = parse(
+    shipmentListQuerySchema.pick({ clientId: true, direction: true, month: true }),
+    req.query,
+  );
+  res.json(
+    await svc.shipmentPlanSummary({ ...q, clientId: scopeClients(req, q.clientId, 'shipments') }),
+  );
+});
+
 /** Same filters as the list, as an .xlsx with every "Expand All" column. */
 shipmentsRouter.get('/export.xlsx', requirePermission('shipments:read'), async (req, res) => {
   const { page: _p, pageSize: _s, ...filters } = parse(shipmentListQuerySchema, req.query);

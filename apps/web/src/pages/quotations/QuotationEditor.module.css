@@ -268,3 +268,88 @@
     padding: 18px 16px;
   }
 }
+
+/* Free-text conditions under the extra charges, folded away until used. */
+.otherNotes {
+  margin-top: 14px;
+}
+.otherNotes summary {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.otherNotes textarea {
+  margin-top: 8px;
+}
+
+/* Our cost under a price, with the margin (Sales Manager only). */
+.costLine {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+.costInput {
+  min-height: 28px !important;
+  height: 28px;
+  border-style: dashed !important;
+  background: color-mix(in srgb, var(--status-pending-bg) 50%, var(--bg-surface)) !important;
+  font-size: 12px !important;
+  text-align: right;
+}
+.margin,
+.marginLow {
+  flex: 0 0 auto;
+  min-width: 48px;
+  font-size: 11.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.margin {
+  color: var(--status-completed-fg);
+}
+.marginLow {
+  color: var(--status-exception-fg);
+}
+
+/* On a client's page: To, Attn, Date, Payment term, Late penalty on one short row. */
+.sectionCompact {
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+}
+.fieldsCompact {
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(
+      0,
+      0.8fr
+    );
+  gap: 10px 14px;
+}
+.fieldsCompact > [hidden] {
+  display: none;
+}
+.fieldsCompact .span2 {
+  grid-column: auto;
+}
+.fieldsCompact .field {
+  gap: 4px;
+}
+.fieldsCompact label {
+  font-size: 12px;
+}
+.fieldsCompact :global(.form-field-box) {
+  min-height: 36px;
+  height: 36px;
+}
+@media (max-width: 1100px) {
+  .fieldsCompact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .fieldsCompact {
+    grid-template-columns: 1fr;
+  }
+}

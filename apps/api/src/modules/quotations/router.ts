@@ -1,21 +1,33 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  decimal,
+  hasPermission,
+  parseChargeLines,
   quotationInputSchema,
   quotationListQuerySchema,
+  toEnglish,
   type QuotationDetail,
   type QuotationRow,
   type QuotationTemplate,
 } from '@gs/shared';
 import { db, type Tx } from '../../db/client';
-import { quotationLines, quotations, quotationTemplates } from '../../db/schema';
+import {
+  clients,
+  quotationCharges,
+  quotationLines,
+  quotations,
+  quotationTemplates,
+} from '../../db/schema';
 import { requireAuth, requirePermission } from '../../middleware/auth';
 import { parse } from '../../lib/validate';
 import { audit } from '../../lib/audit';
-import { businessRule, conflict, notFound } from '../../lib/errors';
+import { badRequest, businessRule, conflict, notFound } from '../../lib/errors';
+import { excelUpload, requireFile } from '../../lib/http';
 import { likePattern, paginate, queryRows, toPaginated, whereAll } from '../../lib/listing';
 import { nextNumber } from '../../lib/numbering';
+import { parseQuotationWorkbook } from './import';
 import {
   allowedClients,
   assertClientAllowed,
@@ -77,6 +89,7 @@ quotationsRouter.get('/', async (req, res) => {
     SELECT qt.id, qt.quote_no AS "quoteNo", qt.version, qt.status, qt.template_key AS "templateKey", t.label AS "templateLabel",
            qt.client_id AS "clientId", c.name AS "clientName", qt.to_name AS "toName", to_char(qt.quote_date, 'YYYY-MM-DD') AS "quoteDate",
            (SELECT count(*) FROM quotation_lines l WHERE l.quotation_id = qt.id)::int AS "lineCount",
+           (SELECT count(*) FROM quotation_charges x WHERE x.quotation_id = qt.id)::int AS "chargeCount",
            NOT EXISTS (SELECT 1 FROM quotations n WHERE n.quote_no = qt.quote_no AND n.version > qt.version AND n.deleted_at IS NULL) AS "isLatest",
            count(*) OVER () AS total_count
     FROM quotations qt JOIN quotation_templates t ON t.key = qt.template_key LEFT JOIN clients c ON c.id = qt.client_id
@@ -85,9 +98,151 @@ quotationsRouter.get('/', async (req, res) => {
   res.json(toPaginated(rows, q.page, q.pageSize));
 });
 
-async function getDetail(id: string): Promise<QuotationDetail> {
+quotationsRouter.post('/import', write, excelUpload, async (req, res) => {
+  const { clientId, preview } = parse(
+    z.object({
+      clientId: z.string().uuid(),
+      preview: z.preprocess(
+        (value) =>
+          value === true || value === 'true'
+            ? true
+            : value === false || value === 'false'
+              ? false
+              : value,
+        z.boolean().default(false),
+      ),
+    }),
+    req.body,
+  );
+  if (allowedClients(req)) assertClientAllowed(req, clientId);
+  const file = requireFile(req.file);
+  if (!/\.xlsx$/i.test(file.originalname)) throw badRequest('Upload an .xlsx workbook');
+
+  const workbook = await parseQuotationWorkbook(file.buffer);
+  const [client] = await db
+    .select({ name: clients.name, legalName: clients.legalName })
+    .from(clients)
+    .where(eq(clients.id, clientId));
+  if (!client) throw notFound('Client');
+
+  if (preview) {
+    const duplicates: string[] = [];
+    for (const quote of workbook.quotations) {
+      const [existing] = await db
+        .select({ id: quotations.id })
+        .from(quotations)
+        .where(
+          and(
+            eq(quotations.clientId, clientId),
+            eq(quotations.templateKey, quote.templateKey),
+            eq(quotations.quoteDate, quote.quoteDate),
+            isNull(quotations.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (existing) duplicates.push(quote.sourceSheet);
+    }
+    return res.json({
+      preview: true,
+      quoteDate: workbook.metadata.quoteDate,
+      toName: workbook.metadata.toName ?? client.legalName ?? client.name,
+      duplicates,
+      quotations: workbook.quotations.map((quote) => ({
+        templateKey: quote.templateKey,
+        sourceSheet: quote.sourceSheet,
+        lineCount: quote.lines.length,
+      })),
+    });
+  }
+
+  const created = await db.transaction(async (tx) => {
+    const result: {
+      id: string;
+      quoteNo: string;
+      templateKey: string;
+      quoteDate: string;
+      sourceSheet: string;
+    }[] = [];
+    for (const quote of workbook.quotations) {
+      await assertTemplate(tx, quote.templateKey);
+      const [existing] = await tx
+        .select({ id: quotations.id })
+        .from(quotations)
+        .where(
+          and(
+            eq(quotations.clientId, clientId),
+            eq(quotations.templateKey, quote.templateKey),
+            eq(quotations.quoteDate, quote.quoteDate),
+            isNull(quotations.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (existing)
+        throw conflict(
+          `A ${quote.templateKey} quotation for this client and date already exists. Edit or revise the existing quote instead.`,
+        );
+
+      const input = parse(quotationInputSchema, {
+        templateKey: quote.templateKey,
+        clientId,
+        toName: quote.toName ?? client.legalName ?? client.name,
+        attn: quote.attn,
+        quoteDate: quote.quoteDate,
+        paymentTermDays: quote.paymentTermDays,
+        latePenaltyPctPerDay: null,
+        // The notes become the extra-charges list (English only).
+        notes: null,
+        lines: quote.lines,
+        charges: parseChargeLines(quote.notes),
+      });
+      const year = input.quoteDate.slice(0, 4);
+      const quoteNo = `Q${year.slice(2)}-${String(await nextNumber(tx, `QUOTATION:${year}`)).padStart(3, '0')}`;
+      const [row] = await tx
+        .insert(quotations)
+        .values({
+          ...header(input),
+          quoteNo,
+          version: 1,
+          status: 'ACCEPTED',
+          createdById: req.auth!.userId,
+        })
+        .returning();
+      await writeLines(tx, row!.id, input);
+      await audit(
+        tx,
+        {
+          action: 'CREATE',
+          entity: 'quotation',
+          entityId: row!.id,
+          after: {
+            ...row,
+            lines: input.lines,
+            importedFrom: file.originalname,
+            sourceSheet: quote.sourceSheet,
+          },
+        },
+        req,
+      );
+      result.push({
+        id: row!.id,
+        quoteNo: row!.quoteNo,
+        templateKey: quote.templateKey,
+        quoteDate: quote.quoteDate,
+        sourceSheet: quote.sourceSheet,
+      });
+    }
+    return result;
+  });
+
+  res.status(201).json({ created: created.length, quotations: created });
+});
+
+/** Costs and margins: only with quotations:cost (Sales Manager); others see client prices. */
+const canCost = (req: Request) => hasPermission(req.auth?.permissions ?? [], 'quotations:cost');
+
+async function getDetail(id: string, withCost = false): Promise<QuotationDetail> {
   const [q] = await queryRows<
-    Omit<QuotationDetail, 'lines' | 'versions' | 'columns'> & {
+    Omit<QuotationDetail, 'lines' | 'charges' | 'versions' | 'columns'> & {
       columns: QuotationDetail['columns'];
     }
   >(
@@ -105,13 +260,25 @@ async function getDetail(id: string): Promise<QuotationDetail> {
     .from(quotationLines)
     .where(eq(quotationLines.quotationId, id))
     .orderBy(asc(quotationLines.lineNo));
+  const charges = await queryRows<QuotationDetail['charges'][number]>(
+    db,
+    sql`SELECT description, amount::text AS amount, unit, remark, cost::text AS cost FROM quotation_charges
+        WHERE quotation_id = ${id} ORDER BY line_no`,
+  );
+  if (!withCost) for (const c of charges) delete c.cost;
   const versions = await queryRows<QuotationDetail['versions'][number]>(
     db,
     sql`
     SELECT id, version, status, to_char(quote_date, 'YYYY-MM-DD') AS "quoteDate" FROM quotations
     WHERE quote_no = ${q.quoteNo} AND deleted_at IS NULL ORDER BY version DESC`,
   );
-  return { ...q, lines: lines.map((l) => l.cells), versions };
+  return {
+    ...q,
+    lines: lines.map((l) => l.cells),
+    ...(withCost ? { costs: lines.map((l) => l.costs ?? {}) } : {}),
+    charges,
+    versions,
+  };
 }
 
 /** Numeric value of a price cell when it is a plain number ("60" → 60, "As per receipt" → none). */
@@ -123,15 +290,57 @@ function amounts(cells: Record<string, string>): Record<string, number> {
   );
 }
 
-async function writeLines(tx: Tx, quotationId: string, input: Input) {
+/** The rates and the extra charges, in English only (any Chinese is dropped). */
+async function writeLines(tx: Tx, quotationId: string, input: Input, withCost = false) {
+  // Without quotations:cost the costs already set stay as they were (by row, by charge name).
+  const oldLines = withCost
+    ? []
+    : await tx
+        .select({ costs: quotationLines.costs })
+        .from(quotationLines)
+        .where(eq(quotationLines.quotationId, quotationId))
+        .orderBy(asc(quotationLines.lineNo));
+  const oldCharges = withCost
+    ? []
+    : await tx
+        .select({ description: quotationCharges.description, cost: quotationCharges.cost })
+        .from(quotationCharges)
+        .where(eq(quotationCharges.quotationId, quotationId));
   await tx.delete(quotationLines).where(eq(quotationLines.quotationId, quotationId));
-  const rows = input.lines.filter((l) => Object.values(l).some((v) => v.trim()));
-  if (rows.length)
+  const rows = input.lines
+    .map((l, i) => ({
+      cells: Object.fromEntries(Object.entries(l).map(([k, v]) => [k, toEnglish(v)])),
+      costs: withCost
+        ? Object.fromEntries(Object.entries(input.costs?.[i] ?? {}).filter(([, v]) => v.trim()))
+        : (oldLines[i]?.costs ?? {}),
+    }))
+    .filter((l) => Object.values(l.cells).some((v) => v.trim()));
+  await tx.delete(quotationCharges).where(eq(quotationCharges.quotationId, quotationId));
+  const charges = input.charges
+    .map((c) => ({
+      description: toEnglish(c.description),
+      amount: c.amount,
+      unit: c.unit ? toEnglish(c.unit) || null : null,
+      remark: c.remark ? toEnglish(c.remark) || null : null,
+      cost: withCost
+        ? (c.cost ?? null)
+        : (oldCharges.find((o) => o.description === toEnglish(c.description))?.cost ?? null),
+    }))
+    .filter((c) => c.description);
+  if (charges.length)
     await tx
-      .insert(quotationLines)
-      .values(
-        rows.map((cells, i) => ({ quotationId, lineNo: i + 1, cells, amounts: amounts(cells) })),
-      );
+      .insert(quotationCharges)
+      .values(charges.map((c, i) => ({ ...c, quotationId, lineNo: i + 1 })));
+  if (rows.length)
+    await tx.insert(quotationLines).values(
+      rows.map(({ cells, costs }, i) => ({
+        quotationId,
+        lineNo: i + 1,
+        cells,
+        costs,
+        amounts: amounts(cells),
+      })),
+    );
 }
 
 async function assertTemplate(tx: Tx, key: string) {
@@ -150,11 +359,11 @@ const header = (v: Input) => ({
   quoteDate: v.quoteDate,
   paymentTermDays: v.paymentTermDays,
   latePenaltyPctPerDay: v.latePenaltyPctPerDay,
-  notes: v.notes,
+  notes: v.notes ? toEnglish(v.notes) || null : null,
 });
 
 quotationsRouter.get('/:id', async (req, res) =>
-  res.json(await getDetail(parse(idParam, req.params).id)),
+  res.json(await getDetail(parse(idParam, req.params).id, canCost(req))),
 );
 
 quotationsRouter.post('/', write, async (req, res) => {
@@ -168,7 +377,7 @@ quotationsRouter.post('/', write, async (req, res) => {
       .insert(quotations)
       .values({ ...header(v), quoteNo, version: 1, createdById: req.auth!.userId })
       .returning();
-    await writeLines(tx, row!.id, v);
+    await writeLines(tx, row!.id, v, canCost(req));
     await audit(
       tx,
       {
@@ -181,7 +390,7 @@ quotationsRouter.post('/', write, async (req, res) => {
     );
     return row!.id;
   });
-  res.status(201).json(await getDetail(id));
+  res.status(201).json(await getDetail(id, canCost(req)));
 });
 
 quotationsRouter.put('/:id', write, async (req, res) => {
@@ -199,10 +408,57 @@ quotationsRouter.put('/:id', write, async (req, res) => {
       throw conflict('Only drafts can be edited. Use "Revise" to make a new version.');
     await assertTemplate(tx, v.templateKey);
     await tx.update(quotations).set(header(v)).where(eq(quotations.id, id));
-    await writeLines(tx, id, v);
+    await writeLines(tx, id, v, canCost(req));
     await audit(tx, { action: 'UPDATE', entity: 'quotation', entityId: id, before, after: v }, req);
   });
-  res.json(await getDetail(id));
+  res.json(await getDetail(id, canCost(req)));
+});
+
+/**
+ * Costs only (Sales Manager): what we pay per rate cell and per extra charge. Internal, so they
+ * can be set on any version, sent or accepted too, without a new version for the client.
+ */
+quotationsRouter.put('/:id/costs', requirePermission('quotations:cost'), async (req, res) => {
+  const { id } = parse(idParam, req.params);
+  const v = parse(
+    z.object({
+      costs: z.array(z.record(z.string().max(300))),
+      chargeCosts: z.array(decimal(2, { min: 0 })),
+    }),
+    req.body,
+  );
+  await db.transaction(async (tx) => {
+    const [q] = await tx
+      .select({ id: quotations.id, clientId: quotations.clientId })
+      .from(quotations)
+      .where(and(eq(quotations.id, id), isNull(quotations.deletedAt)));
+    if (!q) throw notFound('Quotation');
+    if (allowedClients(req)) assertClientAllowed(req, q.clientId);
+    const lines = await tx
+      .select({ id: quotationLines.id })
+      .from(quotationLines)
+      .where(eq(quotationLines.quotationId, id))
+      .orderBy(asc(quotationLines.lineNo));
+    for (const [i, l] of lines.entries())
+      await tx
+        .update(quotationLines)
+        .set({
+          costs: Object.fromEntries(Object.entries(v.costs[i] ?? {}).filter(([, x]) => x.trim())),
+        })
+        .where(eq(quotationLines.id, l.id));
+    const charges = await tx
+      .select({ id: quotationCharges.id })
+      .from(quotationCharges)
+      .where(eq(quotationCharges.quotationId, id))
+      .orderBy(asc(quotationCharges.lineNo));
+    for (const [i, c] of charges.entries())
+      await tx
+        .update(quotationCharges)
+        .set({ cost: v.chargeCosts[i] ?? null })
+        .where(eq(quotationCharges.id, c.id));
+    await audit(tx, { action: 'UPDATE', entity: 'quotation_costs', entityId: id }, req);
+  });
+  res.json(await getDetail(id, true));
 });
 
 const NEXT: Record<string, string[]> = {
@@ -238,7 +494,7 @@ quotationsRouter.post('/:id/status', write, async (req, res) => {
       req,
     );
   });
-  res.json(await getDetail(id));
+  res.json(await getDetail(id, canCost(req)));
 });
 
 /** New version as a draft copy; the previous version becomes Superseded. */
@@ -276,6 +532,18 @@ quotationsRouter.post('/:id/revise', write, async (req, res) => {
           lineNo: l.lineNo,
           cells: l.cells,
           amounts: l.amounts,
+          costs: l.costs,
+        })),
+      );
+    const extras = await tx
+      .select()
+      .from(quotationCharges)
+      .where(eq(quotationCharges.quotationId, id));
+    if (extras.length)
+      await tx.insert(quotationCharges).values(
+        extras.map(({ id: _x, createdAt: _c2, updatedAt: _u2, ...c }) => ({
+          ...c,
+          quotationId: copy!.id,
         })),
       );
     if (q.status !== 'ACCEPTED')
@@ -292,7 +560,7 @@ quotationsRouter.post('/:id/revise', write, async (req, res) => {
     );
     return copy!.id;
   });
-  res.status(201).json(await getDetail(newId));
+  res.status(201).json(await getDetail(newId, canCost(req)));
 });
 
 quotationsRouter.delete('/:id', write, async (req, res) => {
@@ -304,7 +572,7 @@ quotationsRouter.delete('/:id', write, async (req, res) => {
       .where(and(eq(quotations.id, id), isNull(quotations.deletedAt)))
       .for('update');
     if (!q) throw notFound('Quotation');
-    if (q.status !== 'DRAFT') throw conflict('Only drafts can be deleted');
+    // Any version can be deleted (client management); bills already made keep their prices.
     await tx.update(quotations).set({ deletedAt: new Date() }).where(eq(quotations.id, id));
     if (q.previousVersionId)
       await tx

@@ -979,3 +979,10 @@ span.dotsBtn:focus-visible {
     grid-column: span 2;
   }
 }
+
+/* The invoice G.W box in the head bar: narrower, figures right-aligned. */
+.gwInput {
+  width: 130px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

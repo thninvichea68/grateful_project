@@ -136,6 +136,11 @@ const QuotationEditorPage = lazy(() =>
     default: m.QuotationEditorPage,
   })),
 );
+const QuotationClientPage = lazy(() =>
+  import('./pages/quotations/QuotationClientPage').then((m) => ({
+    default: m.QuotationClientPage,
+  })),
+);
 const PrintQuotationPage = lazy(() =>
   import('./pages/print/PrintQuotationPage').then((m) => ({ default: m.PrintQuotationPage })),
 );
@@ -539,6 +544,10 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'quotations', element: guard('quotations:read', <QuotationsPage />) },
+      {
+        path: 'quotations/client/:clientId',
+        element: guard('quotations:read', <QuotationClientPage />),
+      },
       { path: 'quotations/:id', element: guard('quotations:read', <QuotationEditorPage />) },
       { path: 'operations', element: guard('shipments:read', <OperationsPage />) },
       { path: 'staff', element: <Navigate to="/staff/members" replace /> },

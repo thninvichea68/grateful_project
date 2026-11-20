@@ -58,6 +58,7 @@ const ACTIONS: Record<string, string> = {
   delete: 'Delete',
   manage: 'Manage',
   override: 'Override balance',
+  cost: 'See and set costs',
 };
 const svg = (d: string) => (
   <svg

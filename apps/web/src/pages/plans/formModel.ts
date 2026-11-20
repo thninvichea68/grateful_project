@@ -29,6 +29,7 @@ export const blankInvoice = (invoiceDate = ''): InvoiceValues => ({
   invoiceDate,
   description: '',
   packages: '',
+  grossWeightKg: '',
   lines: [blankLine()],
 });
 /** One container row ready to fill in; left blank, it is ignored on save. */
@@ -53,6 +54,7 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     direction,
     transportMode: 'SEA',
     loadType: 'FCL',
+    clearedBy: 'GS',
     clearanceStatus: 'PENDING',
     shipperName: '',
     consigneeId: '',
@@ -81,8 +83,15 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
     flightNo: '',
     checkInDate: '',
     doDate: '',
+    permitDate: '',
+    authorizeDate: '',
     incoterm: '',
     cutOffDate: '',
+    airCutoffAt: '',
+    cyCutoffAt: '',
+    siCutoffAt: '',
+    vgmCutoffAt: '',
+    stuffingDate: '',
     thcHblNo: '',
     thcHblDate: '',
     thcHblAmount: '',
@@ -98,6 +107,20 @@ export function emptyForm(direction: Direction, clientId = ''): FormValues {
 }
 
 const s = (v: string | null | undefined) => v ?? '';
+const localDateTime = (v: string | null) =>
+  v
+    ? new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Phnom_Penh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      })
+        .format(new Date(v))
+        .replace(' ', 'T')
+    : '';
 
 export function fromDetail(d: ShipmentDetail): FormValues {
   return {
@@ -105,6 +128,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     direction: d.direction,
     transportMode: d.transportMode,
     loadType: d.loadType,
+    clearedBy: d.clearedBy,
     clearanceStatus: d.clearanceStatus,
     shipperName: s(d.shipperName),
     consigneeId: s(d.consigneeId),
@@ -133,8 +157,15 @@ export function fromDetail(d: ShipmentDetail): FormValues {
     flightNo: s(d.flightNo),
     checkInDate: s(d.checkInDate),
     doDate: s(d.doDate),
+    permitDate: s(d.permitDate),
+    authorizeDate: s(d.authorizeDate),
     incoterm: d.incoterm ?? '',
     cutOffDate: s(d.cutOffDate),
+    airCutoffAt: localDateTime(d.airCutoffAt),
+    cyCutoffAt: localDateTime(d.cyCutoffAt),
+    siCutoffAt: localDateTime(d.siCutoffAt),
+    vgmCutoffAt: localDateTime(d.vgmCutoffAt),
+    stuffingDate: s(d.stuffingDate),
     thcHblNo: s(d.thcHblNo),
     thcHblDate: s(d.thcHblDate),
     thcHblAmount: s(d.thcHblAmount),
@@ -160,6 +191,7 @@ export function fromDetail(d: ShipmentDetail): FormValues {
           invoiceDate: s(i.invoiceDate),
           description: s(i.description),
           packages: num(i.packages),
+          grossWeightKg: num(i.grossWeightKg),
           lines: i.lines.map((l) => ({
             poNo: s(l.poNo),
             styleNo: s(l.styleNo),
@@ -203,6 +235,10 @@ export function cleanForSubmit(v: FormValues): FormValues {
     Object.values(l).some((x) => x !== '' && x !== null && x !== undefined);
   return {
     ...v,
+    ...(v.direction === 'EXPORT' && { permitDate: '', authorizeDate: '' }),
+    ...(v.direction === 'EXPORT' && v.transportMode === 'SEA'
+      ? { airCutoffAt: '' }
+      : { cyCutoffAt: '', siCutoffAt: '', vgmCutoffAt: '', stuffingDate: '' }),
     containers:
       v.loadType !== 'NONE' && v.transportMode !== 'AIR'
         ? // Truck no. is only shown by truck: clear any left from when the shipment was by truck.

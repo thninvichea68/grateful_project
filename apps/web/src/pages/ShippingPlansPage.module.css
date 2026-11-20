@@ -6,25 +6,10 @@
   padding: 16px;
 }
 
-.pageHeader {
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-}
-
-.pageHeader h1 {
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.35px;
-  line-height: 1.2;
-}
-
 .controls {
   display: grid;
   gap: 10px;
-  padding: 9px 0;
-  border-top: 1px solid var(--border-subtle);
+  padding: 0 0 10px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -63,60 +48,14 @@
   white-space: nowrap;
 }
 
-.statusBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-width: 0;
-}
-
-.statusFilters {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  max-width: 100%;
-  padding: 3px;
-  overflow-x: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  background: var(--bg-subtle);
-}
-
-.statusFilter {
-  min-height: 30px;
-  padding: 0 11px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.statusFilter:hover {
-  color: var(--text-primary);
-}
-
-.statusFilterActive {
-  border-color: var(--border-subtle);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
-}
-
 .resultCount {
-  flex: 0 0 auto;
   color: var(--text-tertiary);
   font-size: 12px;
   font-weight: 600;
-  text-align: right;
+}
+
+.muted {
+  color: var(--text-tertiary);
 }
 
 .searchSummary {
@@ -147,14 +86,5 @@
   .monthControl,
   .clientFilter {
     flex: 1 1 140px;
-  }
-
-  .statusBar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .resultCount {
-    text-align: left;
   }
 }

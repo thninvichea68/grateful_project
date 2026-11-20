@@ -37,9 +37,8 @@ const COLUMNS: {
   format?: (v: string) => string;
 }[] = [
   { key: 'chea', label: 'Chea Payment', format: (v) => CHEA_LABEL[v] ?? v },
-  { key: 'portNo', label: 'Port Number' },
-  { key: 'portCode', label: 'Port Code' },
-  { key: 'portName', label: 'Port Name' },
+  // One column: the port code (PNH04) says it all; its number and name are on hover.
+  { key: 'portCode', label: 'Port' },
   { key: 'declareNo', label: 'Declare' },
   { key: 'declareDate', label: 'Date', ...asDate },
   { key: 'client', label: 'Client' },
@@ -289,7 +288,7 @@ export function LedgerPage() {
             </thead>
             <tbody>
               <TableState
-                cols={23}
+                cols={COLUMNS.length}
                 loading={list.isLoading}
                 error={list.error}
                 empty={list.data?.data.length === 0}
@@ -307,9 +306,14 @@ export function LedgerPage() {
                     {/* No broker credit note (no clear fee): nothing to pay Chea, left blank. */}
                     {r.cheaStatus !== 'NA' && <CheaPill status={r.cheaStatus} />}
                   </td>
-                  <td>{r.portNo ?? '-'}</td>
-                  <td>{r.portCode ?? '-'}</td>
-                  <td>{r.portName ?? '-'}</td>
+                  <td
+                    title={
+                      [r.portNo && `No. ${r.portNo}`, r.portName].filter(Boolean).join(' · ') ||
+                      undefined
+                    }
+                  >
+                    {r.portCode ?? '-'}
+                  </td>
                   <td className="val-bold">{r.declareNo}</td>
                   <td>{fmtDate(r.declareDate)}</td>
                   <td>{r.clientCode}</td>

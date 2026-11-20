@@ -13,6 +13,7 @@ import {
   type ShipmentDetail,
   type ShipmentInputParsed,
   type ShipmentListItem,
+  type ShipmentPlanSummary,
 } from '@gs/shared';
 import type { Request } from 'express';
 import { db, type Tx } from '../../db/client';
@@ -52,11 +53,12 @@ import {
   toPaginated,
   whereAll,
 } from '../../lib/listing';
-import { shipmentCbm, syncBillCbm } from '../../lib/shipmentCbm';
+import { shipmentCbm, shipmentGw, syncBillCbm } from '../../lib/shipmentCbm';
 import { formatNumber, nextNumber } from '../../lib/numbering';
 import { applyClearanceDate } from '../accounting/docs';
 import { recomputeShipmentStatuses } from '../../db/shipmentStatus';
 import { clearanceDate, periodDate, shipmentDate, shipmentDateOf } from '../../lib/shipmentDate';
+import { generateShipmentMilestones, replanShipmentMilestones } from './milestones';
 
 /* ============================== List ============================== */
 
@@ -70,7 +72,23 @@ export interface ShipmentFilters {
   to?: string | undefined;
   month?: string | undefined;
   q?: string | undefined;
+  billing?: 'UNBILLED' | undefined;
 }
+
+/**
+ * Billed to the client: one of the shipment's declarations has a ledger row with something
+ * billed on it (as Analytics' BILLED: INV + DIS + DN > 0), or an issued INV / DIS / DN.
+ */
+export const billedSql = (alias = 's') => {
+  const s = sql.raw(alias);
+  const issued = (table: string) =>
+    sql`EXISTS (SELECT 1 FROM ${sql.raw(table)} t WHERE t.accounting_record_id = a.id AND t.status = 'ISSUED')`;
+  return sql`EXISTS (SELECT 1 FROM customs_declarations d JOIN accounting_records a ON a.declaration_id = d.id
+    WHERE d.shipment_id = ${s}.id AND ((a.inv_revenue + a.dis_total + a.dn_total) > 0
+      OR ${issued('tax_invoices')} OR ${issued('disbursements')} OR ${issued('debit_notes')}))`;
+};
+/** Completed, but nothing billed to the client yet: operations' follow-up list. */
+export const unbilledSql = () => sql`(s.status = 'COMPLETED' AND NOT ${billedSql()})`;
 
 export function shipmentWhere(f: ShipmentFilters, extra: SQL[] = []) {
   const conds = [sql`s.deleted_at IS NULL`, ...extra];
@@ -96,6 +114,7 @@ export function shipmentWhere(f: ShipmentFilters, extra: SQL[] = []) {
   if (f.to) conds.push(sql`${shipmentDate()} <= ${f.to}::date`);
   // By the first declare date (the Clearance Date column); undeclared shipments drop out.
   if (f.month) conds.push(sql`to_char(${periodDate()}, 'YYYY-MM') = ${f.month}`);
+  if (f.billing === 'UNBILLED') conds.push(unbilledSql());
   if (f.q) {
     const like = likePattern(f.q);
     conds.push(sql`(s.reference ILIKE ${like} OR s.hbl_no ILIKE ${like} OR s.booking_no ILIKE ${like} OR c.code ILIKE ${like}
@@ -107,12 +126,12 @@ export function shipmentWhere(f: ShipmentFilters, extra: SQL[] = []) {
 }
 
 const listSelect = (extra: SQL = sql``) => sql`
-  SELECT s.id, s.reference, s.client_id AS "clientId", c.code AS "clientCode", c.name AS "clientName",
+  SELECT s.id, ${billedSql()} AS billed, s.reference, s.client_id AS "clientId", c.code AS "clientCode", c.name AS "clientName",
          s.direction, s.transport_mode AS "transportMode", s.load_type AS "loadType", s.status, s.clearance_status AS "clearanceStatus",
          s.quantity::text AS quantity, s.quantity_unit AS "quantityUnit",
          to_char(s.eta, 'YYYY-MM-DD') AS eta, to_char(s.ata, 'YYYY-MM-DD') AS ata, to_char(s.etd, 'YYYY-MM-DD') AS etd,
          to_char(s.atd, 'YYYY-MM-DD') AS atd, to_char(s.crd, 'YYYY-MM-DD') AS crd, to_char(s.arrive_fty, 'YYYY-MM-DD') AS "arriveFty",
-         f.name AS "forwarderName", p.name AS "clearancePortName", p.short_name AS "clearancePortShortName", s.etd_port AS "etdPort", s.hbl_no AS "hblNo", s.booking_no AS "bookingNo",
+         f.name AS "forwarderName", f.code AS "forwarderCode", p.name AS "clearancePortName", p.short_name AS "clearancePortShortName", p.code AS "clearancePortCode", s.etd_port AS "etdPort", s.hbl_no AS "hblNo", s.booking_no AS "bookingNo",
          cn.name AS "consigneeName", ctry.name AS "countryName", s.vessel_name AS "vesselName", s.voyage_no AS "voyageNo",
          s.co_form AS "coForm", s.co_number AS "coNumber", s.co_status AS "coStatus", s.thc_hbl_no AS "thcHblNo",
          to_char(s.thc_hbl_date, 'YYYY-MM-DD') AS "thcHblDate", s.thc_hbl_amount::text AS "thcHblAmount", s.remark,
@@ -135,7 +154,7 @@ const listSelect = (extra: SQL = sql``) => sql`
   LEFT JOIN LATERAL (SELECT json_agg(json_build_object('declareNo', declare_no, 'declareDate', declare_date) ORDER BY declare_date) AS items
                      FROM customs_declarations WHERE shipment_id = s.id) dc ON true
   LEFT JOIN LATERAL (SELECT coalesce(sum(l.pcs), 0) AS pcs, coalesce(sum(l.ctns), 0) AS ctns, coalesce(sum(l.cbm), 0) AS cbm,
-                            coalesce(sum(l.net_weight_kg), 0) AS nw, coalesce(sum(l.gross_weight_kg), 0) AS gw,
+                            coalesce(sum(l.net_weight_kg), 0) AS nw, ${shipmentGw()} AS gw,
                             coalesce(sum(l.fob_amount), 0) AS fob
                      FROM cargo_invoice_lines l JOIN cargo_invoices ci ON ci.id = l.invoice_id WHERE ci.shipment_id = s.id) tot ON true
   LEFT JOIN LATERAL (SELECT json_build_object('poNo', l.po_no, 'styleNo', l.style_no, 'htsCode', l.hts_code,
@@ -186,8 +205,9 @@ const PLAN_COLUMNS: FilterColumns = {
   },
   clearanceDate: { value: day(clearanceDate()), order: clearanceDate() },
   declareDate: { value: day(clearanceDate()), order: clearanceDate() },
-  fwd: { value: sql`upper(f.name)` },
-  clearance: { value: sql`upper(coalesce(nullif(p.short_name, ''), p.name))` },
+  // Filtered and sorted by code, as the list shows them (MAERSK, PNH04…).
+  fwd: { value: sql`upper(coalesce(nullif(f.code, ''), f.name))` },
+  clearance: { value: sql`upper(coalesce(nullif(p.code, ''), nullif(p.short_name, ''), p.name))` },
   hbl: text('s.hbl_no'),
   ctnr: {
     many: several(
@@ -232,7 +252,10 @@ const PLAN_COLUMNS: FilterColumns = {
   coNumber: text('s.co_number'),
   coStatus: text('s.co_status'),
   netWeight: total('net_weight_kg'),
-  grossWeight: total('gross_weight_kg'),
+  grossWeight: (() => {
+    const order = shipmentGw();
+    return { value: sql`${order}::text`, order };
+  })(),
   cbm: (() => {
     const order = shipmentCbm();
     return { value: sql`${order}::text`, order };
@@ -327,6 +350,29 @@ export async function listShipments(
   return toPaginated(ordered, f.page, f.pageSize);
 }
 
+/** The Shipping Plans headline: the month's shipments by status, and what is still unbilled. */
+export async function shipmentPlanSummary(
+  f: Pick<ShipmentFilters, 'clientId' | 'direction' | 'month'>,
+): Promise<ShipmentPlanSummary> {
+  const n = (cond: SQL) => sql`(count(*) FILTER (WHERE ${cond}))::int`;
+  const [month] = await queryRows<Omit<ShipmentPlanSummary, 'unbilledAll'>>(
+    db,
+    sql`SELECT count(*)::int AS total,
+               ${n(sql`s.status = 'COMPLETED'`)} AS completed,
+               ${n(sql`s.status = 'IN_PROGRESS'`)} AS "inProgress",
+               ${n(sql`s.status = 'PENDING'`)} AS pending,
+               ${n(sql`s.status = 'EXCEPTION'`)} AS exception,
+               ${n(unbilledSql())} AS unbilled
+        ${PLAN_FROM} ${shipmentWhere(f)}`,
+  );
+  const [all] = await queryRows<{ n: number }>(
+    db,
+    sql`SELECT count(*)::int AS n ${PLAN_FROM}
+        ${shipmentWhere({ clientId: f.clientId, direction: f.direction, billing: 'UNBILLED' })}`,
+  );
+  return { ...month!, unbilledAll: all?.n ?? 0 };
+}
+
 /** All matching rows (for Excel export), capped. */
 export async function listShipmentsForExport(
   f: ShipmentFilters & { sort?: string | undefined; filters?: HeaderFilters | undefined },
@@ -405,6 +451,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     direction: r.direction,
     transportMode: r.transportMode,
     loadType: r.loadType,
+    clearedBy: r.clearedBy as ShipmentDetail['clearedBy'],
     status: r.status,
     clearanceStatus: r.clearanceStatus,
     shipperName: r.shipperName,
@@ -433,9 +480,16 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
     arriveFty: r.arriveFty,
     receivedDocumentDate: r.receivedDocumentDate,
     doDate: r.doDate,
+    permitDate: r.permitDate,
+    authorizeDate: r.authorizeDate,
     flightNo: r.flightNo,
     checkInDate: r.checkInDate,
     cutOffDate: r.cutOffDate,
+    airCutoffAt: r.airCutoffAt?.toISOString() ?? null,
+    cyCutoffAt: r.cyCutoffAt?.toISOString() ?? null,
+    siCutoffAt: r.siCutoffAt?.toISOString() ?? null,
+    vgmCutoffAt: r.vgmCutoffAt?.toISOString() ?? null,
+    stuffingDate: r.stuffingDate,
     thcHblNo: r.thcHblNo,
     thcHblDate: r.thcHblDate,
     thcHblAmount: r.thcHblAmount,
@@ -457,6 +511,7 @@ export async function getShipment(id: string): Promise<ShipmentDetail> {
       invoiceDate: i.invoiceDate,
       description: i.description,
       packages: i.packages,
+      grossWeightKg: i.grossWeightKg,
       lines: lines
         .filter((l) => l.invoiceId === i.id)
         .map((l) => ({
@@ -659,9 +714,12 @@ async function writeChildren(
         invoiceDate: inv.invoiceDate,
         description: inv.description,
         packages: inv.packages,
+        grossWeightKg: inv.grossWeightKg,
         sortOrder: i,
       })
       .returning({ id: cargoInvoices.id });
+    // An invoice kept with only its no., date and G.W has no lines.
+    if (!inv.lines.length) continue;
     await tx.insert(cargoInvoiceLines).values(
       inv.lines.map(({ overrideReason: _o, ...l }, li) => {
         const st = stock.get(`${i}:${li}`);
@@ -693,9 +751,25 @@ async function writeChildren(
   }
 }
 
+function timestampValue(value: string | null): Date | null {
+  if (!value) return null;
+  const withZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value)
+    ? value
+    : `${value.length === 10 ? `${value}T17:00:00` : value}+07:00`;
+  const date = new Date(withZone);
+  if (Number.isNaN(date.getTime())) throw badRequest('Enter a valid cut-off date and time');
+  return date;
+}
+
 function scalarValues(input: ShipmentInputParsed) {
   const { containers: _c, invoices: _i, declarations: _d, ...rest } = input;
-  return rest;
+  return {
+    ...rest,
+    airCutoffAt: timestampValue(rest.airCutoffAt),
+    cyCutoffAt: timestampValue(rest.cyCutoffAt),
+    siCutoffAt: timestampValue(rest.siCutoffAt),
+    vgmCutoffAt: timestampValue(rest.vgmCutoffAt),
+  };
 }
 
 /** Friendlier messages for the unique constraints users can hit. */
@@ -752,8 +826,17 @@ export async function insertShipment(
       createdById: actor.userId,
       updatedById: actor.userId,
     })
-    .returning({ id: shipments.id, reference: shipments.reference });
+    .returning({
+      id: shipments.id,
+      reference: shipments.reference,
+      createdAt: shipments.createdAt,
+    });
   await writeChildren(tx, row!.id, input, actor, new Set());
+  await generateShipmentMilestones(
+    tx,
+    { ...input, id: row!.id, clientId: input.clientId, createdAt: row!.createdAt },
+    actor.userId,
+  );
   await audit(
     tx,
     {
@@ -917,6 +1000,46 @@ export async function updateShipment(
       }
       // The bills to the client print the plan's CBM.
       await syncBillCbm(tx, id, req);
+      const afterMilestoneState = {
+        ...before,
+        ...scalarValues(input),
+        id,
+        clientId: input.clientId,
+      };
+      const timestampAnchors = new Set(['airCutoffAt', 'cyCutoffAt', 'siCutoffAt', 'vgmCutoffAt']);
+      for (const field of [
+        'eta',
+        'ata',
+        'etd',
+        'atd',
+        'checkInDate',
+        'cutOffDate',
+        'airCutoffAt',
+        'cyCutoffAt',
+        'siCutoffAt',
+        'vgmCutoffAt',
+        'stuffingDate',
+      ] as const) {
+        const oldValue =
+          before[field] instanceof Date ? before[field].toISOString() : before[field];
+        const newValue = timestampAnchors.has(field)
+          ? (timestampValue(input[field] as string | null)?.toISOString() ?? null)
+          : input[field];
+        if (oldValue !== newValue)
+          await audit(
+            tx,
+            {
+              action: 'UPDATE',
+              entity: 'shipment_date_change',
+              entityId: id,
+              before: { field, value: oldValue },
+              after: { field, value: newValue },
+              reason: `Anchor date changed on ${before.reference}`,
+            },
+            req,
+          );
+      }
+      await replanShipmentMilestones(tx, afterMilestoneState, actor.userId);
       await audit(
         tx,
         { action: 'UPDATE', entity: 'shipment', entityId: id, before, after: input },

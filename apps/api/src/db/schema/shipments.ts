@@ -11,6 +11,7 @@ import {
   pgView,
   numeric,
   jsonb,
+  timestamp,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
@@ -45,6 +46,7 @@ export const shipments = pgTable(
     direction: directionEnum('direction').notNull(),
     transportMode: transportModeEnum('transport_mode').notNull(),
     loadType: loadTypeEnum('load_type').notNull(),
+    clearedBy: text('cleared_by').notNull().default('GS'),
     status: shipmentStatusEnum('status').notNull().default('PENDING'),
     clearanceStatus: clearanceStatusEnum('clearance_status').notNull().default('PENDING'),
 
@@ -95,10 +97,19 @@ export const shipments = pgTable(
     receivedDocumentDate: date('received_document_date'),
     /** Import: the date of the delivery order (DO / EDO). */
     doDate: date('do_date'),
+    /** Import: when the permit was approved/ready. */
+    permitDate: date('permit_date'),
+    /** Import: when customer authorization/signing was completed. */
+    authorizeDate: date('authorize_date'),
     // An export by air: its flight (the flight date is the ETD), check-in and cut-off.
     flightNo: text('flight_no'),
     checkInDate: date('check_in_date'),
     cutOffDate: date('cut_off_date'),
+    airCutoffAt: timestamp('air_cutoff_at', { withTimezone: true }),
+    cyCutoffAt: timestamp('cy_cutoff_at', { withTimezone: true }),
+    siCutoffAt: timestamp('si_cutoff_at', { withTimezone: true }),
+    vgmCutoffAt: timestamp('vgm_cutoff_at', { withTimezone: true }),
+    stuffingDate: date('stuffing_date'),
 
     // Invoice / THC (shown as "INVOICE / THC No.")
     thcHblNo: text('thc_hbl_no'),
@@ -220,6 +231,11 @@ export const cargoInvoices = pgTable(
     description: text('description'),
     /** Imports: packages on the invoice (QTY PKGS of the import schedule). */
     packages: qty('packages'),
+    /**
+     * The invoice's gross weight (kg) as typed: lets an invoice be kept with only its no., date
+     * and G.W. Null = its lines' G.W total.
+     */
+    grossWeightKg: qty('gross_weight_kg'),
     currency: char('currency', { length: 3 }).notNull().default('USD'),
     sortOrder: integer('sort_order').notNull().default(0),
     ...timestamps,

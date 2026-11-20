@@ -1,161 +1,143 @@
-/* The header itself: the column name and a chevron (up, and both cyan, once filtered or sorted). */
-.head {
+/*
+ * A header that is its own search box: the column name as placeholder, the sort arrow (or ×)
+ * inside on the right. Teal text, a light border; filled teal-tint once it filters.
+ */
+.box {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  /* Full-strength text (near-black in light) rather than the table head's muted grey. */
-  color: var(--text-primary);
-  cursor: pointer;
-}
-/* Hover tints the chevron; once filtered or sorted, the column name turns cyan with it. */
-.head:hover .sortIcon,
-.on {
+  width: 100%;
+  min-width: 96px;
+  height: 32px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
   color: var(--accent-primary);
-}
-.sortIcon {
-  display: inline-flex;
-  opacity: 0.55;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
   transition:
-    opacity 0.15s,
-    color 0.15s;
+    border-color 0.15s,
+    box-shadow 0.15s,
+    background 0.15s;
 }
-.sortIcon svg {
-  width: 13px;
-  height: 13px;
+.box:hover {
+  border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-subtle));
 }
-.head:hover .sortIcon,
-.on .sortIcon {
-  opacity: 1;
+.box:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+.boxOn {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-surface));
 }
 
-/* The filter panel, portalled to <body> and placed under the header. */
-.panel {
+.input,
+.select {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-transform: none;
+}
+.input::placeholder {
+  color: var(--accent-primary);
+  opacity: 1;
+}
+.input:focus::placeholder {
+  opacity: 0.45;
+}
+.select {
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+
+/* ↕ faint until hovered or sorted; ↑ / ↓ in teal once sorted. */
+.sort,
+.clear {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sort {
+  opacity: 0.4;
+}
+.box:hover .sort,
+.sort:focus-visible,
+.sortOn {
+  opacity: 1;
+}
+.sortOn,
+.sort:hover {
+  color: var(--accent-primary);
+}
+.sort:hover,
+.clear:hover {
+  background: var(--bg-subtle);
+}
+.clear {
+  font-size: 15px;
+}
+.clear:hover {
+  color: var(--status-exception-fg);
+}
+
+/* Suggestions under the box: a click keeps just that value. */
+.suggest {
   position: fixed;
   z-index: 1000;
-  width: 260px;
-  padding: 6px;
+  max-width: 320px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--bg-surface-elevated);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
   font-family: var(--font-main);
   text-transform: none;
   letter-spacing: normal;
 }
-.item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.note {
+  padding: 6px 8px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+.option {
+  display: block;
   width: 100%;
-  padding: 7px 8px;
+  padding: 6px 8px;
+  overflow: hidden;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: none;
+  color: var(--text-primary);
   font: inherit;
   font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-primary);
   text-align: left;
-  cursor: pointer;
-}
-.item:hover:not(:disabled) {
-  background: var(--bg-subtle);
-}
-.item:disabled {
-  color: var(--text-tertiary);
-  cursor: default;
-}
-.icon {
-  width: 14px;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-.rule {
-  margin: 6px 0;
-  border: none;
-  border-top: 1px solid var(--border-subtle);
-}
-.search {
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: var(--bg-canvas);
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--text-primary);
-  outline: none;
-}
-.search:focus {
-  border-color: var(--accent-primary);
-}
-.list {
-  max-height: 240px;
-  margin-top: 6px;
-  padding: 4px 0;
-  overflow-y: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-}
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  font-size: 12.5px;
-  color: var(--text-primary);
+  text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
 }
-.check:hover {
+.option:hover,
+.option:focus-visible {
   background: var(--bg-subtle);
-}
-.check input {
-  accent-color: var(--accent-primary);
-}
-.blank {
-  color: var(--text-tertiary);
-  font-style: italic;
-}
-.note {
-  padding: 8px 10px;
-  font-size: 12.5px;
-  color: var(--text-tertiary);
-}
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-top: 8px;
-}
-.ok,
-.cancel {
-  height: 30px;
-  padding: 0 16px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.ok {
-  border: none;
-  background: var(--accent-primary);
-  color: #fff;
-}
-.ok:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.cancel {
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  color: var(--text-primary);
+  outline: none;
 }

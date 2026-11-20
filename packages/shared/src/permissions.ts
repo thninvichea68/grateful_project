@@ -27,6 +27,8 @@ export const PERMISSIONS = [
   'recordsummaries:write',
   'quotations:read',
   'quotations:write',
+  /** Quotation costs (what we pay) and margins: Sales Manager only; others see client prices. */
+  'quotations:cost',
   /** Reports (Payroll, MIH, Import & Export): staff salaries, so kept apart from accounting. */
   'reports:read',
   /** Saving a report's setup (e.g. the capacity report's company details, machines, weights). */
@@ -50,6 +52,7 @@ export const ROLE_CODES = [
   'ACCOUNTANT',
   'VIEWER',
   'CUSTOMS_BROKER',
+  'SALES_MANAGER',
 ] as const;
 export type RoleCode = (typeof ROLE_CODES)[number];
 
@@ -57,7 +60,9 @@ const READ_ALL: Permission[] = PERMISSIONS.filter((p) => p.endsWith(':read'));
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
   ADMIN: [...PERMISSIONS],
-  MANAGER: PERMISSIONS.filter((p) => p !== 'settings:manage' && p !== 'staff:manage'),
+  MANAGER: PERMISSIONS.filter(
+    (p) => p !== 'settings:manage' && p !== 'staff:manage' && p !== 'quotations:cost',
+  ),
   OPERATOR: [
     ...READ_ALL.filter(
       (p) =>
@@ -87,6 +92,22 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, Permission[]> = {
   VIEWER: READ_ALL.filter((p) => p !== 'audit:read' && p !== 'staff:read' && p !== 'reports:read'),
   /** The customs broker (Chea): writes Credit Note vouchers and can look up shipments. */
   CUSTOMS_BROKER: ['shipments:read', 'creditnotes:read', 'creditnotes:write'],
+  /** Prices quotations to clients and sets their costs (the only role that sees costs). */
+  SALES_MANAGER: [
+    ...READ_ALL.filter(
+      (p) =>
+        p !== 'audit:read' &&
+        p !== 'accounting:read' &&
+        p !== 'creditnotes:read' &&
+        p !== 'reports:read' &&
+        p !== 'staff:read',
+    ),
+    'clients:write',
+    'quotations:write',
+    'quotations:cost',
+    'documents:write',
+    'followups:write',
+  ],
 };
 
 export const ROLE_LABEL: Record<RoleCode, string> = {
@@ -96,6 +117,7 @@ export const ROLE_LABEL: Record<RoleCode, string> = {
   ACCOUNTANT: 'Accountant',
   VIEWER: 'Viewer',
   CUSTOMS_BROKER: 'Customs Broker',
+  SALES_MANAGER: 'Sales Manager',
 };
 
 /** A user's permissions: their role's, plus per-user extras, minus per-user removals. */

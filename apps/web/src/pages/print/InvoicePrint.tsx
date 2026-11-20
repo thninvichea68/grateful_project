@@ -9,6 +9,7 @@ import {
 } from '@gs/shared';
 import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react';
 import type { CompanyInfo } from '../../features/accounting';
+import { taxInvoiceServiceDescription } from '../accounting/taxInvoiceService';
 import './printFonts';
 import s from './print.module.css';
 import p from './invoicePrint.module.css';
@@ -417,7 +418,7 @@ export function TaxOrDisbursement({ d, c, tax }: { d: BillingDoc; c: CompanyInfo
           {d.lines.map((l) => (
             <tr key={l.id}>
               <td className={p.c}>{l.lineNo}</td>
-              <td>{l.description}</td>
+              <td>{tax ? taxInvoiceServiceDescription(l.description) : l.description}</td>
               <td className={p.c}>{money(l.qty)}</td>
               <td className={p.c}>{billingUnit(l.description, l.unit)}</td>
               {/* Money right-aligned, as in Excel, so it lines up with the totals below. */}

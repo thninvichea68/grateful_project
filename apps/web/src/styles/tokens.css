@@ -1,10 +1,11 @@
-/* Design tokens ported verbatim from the prototype (index.html). Dark is the default theme. */
+/* Shared palette: the light theme is applied by default; :root supplies dark-mode fallbacks. */
 :root {
   --sidebar-w: 220px;
   --topbar-h: 52px;
 
   /* Cyan / Blue Primary Accents */
   --accent-primary: #06b6d4;
+  --accent-on-primary: #041b2d;
   --accent-lime: #0ea5e9;
   --accent-lime-bright: #38bdf8;
   --accent-cyan: #06b6d4;
@@ -39,36 +40,45 @@
   --status-paid-bg: rgba(16, 185, 129, 0.12);
   --status-paid-fg: #34d399;
 
-  /* Geometry - Box Shadows Removed */
-  --radius-xl: 8px;
-  --radius-lg: 8px;
+  /* Geometry */
+  --radius-xl: 12px;
+  --radius-lg: 10px;
   --radius-md: 8px;
   --radius-sm: 6px;
-  --shadow-card: none;
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.18);
   --shadow-glow: none;
 
-  /* 'GS Khmer' (src/lib/khmerFont.ts) covers Khmer characters only, so it goes first. */
-  --font-main: 'GS Khmer', 'Helvetica', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* 'GS Khmer' (src/lib/khmerFont.ts) covers Khmer characters only, so it goes first; English
+     is Inter (bundled, @fontsource-variable/inter): built for dense data screens. */
+  --font-main:
+    'GS Khmer', 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica', sans-serif;
   color-scheme: dark;
 }
 
 [data-theme='light'] {
-  --bg-canvas: #f8fafc;
+  --accent-primary: #0e7490;
+  --accent-on-primary: #ffffff;
+  --accent-lime: #0369a1;
+  --accent-lime-bright: #0e7490;
+  --accent-cyan: #0e7490;
+
+  --bg-canvas: #f4f7fb;
   --bg-surface: #ffffff;
-  --bg-surface-elevated: #f1f5f9;
-  --bg-subtle: #e2e8f0;
-  --bg-inset: #edf2f7;
+  --bg-surface-elevated: #ffffff;
+  --bg-subtle: #f1f5f9;
+  --bg-inset: #f8fafc;
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
+  --text-tertiary: #5b6779;
 
-  --status-completed-bg: #cffafe;
-  --status-completed-fg: #0891b2;
-  --status-progress-bg: #e0f2fe;
-  --status-progress-fg: #0369a1;
+  --status-completed-bg: #dcfce7;
+  --status-completed-fg: #15803d;
+  --status-progress-bg: #dbeafe;
+  --status-progress-fg: #1d4ed8;
   --status-pending-bg: #fef3c7;
   --status-pending-fg: #b45309;
   --status-exception-bg: #ffe4e6;
@@ -76,7 +86,7 @@
   --status-paid-bg: #d1fae5;
   --status-paid-fg: #047857;
 
-  --shadow-card: none;
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 10px 24px -18px rgba(15, 23, 42, 0.22);
   --shadow-glow: none;
   color-scheme: light;
 }

@@ -1,20 +1,21 @@
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HeaderFilter, type SortDir } from './HeaderFilter';
 
-/** A header with its values loaded, open/closed as the list page keeps it. */
+/** A header with its values loaded, open/closed and filtered as the list page keeps it. */
 function Harness({
-  selected,
   onApply,
   onSort = () => {},
+  sort,
 }: {
-  selected?: string[];
   onApply: (kept: string[] | undefined) => void;
   onSort?: (d: SortDir) => void;
+  sort?: SortDir;
 }) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string[] | undefined>();
   return (
     <HeaderFilter
       label="Freight"
@@ -24,60 +25,80 @@ function Harness({
       values={['AIR', 'SEA', 'ROAD', '']}
       loading={false}
       selected={selected}
-      sort={undefined}
+      sort={sort}
       format={(v) => (v === 'ROAD' ? 'TRUCK' : v)}
-      onApply={onApply}
+      onApply={(kept) => {
+        setSelected(kept);
+        onApply(kept);
+      }}
       onSort={onSort}
     />
   );
 }
 
+const wait = () => act(() => new Promise((r) => setTimeout(r, 300)));
+
 describe('HeaderFilter', () => {
-  it('keeps the ticked values; all of them clears the filter', async () => {
-    const onApply = vi.fn();
-    render(<Harness onApply={onApply} />);
-    await userEvent.click(screen.getByRole('button', { name: /freight/i }));
-    // Shown with the column's labels; blanks as (Blanks).
-    expect(screen.getByLabelText('TRUCK')).toBeChecked();
-    expect(screen.getByLabelText('(Blanks)')).toBeChecked();
-    await userEvent.click(screen.getByLabelText('SEA'));
-    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(onApply).toHaveBeenLastCalledWith(['AIR', 'ROAD', '']);
-
-    await userEvent.click(screen.getByRole('button', { name: /freight/i }));
-    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(onApply).toHaveBeenLastCalledWith(undefined);
-  });
-
-  it('opens with the current filter ticked; OK is off with nothing ticked', async () => {
-    const onApply = vi.fn();
-    render(<Harness selected={['AIR']} onApply={onApply} />);
-    await userEvent.click(screen.getByRole('button', { name: /freight/i }));
-    expect(screen.getByLabelText('AIR')).toBeChecked();
-    expect(screen.getByLabelText('SEA')).not.toBeChecked();
-    await userEvent.click(screen.getByLabelText('(Select All)'));
-    await userEvent.click(screen.getByLabelText('(Select All)'));
-    expect(screen.getByRole('button', { name: 'OK' })).toBeDisabled();
-  });
-
-  it('searching keeps only the ticked values found, as Excel', async () => {
-    const onApply = vi.fn();
-    render(<Harness onApply={onApply} />);
-    await userEvent.click(screen.getByRole('button', { name: /freight/i }));
-    // Searched on the labels shown: "r" finds AIR and TRUCK (ROAD), not SEA or (Blanks).
-    await userEvent.type(screen.getByRole('searchbox'), 'r');
-    expect(screen.queryByLabelText('SEA')).toBeNull();
-    await userEvent.click(screen.getByLabelText('TRUCK'));
-    await userEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(onApply).toHaveBeenLastCalledWith(['AIR']);
-  });
-
-  it('sorts and closes', async () => {
+  it('the arrow in the box sorts: A to Z, then Z to A', async () => {
     const onSort = vi.fn();
-    render(<Harness onApply={() => {}} onSort={onSort} />);
-    await userEvent.click(screen.getByRole('button', { name: /freight/i }));
-    await userEvent.click(screen.getByRole('button', { name: /sort z to a/i }));
-    expect(onSort).toHaveBeenCalledWith('desc');
-    expect(screen.queryByRole('dialog')).toBeNull();
+    const { rerender } = render(<Harness onApply={() => {}} onSort={onSort} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Sort by Freight' }));
+    expect(onSort).toHaveBeenLastCalledWith('asc');
+    rerender(<Harness onApply={() => {}} onSort={onSort} sort="asc" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Freight: sorted A to Z' }));
+    expect(onSort).toHaveBeenLastCalledWith('desc');
+  });
+
+  it('the header is the search box: typing filters, on the labels shown', async () => {
+    const onApply = vi.fn();
+    render(<Harness onApply={onApply} />);
+    const box = screen.getByRole('textbox', { name: 'Search Freight' });
+    expect(box).toHaveAttribute('placeholder', 'Freight');
+    // "r" finds AIR and TRUCK (ROAD), not SEA or blanks.
+    await userEvent.type(box, 'r');
+    await wait();
+    expect(onApply).toHaveBeenLastCalledWith(['AIR', 'ROAD']);
+    // Enter leaves the term in the box; × clears it.
+    await userEvent.keyboard('{Enter}');
+    expect(box).toHaveValue('r');
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Freight filter' }));
+    expect(onApply).toHaveBeenLastCalledWith(undefined);
+    expect(box).toHaveValue('');
+  });
+
+  it('a suggestion keeps just that value', async () => {
+    const onApply = vi.fn();
+    render(<Harness onApply={onApply} />);
+    await userEvent.type(screen.getByRole('textbox'), 'tru');
+    await userEvent.click(screen.getByRole('option', { name: 'TRUCK' }));
+    expect(onApply).toHaveBeenLastCalledWith(['ROAD']);
+    expect(screen.getByRole('textbox')).toHaveValue('TRUCK');
+  });
+
+  it('a fixed list is a dropdown', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderFilter
+        label="Status"
+        open={false}
+        onOpen={() => {}}
+        onClose={() => {}}
+        values={undefined}
+        loading={false}
+        selected={undefined}
+        sort={undefined}
+        options={[
+          { value: 'COMPLETED', label: 'Completed' },
+          { value: 'PENDING', label: 'Pending' },
+        ]}
+        onApply={onApply}
+        onSort={() => {}}
+      />,
+    );
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Filter Status' }),
+      'COMPLETED',
+    );
+    expect(onApply).toHaveBeenLastCalledWith(['COMPLETED']);
   });
 });

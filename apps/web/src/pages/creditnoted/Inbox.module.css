@@ -102,7 +102,7 @@
 .accept {
   border: 1px solid var(--accent-primary);
   background: var(--accent-primary);
-  color: #041b2d;
+  color: var(--accent-on-primary);
 }
 .accept:hover:not(:disabled) {
   background: var(--accent-lime-bright);

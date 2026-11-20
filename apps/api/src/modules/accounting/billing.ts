@@ -37,7 +37,7 @@ import { formatNumber, nextNumber } from '../../lib/numbering';
 import { parse } from '../../lib/validate';
 import { createDoc, getDoc, issueDoc, previewDoc } from './docs';
 import { DECLARE_MONTH_FROM, LEDGER_DATE } from './ledgerDate';
-import { prefill, previousLines, summaryLines } from './prefill';
+import { applyQuotationRatesToRecord, prefill, previousLines, summaryLines } from './prefill';
 
 /*
  * Client Billing: one client's month, the way the Excel pack (e.g. "09-JR-INV") had it.
@@ -476,7 +476,9 @@ export async function createDrafts(
       if (input.lines === 'previous' && !fromSummary) {
         const prev = await previousLines(type, clientId, r.recordId);
         if (prev) {
-          draft.lines = prev.lines;
+          const quoted = await applyQuotationRatesToRecord(r.recordId, prev.lines);
+          draft.lines = quoted.lines;
+          draft.quotation = quoted.quotation;
           copiedFrom = prev.number;
         }
       }
@@ -484,7 +486,13 @@ export async function createDrafts(
         typeof createDoc
       >[1];
       const id = await createDoc(type, values, req);
-      created.push({ type, id, number: (await getDoc(type, id)).number, copiedFrom });
+      created.push({
+        type,
+        id,
+        number: (await getDoc(type, id)).number,
+        copiedFrom,
+        quotation: (draft.quotation as BillingDraftsResult['created'][number]['quotation']) ?? null,
+      });
     }
   return { created };
 }

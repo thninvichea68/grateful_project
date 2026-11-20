@@ -70,6 +70,41 @@ describe('shipment cargo invoices', () => {
         },
       ],
     });
+
+    describe('shipment milestone anchors', () => {
+      it('rejects sea export cut-offs on or after the ETD date', () => {
+        const invalid = shipmentInputSchema.safeParse({
+          ...base,
+          etd: '2026-08-01',
+          cyCutoffAt: '2026-08-01T10:00',
+        });
+        expect(invalid.success).toBe(false);
+        if (!invalid.success)
+          expect(invalid.error.issues.some((issue) => issue.path[0] === 'cyCutoffAt')).toBe(true);
+      });
+
+      it('validates air export check-in, cut-off time and flight date order', () => {
+        const invalid = shipmentInputSchema.safeParse({
+          ...base,
+          transportMode: 'AIR',
+          loadType: 'NONE',
+          checkInDate: '2026-08-02',
+          airCutoffAt: '2026-08-01T18:00',
+          etd: '2026-08-03',
+        });
+        expect(invalid.success).toBe(false);
+        if (!invalid.success)
+          expect(invalid.error.issues.some((issue) => issue.path[0] === 'checkInDate')).toBe(true);
+      });
+
+      it('rejects an invalid cut-off time', () => {
+        const invalid = shipmentInputSchema.safeParse({
+          ...base,
+          airCutoffAt: 'not-a-date',
+        });
+        expect(invalid.success).toBe(false);
+      });
+    });
     expect(v.invoices).toEqual([]);
   });
 

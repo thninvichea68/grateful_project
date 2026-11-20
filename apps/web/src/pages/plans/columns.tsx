@@ -107,27 +107,24 @@ export const BASE_COLUMNS: PlanColumn[] = [
     label: 'Declare Date',
     render: (r) => fmtDate(r.declarations[0]?.declareDate),
   },
+  // Forwarder and port by their codes (MAERSK, PNH04…); the full name on hover.
   {
     key: 'fwd',
     label: 'Forwarder',
-    // Cut short with "…"; the whole name on hover.
     render: (r) =>
       r.forwarderName ? (
-        <span className="cell-ellipsis" style={{ maxWidth: 170 }} title={r.forwarderName}>
-          {r.forwarderName.toUpperCase()}
-        </span>
+        <span title={r.forwarderName}>{(r.forwarderCode || r.forwarderName).toUpperCase()}</span>
       ) : (
         '-'
       ),
   },
-  // The port's short name (SHV, KTI, OLAIR…), in capitals; the full name on hover.
   {
     key: 'clearance',
     label: 'Port',
     render: (r) =>
       r.clearancePortName ? (
-        <span title={r.clearancePortName}>
-          {(r.clearancePortShortName || r.clearancePortName).toUpperCase()}
+        <span title={[r.clearancePortShortName, r.clearancePortName].filter(Boolean).join(' · ')}>
+          {(r.clearancePortCode || r.clearancePortShortName || r.clearancePortName).toUpperCase()}
         </span>
       ) : (
         '-'

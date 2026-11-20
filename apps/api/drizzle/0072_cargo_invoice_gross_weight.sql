@@ -1,0 +1,1 @@
+ALTER TABLE "cargo_invoices" ADD COLUMN "gross_weight_kg" numeric(14, 3);

@@ -8,6 +8,7 @@ import {
   useWatch,
   type Control,
   type FieldErrors,
+  type FieldPath,
 } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BackLink, backRow } from '../../components/BackLink';
@@ -59,6 +60,7 @@ import {
   toNum,
   type FormValues,
 } from './formModel';
+import { ShipmentOverview } from './ShipmentOverview';
 import f from './ShipmentForm.module.css';
 import { fi, type FormIcon } from './formIcons';
 
@@ -79,6 +81,11 @@ const FREIGHT: (Choice & { short: string })[] = [
   { value: 'AIR', short: 'By Air', label: 'Air Freight' },
   { value: 'ROAD', short: 'By Truck', label: 'Road Freight (Truck)' },
   { value: 'RAIL', short: 'By Rail', label: 'Rail Freight' },
+];
+const CLEARED_BY: Choice[] = [
+  { value: 'GS', label: 'GS' },
+  { value: 'FORWARDER', label: 'Forwarder' },
+  { value: 'OTHER_BROKER', label: 'Other broker' },
 ];
 /** Shipping terms: spelled out in the dropdown, short in the header. */
 const TERMS: (Choice & { short: string })[] = [
@@ -154,6 +161,8 @@ function ShipmentForm({
   // A saved shipment opens for viewing; ⋯ → Edit unlocks it. New ones start editable.
   const [editing, setEditing] = useState(!detail);
   const [supportDocs, setSupportDocs] = useState(false);
+  // A saved shipment opens on its Overview (stages, what's left, documents); new ones on the form.
+  const [overview, setOverview] = useState(!!detail);
   const readOnly = !can('shipments:write') || !editing;
   const clientLocked = !!detail && detail.declarations.some((d) => d.hasLedgerEntry);
 
@@ -213,10 +222,44 @@ function ShipmentForm({
   );
   const current = Math.min(step, steps.length - 1);
   const isLast = current === steps.length - 1;
+  const nextStep = async () => {
+    if (isLast) return;
+    if (!readOnly) {
+      const valid = await methods.trigger(steps[current]!.fields as FieldPath<FormValues>[], {
+        shouldFocus: true,
+      });
+      if (!valid) {
+        toast('Complete the highlighted fields before moving to the next section.');
+        return;
+      }
+    }
+    if (overview) {
+      setOverview(false);
+      setStep(0);
+      return;
+    }
+    setStep(current + 1);
+  };
+
+  /** Overview → "Enter now" / "Fix": open the tab holding the field, in Edit, cursor in it. */
+  const goToField = (field: keyof FormValues) => {
+    if (can('shipments:write')) setEditing(true);
+    const at = steps.findIndex((x) => x.fields.includes(field));
+    setOverview(false);
+    if (at >= 0) setStep(at);
+    window.setTimeout(() => {
+      const el =
+        document.getElementById(`f-${field}`) ??
+        document.querySelector<HTMLElement>(`[name^="${field}."]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.focus({ preventScroll: true });
+    }, 80);
+  };
 
   const onInvalid = (errs: FieldErrors<FormValues>) => {
     const keys = Object.keys(errs) as (keyof FormValues)[];
     const target = steps.findIndex((s) => s.fields.some((k) => keys.includes(k)));
+    setOverview(false);
     if (target >= 0) setStep(target);
     toast(`Check ${keys.length} highlighted field${keys.length === 1 ? '' : 's'} before saving.`);
   };
@@ -342,20 +385,21 @@ function ShipmentForm({
       hour: '2-digit',
       minute: '2-digit',
     });
-  const statusBadges = detail ? (
-    <>
-      <span className={f.badge} data-tone={TONE[shipStatus]}>
-        {SHIPMENT_STATUS_LABEL[shipStatus]}
+  const statusBadges =
+    detail && !isDirty ? (
+      <>
+        <span className={f.badge} data-tone={TONE[shipStatus]}>
+          {SHIPMENT_STATUS_LABEL[shipStatus]}
+        </span>
+        <span className={f.badge} data-tone={TONE[clearStatus]}>
+          {CLEARANCE_STATUS_LABEL[clearStatus]}
+        </span>
+      </>
+    ) : (
+      <span className={f.badge} data-tone="draft">
+        Draft
       </span>
-      <span className={f.badge} data-tone={TONE[clearStatus]}>
-        {CLEARANCE_STATUS_LABEL[clearStatus]}
-      </span>
-    </>
-  ) : (
-    <span className={f.badge} data-tone="draft">
-      Draft
-    </span>
-  );
+    );
 
   // The client as the title, the shipment's details under it, and icon buttons
   // (⋯ Edit / Delete, Export INV + PL, Save, Next tab) on the right.
@@ -459,10 +503,16 @@ function ShipmentForm({
           <button
             type="button"
             className={f.iconBtn}
-            onClick={() => setStep(current + 1)}
-            disabled={isLast}
+            onClick={() => void nextStep()}
+            disabled={isLast && !overview}
             aria-label="Next tab"
-            title={isLast ? 'Last tab' : `Next: ${steps[current + 1]!.label}`}
+            title={
+              overview
+                ? `Next: ${steps[0]!.label}`
+                : isLast
+                  ? 'Last tab'
+                  : `Next: ${steps[current + 1]!.label}`
+            }
           >
             {fi.arrowRight({})}
           </button>
@@ -558,32 +608,62 @@ function ShipmentForm({
           onSubmit={(e) => {
             e.preventDefault();
             if (isLast) void submit();
-            else setStep(current + 1);
+            else void nextStep();
           }}
           noValidate
         >
           {/* ---------- Header, then where the shipment has got to, then the form's tabs ---------- */}
           {header}
-          <Milestones direction={direction} />
           <CargoQuantityFromInvoices />
           <nav className={f.tabs} role="tablist" aria-label="Form sections">
+            {detail && (
+              <button
+                type="button"
+                role="tab"
+                className={f.tab}
+                aria-selected={overview}
+                onClick={() => setOverview(true)}
+              >
+                Overview
+              </button>
+            )}
             {steps.map((s, i) => (
               <button
                 type="button"
                 key={s.label}
                 role="tab"
                 className={f.tab}
-                aria-selected={i === current}
+                aria-selected={!overview && i === current}
                 data-error={s.fields.some((k) => k in errors)}
-                onClick={() => setStep(i)}
+                onClick={() => {
+                  setOverview(false);
+                  setStep(i);
+                }}
               >
                 {s.label}
               </button>
             ))}
           </nav>
 
+          {overview && detail && (
+            <ShipmentOverview
+              detail={detail}
+              lookups={lookups}
+              onFix={goToField}
+              onDocs={() => setSupportDocs(true)}
+              onSchedule={() => {
+                setOverview(false);
+                const at = steps.findIndex((x) =>
+                  x.fields.includes(direction === 'EXPORT' ? 'etd' : 'eta'),
+                );
+                if (at >= 0) setStep(at);
+              }}
+            />
+          )}
+
           <fieldset
             disabled={readOnly}
+            hidden={overview && !!detail}
             className={readOnly ? f.viewing : undefined}
             style={{ border: 'none', minWidth: 0, padding: 0 }}
           >
@@ -636,20 +716,6 @@ function ShipmentForm({
   );
 }
 
-// By air both directions track the air waybills (HAWB in the HBL no., MAWB in the booking no.).
-const MILESTONES = {
-  IMPORT: ['Received INV & PL', 'HBL', 'ETA Port', 'Clearance', 'Arrive Factory'],
-  EXPORT: ['Received INV & PL', 'Booking', 'ETD', 'Clearance', 'Departed'],
-  AIR_IMPORT: ['Received INV & PL', 'HAWB / MAWB', 'ETA Port', 'Clearance', 'Arrive Factory'],
-  AIR_EXPORT: ['Received INV & PL', 'HAWB / MAWB', 'ETD', 'Clearance', 'Departed'],
-};
-
-/**
- * The shipment's progress, read from what has been filled in. Import: an invoice no., the HBL
- * no., the ETA Port date, a cleared declaration and the ETA Factory date. Export: an invoice
- * no., the booking / SO no., the ETD, a cleared declaration and the ATD. By air the second is
- * a HAWB or MAWB no. The first one still missing is the current milestone.
- */
 /**
  * A shipment's Cargo Quantity is the Pkgs (an export's CTNS) total of its invoice lines, kept in
  * step as lines change (on any tab). Until a line has Pkgs the saved quantity stays: most older
@@ -688,61 +754,6 @@ function CbmField() {
       placeholder={lines ? `${+lines.toFixed(3)} (from invoices)` : '0.000'}
       decimals={3}
     />
-  );
-}
-
-function Milestones({ direction }: { direction: FormValues['direction'] }) {
-  const { control } = useFormContext<FormValues>();
-  const [invoices, hblNo, eta, arriveFty, bookingNo, etd, atd, declarations, mode] = useWatch({
-    control,
-    name: [
-      'invoices',
-      'hblNo',
-      'eta',
-      'arriveFty',
-      'bookingNo',
-      'etd',
-      'atd',
-      'declarations',
-      'transportMode',
-    ],
-  });
-  const isExport = direction === 'EXPORT';
-  // An air export has no ATD field: it has departed once its flight date has come.
-  const departed =
-    !!atd || (mode === 'AIR' && !!etd && etd <= new Date().toISOString().slice(0, 10));
-  const reached = [
-    (invoices ?? []).some((i) => !!i.invoiceNo?.trim()),
-    mode === 'AIR'
-      ? !!bookingNo?.trim() || !!hblNo?.trim()
-      : isExport
-        ? !!bookingNo?.trim()
-        : !!hblNo?.trim(),
-    isExport ? !!etd : !!eta,
-    clearanceStatusOf({ declarations }) === 'CLEARED',
-    isExport ? departed : !!arriveFty,
-  ];
-  const next = reached.indexOf(false);
-  return (
-    <ol className={f.track} aria-label="Shipment progress">
-      {MILESTONES[`${mode === 'AIR' ? 'AIR_' : ''}${isExport ? 'EXPORT' : 'IMPORT'}`].map(
-        (label, i) => {
-          const state = reached[i] ? 'done' : i === next ? 'current' : 'todo';
-          return (
-            <li
-              key={label}
-              className={f.mile}
-              data-state={state}
-              data-linked={!!reached[i] && !!reached[i + 1]}
-              aria-current={state === 'current' ? 'step' : undefined}
-            >
-              <span className={f.mileDot}>{state === 'done' ? fi.check({}) : i + 1}</span>
-              <span className={f.mileLabel}>{label}</span>
-            </li>
-          );
-        },
-      )}
-    </ol>
   );
 }
 
@@ -1316,15 +1327,28 @@ function ExportSchedule() {
     return (
       <Card title="Schedule" icon="calendar" cols={2}>
         <Field name="flightNo" label="Flight No." placeholder="e.g. CZ 3054" />
+        <Select name="clearedBy" label="Cleared by" options={CLEARED_BY} />
         <Field name="checkInDate" label="Check-in Date" type="date" />
-        <Field name="cutOffDate" label="Cut-off" type="date" />
+        <Field name="airCutoffAt" label="Cut-off date & time" type="datetime-local" />
         <Field name="etd" label="Flight Date" type="date" />
+      </Card>
+    );
+  if (mode !== 'SEA')
+    return (
+      <Card title="Schedule" icon="calendar" cols={2}>
+        <Field name="etd" label="ETD" type="date" />
+        <Field name="atd" label="ATD (Actual Departure)" type="date" />
       </Card>
     );
   return (
     <Card title="Schedule" icon="calendar" cols={2}>
+      <Select name="clearedBy" label="Cleared by" options={CLEARED_BY} />
       <Field name="etd" label="ETD" type="date" />
       <Field name="atd" label="ATD (Actual Departure)" type="date" />
+      <Field name="cyCutoffAt" label="CY cut-off" type="datetime-local" />
+      <Field name="siCutoffAt" label="SI cut-off" type="datetime-local" />
+      <Field name="vgmCutoffAt" label="VGM cut-off" type="datetime-local" />
+      <Field name="stuffingDate" label="Stuffing / loading date" type="date" />
     </Card>
   );
 }
@@ -1583,6 +1607,12 @@ function buildSteps(
           'flightNo',
           'checkInDate',
           'cutOffDate',
+          'airCutoffAt',
+          'cyCutoffAt',
+          'siCutoffAt',
+          'vgmCutoffAt',
+          'stuffingDate',
+          'clearedBy',
           'containers',
           'loadType',
           'vesselName',
@@ -1730,7 +1760,10 @@ function buildSteps(
         'hblNo',
         'hblDate',
         'doDate',
+        'permitDate',
+        'authorizeDate',
         'eta',
+        'ata',
         'arriveFty',
         'vesselName',
         'voyageNo',
@@ -1743,6 +1776,7 @@ function buildSteps(
         <div className={`${f.columns} ${f.open}`}>
           <Card title="Schedule" icon="calendar" cols={2}>
             <Field name="eta" label="ETA Port" type="date" />
+            <Field name="ata" label="ATA (Actual Arrival)" type="date" />
             <Field name="arriveFty" label="ETA Factory" type="date" />
           </Card>
           {/* The clearance port is with the customs declarations (last tab). */}
@@ -1762,6 +1796,10 @@ function buildSteps(
             {air && <Field name="bookingNo" label="MAWB No." />}
             <Field name="hblDate" label={hblDateLabel} type="date" />
             <Field name="doDate" label="DO / EDO Released Date" type="date" />
+          </Card>
+          <Card title="Permit & Authorization" icon="file" cols={2}>
+            <Field name="permitDate" label="Permit Approved Date" type="date" />
+            <Field name="authorizeDate" label="Customer Authorization Date" type="date" />
           </Card>
           {!air && <ContainersCard />}
         </div>

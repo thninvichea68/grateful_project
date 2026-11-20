@@ -1,9 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { SHIPMENT_STATUS_LABEL, type ShipmentStatus } from '@gs/shared';
+import { SHIPMENT_STATUS_LABEL, SHIPMENT_STATUSES, type ShipmentStatus } from '@gs/shared';
 import { useAuth } from '../auth/AuthProvider';
-import { useLookups, useShipmentColumnValues, useShipments } from '../features/hooks';
-import { ShipmentStatusPill } from '../components/StatusPill';
+import {
+  useLookups,
+  useShipmentColumnValues,
+  useShipmentSummary,
+  useShipments,
+} from '../features/hooks';
+import { Pill, ShipmentStatusPill } from '../components/StatusPill';
 import { Pager, TableState, ui } from '../components/ui';
 import { MonthInput } from '../components/MonthInput';
 import { HeaderFilter } from '../components/HeaderFilter';
@@ -17,6 +22,7 @@ import { BASE_COLUMNS, EXPANDED_COLUMNS, type PlanColumn } from './plans/columns
 import { PlansFilter, type PlansFilterValue } from './plans/PlansFilter';
 import { PlansMoreMenu } from './plans/PlansMoreMenu';
 import { CardToggle } from './dashboard/parts';
+import { PlanSummary } from './plans/PlanSummary';
 import s from './ShippingPlansPage.module.css';
 
 const PREFS = 'gs:plans-view';
@@ -27,13 +33,12 @@ const columnsFor = (expand: boolean, direction: 'IMPORT' | 'EXPORT') =>
     direction === 'EXPORT' ? !c.importOnly : !c.exportOnly,
   );
 
-const STATUS_FILTERS: { value: '' | ShipmentStatus; label: string }[] = [
-  { value: '', label: 'All shipments' },
-  { value: 'IN_PROGRESS', label: 'In progress' },
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'COMPLETED', label: 'Completed' },
-  { value: 'EXCEPTION', label: 'Exception' },
-];
+const monthLabel = (month: string) =>
+  month
+    ? new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+        new Date(`${month}-01T00:00:00Z`),
+      )
+    : 'All months';
 
 function readPrefs(): { expandAll: boolean; frozen: string[] } {
   try {
@@ -62,7 +67,11 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   // "All months" is kept in the URL as month=all so Clear doesn't snap back.
   const rawMonth = params.get('month');
   const autoMonth =
-    rawMonth === null && !params.get('q') && !params.has('clientId') && !params.get('status');
+    rawMonth === null &&
+    !params.get('q') &&
+    !params.has('clientId') &&
+    !params.get('status') &&
+    !params.get('billing');
   useEffect(() => {
     if (!autoMonth) return;
     const next = new URLSearchParams(params);
@@ -75,6 +84,8 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
     // Import Plans or Export Plans, from the route (the sidebar's Shipping Plans dropdown).
     direction,
     status: (params.get('status') ?? '') as '' | ShipmentStatus,
+    // UNBILLED: completed, nothing issued to the client yet (the follow-up list).
+    billing: params.get('billing') === 'UNBILLED' ? ('UNBILLED' as const) : undefined,
     // Declaration month (YYYY-MM), or the month added while undeclared; empty = every month.
     month: rawMonth === 'all' ? '' : (rawMonth ?? (autoMonth ? currentMonth() : '')),
     q: params.get('q') ?? '',
@@ -91,9 +102,15 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
     direction: filters.direction,
     status: filters.status || undefined,
     month: filters.month || undefined,
+    billing: filters.billing,
     filters: header.raw,
   };
   const list = useShipments(query);
+  const summary = useShipmentSummary({
+    clientId: filters.clientId,
+    direction: filters.direction,
+    month: filters.month || undefined,
+  });
   // The open header filter's values come from the list's other filters, not the page.
   const { page: _page, pageSize: _size, sort: _sort, ...valuesQuery } = query;
   const colValues = useShipmentColumnValues(header.openCol, valuesQuery);
@@ -110,6 +127,17 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
     else next.delete(k);
     if (k !== 'page') next.delete('page');
     setParams(next, { replace: k === 'q' });
+  };
+  // The headline cards filter the table: one status, or the unbilled follow-up list.
+  const setView = (v: { status?: string; billing?: boolean; allMonths?: boolean }) => {
+    const next = new URLSearchParams(params);
+    next.delete('page');
+    if (v.status) next.set('status', v.status);
+    else next.delete('status');
+    if (v.billing) next.set('billing', 'UNBILLED');
+    else next.delete('billing');
+    if (v.allMonths) next.set('month', 'all');
+    setParams(next);
   };
 
   // Freeze panes: pin chosen columns with sticky `left` offsets measured from the header.
@@ -148,6 +176,7 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
         direction: filters.direction || undefined,
         status: filters.status || undefined,
         month: filters.month || undefined,
+        billing: filters.billing,
         q: filters.q || undefined,
         sort: filters.sort,
         filters: header.raw,
@@ -160,9 +189,14 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   };
 
   // Excel-style header: a column's filter and sort ("?sort=hbl" / "-hbl").
-  const head = (c: Pick<PlanColumn, 'key' | 'label' | 'kind' | 'format'>) => (
+  const head = (
+    c: Pick<PlanColumn, 'key' | 'label' | 'kind' | 'format'> & {
+      options?: { value: string; label: string }[];
+    },
+  ) => (
     <HeaderFilter
       label={c.label}
+      options={c.options}
       kind={c.kind}
       format={c.format}
       open={header.openCol === c.key}
@@ -195,13 +229,14 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
     filters.clientId.length ||
     filters.direction === 'EXPORT' ||
     filters.status ||
+    filters.billing ||
     header.active ||
     params.has('sort'),
   );
   const clearFilters = () => {
     const next = new URLSearchParams(params);
-    ['q', 'month', 'clientId', 'direction', 'status', 'page', 'f', 'sort'].forEach((key) =>
-      next.delete(key),
+    ['q', 'month', 'clientId', 'direction', 'status', 'billing', 'page', 'f', 'sort'].forEach(
+      (key) => next.delete(key),
     );
     setParams(next, { replace: true });
   };
@@ -213,11 +248,8 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
   return (
     <section className="view active caps-values" id="view-plans">
       <div className={`card ${s.pageCard}`}>
-        <header className={s.pageHeader}>
-          <h1>Shipping plans</h1>
-        </header>
         <div className={s.controls}>
-          <div className={s.filterToolbar}>
+          <div className={s.filterToolbar} role="toolbar" aria-label="Shipping plan tools">
             <div className={s.monthControl}>
               <MonthInput
                 value={filters.month}
@@ -288,31 +320,27 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
               onStatusRules={() => setRulesOpen(true)}
             />
           </div>
-          <div className={s.statusBar}>
-            <div className={s.statusFilters} role="group" aria-label="Filter shipments by status">
-              {STATUS_FILTERS.map((status) => (
-                <button
-                  key={status.value || 'all'}
-                  type="button"
-                  className={`${s.statusFilter} ${
-                    filters.status === status.value ? s.statusFilterActive : ''
-                  }`}
-                  aria-pressed={filters.status === status.value}
-                  onClick={() => setParam('status', status.value)}
-                >
-                  {status.label}
-                </button>
-              ))}
-            </div>
-            <p className={s.resultCount} aria-live="polite">
-              {list.data
-                ? `${list.data.meta.total.toLocaleString()} ${
-                    filters.status ? SHIPMENT_STATUS_LABEL[filters.status] + ' ' : ''
-                  }shipment${list.data.meta.total === 1 ? '' : 's'}`
-                : 'Loading shipments…'}
-            </p>
-          </div>
         </div>
+        <PlanSummary
+          data={summary.data}
+          loading={summary.isLoading}
+          monthLabel={monthLabel(filters.month)}
+          allMonths={!filters.month}
+          status={filters.status}
+          billing={Boolean(filters.billing)}
+          onView={setView}
+        />
+        <p className={s.resultCount} aria-live="polite">
+          {list.data
+            ? `${list.data.meta.total.toLocaleString()} ${
+                filters.billing
+                  ? 'completed, not invoiced '
+                  : filters.status
+                    ? SHIPMENT_STATUS_LABEL[filters.status].toLowerCase() + ' '
+                    : ''
+              }shipment${list.data.meta.total === 1 ? '' : 's'} · ${monthLabel(filters.month)}`
+            : 'Loading shipments…'}
+        </p>
         {filters.q && (
           <div className={s.searchSummary}>
             Showing results for “{filters.q}”.{' '}
@@ -345,13 +373,19 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
                     key: 'status',
                     label: 'Status',
                     format: (v) => SHIPMENT_STATUS_LABEL[v as ShipmentStatus] ?? v,
+                    // A short fixed list: a dropdown in the header.
+                    options: SHIPMENT_STATUSES.map((v) => ({
+                      value: v,
+                      label: SHIPMENT_STATUS_LABEL[v],
+                    })),
                   })}
                 </th>
+                <th>Billing</th>
               </tr>
             </thead>
             <tbody>
               <TableState
-                cols={cols.length + (isExport ? 3 : 2)}
+                cols={cols.length + (isExport ? 4 : 3)}
                 loading={list.isLoading}
                 error={list.error}
                 empty={list.data?.data.length === 0}
@@ -361,6 +395,7 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
                   filters.month ||
                   filters.direction === 'EXPORT' ||
                   filters.status ||
+                  filters.billing ||
                   header.active
                     ? 'No shipments match the selected filters.'
                     : 'No shipments yet. Create one with “New Shipment”.'
@@ -399,6 +434,15 @@ export function ShippingPlansPage({ direction }: { direction: 'IMPORT' | 'EXPORT
                   )}
                   <td>
                     <ShipmentStatusPill status={r.status} />
+                  </td>
+                  <td>
+                    {r.status !== 'COMPLETED' ? (
+                      <span className={s.muted}>—</span>
+                    ) : r.billed ? (
+                      <Pill tone="completed">Invoiced</Pill>
+                    ) : (
+                      <Pill tone="exception">Not invoiced</Pill>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,0 +1,425 @@
+/* Shipment Overview: summary strip, stage track, to-finish list, documents, and a side rail. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  text-transform: none;
+}
+
+/* ---------- Summary strip ---------- */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-left: 1px solid var(--border-subtle);
+}
+.cell:first-child {
+  border-left: 0;
+}
+.cellLabel {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.cellValue,
+.cellSub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cellValue {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+.cellSub {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.cell[data-tone='green'] .cellValue {
+  color: var(--status-completed-fg);
+}
+.cell[data-tone='red'] .cellValue {
+  color: var(--status-exception-fg);
+}
+
+/* ---------- Panels ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 14px;
+  align-items: start;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14.5px;
+  font-weight: 650;
+}
+.head p {
+  margin: 3px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+.badgeRed,
+.badgeAmber,
+.badgeGreen,
+.badgeBlue {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badgeRed {
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+}
+.badgeAmber {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+}
+.badgeGreen {
+  background: var(--status-completed-bg);
+  color: var(--status-completed-fg);
+}
+.badgeBlue {
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+
+/* ---------- Stage track ---------- */
+.track {
+  display: flex;
+  margin: 0;
+  padding: 22px 12px 18px;
+  overflow-x: auto;
+  list-style: none;
+}
+.step {
+  position: relative;
+  display: flex;
+  flex: 1 0 96px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.step + .step::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  right: calc(50% + 22px);
+  left: calc(-50% + 22px);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+}
+.step[data-state='done']::before,
+.step[data-state='current']::before {
+  background: var(--status-completed-fg);
+}
+.dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.step[data-state='done'] .dot {
+  border-color: var(--status-completed-fg);
+  background: var(--status-completed-fg);
+  color: #fff;
+}
+.step[data-state='current'] .dot {
+  border-color: var(--status-exception-fg);
+  background: var(--status-exception-bg);
+  color: var(--status-exception-fg);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-exception-bg) 70%, transparent);
+}
+.stepLabel {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.stepSub {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+.step[data-state='current'] .stepSub {
+  color: var(--status-exception-fg);
+  font-weight: 600;
+}
+
+/* ---------- Rows: to finish / documents ---------- */
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row,
+.docRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.rows > li:first-child {
+  border-top: 0;
+}
+.row {
+  --tone: var(--status-pending-fg);
+  --tone-bg: var(--status-pending-bg);
+}
+.row[data-tone='red'] {
+  --tone: var(--status-exception-fg);
+  --tone-bg: var(--status-exception-bg);
+  background: color-mix(in srgb, var(--status-exception-bg) 45%, transparent);
+}
+.row[data-tone='green'] {
+  --tone: var(--status-completed-fg);
+  --tone-bg: var(--status-completed-bg);
+}
+.row[data-tone='grey'] {
+  --tone: var(--text-tertiary);
+  --tone-bg: var(--bg-subtle);
+}
+.rowIcon,
+.docIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tone-bg);
+  color: var(--tone);
+  font-size: 12px;
+  font-weight: 700;
+}
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rowText strong {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.rowText span {
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+.fixBtn,
+.uploadBtn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.fixBtn:hover,
+.uploadBtn:hover {
+  border-color: var(--border-strong);
+}
+.docRow {
+  --tone: var(--status-completed-fg);
+  --tone-bg: var(--status-completed-bg);
+}
+.docRow[data-state='have'] .docIcon {
+  background: var(--status-completed-fg);
+  color: #fff;
+}
+.docRow[data-state='missing'] {
+  --tone: var(--status-exception-fg);
+  --tone-bg: var(--status-exception-bg);
+}
+.docRow[data-state='later'] .docIcon {
+  border: 2px dashed var(--status-pending-fg);
+  background: none;
+}
+.docTag {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* ---------- Side rail ---------- */
+.progressBody {
+  padding: 18px 20px;
+}
+.bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--status-progress-bg);
+}
+.barDone {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--status-completed-fg);
+}
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.legend li::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-completed-fg);
+}
+.legend li[data-k='left']::before {
+  background: var(--status-progress-fg);
+}
+.legend li[data-k='issue']::before {
+  background: var(--status-pending-fg);
+}
+.legend strong {
+  margin-left: auto;
+  color: var(--text-primary);
+}
+.linkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.linkRow:hover {
+  background: var(--bg-subtle);
+}
+.linkIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--status-progress-bg);
+  color: var(--status-progress-fg);
+}
+.chev {
+  align-self: center;
+  color: var(--text-tertiary);
+}
+.remark {
+  margin: 0;
+  padding: 16px 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1280px) {
+  .strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .cell:nth-child(4) {
+    border-left: 0;
+  }
+  .cell:nth-child(n + 4) {
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cell:nth-child(odd) {
+    border-left: 0;
+  }
+  .cell:nth-child(4) {
+    border-left: 1px solid var(--border-subtle);
+  }
+  .cell:nth-child(n + 3) {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .row,
+  .docRow {
+    flex-wrap: wrap;
+  }
+}

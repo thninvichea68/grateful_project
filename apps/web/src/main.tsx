@@ -8,6 +8,8 @@ import { ToastProvider } from './components/Toast';
 import { router } from './router';
 import './lib/khmerFont';
 import './lib/datePicker';
+// Inter: the English UI font (screen-tuned, tabular figures for tables); Khmer stays GS Khmer.
+import '@fontsource-variable/inter';
 import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/prototype.css';

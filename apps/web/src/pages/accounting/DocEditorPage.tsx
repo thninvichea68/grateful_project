@@ -45,6 +45,12 @@ import { CorrectDocDialog } from './CorrectDocDialog';
 import { DeleteInvoiceDialog } from './DeleteInvoiceDialog';
 import { PickShipment } from './PickShipment';
 import { exportInvoiceExcel, INVOICE_EXCEL_TYPES } from './invoiceExport';
+import {
+  EXPORT_PROCESSING_FEE_LABEL,
+  IMPORT_PROCESSING_FEE_LABEL,
+  taxInvoiceServiceChoices,
+  taxInvoiceServiceDescription,
+} from './taxInvoiceService';
 
 /** The three shipment documents: numbered from the Monthly Ledger, dated from clearance. */
 const SHIPMENT_DOCS = ['tax-invoices', 'disbursements', 'debit-notes'] as const;
@@ -54,10 +60,7 @@ const isShipmentDoc = (t: BillingDocType): t is ShipmentDoc =>
 
 /** The usual fee items on the Excel pack, offered with Settings → Charge descriptions. */
 const FEE_ITEMS: Record<ShipmentDoc, string[]> = {
-  'tax-invoices': [
-    'កំរៃសេវាបំពេញបែបបទនាំចេញ / EXPORT PROCESSING FEE',
-    'កំរៃសេវាបំពេញបែបបទនាំចូល / IMPORT PROCESSING FEE',
-  ],
+  'tax-invoices': [EXPORT_PROCESSING_FEE_LABEL, IMPORT_PROCESSING_FEE_LABEL],
   disbursements: ['LOLO AT PORT', 'CUSTOM PROCESSING FEE', 'HBL FEE', 'THC', 'STORAGE FEE'],
   'debit-notes': [
     'TRUCKING FEE',
@@ -131,7 +134,12 @@ function Loader({
 }) {
   const pick = !id && !recordId && !client && isShipmentDoc(type);
   const doc = useDoc(type, id);
-  const pre = usePrefill(type, id || pick ? null : recordId, null, id || recordId ? null : client);
+  const prefillRecordId = id
+    ? type === 'tax-invoices'
+      ? (doc.data?.accountingRecordId ?? null)
+      : null
+    : recordId;
+  const pre = usePrefill(type, pick ? null : prefillRecordId, null, id || recordId ? null : client);
   const lookups = useLookups();
   // A new shipment document starts by choosing an approved shipment.
   if (pick) return <PickShipment type={type} />;
@@ -239,10 +247,20 @@ function Editor({
   // (changed through "Correct number / date").
   const issuedEdit = doc?.status === 'ISSUED' && isShipmentDoc(type);
   const editable = can('accounting:write') && (!doc || doc.status === 'DRAFT' || issuedEdit);
-  const defaults = useMemo(() => initialValues(type, doc, prefill), [type, doc, prefill]);
+  const defaults = useMemo(() => {
+    const values = initialValues(type, doc, prefill);
+    if (type === 'tax-invoices')
+      values.lines = values.lines.map((line) => ({
+        ...line,
+        description: taxInvoiceServiceDescription(line.description),
+      }));
+    return values;
+  }, [type, doc, prefill]);
   const {
     register,
     control,
+    setValue,
+    getValues,
     handleSubmit,
     formState: { errors, isDirty },
   } = useForm<Values>({
@@ -266,6 +284,19 @@ function Editor({
       : { date: str(prefill?.[cfg.dateField]), vatRate: str(prefill?.vatRate) || null },
   );
   const clientId = useWatch({ control, name: 'clientId' });
+  const quotation = prefill?.quotation as { quoteNo: string; version: number } | undefined;
+  const quotationCharges = Array.isArray(prefill?.quotationCharges)
+    ? prefill.quotationCharges.filter(
+        (charge): charge is { description: string; unitPrice: string | null } =>
+          typeof charge === 'object' &&
+          charge !== null &&
+          'description' in charge &&
+          typeof charge.description === 'string' &&
+          'unitPrice' in charge &&
+          (typeof charge.unitPrice === 'string' || charge.unitPrice === null),
+      )
+    : [];
+  const taxInvoiceCharges = taxInvoiceServiceChoices(quotationCharges);
   /** Most shipments repeat the same charges: start from an earlier document's lines. */
   const copyLines = (src: BillingDoc) => {
     const filled = (watched ?? []).some((l) => l.description.trim() || Number(l.unitPrice));
@@ -549,6 +580,15 @@ function Editor({
           </div>
         </div>
         <ErrorBanner error={action.error} />
+        {!doc && quotation && (
+          <div className={ui.alert} role="status" style={{ marginTop: 12 }}>
+            Rates prefilled from accepted quotation{' '}
+            <strong>
+              {quotation.quoteNo} v{quotation.version}
+            </strong>
+            . Unit prices remain editable.
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -625,6 +665,18 @@ function Editor({
                 )}
               </div>
               <FieldError message={(errors.lines as { message?: string } | undefined)?.message} />
+              {type === 'tax-invoices' && (
+                <p className={ui.info}>
+                  All shipment services are listed. A client quotation rate fills when available;
+                  prices remain editable.
+                </p>
+              )}
+              {type === 'tax-invoices' && quotationCharges.length === 0 && (
+                <p role="alert" style={{ color: 'var(--danger, #b42318)' }}>
+                  No quotation service list is available for this shipment. Link it to a ledger
+                  entry to load the client and port services.
+                </p>
+              )}
               <div className={dl.wrap}>
                 <table className={dl.table}>
                   <thead>
@@ -663,13 +715,75 @@ function Editor({
                             <span className={dl.no}>{i + 1}</span>
                           </td>
                           <td style={{ minWidth: 220 }}>
-                            <input
-                              className="form-field-box"
-                              placeholder="Choose or type a fee item"
-                              list="doc-fee-items"
-                              {...register(`lines.${i}.description`)}
-                              aria-invalid={!!lineErr(i, 'description')}
-                            />
+                            {type === 'tax-invoices' ? (
+                              <select
+                                className="form-field-box"
+                                {...register(`lines.${i}.description`)}
+                                onChange={(event) => {
+                                  const description = event.currentTarget.value;
+                                  const charge = taxInvoiceCharges.find(
+                                    (item) => item.description === description,
+                                  );
+                                  setValue(`lines.${i}.description`, description, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                  setValue(`lines.${i}.unitPrice`, charge?.unitPrice ?? '', {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                  });
+                                }}
+                                aria-invalid={!!lineErr(i, 'description')}
+                              >
+                                <option value="">Choose a service</option>
+                                {taxInvoiceCharges.map((charge, index) => (
+                                  <option
+                                    key={`${charge.description}-${index}`}
+                                    value={charge.description}
+                                  >
+                                    {charge.description}
+                                  </option>
+                                ))}
+                                {l?.description &&
+                                  !taxInvoiceCharges.some(
+                                    (charge) => charge.description === l.description,
+                                  ) && (
+                                    <option value={l.description} disabled>
+                                      {l.description} (not in current quotation)
+                                    </option>
+                                  )}
+                              </select>
+                            ) : (
+                              <input
+                                className="form-field-box"
+                                placeholder="Choose or type a fee item"
+                                list="doc-fee-items"
+                                {...register(`lines.${i}.description`, {
+                                  // A quoted charge picked: its price, unless one is typed.
+                                  onChange: (e: { target: { value: string } }) => {
+                                    const c = quotationCharges.find(
+                                      (q) =>
+                                        q.unitPrice !== null &&
+                                        q.description.trim().toUpperCase() ===
+                                          e.target.value.trim().toUpperCase(),
+                                    );
+                                    if (
+                                      c?.unitPrice &&
+                                      !(Number(getValues(`lines.${i}.unitPrice`)) > 0)
+                                    )
+                                      setValue(
+                                        `lines.${i}.unitPrice`,
+                                        String(Number(c.unitPrice)),
+                                        {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        },
+                                      );
+                                  },
+                                })}
+                                aria-invalid={!!lineErr(i, 'description')}
+                              />
+                            )}
                             <FieldError message={lineErr(i, 'description')} />
                           </td>
                           <td>
@@ -794,9 +908,26 @@ function Editor({
             </div>
           </fieldset>
           <datalist id="doc-fee-items">
-            {feeItems.map((v) => (
-              <option key={v} value={v} />
+            {/* The client's quoted charges first (with their price), then the usual fee items. */}
+            {quotationCharges.map((q) => (
+              <option
+                key={`q-${q.description}`}
+                value={q.description}
+                label={
+                  q.unitPrice !== null ? `USD ${Number(q.unitPrice)} · quotation` : 'quotation'
+                }
+              />
             ))}
+            {feeItems
+              .filter(
+                (v) =>
+                  !quotationCharges.some(
+                    (q) => q.description.trim().toUpperCase() === v.trim().toUpperCase(),
+                  ),
+              )
+              .map((v) => (
+                <option key={v} value={v} />
+              ))}
           </datalist>
           <datalist id="doc-units">
             {units.map((v) => (
